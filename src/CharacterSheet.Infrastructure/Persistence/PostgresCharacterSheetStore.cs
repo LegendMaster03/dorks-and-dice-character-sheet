@@ -26,7 +26,13 @@ public sealed class PostgresCharacterSheetStore(CharacterSheetDbContext dbContex
             return existing;
         }
 
-        var root = new CharacterSheetRoot(characterId, DateTimeOffset.UtcNow);
+        // PostgreSQL timestamp with time zone persists microsecond precision. Normalize before the
+        // first response so an immediately reloaded root has exactly the same timestamp value.
+        var now = DateTimeOffset.UtcNow;
+        var createdAt = new DateTimeOffset(
+            now.Ticks - (now.Ticks % TimeSpan.TicksPerMicrosecond),
+            TimeSpan.Zero);
+        var root = new CharacterSheetRoot(characterId, createdAt);
         dbContext.CharacterSheets.Add(root);
         try
         {
