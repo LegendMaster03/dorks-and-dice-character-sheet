@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CharacterSheet.Web/CharacterSheet.Web.csproj" />
+    <ProjectReference Include="../../src/CharacterSheet.Infrastructure/CharacterSheet.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

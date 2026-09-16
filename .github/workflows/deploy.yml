@@ -39,6 +39,8 @@ jobs:
 
           docker run -d --name dorks-and-dice-character-sheet-smoketest \
             --network dorks-and-dice-character-sheet-test \
+            --tmpfs /data:rw,noexec,nosuid,size=32m \
+            -e 'ConnectionStrings__CharacterSheet=Data Source=/data/smoke-test.db' \
             dorks-and-dice-character-sheet:latest
 
           ready=false
@@ -64,6 +66,8 @@ jobs:
 
             if [ "$health" = "Healthy" ] \
               && echo "$readiness" | grep -q '"status":"ready"' \
+              && echo "$readiness" | grep -q '"persistence":"sqlite-ready"' \
+              && echo "$readiness" | grep -q '"characterAuthorization":"tool-host-owner-projection"' \
               && echo "$appjs" | grep -q 'Character Sheet'; then
               ready=true
               break
@@ -119,6 +123,8 @@ jobs:
 
             if [ "$health" = "Healthy" ] \
               && echo "$readiness" | grep -q '"status":"ready"' \
+              && echo "$readiness" | grep -q '"persistence":"sqlite-ready"' \
+              && echo "$readiness" | grep -q '"characterAuthorization":"tool-host-owner-projection"' \
               && echo "$appjs" | grep -q 'Character Sheet'; then
               echo "$readiness"
               ready=true

@@ -6,6 +6,14 @@ public enum SiteCharacterLifecycleState
     Archived
 }
 
+public enum SiteCharacterAccessStatus
+{
+    Authorized,
+    NotFoundOrNotOwned,
+    ProjectionUnavailable,
+    Unauthenticated
+}
+
 /// <summary>
 /// Transient Site-authoritative projection. This is not Character Sheet persistence.
 /// </summary>
@@ -19,14 +27,21 @@ public sealed record SiteCharacterProjection(
     public bool AllowsOrdinaryEditingByLifecycle => LifecycleState == SiteCharacterLifecycleState.Active;
 }
 
+public sealed record SiteCharacterAccessResult(
+    SiteCharacterAccessStatus Status,
+    SiteCharacterProjection? Character = null)
+{
+    public static SiteCharacterAccessResult Authorized(SiteCharacterProjection character) =>
+        new(SiteCharacterAccessStatus.Authorized, character);
+}
+
 /// <summary>
-/// Future integration boundary for authoritative Site character access/lifecycle data.
-/// No production implementation exists until the Site extends the Tool Host contract with
-/// per-character authorization.
+/// Resolves Site-authoritative owner access for the current request. Implementations must use the
+/// freshly redeemed Tool Host authentication context and must not infer ownership from local state.
 /// </summary>
 public interface ISiteCharacterAccessGateway
 {
-    Task<SiteCharacterProjection?> GetAuthorizedCharacterAsync(
+    Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
         Guid characterId,
         CancellationToken cancellationToken = default);
 }

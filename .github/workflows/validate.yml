@@ -43,5 +43,8 @@ jobs:
       - name: Test
         run: dotnet test dorks-and-dice-character-sheet.slnx --configuration Release --no-restore -p:BuildClient=false
 
+      - name: Validate Compose configuration
+        run: docker compose -f docker-compose.yml config >/dev/null
+
       - name: Build container
         run: docker build -t dorks-and-dice-character-sheet:test -f src/CharacterSheet.Web/Dockerfile .

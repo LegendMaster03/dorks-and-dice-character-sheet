@@ -10,13 +10,21 @@ public sealed record ToolHostUserContext(string Id, string DisplayName);
 
 public sealed record ToolHostCampaignContext(Guid Id, string Name, string Role);
 
+public sealed record ToolHostCharacterContext(
+    Guid Id,
+    string Name,
+    string Status,
+    DateTimeOffset? ArchivedAt,
+    IReadOnlyList<Guid> CampaignIds);
+
 public sealed record ToolHostAuthenticationContext(
     int ContractVersion,
     string ToolSlug,
     string SiteMode,
     ToolHostUserContext User,
     IReadOnlyList<string> GlobalRoles,
-    IReadOnlyList<ToolHostCampaignContext> Campaigns);
+    IReadOnlyList<ToolHostCampaignContext> Campaigns,
+    IReadOnlyList<ToolHostCharacterContext>? Characters = null);
 
 public interface IToolHostAuthenticationClient
 {
