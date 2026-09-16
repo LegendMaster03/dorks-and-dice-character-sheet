@@ -8,14 +8,14 @@ import {
     RichSheetInitializationError
 } from "../.test-dist/character-api.js";
 
+const characterId = "8f62ed58-0f5f-4e71-9a18-8d9dcfe71dc7";
 const environment = {
     embedded: true,
     toolBasePath: "/tools/character-sheet",
     toolRoute: "/new",
-    contextUrl: "/tool-host/character-sheet/context"
+    contextUrl: "/tool-host/character-sheet/context?toolRoute=%2Fnew"
 };
 
-const characterId = "8f62ed58-0f5f-4e71-9a18-8d9dcfe71dc7";
 const sheet = {
     characterId,
     name: "Canonical Hero",
@@ -38,6 +38,18 @@ test("host URLs use Tool Host context and base-path information", () => {
     assert.equal(
         buildCharacterRouteUrl(environment, characterId),
         `/tools/character-sheet/characters/${characterId}`);
+});
+
+test("nested Character routes ignore Tool Host context query while deriving upstream API base", () => {
+    const nestedEnvironment = {
+        ...environment,
+        toolRoute: `/characters/${characterId}`,
+        contextUrl: `/tool-host/character-sheet/context?toolRoute=%2Fcharacters%2F${characterId}`
+    };
+
+    assert.equal(
+        buildCharacterSheetBackendUrl(nestedEnvironment, characterId),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/sheet`);
 });
 
 test("new character workflow allocates identity at the Site before initializing the returned CharacterId", async () => {
