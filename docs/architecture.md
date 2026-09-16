@@ -57,7 +57,51 @@ The first builder status is `BuildInProgress`. It means that a digital-sheet bui
 
 The application applies EF Core migrations during startup. Readiness checks verify that the configured SQLite database can be opened. Production Docker Compose mounts the named `dorks-and-dice-character-sheet-data` volume at `/data` and configures `ConnectionStrings:CharacterSheet` to use `/data/character-sheet.db`. Smoke tests use an isolated temporary `/data` filesystem and do not mount the production volume.
 
-Permanent Site Character deletion is not delivered to Character Sheet yet. Durable deletion delivery and cleanup remains the next lifecycle integration concern.
+## Durable Site lifecycle cleanup
+
+Permanent Site deletion is delivered to Character Sheet through a durable producer/consumer lifecycle contract. The Site is the producer and remains authoritative for whether a Character or Campaign has been permanently deleted. Character Sheet consumes the event only to remove Tool-owned dependent state; it does not independently infer canonical deletion from missing authorization projections or local records.
+
+The Site writes a lifecycle outbox row in the same database transaction as canonical Character or Campaign deletion. An outbox persistence failure therefore rolls the canonical deletion back. After commit, a background dispatcher sends due events directly to the registered Character Sheet upstream endpoint:
+
+```text
+POST /api/lifecycle/events
+X-Dorks-Tool-Lifecycle-Ticket: <opaque one-time ticket>
+X-Dorks-Tool-Lifecycle-Introspection-Path: /tool-host/character-sheet/api/lifecycle/introspect
+```
+
+The delivery request does not trust an event body as the authoritative lifecycle payload. Character Sheet requires exactly one lifecycle ticket and one introspection-path header, requires the fixed Character Sheet lifecycle introspection path, and redeems the ticket against the Site:
+
+```text
+POST /tool-host/character-sheet/api/lifecycle/introspect
+Authorization: Bearer <opaque one-time ticket>
+```
+
+Successful lifecycle introspection returns contract version `1` with the authoritative Tool-scoped event context:
+
+```text
+contractVersion
+  1
+toolSlug
+  character-sheet
+eventId
+  <GUID>
+eventType
+  character.deleted | campaign.deleted
+subjectId
+  <canonical CharacterId or CampaignId>
+occurredAt
+  <Site deletion timestamp>
+```
+
+Lifecycle tickets are separate from ordinary hosted-user authentication. The context carries no user identity or ownership projection because permanent deletion cleanup is Site-authoritative system-to-system work, not a user-authorized Character Sheet action. Character Sheet validates the contract version, `character-sheet` Tool slug, non-empty `EventId` and `SubjectId`, and the supported event type before processing.
+
+The Site keeps failed deliveries in its durable outbox and retries them. Character Sheet availability is therefore not part of the synchronous Site deletion transaction. A successful `2xx` response acknowledges delivery; a failed or unavailable receiver leaves the Site event pending for a later attempt. Character Sheet readiness also remains based on its own SQLite availability and does not require the Site lifecycle endpoint to be continuously reachable.
+
+Character Sheet records successfully processed lifecycle events in `processed_lifecycle_events`, keyed by `EventId`. Cleanup and inbox insertion occur in the same local database transaction. If the transaction fails, neither the cleanup nor the inbox acknowledgment commits. If the same `EventId` is delivered again after a successful commit, Character Sheet returns the already-processed result without rerunning cleanup. This makes redelivery safe when the Site does not receive a previous acknowledgment.
+
+For `character.deleted`, `SubjectId` is the canonical Site `CharacterId`. Character Sheet removes the matching `CharacterSheetRoot` if one exists and records the inbox event atomically. A missing local root is also successful because canonical deletion does not require Character Sheet-owned state to have existed. Future Character-owned tables must be added behind the same Character cleanup boundary so the lifecycle wire contract does not change as persistence grows.
+
+For `campaign.deleted`, `SubjectId` is the canonical Site `CampaignId`. Character Sheet currently has no campaign-scoped persistent rows, so the implemented Campaign cleanup boundary is intentionally a no-op before the inbox event is recorded. Future state keyed by `(CharacterId, CampaignId, ModuleKey)` belongs behind this boundary. A Campaign lifecycle event must not delete `character_sheet_roots`, because the Site owns Character-to-Campaign association lifecycle separately from the Character's canonical existence.
 
 ## Character bootstrap API
 
