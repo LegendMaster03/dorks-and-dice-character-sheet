@@ -1,4 +1,6 @@
 using CharacterSheet.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -107,6 +109,25 @@ internal sealed class PostgresTestDatabase : IDisposable, IAsyncDisposable
         {
             drop.CommandText = $"DROP DATABASE IF EXISTS \"{_databaseName}\"";
             await drop.ExecuteNonQueryAsync();
+        }
+    }
+}
+
+internal sealed class PostgresWebApplicationFactory : WebApplicationFactory<Program>
+{
+    private readonly PostgresTestDatabase _database = PostgresTestDatabase.Create();
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseSetting("ConnectionStrings:CharacterSheet", _database.ConnectionString);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            _database.Dispose();
         }
     }
 }
