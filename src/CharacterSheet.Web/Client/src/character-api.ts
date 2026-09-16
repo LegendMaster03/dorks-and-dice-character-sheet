@@ -42,11 +42,19 @@ export function buildCharacterSheetBackendUrl(
         return backendPath;
     }
 
-    if (environment.contextUrl === null || !environment.contextUrl.endsWith("/context")) {
+    if (environment.contextUrl === null) {
         throw new Error("Embedded Character Sheet is missing a valid Tool Host context URL.");
     }
 
-    const hostApiBase = environment.contextUrl.slice(0, -"/context".length);
+    const queryOrFragmentIndex = environment.contextUrl.search(/[?#]/);
+    const contextPath = queryOrFragmentIndex >= 0
+        ? environment.contextUrl.slice(0, queryOrFragmentIndex)
+        : environment.contextUrl;
+    if (!contextPath.endsWith("/context")) {
+        throw new Error("Embedded Character Sheet is missing a valid Tool Host context URL.");
+    }
+
+    const hostApiBase = contextPath.slice(0, -"/context".length);
     return `${hostApiBase}/api/upstream${backendPath}`;
 }
 
