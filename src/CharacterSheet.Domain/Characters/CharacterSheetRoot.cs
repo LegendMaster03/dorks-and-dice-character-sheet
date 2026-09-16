@@ -112,6 +112,10 @@ public sealed class CharacterSheetRoot
         }
         else
         {
+            if (!string.Equals(entry.RuleConceptKey, normalizedConceptKey, StringComparison.Ordinal))
+            {
+                RemoveSubclassChildren(entry.Id);
+            }
             entry.ReplaceRule(normalizedConceptKey, changedAt);
         }
 
@@ -125,6 +129,68 @@ public sealed class CharacterSheetRoot
         if (matches.Length > 1)
         {
             throw new InvalidOperationException("Character has more than one starting Class advancement entry.");
+        }
+
+        var entry = matches.SingleOrDefault();
+        if (entry is null)
+        {
+            return false;
+        }
+
+        RemoveSubclassChildren(entry.Id);
+        AdvancementEntries.Remove(entry);
+        Touch(changedAt);
+        return true;
+    }
+
+    public CharacterAdvancementEntry SetSubclassForClass(
+        Guid classAdvancementEntryId,
+        string ruleConceptKey,
+        DateTimeOffset changedAt)
+    {
+        var parent = RequireClassAdvancement(classAdvancementEntryId);
+        var matches = AdvancementEntries
+            .Where(value => value.Kind == CharacterAdvancementKind.Subclass
+                && value.ParentAdvancementEntryId == parent.Id)
+            .ToArray();
+        if (matches.Length > 1)
+        {
+            throw new InvalidOperationException("Class advancement has more than one Subclass advancement entry.");
+        }
+
+        var normalizedConceptKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
+        var entry = matches.SingleOrDefault();
+        if (entry is null)
+        {
+            entry = new CharacterAdvancementEntry(
+                Guid.NewGuid(),
+                CharacterId,
+                CharacterAdvancementKind.Subclass,
+                normalizedConceptKey,
+                null,
+                parent.Id,
+                changedAt);
+            AdvancementEntries.Add(entry);
+        }
+        else
+        {
+            entry.ReplaceRule(normalizedConceptKey, changedAt);
+        }
+
+        Touch(changedAt);
+        return entry;
+    }
+
+    public bool ClearSubclassForClass(Guid classAdvancementEntryId, DateTimeOffset changedAt)
+    {
+        var parent = RequireClassAdvancement(classAdvancementEntryId);
+        var matches = AdvancementEntries
+            .Where(value => value.Kind == CharacterAdvancementKind.Subclass
+                && value.ParentAdvancementEntryId == parent.Id)
+            .ToArray();
+        if (matches.Length > 1)
+        {
+            throw new InvalidOperationException("Class advancement has more than one Subclass advancement entry.");
         }
 
         var entry = matches.SingleOrDefault();
@@ -160,13 +226,27 @@ public sealed class CharacterSheetRoot
             throw new InvalidOperationException("Character can have at most one starting Class advancement entry.");
         }
 
+        CharacterAdvancementEntry? parent = null;
         if (parentAdvancementEntryId is Guid parentId)
         {
-            var parent = AdvancementEntries.SingleOrDefault(value => value.Id == parentId);
+            parent = AdvancementEntries.SingleOrDefault(value => value.Id == parentId);
             if (parent is null || parent.CharacterId != CharacterId)
             {
                 throw new InvalidOperationException(
                     "Parent advancement entry must belong to the same Character.");
+            }
+        }
+
+        if (kind == CharacterAdvancementKind.Subclass)
+        {
+            if (parent is null || parent.Kind != CharacterAdvancementKind.Class)
+            {
+                throw new InvalidOperationException("A Subclass advancement must belong to a Class advancement entry.");
+            }
+            if (AdvancementEntries.Any(value => value.Kind == CharacterAdvancementKind.Subclass
+                && value.ParentAdvancementEntryId == parent.Id))
+            {
+                throw new InvalidOperationException("A Class advancement can have at most one Subclass advancement entry.");
             }
         }
 
@@ -181,6 +261,32 @@ public sealed class CharacterSheetRoot
         AdvancementEntries.Add(entry);
         Touch(createdAt);
         return entry;
+    }
+
+    private CharacterAdvancementEntry RequireClassAdvancement(Guid classAdvancementEntryId)
+    {
+        if (classAdvancementEntryId == Guid.Empty)
+        {
+            throw new ArgumentException("Class advancement entry ID can not be empty.", nameof(classAdvancementEntryId));
+        }
+
+        var parent = AdvancementEntries.SingleOrDefault(value => value.Id == classAdvancementEntryId);
+        if (parent is null || parent.CharacterId != CharacterId || parent.Kind != CharacterAdvancementKind.Class)
+        {
+            throw new InvalidOperationException("Subclass parent must be a Class advancement entry for the same Character.");
+        }
+        return parent;
+    }
+
+    private void RemoveSubclassChildren(Guid classAdvancementEntryId)
+    {
+        foreach (var subclass in AdvancementEntries
+                     .Where(value => value.Kind == CharacterAdvancementKind.Subclass
+                         && value.ParentAdvancementEntryId == classAdvancementEntryId)
+                     .ToArray())
+        {
+            AdvancementEntries.Remove(subclass);
+        }
     }
 
     private static bool IsStartingClass(CharacterAdvancementEntry value) =>

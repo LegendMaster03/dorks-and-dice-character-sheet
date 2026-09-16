@@ -7,6 +7,8 @@ import {
     type CharacterBuilderChoice
 } from "./builder-api.js";
 import {
+    filterSubclassesForClass,
+    getStartingClassEntry,
     getStoredChoiceConceptKey,
     resolveStoredChoice,
     type RuleReferenceState
@@ -203,6 +205,17 @@ function renderCharacterBuilder(
         builder.references.startingClass,
         readOnly);
 
+    const startingClass = getStartingClassEntry(builder.build);
+    renderChoice(
+        section,
+        character.characterId,
+        "subclass",
+        "Subclass",
+        builder.references.subclass,
+        readOnly,
+        startingClass !== null,
+        "Choose a Class before selecting a Subclass.");
+
     appendParagraph(section, "Build status: In progress");
     if (builder.saveError !== undefined) {
         appendParagraph(section, builder.saveError);
@@ -219,7 +232,9 @@ function renderChoice(
     target: CharacterBuilderChoice,
     labelText: string,
     reference: RuleReferenceState,
-    readOnly: boolean
+    readOnly: boolean,
+    available = true,
+    unavailableMessage?: string
 ): void {
     const container = document.createElement("div");
     container.setAttribute("data-builder-choice", target);
@@ -228,6 +243,14 @@ function renderChoice(
     label.textContent = labelText;
     container.append(label);
     renderRuleReference(container, reference);
+
+    if (!available) {
+        if (unavailableMessage !== undefined) {
+            appendParagraph(container, unavailableMessage);
+        }
+        section.append(container);
+        return;
+    }
 
     if (!readOnly) {
         const choose = document.createElement("button");
@@ -284,7 +307,9 @@ function renderRuleChooser(
     const container = document.createElement("div");
     container.setAttribute("data-rule-chooser", target);
     const heading = document.createElement("h3");
-    heading.textContent = target === "raceSpecies" ? "Choose Race / Species" : "Choose Starting Class";
+    heading.textContent = target === "raceSpecies"
+        ? "Choose Race / Species"
+        : target === "startingClass" ? "Choose Starting Class" : "Choose Subclass";
     container.append(heading);
 
     const form = document.createElement("form");
@@ -394,7 +419,7 @@ async function bootstrapBuild(characterId: string): Promise<void> {
 }
 
 async function resolveBuildReferences(build: CharacterBuildResponse): Promise<void> {
-    await Promise.all(((["raceSpecies", "startingClass"] as const)).map(async target => {
+    await Promise.all(((["raceSpecies", "startingClass", "subclass"] as const)).map(async target => {
         const conceptKey = getStoredChoiceConceptKey(build, target);
         if (conceptKey === null) return;
         const reference = await resolveStoredChoice(environment, build, target);
@@ -416,13 +441,26 @@ async function loadChooser(target: CharacterBuilderChoice, query: string): Promi
     const normalizedQuery = query.trim();
     application.dispatch({ type: "chooser-load-started", target, query: normalizedQuery });
     try {
-        const entityType = target === "raceSpecies" ? "race" : "class";
+        const entityType = target === "raceSpecies"
+            ? "race"
+            : target === "startingClass" ? "class" : "subclass";
         const catalog = await searchResolvedRules(environment, entityType, normalizedQuery);
+        let results = catalog.rules.filter(rule => rule.entityType === entityType);
+        if (target === "subclass") {
+            const build = application.getState().builder.build;
+            const startingClass = build === null ? null : getStartingClassEntry(build);
+            if (startingClass === null) {
+                throw new Error("Choose a Class before selecting a Subclass.");
+            }
+
+            results = filterSubclassesForClass(results, startingClass.ruleConceptKey);
+        }
+
         application.dispatch({
             type: "chooser-loaded",
             target,
             query: normalizedQuery,
-            results: catalog.rules.filter(rule => rule.entityType === entityType)
+            results
         });
     } catch (error) {
         application.dispatch({
@@ -441,7 +479,13 @@ async function saveChoice(
 ): Promise<void> {
     application.dispatch({ type: "selection-save-started", target });
     try {
-        const build = await setCharacterBuildChoice(environment, characterId, target, conceptKey);
+        const classAdvancementEntryId = target === "subclass" ? currentStartingClassId() : undefined;
+        const build = await setCharacterBuildChoice(
+            environment,
+            characterId,
+            target,
+            conceptKey,
+            classAdvancementEntryId);
         application.dispatch({ type: "selection-saved", build });
         await resolveBuildReferences(build);
     } catch (error) {
@@ -452,12 +496,26 @@ async function saveChoice(
 async function clearChoice(characterId: string, target: CharacterBuilderChoice): Promise<void> {
     application.dispatch({ type: "selection-save-started", target });
     try {
-        const build = await clearCharacterBuildChoice(environment, characterId, target);
+        const classAdvancementEntryId = target === "subclass" ? currentStartingClassId() : undefined;
+        const build = await clearCharacterBuildChoice(
+            environment,
+            characterId,
+            target,
+            classAdvancementEntryId);
         application.dispatch({ type: "selection-saved", build });
         await resolveBuildReferences(build);
     } catch (error) {
         application.dispatch({ type: "selection-save-failed", message: errorMessage(error) });
     }
+}
+
+function currentStartingClassId(): string {
+    const build = application.getState().builder.build;
+    const startingClass = build === null ? null : getStartingClassEntry(build);
+    if (startingClass === null) {
+        throw new Error("Choose a Class before selecting a Subclass.");
+    }
+    return startingClass.id;
 }
 
 async function submitNewCharacter(name: string): Promise<void> {

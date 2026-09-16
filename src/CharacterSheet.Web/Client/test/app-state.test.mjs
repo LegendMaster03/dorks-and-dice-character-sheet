@@ -74,6 +74,7 @@ test("rich builder state models Rules Core resolution, chooser loading, search, 
     assert.equal(state.builder.status, "ready");
     assert.deepEqual(state.builder.references.raceSpecies, { status: "loading", conceptKey: "race:elf" });
     assert.deepEqual(state.builder.references.startingClass, { status: "loading", conceptKey: "class:wizard" });
+    assert.deepEqual(state.builder.references.subclass, { status: "none" });
 
     state = reduceAppState(state, {
         type: "rule-reference-resolved",
@@ -107,7 +108,8 @@ test("rich builder state models Rules Core resolution, chooser loading, search, 
         packageKey: "fixture",
         packageDisplayName: "Fixture",
         editionKey: "5e",
-        editionDisplayName: "5e"
+        editionDisplayName: "5e",
+        relationships: []
     };
     state = reduceAppState(state, {
         type: "chooser-loaded",
@@ -123,6 +125,32 @@ test("rich builder state models Rules Core resolution, chooser loading, search, 
     state = reduceAppState(state, { type: "selection-save-failed", message: "save failed" });
     assert.equal(state.builder.saving, null);
     assert.equal(state.builder.saveError, "save failed");
+});
+
+test("subclass reference is loaded from its Character-owned parented advancement entry", () => {
+    const subclassBuild = {
+        ...build,
+        progressionEntries: [
+            ...build.progressionEntries,
+            {
+                id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                ordinal: null,
+                kind: "subclass",
+                ruleConceptKey: "subclass.wizard.evocation",
+                parentAdvancementEntryId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                createdAt: "now",
+                updatedAt: "now"
+            }
+        ]
+    };
+
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build: subclassBuild });
+    assert.deepEqual(state.builder.references.subclass, {
+        status: "loading",
+        conceptKey: "subclass.wizard.evocation"
+    });
 });
 
 test("stale Rules Core resolution can not overwrite a replaced stored concept", () => {

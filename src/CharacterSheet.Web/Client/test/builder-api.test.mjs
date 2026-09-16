@@ -8,6 +8,7 @@ import {
 } from "../.test-dist/builder-api.js";
 
 const characterId = "8f62ed58-0f5f-4e71-9a18-8d9dcfe71dc7";
+const classEntryId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const environment = {
     embedded: true,
     toolBasePath: "/tools/character-sheet",
@@ -34,6 +35,15 @@ test("builder API remains behind Character Sheet Tool Host authorization", () =>
     assert.equal(
         buildCharacterBuildBackendUrl(environment, characterId, "startingClass"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/starting-class`);
+    assert.equal(
+        buildCharacterBuildBackendUrl(environment, characterId, "subclass", classEntryId),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/classes/${classEntryId}/subclass`);
+});
+
+test("subclass builder route requires a Character-owned Class advancement entry", () => {
+    assert.throws(
+        () => buildCharacterBuildBackendUrl(environment, characterId, "subclass"),
+        /Class advancement entry/);
 });
 
 test("loading builder state uses the coherent build resource", async () => {
@@ -58,13 +68,22 @@ test("selection mutation sends only the stable concept key", async () => {
         return Response.json(build);
     };
 
-    await setCharacterBuildChoice(environment, characterId, "raceSpecies", "race:elf", fetcher);
-    await setCharacterBuildChoice(environment, characterId, "startingClass", "class:wizard", fetcher);
+    await setCharacterBuildChoice(environment, characterId, "raceSpecies", "race:elf", undefined, fetcher);
+    await setCharacterBuildChoice(environment, characterId, "startingClass", "class:wizard", undefined, fetcher);
+    await setCharacterBuildChoice(
+        environment,
+        characterId,
+        "subclass",
+        "subclass.wizard.evocation",
+        classEntryId,
+        fetcher);
 
     assert.deepEqual(JSON.parse(calls[0].body), { conceptKey: "race:elf" });
     assert.deepEqual(JSON.parse(calls[1].body), { conceptKey: "class:wizard" });
+    assert.deepEqual(JSON.parse(calls[2].body), { conceptKey: "subclass.wizard.evocation" });
     assert.equal(calls[0].input.endsWith("/build/race-species"), true);
     assert.equal(calls[1].input.endsWith("/build/starting-class"), true);
+    assert.equal(calls[2].input.endsWith(`/build/classes/${classEntryId}/subclass`), true);
     assert.equal(calls.some(call => String(call.body).includes("displayName")), false);
 });
 
@@ -75,10 +94,15 @@ test("clearing a builder choice uses DELETE without rule content", async () => {
         return Response.json(build);
     };
 
-    await clearCharacterBuildChoice(environment, characterId, "startingClass", fetcher);
+    await clearCharacterBuildChoice(environment, characterId, "startingClass", undefined, fetcher);
+    await clearCharacterBuildChoice(environment, characterId, "subclass", classEntryId, fetcher);
 
     assert.deepEqual(calls, [{
         input: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/starting-class`,
+        method: "DELETE",
+        body: undefined
+    }, {
+        input: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/classes/${classEntryId}/subclass`,
         method: "DELETE",
         body: undefined
     }]);

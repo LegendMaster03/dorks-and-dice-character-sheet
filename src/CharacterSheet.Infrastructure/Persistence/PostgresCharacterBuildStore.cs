@@ -81,6 +81,41 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> SetSubclassAsync(
+        Guid characterId,
+        Guid classAdvancementEntryId,
+        string ruleConceptKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.SetSubclassForClass(classAdvancementEntryId, ruleConceptKey, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> ClearSubclassAsync(
+        Guid characterId,
+        Guid classAdvancementEntryId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.ClearSubclassForClass(classAdvancementEntryId, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     private Task<CharacterSheetRoot?> GetTrackedAsync(
         Guid characterId,
         CancellationToken cancellationToken) =>

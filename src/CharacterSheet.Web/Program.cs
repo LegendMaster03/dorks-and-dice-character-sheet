@@ -206,6 +206,47 @@ app.MapDelete("/api/characters/{characterId:guid}/build/starting-class", async (
         await service.ClearStartingClassAsync(characterId, cancellationToken),
         mutating: true));
 
+app.MapPut("/api/characters/{characterId:guid}/build/classes/{classAdvancementEntryId:guid}/subclass", async (
+    Guid characterId,
+    Guid classAdvancementEntryId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.SetSubclassAsync(
+                characterId,
+                classAdvancementEntryId,
+                request.ConceptKey,
+                cancellationToken),
+            mutating: true);
+    }
+    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/classes/{classAdvancementEntryId:guid}/subclass", async (
+    Guid characterId,
+    Guid classAdvancementEntryId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.ClearSubclassAsync(characterId, classAdvancementEntryId, cancellationToken),
+            mutating: true);
+    }
+    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
 var standaloneDevelopmentAttributes = app.Environment.IsDevelopment()
     ? " data-standalone-development=\"true\""
         + (rulesCoreDevelopmentBaseUrl is null

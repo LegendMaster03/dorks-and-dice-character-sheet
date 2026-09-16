@@ -129,6 +129,34 @@ public sealed class CharacterBuildService(
                 token),
             cancellationToken);
 
+    public Task<CharacterBuildResult> SetSubclassAsync(
+        Guid characterId,
+        Guid classAdvancementEntryId,
+        string ruleConceptKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.SetSubclassAsync(
+                characterId,
+                classAdvancementEntryId,
+                ruleConceptKey,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> ClearSubclassAsync(
+        Guid characterId,
+        Guid classAdvancementEntryId,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.ClearSubclassAsync(
+                characterId,
+                classAdvancementEntryId,
+                changedAt,
+                token),
+            cancellationToken);
+
     private async Task<CharacterBuildResult> MutateAsync(
         Guid characterId,
         Func<DateTimeOffset, CancellationToken, Task<CharacterSheetRoot?>> mutation,

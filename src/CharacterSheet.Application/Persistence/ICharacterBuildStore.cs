@@ -35,4 +35,17 @@ public interface ICharacterBuildStore
         Guid characterId,
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> SetSubclassAsync(
+        Guid characterId,
+        Guid classAdvancementEntryId,
+        string ruleConceptKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> ClearSubclassAsync(
+        Guid characterId,
+        Guid classAdvancementEntryId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
 }

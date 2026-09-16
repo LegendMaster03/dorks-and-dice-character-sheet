@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    filterSubclassesForClass,
+    getStartingClassEntry,
     getStoredChoiceConceptKey,
+    getStoredSubclassEntry,
     loadingRuleReference,
     resolveStoredChoice
 } from "../.test-dist/builder-rules.js";
@@ -14,6 +17,7 @@ const environment = {
     standaloneDevelopment: false,
     rulesCoreDevelopmentBaseUrl: null
 };
+const classEntryId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 const build = {
     characterId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     builderStatus: "BuildInProgress",
@@ -26,11 +30,19 @@ const build = {
         updatedAt: "now"
     }],
     progressionEntries: [{
-        id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        id: classEntryId,
         ordinal: 0,
         kind: "class",
         ruleConceptKey: "class:wizard",
         parentAdvancementEntryId: null,
+        createdAt: "now",
+        updatedAt: "now"
+    }, {
+        id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        ordinal: null,
+        kind: "subclass",
+        ruleConceptKey: "subclass.wizard.evocation",
+        parentAdvancementEntryId: classEntryId,
         createdAt: "now",
         updatedAt: "now"
     }]
@@ -39,10 +51,62 @@ const build = {
 test("stored builder references are identified from Character Sheet-owned categories and progression", () => {
     assert.equal(getStoredChoiceConceptKey(build, "raceSpecies"), "race:elf");
     assert.equal(getStoredChoiceConceptKey(build, "startingClass"), "class:wizard");
+    assert.equal(getStoredChoiceConceptKey(build, "subclass"), "subclass.wizard.evocation");
+    assert.equal(getStartingClassEntry(build)?.id, classEntryId);
+    assert.equal(getStoredSubclassEntry(build)?.parentAdvancementEntryId, classEntryId);
     assert.deepEqual(loadingRuleReference(build, "raceSpecies"), {
         status: "loading",
         conceptKey: "race:elf"
     });
+});
+
+test("subclass chooser retains only explicit Subclasses related to the selected Class", () => {
+    const relationship = relatedConceptKey => [{
+        kind: "parent-class",
+        relatedRuleConceptId: "11111111-1111-1111-1111-111111111111",
+        relatedConceptKey,
+        relatedEntityType: "class",
+        relatedDisplayName: relatedConceptKey
+    }];
+    const rule = (conceptKey, entityType, relationships) => ({
+        ruleConceptId: conceptKey,
+        conceptKey,
+        entityType,
+        displayName: conceptKey,
+        decisionKind: "select-source",
+        hasCampaignOverride: false,
+        sourceEntityId: conceptKey,
+        sourceEntityRevisionId: conceptKey,
+        sourceRevisionNumber: 1,
+        sourceEntityName: conceptKey,
+        sourceCode: "TST",
+        packageKey: "fixture",
+        packageDisplayName: "Fixture",
+        editionKey: "5e",
+        editionDisplayName: "5e",
+        relationships
+    });
+
+    const wizardSubclass = rule(
+        "subclass.wizard.evocation",
+        "subclass",
+        relationship("class:wizard"));
+    const fighterSubclass = rule(
+        "subclass.fighter.champion",
+        "subclass",
+        relationship("class:fighter"));
+    const unlinkedSubclass = rule("subclass.unknown", "subclass", []);
+    const prestigeClass = rule(
+        "prestigeclass.arcane-archer",
+        "prestigeClass",
+        relationship("class:wizard"));
+
+    assert.deepEqual(
+        filterSubclassesForClass(
+            [wizardSubclass, fighterSubclass, unlinkedSubclass, prestigeClass],
+            "class:wizard"),
+        [wizardSubclass]);
+    assert.deepEqual(filterSubclassesForClass([wizardSubclass], "   "), []);
 });
 
 test("canonical persisted reference resolves through Rules Core rather than being falsely unavailable", async () => {
@@ -64,6 +128,25 @@ test("canonical persisted reference resolves through Rules Core rather than bein
     assert.equal(resolved.status, "resolved");
     assert.equal(resolved.conceptKey, "race:elf");
     assert.equal(resolved.rule.displayName, "Elf");
+});
+
+test("subclass reference resolves only as an explicit subclass concept", async () => {
+    const fetcher = async () => Response.json({
+        ruleConceptId: "22222222-2222-2222-2222-222222222222",
+        conceptKey: "subclass.wizard.evocation",
+        entityType: "subclass",
+        displayName: "School of Evocation",
+        sourceEntityName: "School of Evocation",
+        sourceCode: "SRD",
+        packageKey: "fixture",
+        packageDisplayName: "Fixture",
+        editionKey: "5e",
+        editionDisplayName: "5e"
+    });
+
+    const resolved = await resolveStoredChoice(environment, build, "subclass", fetcher);
+    assert.equal(resolved.status, "resolved");
+    assert.equal(resolved.rule.entityType, "subclass");
 });
 
 test("unavailable stored reference remains retained and is not substituted", async () => {

@@ -4,7 +4,7 @@
 
 The Dorks & Dice Site remains authoritative for canonical Character identity and lifecycle. It owns `CharacterId`, account ownership, Character name, active/archive state, permanent deletion, Campaign identity and membership, and Character-to-Campaign associations.
 
-Rules Core is the rule-definition authority. It owns source provenance, normalization across editions, resolved rules, mechanical relationships, combined skills, Classes, Prestige Classes, Feats, race/species concepts, and future Subclass/campaign rule resolution.
+Rules Core is the rule-definition authority. It owns source provenance, normalization across editions, resolved rules, mechanical relationships, combined skills, Classes, Subclasses, Prestige Classes, Feats, race/species concepts, and campaign rule resolution.
 
 Character Sheet owns Character decisions and state: which stable Rules Core concepts a Character selected, builder progress, advancement history, future calculated Character state, and future campaign-scoped Character module state. Character Sheet is not a second rules engine and does not copy resolved rule mechanics into its database.
 
@@ -36,7 +36,7 @@ GET /api/rules?entityType={type}&q={search}&limit=200
 GET /api/rules/{conceptKey}
 ```
 
-`GET /api/rules` is used for searchable resolved catalog choices. `GET /api/rules/{conceptKey}` resolves a persisted reference for display. Rules Core applies its existing current-user/source-access filtering to those reads.
+`GET /api/rules` is used for searchable resolved catalog choices. `GET /api/rules/{conceptKey}` resolves a persisted reference for display. Rules Core applies its existing current-user/source-access filtering to those reads. Resolved catalog items also carry stable concept-to-concept relationship metadata; Character Sheet currently consumes the `parent-class` relationship on Subclass concepts.
 
 The builder intentionally uses global rules only. A Site Character can belong to multiple Campaigns, so Character Sheet does not arbitrarily select one Campaign's resolved rules. Campaign-specific resolution is deferred until the Character Sheet has an explicit Campaign-context selector/overlay.
 
@@ -44,7 +44,7 @@ For standalone ASP.NET development only, `RulesCore:DevelopmentBaseUrl` may expo
 
 ## Stable rule-reference semantics
 
-Character Sheet persists Rules Core `RuleConcept.Key`, exposed as `ConceptKey` by the resolved catalog, as its stable rule reference. The resolved catalog also exposes `RuleConceptId`, display metadata, source IDs, and source revision IDs, but Character Sheet does not use display name, source-native ID, `SourceEntityRevisionId`, package revision, source JSON, or resolved mechanical `Document` as Character decision identity.
+Character Sheet persists Rules Core `RuleConcept.Key`, exposed as `ConceptKey` by the resolved catalog, as its stable rule reference. The resolved catalog also exposes `RuleConceptId`, display metadata, relationship metadata, source IDs, and source revision IDs, but Character Sheet does not use display name, source-native ID, `SourceEntityRevisionId`, package revision, source JSON, or resolved mechanical `Document` as Character decision identity.
 
 Before persistence, `ConceptKey` input is trimmed and normalized to invariant lowercase so Character Sheet matches Rules Core canonical key behavior. Differently cased representations therefore do not create distinct Character decisions.
 
@@ -109,7 +109,9 @@ UpdatedAt
 
 The first Starting Class is represented as the `Class` entry at ordinal `0` with no parent. A filtered unique index permits at most one such Starting Class for a Character while still permitting later Class entries and any number of Prestige Class entries. Replacing the Starting Class updates that same Character-owned entry rather than appending duplicate first entries.
 
-`ParentAdvancementEntryId` allows a future first-class Subclass advancement to reference its relevant Character Class advancement without placing Subclass fields on a Class row. The persistence relationship includes `CharacterId` in both the foreign key and principal key, so a progression row can not reference an advancement owned by a different Character. The self-reference uses database `NO ACTION`; this preserves referential integrity for surviving rows while allowing the root Character cascade to remove an entire parented advancement graph in one deletion.
+A `Subclass` entry must reference a Character-owned `Class` advancement through `ParentAdvancementEntryId`; it can not be parented by a Prestige Class, Feat, or another Character. A Class advancement currently permits at most one Subclass child. Replacing or clearing a Class removes its attached Subclass selection rather than leaving a Character-specific selection attached to the wrong parent Class. Rules Core determines which Subclass concepts belong to which Class concepts; Character Sheet persists only the selected concept key and the Character-owned parent advancement ID.
+
+The persistence relationship includes `CharacterId` in both the foreign key and principal key, so a progression row can not reference an advancement owned by a different Character. The self-reference uses database `NO ACTION`; this preserves referential integrity for surviving rows while allowing the root Character cascade to remove an entire parented advancement graph in one deletion.
 
 Feat occurrences have their own Character-owned entry identities independently from the Rules Core feat concept, so future acquisition metadata can distinguish advancement-granted and free/flavor occurrences while preserving the same underlying Rules Core concept identity.
 
@@ -117,7 +119,7 @@ No total Character level is calculated from this immature progression model.
 
 ## Current `/build` API
 
-Character build state is exposed as one coherent resource plus two selection resources:
+Character build state is exposed as one coherent resource plus class/foundational selection resources:
 
 ```text
 GET    /api/characters/{characterId}/build
@@ -125,6 +127,8 @@ PUT    /api/characters/{characterId}/build/race-species
 DELETE /api/characters/{characterId}/build/race-species
 PUT    /api/characters/{characterId}/build/starting-class
 DELETE /api/characters/{characterId}/build/starting-class
+PUT    /api/characters/{characterId}/build/classes/{classAdvancementEntryId}/subclass
+DELETE /api/characters/{characterId}/build/classes/{classAdvancementEntryId}/subclass
 ```
 
 A `PUT` body is only:
@@ -133,7 +137,7 @@ A `PUT` body is only:
 { "conceptKey": "<stable Rules Core ConceptKey>" }
 ```
 
-Display names and mechanical JSON are neither accepted as Character Sheet identity nor required for persistence. The response contains Character Sheet-owned builder references/state, not copied Rules Core mechanics.
+Display names and mechanical JSON are neither accepted as Character Sheet identity nor required for persistence. The response contains Character Sheet-owned builder references/state, not copied Rules Core mechanics. The Class advancement ID in the Subclass route is Character Sheet-owned identity; the Subclass body remains only a stable Rules Core concept reference.
 
 The existing rich-sheet bootstrap API remains:
 
@@ -146,7 +150,7 @@ An owned basic Site Character still uses `POST /sheet` to initialize rich state 
 
 ## Current builder UI
 
-The first rules-backed Character Builder exposes only:
+The rules-backed Character Builder currently exposes:
 
 ```text
 <Character Name>
@@ -159,20 +163,31 @@ Race / Species
 Starting Class
 [current choice / Choose / Replace / Clear]
 
+Subclass
+[current choice / Choose / Replace / Clear]
+
 Build status: In progress
 ```
 
 Race / Species queries the global Rules Core catalog with `entityType=race`. Starting Class queries it with `entityType=class`. `prestigeClass` is not offered as a Starting Class. `npcClass` is not offered because the current architecture does not establish NPC Classes as ordinary player Starting Classes.
 
+Subclass selection is unavailable until the Character has a Class advancement. The chooser queries `entityType=subclass`, then accepts only resolved Subclass concepts whose Rules Core `parent-class` relationship identifies the selected Class concept. Character Sheet does not inspect `Document`, `ContentJson`, source-native JSON, or nested Class content to create that list.
+
 The chooser models loading, search, empty results, Rules Core error, selection, replacement, clear, save error, and cancel explicitly. It displays Rules Core identification metadata such as resolved display name, edition/source/package metadata, but does not dump raw resolved JSON or reproduce source prose.
 
-Build status remains `In progress` even after these two choices are selected. This slice does not invent a complete builder-step state machine.
+Build status remains `In progress` after these choices are selected. This slice does not invent a complete builder-step state machine.
 
 ## Subclass boundary
 
-Rules Core source ingestion recognizes source-native 5e.tools `subclass`/`subclassFeature` material, but repository inspection for this slice did not establish a resolved first-class Subclass builder contract that supplies the parent-Class relationship Character Sheet needs. The generic resolved catalog is not a license for Character Sheet to parse nested/native class `Document` JSON and manufacture its own Subclass catalog.
+Rules Core owns Subclass definition and the normalized relationship from a Subclass concept to its parent Class concept. For 5e.tools-shaped source material, the source-native `className`/`classSource` identity evidence is normalized into a persistent Rules Core `parent-class` concept relationship. The resolved catalog exposes that relationship by stable Rules Core concept identity.
 
-Subclass selection is therefore intentionally absent. A later coordinated Rules Core slice should expose the normalized first-class Subclass relationship required by the builder; Character Sheet can then store it as a `Subclass` progression entry related to the appropriate `Class` entry.
+Character Sheet consumes that contract only. It stores the selected Subclass `ConceptKey` as a `Subclass` advancement entry and uses `ParentAdvancementEntryId` to attach the Character-owned occurrence to the relevant Character-owned Class advancement. Source revisions can change without changing that Character relationship, and Character Sheet does not scrape source documents to rediscover it.
+
+The current UI applies this contract to the Starting Class because that is the only Class advancement the builder currently creates interactively. The backend/domain contract accepts any existing Character-owned Class advancement entry, leaving later multiclass/level-up work independent from this slice.
+
+## Prestige Class boundary
+
+Prestige Classes remain distinct from ordinary Classes and Subclasses in Character Sheet as `CharacterAdvancementKind.PrestigeClass`, matching Rules Core's distinct `prestigeClass` rule concept type. This slice does not define when Prestige Classes are acquired, how their levels interact with ordinary Class levels, how prerequisites are evaluated, or how prestige spellcasting progression works.
 
 ## Durable Site lifecycle cleanup
 
@@ -214,4 +229,4 @@ CI and deployment smoke tests use disposable PostgreSQL 18 containers. Integrati
 
 ## Deferred systems
 
-This foundation does not implement ability score generation, skills/combined-skill UI, saving throws, hit points, armor class, attacks, equipment/inventory, spells/slots/points, Subclass UI, Prestige Class selection/prerequisites, multiclass prerequisites, Feat UI or grants, level-up UI beyond Starting Class representation, class-feature/proficiency calculations, Campaign-specific rules context, optional Campaign modules, Acquisitions Incorporated positions, Loot Tavern harvesting/crafting, Block Initiative integration, or cross-owner DM Character access.
+This foundation does not implement ability score generation, skills/combined-skill UI, saving throws, hit points, armor class, attacks, equipment/inventory, spells/slots/points, Prestige Class selection/prerequisites, multiclass prerequisites, Feat UI or grants, generic level-up UI, Class/Subclass feature application, class-feature/proficiency calculations, Campaign-specific rules context, optional Campaign modules, Acquisitions Incorporated positions, Loot Tavern harvesting/crafting, Block Initiative integration, or cross-owner DM Character access.

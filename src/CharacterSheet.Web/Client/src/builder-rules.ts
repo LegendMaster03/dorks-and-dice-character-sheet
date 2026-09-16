@@ -1,8 +1,13 @@
-import type { CharacterBuildResponse, CharacterBuilderChoice } from "./builder-api.js";
+import type {
+    CharacterAdvancementEntryResponse,
+    CharacterBuildResponse,
+    CharacterBuilderChoice
+} from "./builder-api.js";
 import type { FetchLike } from "./character-api.js";
 import type { HostEnvironment } from "./host-environment.js";
 import {
     resolveRuleConcept,
+    type ResolvedRuleCatalogItem,
     type ResolvedRuleDetail
 } from "./rules-core-api.js";
 
@@ -13,6 +18,28 @@ export type RuleReferenceState =
     | { status: "unavailable"; conceptKey: string }
     | { status: "error"; conceptKey: string; message: string };
 
+export function getStartingClassEntry(
+    build: CharacterBuildResponse
+): CharacterAdvancementEntryResponse | null {
+    return build.progressionEntries.find(value =>
+        value.kind === "class"
+        && value.ordinal === 0
+        && value.parentAdvancementEntryId === null) ?? null;
+}
+
+export function getStoredSubclassEntry(
+    build: CharacterBuildResponse
+): CharacterAdvancementEntryResponse | null {
+    const startingClass = getStartingClassEntry(build);
+    if (startingClass === null) {
+        return null;
+    }
+
+    return build.progressionEntries.find(value =>
+        value.kind === "subclass"
+        && value.parentAdvancementEntryId === startingClass.id) ?? null;
+}
+
 export function getStoredChoiceConceptKey(
     build: CharacterBuildResponse,
     choice: CharacterBuilderChoice
@@ -20,11 +47,27 @@ export function getStoredChoiceConceptKey(
     if (choice === "raceSpecies") {
         return build.foundationalSelections.find(value => value.category === "raceSpecies")?.ruleConceptKey ?? null;
     }
+    if (choice === "startingClass") {
+        return getStartingClassEntry(build)?.ruleConceptKey ?? null;
+    }
+    return getStoredSubclassEntry(build)?.ruleConceptKey ?? null;
+}
 
-    return build.progressionEntries.find(value =>
-        value.kind === "class"
-        && value.ordinal === 0
-        && value.parentAdvancementEntryId === null)?.ruleConceptKey ?? null;
+export function filterSubclassesForClass(
+    rules: readonly ResolvedRuleCatalogItem[],
+    classConceptKey: string
+): ResolvedRuleCatalogItem[] {
+    const normalizedClassKey = classConceptKey.trim();
+    if (normalizedClassKey.length === 0) {
+        return [];
+    }
+
+    return rules.filter(rule =>
+        rule.entityType === "subclass"
+        && (rule.relationships ?? []).some(relationship =>
+            relationship.kind === "parent-class"
+            && relationship.relatedEntityType === "class"
+            && relationship.relatedConceptKey === normalizedClassKey));
 }
 
 export function loadingRuleReference(
@@ -50,7 +93,9 @@ export async function resolveStoredChoice(
 
     try {
         const rule = await resolveRuleConcept(environment, conceptKey, fetcher);
-        const expectedEntityType = choice === "raceSpecies" ? "race" : "class";
+        const expectedEntityType = choice === "raceSpecies"
+            ? "race"
+            : choice === "startingClass" ? "class" : "subclass";
         if (rule === null || rule.entityType !== expectedEntityType || rule.conceptKey !== conceptKey) {
             return { status: "unavailable", conceptKey };
         }

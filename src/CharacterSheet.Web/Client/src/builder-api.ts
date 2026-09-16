@@ -32,12 +32,13 @@ export interface CharacterBuildResponse {
     progressionEntries: CharacterAdvancementEntryResponse[];
 }
 
-export type CharacterBuilderChoice = "raceSpecies" | "startingClass";
+export type CharacterBuilderChoice = "raceSpecies" | "startingClass" | "subclass";
 
 export function buildCharacterBuildBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    choice?: CharacterBuilderChoice
+    choice?: CharacterBuilderChoice,
+    classAdvancementEntryId?: string
 ): string {
     const base = `/api/characters/${encodeURIComponent(characterId)}/build`;
     if (choice === "raceSpecies") {
@@ -45,6 +46,14 @@ export function buildCharacterBuildBackendUrl(
     }
     if (choice === "startingClass") {
         return buildCharacterSheetApiUrl(environment, `${base}/starting-class`);
+    }
+    if (choice === "subclass") {
+        if (classAdvancementEntryId === undefined || classAdvancementEntryId.trim().length === 0) {
+            throw new Error("A Class advancement entry is required for a Subclass selection.");
+        }
+        return buildCharacterSheetApiUrl(
+            environment,
+            `${base}/classes/${encodeURIComponent(classAdvancementEntryId)}/subclass`);
     }
     return buildCharacterSheetApiUrl(environment, base);
 }
@@ -71,16 +80,19 @@ export async function setCharacterBuildChoice(
     characterId: string,
     choice: CharacterBuilderChoice,
     conceptKey: string,
+    classAdvancementEntryId?: string,
     fetcher: FetchLike = window.fetch.bind(window)
 ): Promise<CharacterBuildResponse> {
-    const response = await fetcher(buildCharacterBuildBackendUrl(environment, characterId, choice), {
-        method: "PUT",
-        headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ conceptKey })
-    });
+    const response = await fetcher(
+        buildCharacterBuildBackendUrl(environment, characterId, choice, classAdvancementEntryId),
+        {
+            method: "PUT",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ conceptKey })
+        });
     if (!response.ok) {
         throw new CharacterSheetApiError(
             await readApiError(response, "Unable to save Character build choice."),
@@ -93,12 +105,15 @@ export async function clearCharacterBuildChoice(
     environment: HostEnvironment,
     characterId: string,
     choice: CharacterBuilderChoice,
+    classAdvancementEntryId?: string,
     fetcher: FetchLike = window.fetch.bind(window)
 ): Promise<CharacterBuildResponse> {
-    const response = await fetcher(buildCharacterBuildBackendUrl(environment, characterId, choice), {
-        method: "DELETE",
-        headers: { Accept: "application/json" }
-    });
+    const response = await fetcher(
+        buildCharacterBuildBackendUrl(environment, characterId, choice, classAdvancementEntryId),
+        {
+            method: "DELETE",
+            headers: { Accept: "application/json" }
+        });
     if (!response.ok) {
         throw new CharacterSheetApiError(
             await readApiError(response, "Unable to clear Character build choice."),

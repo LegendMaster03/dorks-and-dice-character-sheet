@@ -9,6 +9,14 @@ export interface ResolvedRulesCatalogResponse {
     rules: ResolvedRuleCatalogItem[];
 }
 
+export interface ResolvedRuleRelationship {
+    kind: string;
+    relatedRuleConceptId: string;
+    relatedConceptKey: string;
+    relatedEntityType: string;
+    relatedDisplayName: string;
+}
+
 export interface ResolvedRuleCatalogItem {
     ruleConceptId: string;
     conceptKey: string;
@@ -25,6 +33,7 @@ export interface ResolvedRuleCatalogItem {
     packageDisplayName: string;
     editionKey: string;
     editionDisplayName: string;
+    relationships: ResolvedRuleRelationship[];
 }
 
 export interface ResolvedRuleDetail {

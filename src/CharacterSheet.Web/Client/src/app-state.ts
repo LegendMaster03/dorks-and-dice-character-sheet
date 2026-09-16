@@ -245,7 +245,8 @@ function createInitialBuilderState(): CharacterBuilderUiState {
         build: null,
         references: {
             raceSpecies: { status: "none" },
-            startingClass: { status: "none" }
+            startingClass: { status: "none" },
+            subclass: { status: "none" }
         },
         chooser: { kind: "closed" },
         saving: null
@@ -263,7 +264,8 @@ function builderStateFromBuild(
         message: undefined,
         references: {
             raceSpecies: loadingRuleReference(build, "raceSpecies"),
-            startingClass: loadingRuleReference(build, "startingClass")
+            startingClass: loadingRuleReference(build, "startingClass"),
+            subclass: loadingRuleReference(build, "subclass")
         },
         saving: null,
         saveError: undefined
