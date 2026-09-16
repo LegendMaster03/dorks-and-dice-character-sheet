@@ -33,11 +33,14 @@ export class RichSheetInitializationError extends Error {
     }
 }
 
-export function buildCharacterSheetBackendUrl(
+export function buildCharacterSheetApiUrl(
     environment: HostEnvironment,
-    characterId: string
+    backendPath: string
 ): string {
-    const backendPath = `/api/characters/${encodeURIComponent(characterId)}/sheet`;
+    if (!backendPath.startsWith("/api/")) {
+        throw new Error("Character Sheet backend paths must begin with /api/.");
+    }
+
     if (!environment.embedded) {
         return backendPath;
     }
@@ -56,6 +59,15 @@ export function buildCharacterSheetBackendUrl(
 
     const hostApiBase = contextPath.slice(0, -"/context".length);
     return `${hostApiBase}/api/upstream${backendPath}`;
+}
+
+export function buildCharacterSheetBackendUrl(
+    environment: HostEnvironment,
+    characterId: string
+): string {
+    return buildCharacterSheetApiUrl(
+        environment,
+        `/api/characters/${encodeURIComponent(characterId)}/sheet`);
 }
 
 export function buildCharacterRouteUrl(environment: HostEnvironment, characterId: string): string {
@@ -144,7 +156,7 @@ export async function createNewCharacterAndSheet(
     return created.id;
 }
 
-async function readError(response: Response, fallback: string): Promise<string> {
+export async function readApiError(response: Response, fallback: string): Promise<string> {
     try {
         const payload = await response.json() as { error?: unknown };
         return typeof payload.error === "string" && payload.error.trim().length > 0
@@ -153,4 +165,8 @@ async function readError(response: Response, fallback: string): Promise<string> 
     } catch {
         return fallback;
     }
+}
+
+async function readError(response: Response, fallback: string): Promise<string> {
+    return await readApiError(response, fallback);
 }

@@ -2,170 +2,199 @@
 
 ## Ownership boundaries
 
-The Dorks & Dice Site remains authoritative for canonical Character identity and lifecycle. It owns `CharacterId`, account ownership, character name, active/archive state, permanent deletion, campaign membership and roles, and character-to-campaign associations. Character Sheet owns only rich digital-sheet state, builder progress, and future Character Sheet-specific selections attached to that Site identity. Rules Core remains authoritative for normalized rule definitions.
+The Dorks & Dice Site remains authoritative for canonical Character identity and lifecycle. It owns `CharacterId`, account ownership, Character name, active/archive state, permanent deletion, Campaign identity and membership, and Character-to-Campaign associations.
 
-Character Sheet does not create a parallel character identifier and does not persist Site ownership as a substitute for authorization. `CharacterSheetRoot.CharacterId` is exactly the Site-generated `CharacterId` and is the physical database primary key. Character Sheet does not persist the authoritative Site character name, owner user ID, lifecycle, or campaign associations.
+Rules Core is the rule-definition authority. It owns source provenance, normalization across editions, resolved rules, mechanical relationships, combined skills, Classes, Prestige Classes, Feats, race/species concepts, and future Subclass/campaign rule resolution.
 
-Future campaign-scoped module state may be identified conceptually as `(CharacterId, CampaignId, ModuleKey)`. Campaign IDs used for that purpose are contextual references; the Site remains authoritative for whether those associations exist.
+Character Sheet owns Character decisions and state: which stable Rules Core concepts a Character selected, builder progress, advancement history, future calculated Character state, and future campaign-scoped Character module state. Character Sheet is not a second rules engine and does not copy resolved rule mechanics into its database.
+
+`CharacterSheetRoot.CharacterId` is exactly the Site-issued `CharacterId`. Character Sheet does not persist a parallel identity, authoritative owner ID, Site Character name, lifecycle, or Campaign membership as a substitute for Site authorization.
 
 ## Tool Host Character authorization
 
-Tool Host authentication contract version `1` now has an additive Character Sheet-specific `characters` projection. For Character Sheet, the Site supplies owner-only entries with this shape:
+The Site supplies Character Sheet an owner-only Character projection in the freshly redeemed Tool Host authentication context. Every rich-sheet and `/build` request authorizes the requested Site `CharacterId` before Character Sheet persistence is read or mutated. A local SQLite row is never sufficient authorization, and Campaign DM authority does not grant another player's Character in this contract.
+
+An active owned Character may be mutated. An archived owned Character may read preserved rich/build state but may not initialize or mutate it. A Character missing from the owner projection returns the same unavailable response whether or not orphaned local rows happen to exist. A missing required Site projection fails closed. Direct unauthenticated backend access remains rejected.
+
+## Rules Core read path
+
+In embedded production use, rule discovery and rule display are browser reads through the Site's authenticated Rules Core Tool Host route:
 
 ```text
-characters[]
-  id
-  name
-  status
-  archivedAt
-  campaignIds[]
+browser
+  -> Dorks & Dice Site
+  -> /tool-host/rules-core/api/upstream/api/...
+  -> Rules Core
 ```
 
-`id` is the canonical Site `CharacterId`. `status` is mapped strictly from `Active` or `Archived`. `campaignIds` is the current set of active Site Character-to-campaign associations and can contain multiple campaign IDs.
+Character Sheet never forwards or derives a Rules Core request from Character Sheet's own Tool Host ticket. Tool Host tickets are Tool-scoped. It does not introduce a static shared secret or a second Rules Core authentication system.
 
-`characters: []` means the authenticated account currently owns no Characters. A missing or `null` `characters` property means the required authorization projection is unavailable. Character Sheet does not treat those states as equivalent.
-
-Every rich-sheet API request authorizes the requested `CharacterId` from the freshly redeemed Tool Host context before local persistence is read. A local SQLite record is never sufficient authorization. Campaign DM authority does not grant another player's Character because cross-owner DM sheet access is not part of this contract.
-
-Hosted requests therefore distinguish:
-
-- authenticated owner with an active Character;
-- authenticated owner with an archived Character;
-- Character not present in the owner's projection;
-- missing required Character projection;
-- unauthenticated direct backend access.
-
-Frontend route visibility is not an authorization boundary.
-
-## Rich Character Sheet persistence
-
-Character Sheet has tool-owned durable persistence implemented with EF Core and SQLite. The database is independent of the Site database and does not change the Site's authority over Character identity or lifecycle.
-
-The initial `character_sheet_roots` schema is deliberately small:
+This slice consumes the current global resolved Rules Core endpoints:
 
 ```text
-CharacterId     TEXT primary key
-SchemaVersion   INTEGER
-BuilderStatus   TEXT
-CreatedAt       TEXT
-UpdatedAt       TEXT
+GET /api/rules?entityType={type}&q={search}&limit=200
+GET /api/rules/{conceptKey}
 ```
 
-The first builder status is `BuildInProgress`. It means that a digital-sheet build has begun; it does not attempt to model detailed character-building phases.
+`GET /api/rules` is used for searchable resolved catalog choices. `GET /api/rules/{conceptKey}` resolves a persisted reference for display. Rules Core applies its existing current-user/source-access filtering to those reads.
 
-`ICharacterSheetStore.GetOrCreateAsync(CharacterId)` is idempotent. Repeated initialization of the same Site Character reuses the existing root rather than allocating another identity or row.
+The builder intentionally uses global rules only. A Site Character can belong to multiple Campaigns, so Character Sheet does not arbitrarily select one Campaign's resolved rules. Campaign-specific resolution is deferred until the Character Sheet has an explicit Campaign-context selector/overlay.
 
-The application applies EF Core migrations during startup. Readiness checks verify that the configured SQLite database can be opened. Production Docker Compose mounts the named `dorks-and-dice-character-sheet-data` volume at `/data` and configures `ConnectionStrings:CharacterSheet` to use `/data/character-sheet.db`. Smoke tests use an isolated temporary `/data` filesystem and do not mount the production volume.
+For standalone ASP.NET development only, `RulesCore:DevelopmentBaseUrl` may expose an explicit direct Rules Core base URL to the frontend. The standalone shell emits that adapter only when the ASP.NET environment is `Development`; embedded mode ignores standalone adapter attributes and always uses the Site Tool Host path. Production authentication is not weakened for standalone convenience.
 
-## Durable Site lifecycle cleanup
+## Stable rule-reference semantics
 
-Permanent Site deletion is delivered to Character Sheet through a durable producer/consumer lifecycle contract. The Site is the producer and remains authoritative for whether a Character or Campaign has been permanently deleted. Character Sheet consumes the event only to remove Tool-owned dependent state; it does not independently infer canonical deletion from missing authorization projections or local records.
+Character Sheet persists Rules Core `RuleConcept.Key`, exposed as `ConceptKey` by the resolved catalog, as its stable rule reference. The resolved catalog also exposes `RuleConceptId`, display metadata, source IDs, and source revision IDs, but Character Sheet does not use display name, source-native ID, `SourceEntityRevisionId`, package revision, source JSON, or resolved mechanical `Document` as Character decision identity.
 
-The Site writes a lifecycle outbox row in the same database transaction as canonical Character or Campaign deletion. An outbox persistence failure therefore rolls the canonical deletion back. After commit, a background dispatcher sends due events directly to the registered Character Sheet upstream endpoint:
+A persisted row therefore means only:
 
 ```text
-POST /api/lifecycle/events
-X-Dorks-Tool-Lifecycle-Ticket: <opaque one-time ticket>
-X-Dorks-Tool-Lifecycle-Introspection-Path: /tool-host/character-sheet/api/lifecycle/introspect
+This Character selected Rules Core concept <ConceptKey>.
 ```
 
-The delivery request does not trust an event body as the authoritative lifecycle payload. Character Sheet requires exactly one lifecycle ticket and one introspection-path header, requires the fixed Character Sheet lifecycle introspection path, and redeems the ticket against the Site:
+Rules Core remains responsible for what that concept currently means and whether its content is currently visible to the authenticated user.
+
+The Character Sheet backend deliberately does not call Rules Core when a selection reference is persisted. Saving a `ConceptKey` is not independent verification of the user's current Rules Core source access and grants no permission to reveal rule content. The authenticated frontend resolves content through Rules Core before displaying it.
+
+If a previously stored `ConceptKey` later resolves to `404`, resolves as the wrong expected entity type, or becomes inaccessible because source/rule resolution changed, Character Sheet retains the stored key. The UI reports the saved rule as unavailable rather than deleting it or substituting a same-named rule. A Rules Core service failure is shown separately as a resolution error, again without clearing the decision.
+
+## Builder persistence model
+
+The root remains:
 
 ```text
-POST /tool-host/character-sheet/api/lifecycle/introspect
-Authorization: Bearer <opaque one-time ticket>
+character_sheet_roots
+  CharacterId      canonical Site CharacterId, primary key
+  SchemaVersion
+  BuilderStatus    BuildInProgress
+  CreatedAt
+  UpdatedAt
 ```
 
-Successful lifecycle introspection returns contract version `1` with the authoritative Tool-scoped event context:
+Builder choices are intentionally split between foundational selections and progression entries.
+
+### Foundational selections
+
+`character_foundational_rule_selections` stores Character-owned foundational decisions:
 
 ```text
-contractVersion
-  1
-toolSlug
-  character-sheet
-eventId
-  <GUID>
-eventType
-  character.deleted | campaign.deleted
-subjectId
-  <canonical CharacterId or CampaignId>
-occurredAt
-  <Site deletion timestamp>
+Id                Character-owned selection identity
+CharacterId       Site CharacterId, FK -> root, cascade delete
+Category          current value: RaceSpecies
+RuleConceptKey    stable Rules Core ConceptKey
+CreatedAt
+UpdatedAt
 ```
 
-Lifecycle tickets are separate from ordinary hosted-user authentication. The context carries no user identity or ownership projection because permanent deletion cleanup is Site-authoritative system-to-system work, not a user-authorized Character Sheet action. Character Sheet validates the contract version, `character-sheet` Tool slug, non-empty `EventId` and `SubjectId`, and the supported event type before processing.
+`(CharacterId, Category)` is unique for the currently active foundational choice. The first public category is presented as `raceSpecies`, allowing the UI to use the combined `Race / Species` terminology without asserting that every source edition calls the concept the same thing. The row has its own identity rather than adding a `RaceId` column to the root, leaving room for future provenance/template/inheritance semantics to evolve independently of the root schema.
 
-The Site keeps failed deliveries in its durable outbox and retries them. Character Sheet availability is therefore not part of the synchronous Site deletion transaction. A successful `2xx` response acknowledges delivery; a failed or unavailable receiver leaves the Site event pending for a later attempt. Character Sheet readiness also remains based on its own SQLite availability and does not require the Site lifecycle endpoint to be continuously reachable.
+### Progression / advancement entries
 
-Character Sheet records successfully processed lifecycle events in `processed_lifecycle_events`, keyed by `EventId`. Cleanup and inbox insertion occur in the same local database transaction. If the transaction fails, neither the cleanup nor the inbox acknowledgment commits. If the same `EventId` is delivered again after a successful commit, Character Sheet returns the already-processed result without rerunning cleanup. This makes redelivery safe when the Site does not receive a previous acknowledgment.
+`character_advancement_entries` stores Character-owned advancement occurrences:
 
-For `character.deleted`, `SubjectId` is the canonical Site `CharacterId`. Character Sheet removes the matching `CharacterSheetRoot` if one exists and records the inbox event atomically. A missing local root is also successful because canonical deletion does not require Character Sheet-owned state to have existed. Future Character-owned tables must be added behind the same Character cleanup boundary so the lifecycle wire contract does not change as persistence grows.
+```text
+Id                         Character-owned advancement identity
+CharacterId                Site CharacterId, FK -> root, cascade delete
+Kind                       Class | Subclass | PrestigeClass | Feat
+RuleConceptKey             stable Rules Core ConceptKey
+Ordinal                    optional progression order
+ParentAdvancementEntryId   optional Character-owned parent entry, self FK
+CreatedAt
+UpdatedAt
+```
 
-For `campaign.deleted`, `SubjectId` is the canonical Site `CampaignId`. Character Sheet currently has no campaign-scoped persistent rows, so the implemented Campaign cleanup boundary is intentionally a no-op before the inbox event is recorded. Future state keyed by `(CharacterId, CampaignId, ModuleKey)` belongs behind this boundary. A Campaign lifecycle event must not delete `character_sheet_roots`, because the Site owns Character-to-Campaign association lifecycle separately from the Character's canonical existence.
+`Class`, `Subclass`, `PrestigeClass`, and `Feat` are distinct kinds. The schema does not enforce one total Class, one total Prestige Class, a fixed Subclass level, one universal feat slot, total Character level, multiclass prerequisites, or mature Prestige Class advancement semantics.
 
-## Character bootstrap API
+The first Starting Class is represented as the `Class` entry at ordinal `0` with no parent. Replacing the Starting Class updates that same Character-owned entry rather than appending duplicate first entries. The general model permits additional Class and Prestige Class entries later.
 
-The frontend uses a single bootstrap resource rather than separate persistence endpoints:
+`ParentAdvancementEntryId` allows a future first-class Subclass advancement to reference its relevant Character Class advancement without placing Subclass fields on a Class row. Feat occurrences have their own Character-owned entry identities independently from the Rules Core feat concept, so future acquisition metadata can distinguish advancement-granted and free/flavor occurrences while preserving the same underlying Rules Core concept identity.
+
+No total Character level is calculated from this immature progression model.
+
+## Current `/build` API
+
+Character build state is exposed as one coherent resource plus two selection resources:
+
+```text
+GET    /api/characters/{characterId}/build
+PUT    /api/characters/{characterId}/build/race-species
+DELETE /api/characters/{characterId}/build/race-species
+PUT    /api/characters/{characterId}/build/starting-class
+DELETE /api/characters/{characterId}/build/starting-class
+```
+
+A `PUT` body is only:
+
+```json
+{ "conceptKey": "<stable Rules Core ConceptKey>" }
+```
+
+Display names and mechanical JSON are neither accepted as Character Sheet identity nor required for persistence. The response contains Character Sheet-owned builder references/state, not copied Rules Core mechanics.
+
+The existing rich-sheet bootstrap API remains:
 
 ```text
 GET  /api/characters/{characterId}/sheet
 POST /api/characters/{characterId}/sheet
 ```
 
-`GET` authorizes the Site Character first and then returns the transient Site projection together with whether a rich local root exists and its minimal builder state. It never creates a rich root.
+An owned basic Site Character still uses `POST /sheet` to initialize rich state against the existing Site `CharacterId`; `/new` still creates the Site Character first and initializes exactly the returned canonical identity.
 
-`POST` performs the same authorization and idempotently initializes rich state only for an owned active Character. An archived Character returns an archived conflict and is not initialized. A missing/not-owned Character returns a generic unavailable response without revealing whether an orphaned local row exists. A missing Site projection fails closed, and an unauthenticated direct backend request is rejected.
+## Current builder UI
 
-Browser-to-tool backend traffic continues to pass through:
+The first rules-backed Character Builder exposes only:
 
 ```text
-/tool-host/character-sheet/api/upstream/{tool-backend-path}
+<Character Name>
+
+Character Builder
+
+Race / Species
+[current choice / Choose / Replace / Clear]
+
+Starting Class
+[current choice / Choose / Replace / Clear]
+
+Build status: In progress
 ```
 
-The Site strips browser identity credentials and injects the one-time Tool Host authentication ticket and introspection path. Character Sheet redeems that context for each hosted request and does not make a second ownership query against the Site database or Site Character API.
+Race / Species queries the global Rules Core catalog with `entityType=race`. Starting Class queries it with `entityType=class`. `prestigeClass` is not offered as a Starting Class. `npcClass` is not offered because the current architecture does not establish NPC Classes as ordinary player Starting Classes.
 
-## `/new` canonical identity allocation
+The chooser models loading, search, empty results, Rules Core error, selection, replacement, clear, save error, and cancel explicitly. It displays Rules Core identification metadata such as resolved display name, edition/source/package metadata, but does not dump raw resolved JSON or reproduce source prose.
 
-Opening `/tools/character-sheet/new` does not allocate any identity or create any rich state. The initial UI contains only a Character name field and `Build Character` action.
+Build status remains `In progress` even after these two choices are selected. This slice does not invent a complete builder-step state machine.
 
-On submit, the hosted browser performs this sequence:
+## Subclass boundary
 
-1. `POST /characters/api` to the Site with the Character name.
-2. Receive the Site-generated canonical `CharacterId`.
-3. `POST` the Character Sheet bootstrap resource for exactly that returned `CharacterId` through the Tool Host upstream gateway.
-4. Navigate to `/tools/character-sheet/characters/{characterId}` using the host-provided Tool base path.
+Rules Core source ingestion recognizes source-native 5e.tools `subclass`/`subclassFeature` material, but repository inspection for this slice did not establish a resolved first-class Subclass builder contract that supplies the parent-Class relationship Character Sheet needs. The generic resolved catalog is not a license for Character Sheet to parse nested/native class `Document` JSON and manufacture its own Subclass catalog.
 
-The Character Sheet frontend does not generate a temporary Character ID. If Site Character creation succeeds but rich-sheet initialization fails, no compensating delete is attempted. The valid basic Site Character remains available for the existing-character upgrade flow.
+Subclass selection is therefore intentionally absent. A later coordinated Rules Core slice should expose the normalized first-class Subclass relationship required by the builder; Character Sheet can then store it as a `Subclass` progression entry related to the appropriate `Class` entry.
 
-Standalone `/new` remains runnable for development, but it does not invent production Site ownership or create a canonical Site Character outside Tool Host.
+## Durable Site lifecycle cleanup
 
-## Existing Character route
+Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades to both foundational selections and advancement entries in the same local transaction before the lifecycle event is acknowledged. A missing local root is still successful.
 
-`/tools/character-sheet/characters/{characterId}` bootstraps through the Character Sheet backend.
-
-For an owned active Character with a rich root, the UI uses the Site-projected name and reports that the digital build is in progress.
-
-For an owned active basic Site Character with no rich root, `GET` leaves persistence untouched and the UI offers `Build Digital Sheet`. That action initializes the existing Site `CharacterId`; it does not call Site Character creation and does not create a second Character.
-
-For an owned archived Character, any existing rich root remains preserved and readable as archived state. Ordinary initialization/editing is unavailable while archived. Restoration remains Site-owned; the Character Sheet UI directs the user to restore the Character through the Site.
-
-For a Character that is not in the owner projection, the UI receives only a generic unavailable state. Local orphan data is not exposed.
+`campaign.deleted` remains unrelated to these base/global Character selections and does not remove them. Future Campaign-scoped Character module state belongs behind the existing Campaign cleanup boundary.
 
 ## Embedded Module v2 frontend lifecycle
 
-Production registration remains:
+Production registration remains Embedded Module contract v2. The Site shell owns `#tool-root` and supplies host route/context attributes. Application-owned DOM uses the explicit application state/reducer/render lifecycle; `MutationObserver` is not used.
 
-- display name: `Character Sheet`;
-- slug: `character-sheet`;
-- integration type: `Embedded Module`;
-- integration contract version: `2`;
-- Dorks & Dice Site mode only;
-- anonymous access disabled.
+The reducer now models sheet loading, basic/rich/archived screens, builder loading/failure, saved rule-reference resolution, chooser open/search/catalog loading/catalog failure, saving, save failure, unresolved references, and read-only behavior. Chooser actions feed state and then the single render path replaces application-owned DOM.
 
-The Site shell owns `#tool-root` and supplies `data-tool-base-path`, `data-tool-route`, and `data-tool-context-url`. The frontend derives Tool Host API paths and navigation from that host data rather than hard-coding the production hostname.
+Nested `/characters/{characterId}` routes and `/new` continue to use the host-provided Tool route/base path.
 
-Application-owned DOM uses explicit application state, reducer actions, and render entry points. The workflow models loading, submitting, error, not-found, basic-character, rich-character, archived, and new-character states explicitly. It does not use `MutationObserver` for application-owned rendering.
+## SQLite deployment
 
-## Rules Core and deferred mechanics
+EF Core migrations are applied at startup. Production Compose continues to use:
 
-Rules Core remains the source of normalized rule definitions. This slice does not add species/race, ability scores, combined skills, classes, subclasses, prestige classes, feats, spells, inventory, equipment, Rules Core content queries, Loot Tavern harvesting/crafting, Acquisitions Incorporated positions, campaign module configuration, or cross-owner DM access.
+```text
+ConnectionStrings__CharacterSheet=Data Source=/data/character-sheet.db
+volume: dorks-and-dice-character-sheet-data -> /data
+```
+
+The builder tables are added to that same durable SQLite database. No production persistence path or volume contract changes in this feature.
+
+## Deferred systems
+
+This foundation does not implement ability score generation, skills/combined-skill UI, saving throws, hit points, armor class, attacks, equipment/inventory, spells/slots/points, Subclass UI, Prestige Class selection/prerequisites, multiclass prerequisites, Feat UI or grants, level-up UI beyond Starting Class representation, class-feature/proficiency calculations, Campaign-specific rules context, optional Campaign modules, Acquisitions Incorporated positions, Loot Tavern harvesting/crafting, Block Initiative integration, or cross-owner DM Character access.

@@ -22,6 +22,24 @@ if (!string.IsNullOrWhiteSpace(toolHostBaseUrl))
     }
 }
 
+string? rulesCoreDevelopmentBaseUrl = null;
+if (builder.Environment.IsDevelopment())
+{
+    var configuredRulesCoreDevelopmentBaseUrl = builder.Configuration["RulesCore:DevelopmentBaseUrl"];
+    if (!string.IsNullOrWhiteSpace(configuredRulesCoreDevelopmentBaseUrl))
+    {
+        if (!Uri.TryCreate(configuredRulesCoreDevelopmentBaseUrl, UriKind.Absolute, out var rulesCoreDevelopmentBaseUri)
+            || (rulesCoreDevelopmentBaseUri.Scheme != Uri.UriSchemeHttp
+                && rulesCoreDevelopmentBaseUri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                "RulesCore:DevelopmentBaseUrl must be an absolute HTTP or HTTPS URL when configured.");
+        }
+
+        rulesCoreDevelopmentBaseUrl = rulesCoreDevelopmentBaseUri.ToString().TrimEnd('/');
+    }
+}
+
 builder.Services
     .AddHttpClient<IToolHostAuthenticationClient, DorksAndDiceToolHostAuthenticationClient>(client =>
     {
@@ -55,10 +73,12 @@ builder.Services.AddDbContext<CharacterSheetDbContext>(options =>
     options.UseSqlite(characterSheetConnectionString));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICharacterSheetStore, SqliteCharacterSheetStore>();
+builder.Services.AddScoped<ICharacterBuildStore, SqliteCharacterBuildStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
+builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -109,8 +129,8 @@ app.MapGet("/ready", async (CharacterSheetDbContext dbContext, CancellationToken
 app.MapGet("/api", () => Results.Ok(new
 {
     service = "Dorks & Dice Character Sheet",
-    version = "0.2-dev",
-    status = "character-bootstrap"
+    version = "0.3-dev",
+    status = "rules-core-builder-foundation"
 }));
 
 app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
@@ -127,7 +147,71 @@ app.MapPost("/api/characters/{characterId:guid}/sheet", async (
     CancellationToken cancellationToken) =>
     ToApiResult(await service.InitializeAsync(characterId, cancellationToken), initializing: true));
 
-const string standaloneShell = """
+app.MapGet("/api/characters/{characterId:guid}/build", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(await service.GetAsync(characterId, cancellationToken), mutating: false));
+
+app.MapPut("/api/characters/{characterId:guid}/build/race-species", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.SetRaceSpeciesAsync(characterId, request.ConceptKey, cancellationToken),
+            mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/race-species", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(
+        await service.ClearRaceSpeciesAsync(characterId, cancellationToken),
+        mutating: true));
+
+app.MapPut("/api/characters/{characterId:guid}/build/starting-class", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.SetStartingClassAsync(characterId, request.ConceptKey, cancellationToken),
+            mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/starting-class", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(
+        await service.ClearStartingClassAsync(characterId, cancellationToken),
+        mutating: true));
+
+var standaloneDevelopmentAttributes = app.Environment.IsDevelopment()
+    ? " data-standalone-development=\"true\""
+        + (rulesCoreDevelopmentBaseUrl is null
+            ? string.Empty
+            : $" data-rules-core-development-base-url=\"{System.Net.WebUtility.HtmlEncode(rulesCoreDevelopmentBaseUrl)}\"")
+    : string.Empty;
+var standaloneShell = $$"""
 <!doctype html>
 <html lang="en">
 <head>
@@ -136,7 +220,7 @@ const string standaloneShell = """
     <title>Character Sheet</title>
 </head>
 <body>
-    <main id="tool-root"></main>
+    <main id="tool-root"{{standaloneDevelopmentAttributes}}></main>
     <script type="module" src="/app.js"></script>
 </body>
 </html>
@@ -239,5 +323,30 @@ static IResult ToApiResult(CharacterSheetBootstrapResult result, bool initializi
     }),
     _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
 };
+
+static IResult ToBuildApiResult(CharacterBuildResult result, bool mutating) => result.Status switch
+{
+    CharacterBuildAccessStatus.Ready => Results.Ok(result.View),
+    CharacterBuildAccessStatus.NotFoundOrNotOwned => Results.NotFound(new
+    {
+        error = "Character unavailable."
+    }),
+    CharacterBuildAccessStatus.ProjectionUnavailable => Results.Json(new
+    {
+        error = "Site Character authorization is unavailable for this request."
+    }, statusCode: StatusCodes.Status503ServiceUnavailable),
+    CharacterBuildAccessStatus.Unauthenticated => Results.Unauthorized(),
+    CharacterBuildAccessStatus.SheetNotInitialized => Results.NotFound(new
+    {
+        error = "Digital Character Sheet is not initialized."
+    }),
+    CharacterBuildAccessStatus.ArchivedReadOnly when mutating => Results.Conflict(new
+    {
+        error = "Archived Characters are read-only. Restore the Character through the Site before editing its build."
+    }),
+    _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+};
+
+public sealed record RuleConceptSelectionRequest(string ConceptKey);
 
 public partial class Program;
