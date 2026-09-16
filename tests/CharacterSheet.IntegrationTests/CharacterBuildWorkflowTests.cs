@@ -68,6 +68,49 @@ public sealed class CharacterBuildWorkflowTests
     }
 
     [Fact]
+    public async Task DifferentlyCasedConceptInputPersistsAsOneCanonicalKey()
+    {
+        using var factory = new CharacterBuildWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(Character(characterId, "Canonical Builder", "Active"));
+        using var initialize = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/sheet");
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+
+        foreach (var key in new[] { "  Race:ELF  ", "RACE:Elf" })
+        {
+            using var response = await factory.SendHostedAsync(
+                HttpMethod.Put,
+                $"/api/characters/{characterId:D}/build/race-species",
+                new { conceptKey = key });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+        foreach (var key in new[] { "  CLASS:WIZARD  ", "Class:Wizard" })
+        {
+            using var response = await factory.SendHostedAsync(
+                HttpMethod.Put,
+                $"/api/characters/{characterId:D}/build/starting-class",
+                new { conceptKey = key });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        using var read = await factory.SendHostedAsync(
+            HttpMethod.Get,
+            $"/api/characters/{characterId:D}/build");
+        var build = await read.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        Assert.NotNull(build);
+        Assert.Equal("race:elf", Assert.Single(build.FoundationalSelections).RuleConceptKey);
+        Assert.Equal("class:wizard", Assert.Single(build.ProgressionEntries).RuleConceptKey);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CharacterSheetDbContext>();
+        Assert.Equal(1, await db.FoundationalRuleSelections.CountAsync());
+        Assert.Equal(1, await db.CharacterAdvancementEntries.CountAsync());
+    }
+
+    [Fact]
     public async Task ReplacingAndClearingStartingChoicesDoNotCreateDuplicates()
     {
         using var factory = new CharacterBuildWorkflowFactory();

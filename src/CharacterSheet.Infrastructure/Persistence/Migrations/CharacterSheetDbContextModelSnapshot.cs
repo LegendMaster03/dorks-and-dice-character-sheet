@@ -47,9 +47,16 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
 
             b.HasKey("Id");
 
+            b.HasAlternateKey("Id", "CharacterId");
+
+            b.HasIndex("CharacterId")
+                .IsUnique()
+                .HasDatabaseName("UX_character_advancement_entries_StartingClass")
+                .HasFilter("\"Kind\" = 'Class' AND \"Ordinal\" = 0 AND \"ParentAdvancementEntryId\" IS NULL");
+
             b.HasIndex("CharacterId", "Ordinal");
 
-            b.HasIndex("ParentAdvancementEntryId");
+            b.HasIndex("ParentAdvancementEntryId", "CharacterId");
 
             b.ToTable("character_advancement_entries");
         });
@@ -139,8 +146,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
 
             b.HasOne("CharacterSheet.Domain.Characters.CharacterAdvancementEntry", null)
                 .WithMany()
-                .HasForeignKey("ParentAdvancementEntryId")
-                .OnDelete(DeleteBehavior.SetNull);
+                .HasForeignKey("ParentAdvancementEntryId", "CharacterId")
+                .HasPrincipalKey("Id", "CharacterId")
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>

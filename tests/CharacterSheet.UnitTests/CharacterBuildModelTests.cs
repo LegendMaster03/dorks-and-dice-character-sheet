@@ -24,6 +24,22 @@ public sealed class CharacterBuildModelTests
     }
 
     [Fact]
+    public void RuleConceptKeysAreTrimmedAndLowercasedInvariantly()
+    {
+        var root = Root();
+        var race = root.SetFoundationalSelection(
+            CharacterFoundationalSelectionCategory.RaceSpecies,
+            "  Race:ELF  ",
+            DateTimeOffset.UtcNow);
+        var startingClass = root.SetStartingClass(
+            "  CLASS:Wizard  ",
+            DateTimeOffset.UtcNow.AddMinutes(1));
+
+        Assert.Equal("race:elf", race.RuleConceptKey);
+        Assert.Equal("class:wizard", startingClass.RuleConceptKey);
+    }
+
+    [Fact]
     public void RaceSpeciesSelectionCanBeCleared()
     {
         var root = Root();
@@ -54,6 +70,23 @@ public sealed class CharacterBuildModelTests
         Assert.Equal(0, entry.Ordinal);
         Assert.Null(entry.ParentAdvancementEntryId);
         Assert.Equal("class:wizard", entry.RuleConceptKey);
+    }
+
+    [Fact]
+    public void GeneralAdvancementCanNotCreateSecondStartingClass()
+    {
+        var root = Root();
+        root.SetStartingClass("class:fighter", DateTimeOffset.UtcNow);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => root.AddAdvancement(
+            CharacterAdvancementKind.Class,
+            "class:wizard",
+            0,
+            null,
+            DateTimeOffset.UtcNow.AddMinutes(1)));
+
+        Assert.Contains("at most one starting Class", exception.Message, StringComparison.Ordinal);
+        Assert.Single(root.AdvancementEntries);
     }
 
     [Fact]
@@ -110,6 +143,24 @@ public sealed class CharacterBuildModelTests
         Assert.Equal(CharacterAdvancementKind.Subclass, subclass.Kind);
         Assert.Equal(startingClass.Id, subclass.ParentAdvancementEntryId);
         Assert.Equal(CharacterAdvancementKind.Feat, feat.Kind);
+    }
+
+    [Fact]
+    public void AdvancementParentMustBelongToSameCharacter()
+    {
+        var characterA = Root();
+        var characterB = Root();
+        var characterBClass = characterB.SetStartingClass("class:wizard", DateTimeOffset.UtcNow);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => characterA.AddAdvancement(
+            CharacterAdvancementKind.Subclass,
+            "subclass:evoker",
+            null,
+            characterBClass.Id,
+            DateTimeOffset.UtcNow.AddMinutes(1)));
+
+        Assert.Contains("same Character", exception.Message, StringComparison.Ordinal);
+        Assert.Empty(characterA.AdvancementEntries);
     }
 
     [Fact]

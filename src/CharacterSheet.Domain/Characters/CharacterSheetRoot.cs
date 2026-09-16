@@ -91,11 +91,7 @@ public sealed class CharacterSheetRoot
     public CharacterAdvancementEntry SetStartingClass(string ruleConceptKey, DateTimeOffset changedAt)
     {
         var normalizedConceptKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
-        var matches = AdvancementEntries
-            .Where(value => value.Kind == CharacterAdvancementKind.Class
-                && value.Ordinal == 0
-                && value.ParentAdvancementEntryId is null)
-            .ToArray();
+        var matches = AdvancementEntries.Where(IsStartingClass).ToArray();
         if (matches.Length > 1)
         {
             throw new InvalidOperationException("Character has more than one starting Class advancement entry.");
@@ -125,11 +121,7 @@ public sealed class CharacterSheetRoot
 
     public bool ClearStartingClass(DateTimeOffset changedAt)
     {
-        var matches = AdvancementEntries
-            .Where(value => value.Kind == CharacterAdvancementKind.Class
-                && value.Ordinal == 0
-                && value.ParentAdvancementEntryId is null)
-            .ToArray();
+        var matches = AdvancementEntries.Where(IsStartingClass).ToArray();
         if (matches.Length > 1)
         {
             throw new InvalidOperationException("Character has more than one starting Class advancement entry.");
@@ -162,6 +154,22 @@ public sealed class CharacterSheetRoot
             throw new ArgumentOutOfRangeException(nameof(ordinal), "Advancement ordinal can not be negative.");
         }
 
+        if (IsStartingClass(kind, ordinal, parentAdvancementEntryId)
+            && AdvancementEntries.Any(IsStartingClass))
+        {
+            throw new InvalidOperationException("Character can have at most one starting Class advancement entry.");
+        }
+
+        if (parentAdvancementEntryId is Guid parentId)
+        {
+            var parent = AdvancementEntries.SingleOrDefault(value => value.Id == parentId);
+            if (parent is null || parent.CharacterId != CharacterId)
+            {
+                throw new InvalidOperationException(
+                    "Parent advancement entry must belong to the same Character.");
+            }
+        }
+
         var entry = new CharacterAdvancementEntry(
             Guid.NewGuid(),
             CharacterId,
@@ -174,6 +182,17 @@ public sealed class CharacterSheetRoot
         Touch(createdAt);
         return entry;
     }
+
+    private static bool IsStartingClass(CharacterAdvancementEntry value) =>
+        IsStartingClass(value.Kind, value.Ordinal, value.ParentAdvancementEntryId);
+
+    private static bool IsStartingClass(
+        CharacterAdvancementKind kind,
+        int? ordinal,
+        Guid? parentAdvancementEntryId) =>
+        kind == CharacterAdvancementKind.Class
+        && ordinal == 0
+        && parentAdvancementEntryId is null;
 
     private void Touch(DateTimeOffset changedAt)
     {

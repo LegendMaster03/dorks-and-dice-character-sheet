@@ -45,7 +45,7 @@ test("stored builder references are identified from Character Sheet-owned catego
     });
 });
 
-test("stored reference display is resolved through Rules Core rather than persisted display data", async () => {
+test("canonical persisted reference resolves through Rules Core rather than being falsely unavailable", async () => {
     const fetcher = async () => Response.json({
         ruleConceptId: "11111111-1111-1111-1111-111111111111",
         conceptKey: "race:elf",
@@ -62,6 +62,7 @@ test("stored reference display is resolved through Rules Core rather than persis
     const resolved = await resolveStoredChoice(environment, build, "raceSpecies", fetcher);
 
     assert.equal(resolved.status, "resolved");
+    assert.equal(resolved.conceptKey, "race:elf");
     assert.equal(resolved.rule.displayName, "Elf");
 });
 

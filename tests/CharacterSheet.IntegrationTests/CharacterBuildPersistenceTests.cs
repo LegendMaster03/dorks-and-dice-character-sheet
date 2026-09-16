@@ -1,6 +1,7 @@
 using CharacterSheet.Application.Lifecycle;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.IntegrationTests;
@@ -29,8 +30,13 @@ public sealed class CharacterBuildPersistenceTests
                 await buildStore.SetFoundationalSelectionAsync(
                     characterId,
                     CharacterFoundationalSelectionCategory.RaceSpecies,
-                    "race:elf",
+                    "  Race:ELF  ",
                     DateTimeOffset.UtcNow);
+                await buildStore.SetFoundationalSelectionAsync(
+                    characterId,
+                    CharacterFoundationalSelectionCategory.RaceSpecies,
+                    "RACE:elf",
+                    DateTimeOffset.UtcNow.AddSeconds(30));
                 await buildStore.SetFoundationalSelectionAsync(
                     characterId,
                     CharacterFoundationalSelectionCategory.RaceSpecies,
@@ -38,8 +44,12 @@ public sealed class CharacterBuildPersistenceTests
                     DateTimeOffset.UtcNow.AddMinutes(1));
                 await buildStore.SetStartingClassAsync(
                     characterId,
-                    "class:fighter",
+                    "  CLASS:FIGHTER  ",
                     DateTimeOffset.UtcNow.AddMinutes(2));
+                await buildStore.SetStartingClassAsync(
+                    characterId,
+                    "Class:Fighter",
+                    DateTimeOffset.UtcNow.AddMinutes(2).AddSeconds(30));
                 await buildStore.SetStartingClassAsync(
                     characterId,
                     "class:wizard",
@@ -74,6 +84,117 @@ public sealed class CharacterBuildPersistenceTests
                 Assert.Empty((await buildStore.GetAsync(characterId))!.FoundationalSelections);
                 Assert.Empty((await buildStore.GetAsync(characterId))!.AdvancementEntries);
             }
+        }
+        finally
+        {
+            DeleteDatabase(path);
+        }
+    }
+
+    [Fact]
+    public async Task StartingClassUniqueIndexRejectsConcurrentWritersAndAllowsLaterProgression()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"character-build-starting-class-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<CharacterSheetDbContext>()
+            .UseSqlite($"Data Source={path}")
+            .Options;
+        var characterId = Guid.NewGuid();
+
+        try
+        {
+            await using (var setup = new CharacterSheetDbContext(options))
+            {
+                await setup.Database.MigrateAsync();
+                await new SqliteCharacterSheetStore(setup).GetOrCreateAsync(characterId);
+
+                var indexSql = await ExecuteScalarStringAsync(
+                    setup,
+                    "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'UX_character_advancement_entries_StartingClass';");
+                Assert.NotNull(indexSql);
+                Assert.Contains("UNIQUE INDEX", indexSql, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("\"Kind\" = 'Class'", indexSql, StringComparison.Ordinal);
+                Assert.Contains("\"Ordinal\" = 0", indexSql, StringComparison.Ordinal);
+                Assert.Contains("\"ParentAdvancementEntryId\" IS NULL", indexSql, StringComparison.Ordinal);
+            }
+
+            await using var writerA = new CharacterSheetDbContext(options);
+            await using var writerB = new CharacterSheetDbContext(options);
+            var rootA = await writerA.CharacterSheets
+                .Include(value => value.AdvancementEntries)
+                .SingleAsync(value => value.CharacterId == characterId);
+            var rootB = await writerB.CharacterSheets
+                .Include(value => value.AdvancementEntries)
+                .SingleAsync(value => value.CharacterId == characterId);
+
+            rootA.SetStartingClass("class:fighter", DateTimeOffset.UtcNow);
+            rootB.SetStartingClass("class:wizard", DateTimeOffset.UtcNow.AddSeconds(1));
+            await writerA.SaveChangesAsync();
+            await Assert.ThrowsAsync<DbUpdateException>(() => writerB.SaveChangesAsync());
+
+            await using var later = new CharacterSheetDbContext(options);
+            var persisted = await later.CharacterSheets
+                .Include(value => value.AdvancementEntries)
+                .SingleAsync(value => value.CharacterId == characterId);
+            persisted.AddAdvancement(
+                CharacterAdvancementKind.Class,
+                "class:wizard",
+                1,
+                null,
+                DateTimeOffset.UtcNow.AddMinutes(1));
+            persisted.AddAdvancement(
+                CharacterAdvancementKind.PrestigeClass,
+                "prestigeclass:arcane-archer",
+                2,
+                null,
+                DateTimeOffset.UtcNow.AddMinutes(2));
+            await later.SaveChangesAsync();
+
+            Assert.Equal(
+                2,
+                await later.CharacterAdvancementEntries.CountAsync(value =>
+                    value.CharacterId == characterId && value.Kind == CharacterAdvancementKind.Class));
+            Assert.Equal(
+                1,
+                await later.CharacterAdvancementEntries.CountAsync(value =>
+                    value.CharacterId == characterId && value.Kind == CharacterAdvancementKind.PrestigeClass));
+        }
+        finally
+        {
+            DeleteDatabase(path);
+        }
+    }
+
+    [Fact]
+    public async Task DatabaseRejectsCrossCharacterAdvancementParent()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"character-build-parent-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<CharacterSheetDbContext>()
+            .UseSqlite($"Data Source={path}")
+            .Options;
+        var characterAId = Guid.NewGuid();
+        var characterBId = Guid.NewGuid();
+
+        try
+        {
+            await using var db = new CharacterSheetDbContext(options);
+            await db.Database.MigrateAsync();
+            var sheetStore = new SqliteCharacterSheetStore(db);
+            var characterA = await sheetStore.GetOrCreateAsync(characterAId);
+            await sheetStore.GetOrCreateAsync(characterBId);
+            var parent = characterA.SetStartingClass("class:fighter", DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+
+            var now = DateTimeOffset.UtcNow.AddMinutes(1);
+            await Assert.ThrowsAsync<SqliteException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO character_advancement_entries
+                    (Id, CharacterId, Kind, RuleConceptKey, Ordinal, ParentAdvancementEntryId, CreatedAt, UpdatedAt)
+                VALUES
+                    ({Guid.NewGuid()}, {characterBId}, {"Subclass"}, {"subclass:evoker"}, {1}, {parent.Id}, {now}, {now});
+                """));
+
+            Assert.Equal(
+                0,
+                await db.CharacterAdvancementEntries.CountAsync(value => value.CharacterId == characterBId));
         }
         finally
         {
@@ -135,6 +256,22 @@ public sealed class CharacterBuildPersistenceTests
         finally
         {
             DeleteDatabase(path);
+        }
+    }
+
+    private static async Task<string?> ExecuteScalarStringAsync(CharacterSheetDbContext db, string sql)
+    {
+        var connection = db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            return await command.ExecuteScalarAsync() as string;
+        }
+        finally
+        {
+            await connection.CloseAsync();
         }
     }
 

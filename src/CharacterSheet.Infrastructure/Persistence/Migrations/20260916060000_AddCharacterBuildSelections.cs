@@ -27,12 +27,15 @@ public partial class AddCharacterBuildSelections : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_character_advancement_entries", x => x.Id);
+                table.UniqueConstraint(
+                    "AK_character_advancement_entries_Id_CharacterId",
+                    x => new { x.Id, x.CharacterId });
                 table.ForeignKey(
-                    name: "FK_character_advancement_entries_character_advancement_entries_ParentAdvancementEntryId",
-                    column: x => x.ParentAdvancementEntryId,
+                    name: "FK_character_advancement_entries_character_advancement_entries_ParentAdvancementEntryId_CharacterId",
+                    columns: x => new { x.ParentAdvancementEntryId, x.CharacterId },
                     principalTable: "character_advancement_entries",
-                    principalColumn: "Id",
-                    onDelete: ReferentialAction.SetNull);
+                    principalColumns: new[] { "Id", "CharacterId" },
+                    onDelete: ReferentialAction.Restrict);
                 table.ForeignKey(
                     name: "FK_character_advancement_entries_character_sheet_roots_CharacterId",
                     column: x => x.CharacterId,
@@ -69,9 +72,16 @@ public partial class AddCharacterBuildSelections : Migration
             columns: new[] { "CharacterId", "Ordinal" });
 
         migrationBuilder.CreateIndex(
-            name: "IX_character_advancement_entries_ParentAdvancementEntryId",
+            name: "IX_character_advancement_entries_ParentAdvancementEntryId_CharacterId",
             table: "character_advancement_entries",
-            column: "ParentAdvancementEntryId");
+            columns: new[] { "ParentAdvancementEntryId", "CharacterId" });
+
+        migrationBuilder.CreateIndex(
+            name: "UX_character_advancement_entries_StartingClass",
+            table: "character_advancement_entries",
+            column: "CharacterId",
+            unique: true,
+            filter: "\"Kind\" = 'Class' AND \"Ordinal\" = 0 AND \"ParentAdvancementEntryId\" IS NULL");
 
         migrationBuilder.CreateIndex(
             name: "IX_character_foundational_rule_selections_CharacterId_Category",

@@ -58,6 +58,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         var advancement = modelBuilder.Entity<CharacterAdvancementEntry>();
         advancement.ToTable("character_advancement_entries");
         advancement.HasKey(value => value.Id);
+        advancement.HasAlternateKey(value => new { value.Id, value.CharacterId });
         advancement.Property(value => value.Id)
             .ValueGeneratedNever();
         advancement.Property(value => value.CharacterId)
@@ -77,15 +78,20 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         advancement.Property(value => value.UpdatedAt)
             .IsRequired();
         advancement.HasIndex(value => new { value.CharacterId, value.Ordinal });
-        advancement.HasIndex(value => value.ParentAdvancementEntryId);
+        advancement.HasIndex(value => new { value.ParentAdvancementEntryId, value.CharacterId });
+        advancement.HasIndex(value => value.CharacterId)
+            .HasDatabaseName("UX_character_advancement_entries_StartingClass")
+            .IsUnique()
+            .HasFilter("\"Kind\" = 'Class' AND \"Ordinal\" = 0 AND \"ParentAdvancementEntryId\" IS NULL");
         root.HasMany(value => value.AdvancementEntries)
             .WithOne()
             .HasForeignKey(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
         advancement.HasOne<CharacterAdvancementEntry>()
             .WithMany()
-            .HasForeignKey(value => value.ParentAdvancementEntryId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .HasForeignKey(value => new { value.ParentAdvancementEntryId, value.CharacterId })
+            .HasPrincipalKey(value => new { value.Id, value.CharacterId })
+            .OnDelete(DeleteBehavior.Restrict);
 
         var processedLifecycleEvent = modelBuilder.Entity<ProcessedLifecycleEvent>();
         processedLifecycleEvent.ToTable("processed_lifecycle_events");

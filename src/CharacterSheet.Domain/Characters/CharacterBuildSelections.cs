@@ -24,7 +24,7 @@ public static class CharacterRuleReference
             throw new ArgumentException("Rules Core concept key can not be blank.", nameof(value));
         }
 
-        var normalized = value.Trim();
+        var normalized = value.Trim().ToLowerInvariant();
         if (normalized.Length > MaxConceptKeyLength)
         {
             throw new ArgumentException(
@@ -129,7 +129,8 @@ public sealed class CharacterAdvancementEntry
 
     /// <summary>
     /// Optional Character-owned parent advancement identity. This allows a future Subclass entry to
-    /// point at the relevant Class entry without storing subclass fields on the Class row.
+    /// point at the relevant Class entry without storing subclass fields on the Class row. The parent
+    /// must belong to the same Character.
     /// </summary>
     public Guid? ParentAdvancementEntryId { get; private set; }
 
