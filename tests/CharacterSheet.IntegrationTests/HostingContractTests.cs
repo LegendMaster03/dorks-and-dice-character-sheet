@@ -2,15 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using CharacterSheet.Application.Hosting;
 using CharacterSheet.Infrastructure.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace CharacterSheet.IntegrationTests;
 
-public sealed class HostingContractTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class HostingContractTests : IClassFixture<PostgresWebApplicationFactory>
 {
     private readonly HttpClient _client;
 
-    public HostingContractTests(WebApplicationFactory<Program> factory)
+    public HostingContractTests(PostgresWebApplicationFactory factory)
     {
         _client = factory.CreateClient();
     }
@@ -25,6 +24,7 @@ public sealed class HostingContractTests : IClassFixture<WebApplicationFactory<P
         Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
         var payload = await ready.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.Equal("ready", payload!["status"]);
+        Assert.Equal("postgresql-ready", payload["persistence"]);
     }
 
     [Theory]
