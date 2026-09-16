@@ -14,26 +14,28 @@ partial class InitialCharacterSheetPersistence
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
-        modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
+        modelBuilder
+            .HasAnnotation("ProductVersion", "10.0.10")
+            .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSheetRoot", b =>
         {
             b.Property<Guid>("CharacterId")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<string>("BuilderStatus")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("TEXT");
+                .HasColumnType("character varying(64)");
 
             b.Property<DateTimeOffset>("CreatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.Property<int>("SchemaVersion")
-                .HasColumnType("INTEGER");
+                .HasColumnType("integer");
 
             b.Property<DateTimeOffset>("UpdatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.HasKey("CharacterId");
             b.ToTable("character_sheet_roots");

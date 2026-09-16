@@ -12,11 +12,11 @@ public partial class InitialCharacterSheetPersistence : Migration
             name: "character_sheet_roots",
             columns: table => new
             {
-                CharacterId = table.Column<Guid>(type: "TEXT", nullable: false),
-                SchemaVersion = table.Column<int>(type: "INTEGER", nullable: false),
-                BuilderStatus = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                CharacterId = table.Column<Guid>(type: "uuid", nullable: false),
+                SchemaVersion = table.Column<int>(type: "integer", nullable: false),
+                BuilderStatus = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
             },
             constraints: table =>
             {

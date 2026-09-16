@@ -104,7 +104,6 @@ public sealed class CharacterSheetWorkflowTests
         Assert.Equal(1, await db.CharacterSheets.CountAsync());
     }
 
-
     [Fact]
     public async Task ArchivedBasicCharacterCanNotInitializeRichSheet()
     {
@@ -188,7 +187,7 @@ public sealed class CharacterSheetWorkflowTests
     }
 
     [Fact]
-    public async Task ReadinessReportsUsableSqlitePersistenceAndImplementedOwnerAuthorization()
+    public async Task ReadinessReportsUsablePostgreSqlPersistenceAndImplementedOwnerAuthorization()
     {
         using var factory = new CharacterSheetWorkflowFactory();
         using var client = factory.CreateClient();
@@ -198,7 +197,7 @@ public sealed class CharacterSheetWorkflowTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
         Assert.Equal("ready", payload["status"]);
-        Assert.Equal("sqlite-ready", payload["persistence"]);
+        Assert.Equal("postgresql-ready", payload["persistence"]);
         Assert.Equal("tool-host-owner-projection", payload["characterAuthorization"]);
     }
 
@@ -224,15 +223,13 @@ public sealed class CharacterSheetWorkflowTests
 
     private sealed class CharacterSheetWorkflowFactory : WebApplicationFactory<Program>
     {
-        private readonly string _databasePath = Path.Combine(
-            Path.GetTempPath(),
-            $"character-sheet-web-{Guid.NewGuid():N}.db");
+        private readonly PostgresTestDatabase _database = PostgresTestDatabase.Create();
 
         public ToolHostAuthenticationContext Context { get; set; } = CreateContext(characters: []);
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            builder.UseSetting("ConnectionStrings:CharacterSheet", $"Data Source={_databasePath}");
+            builder.UseSetting("ConnectionStrings:CharacterSheet", _database.ConnectionString);
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IToolHostAuthenticationClient>();
@@ -254,20 +251,9 @@ public sealed class CharacterSheetWorkflowTests
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
-            if (!disposing) return;
-            DeleteIfExists(_databasePath);
-            DeleteIfExists(_databasePath + "-shm");
-            DeleteIfExists(_databasePath + "-wal");
-        }
-
-        private static void DeleteIfExists(string path)
-        {
-            try
+            if (disposing)
             {
-                if (File.Exists(path)) File.Delete(path);
-            }
-            catch (IOException)
-            {
+                _database.Dispose();
             }
         }
 

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.Infrastructure.Persistence;
 
-public sealed class SqliteCharacterBuildStore(CharacterSheetDbContext dbContext)
+public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContext)
     : ICharacterBuildStore
 {
     public Task<CharacterSheetRoot?> GetAsync(

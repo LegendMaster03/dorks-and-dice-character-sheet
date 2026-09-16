@@ -13,37 +13,39 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
-        modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
+        modelBuilder
+            .HasAnnotation("ProductVersion", "10.0.10")
+            .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterAdvancementEntry", b =>
         {
             b.Property<Guid>("Id")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<Guid>("CharacterId")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<DateTimeOffset>("CreatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.Property<string>("Kind")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("TEXT");
+                .HasColumnType("character varying(64)");
 
             b.Property<int?>("Ordinal")
-                .HasColumnType("INTEGER");
+                .HasColumnType("integer");
 
             b.Property<Guid?>("ParentAdvancementEntryId")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<string>("RuleConceptKey")
                 .IsRequired()
                 .HasMaxLength(300)
-                .HasColumnType("TEXT");
+                .HasColumnType("character varying(300)");
 
             b.Property<DateTimeOffset>("UpdatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.HasKey("Id");
 
@@ -64,26 +66,26 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>
         {
             b.Property<Guid>("Id")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<string>("Category")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("TEXT");
+                .HasColumnType("character varying(64)");
 
             b.Property<Guid>("CharacterId")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<DateTimeOffset>("CreatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.Property<string>("RuleConceptKey")
                 .IsRequired()
                 .HasMaxLength(300)
-                .HasColumnType("TEXT");
+                .HasColumnType("character varying(300)");
 
             b.Property<DateTimeOffset>("UpdatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.HasKey("Id");
 
@@ -96,21 +98,21 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSheetRoot", b =>
         {
             b.Property<Guid>("CharacterId")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<string>("BuilderStatus")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("TEXT");
+                .HasColumnType("character varying(64)");
 
             b.Property<DateTimeOffset>("CreatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.Property<int>("SchemaVersion")
-                .HasColumnType("INTEGER");
+                .HasColumnType("integer");
 
             b.Property<DateTimeOffset>("UpdatedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.HasKey("CharacterId");
             b.ToTable("character_sheet_roots");
@@ -119,18 +121,18 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("CharacterSheet.Infrastructure.Persistence.ProcessedLifecycleEvent", b =>
         {
             b.Property<Guid>("EventId")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.Property<string>("EventType")
                 .IsRequired()
                 .HasMaxLength(80)
-                .HasColumnType("TEXT");
+                .HasColumnType("character varying(80)");
 
             b.Property<DateTimeOffset>("ProcessedAt")
-                .HasColumnType("TEXT");
+                .HasColumnType("timestamp with time zone");
 
             b.Property<Guid>("SubjectId")
-                .HasColumnType("TEXT");
+                .HasColumnType("uuid");
 
             b.HasKey("EventId");
             b.ToTable("processed_lifecycle_events");

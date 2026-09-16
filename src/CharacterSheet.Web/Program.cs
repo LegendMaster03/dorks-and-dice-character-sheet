@@ -66,14 +66,15 @@ builder.Services
 var characterSheetConnectionString = builder.Configuration.GetConnectionString("CharacterSheet");
 if (string.IsNullOrWhiteSpace(characterSheetConnectionString))
 {
-    characterSheetConnectionString = $"Data Source={Path.Combine(Path.GetTempPath(), "dorks-and-dice-character-sheet-dev.db")}";
+    throw new InvalidOperationException(
+        "ConnectionStrings:CharacterSheet must be configured with the Character Sheet PostgreSQL connection string.");
 }
 
 builder.Services.AddDbContext<CharacterSheetDbContext>(options =>
-    options.UseSqlite(characterSheetConnectionString));
+    options.UseNpgsql(characterSheetConnectionString));
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddScoped<ICharacterSheetStore, SqliteCharacterSheetStore>();
-builder.Services.AddScoped<ICharacterBuildStore, SqliteCharacterBuildStore>();
+builder.Services.AddScoped<ICharacterSheetStore, PostgresCharacterSheetStore>();
+builder.Services.AddScoped<ICharacterBuildStore, PostgresCharacterBuildStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
@@ -103,7 +104,7 @@ app.MapGet("/ready", async (CharacterSheetDbContext dbContext, CancellationToken
             return Results.Json(new
             {
                 status = "not-ready",
-                persistence = "sqlite-unavailable",
+                persistence = "postgresql-unavailable",
                 characterAuthorization = "tool-host-owner-projection"
             }, statusCode: StatusCodes.Status503ServiceUnavailable);
         }
@@ -113,7 +114,7 @@ app.MapGet("/ready", async (CharacterSheetDbContext dbContext, CancellationToken
         return Results.Json(new
         {
             status = "not-ready",
-            persistence = "sqlite-unavailable",
+            persistence = "postgresql-unavailable",
             characterAuthorization = "tool-host-owner-projection"
         }, statusCode: StatusCodes.Status503ServiceUnavailable);
     }
@@ -121,7 +122,7 @@ app.MapGet("/ready", async (CharacterSheetDbContext dbContext, CancellationToken
     return Results.Ok(new
     {
         status = "ready",
-        persistence = "sqlite-ready",
+        persistence = "postgresql-ready",
         characterAuthorization = "tool-host-owner-projection"
     });
 });

@@ -12,7 +12,7 @@ Character Sheet owns Character decisions and state: which stable Rules Core conc
 
 ## Tool Host Character authorization
 
-The Site supplies Character Sheet an owner-only Character projection in the freshly redeemed Tool Host authentication context. Every rich-sheet and `/build` request authorizes the requested Site `CharacterId` before Character Sheet persistence is read or mutated. A local SQLite row is never sufficient authorization, and Campaign DM authority does not grant another player's Character in this contract.
+The Site supplies Character Sheet an owner-only Character projection in the freshly redeemed Tool Host authentication context. Every rich-sheet and `/build` request authorizes the requested Site `CharacterId` before Character Sheet persistence is read or mutated. A local Character Sheet database row is never sufficient authorization, and Campaign DM authority does not grant another player's Character in this contract.
 
 An active owned Character may be mutated. An archived owned Character may read preserved rich/build state but may not initialize or mutate it. A Character missing from the owner projection returns the same unavailable response whether or not orphaned local rows happen to exist. A missing required Site projection fails closed. Direct unauthenticated backend access remains rejected.
 
@@ -45,6 +45,8 @@ For standalone ASP.NET development only, `RulesCore:DevelopmentBaseUrl` may expo
 ## Stable rule-reference semantics
 
 Character Sheet persists Rules Core `RuleConcept.Key`, exposed as `ConceptKey` by the resolved catalog, as its stable rule reference. The resolved catalog also exposes `RuleConceptId`, display metadata, source IDs, and source revision IDs, but Character Sheet does not use display name, source-native ID, `SourceEntityRevisionId`, package revision, source JSON, or resolved mechanical `Document` as Character decision identity.
+
+Before persistence, `ConceptKey` input is trimmed and normalized to invariant lowercase so Character Sheet matches Rules Core canonical key behavior. Differently cased representations therefore do not create distinct Character decisions.
 
 A persisted row therefore means only:
 
@@ -105,9 +107,11 @@ UpdatedAt
 
 `Class`, `Subclass`, `PrestigeClass`, and `Feat` are distinct kinds. The schema does not enforce one total Class, one total Prestige Class, a fixed Subclass level, one universal feat slot, total Character level, multiclass prerequisites, or mature Prestige Class advancement semantics.
 
-The first Starting Class is represented as the `Class` entry at ordinal `0` with no parent. Replacing the Starting Class updates that same Character-owned entry rather than appending duplicate first entries. The general model permits additional Class and Prestige Class entries later.
+The first Starting Class is represented as the `Class` entry at ordinal `0` with no parent. A filtered unique index permits at most one such Starting Class for a Character while still permitting later Class entries and any number of Prestige Class entries. Replacing the Starting Class updates that same Character-owned entry rather than appending duplicate first entries.
 
-`ParentAdvancementEntryId` allows a future first-class Subclass advancement to reference its relevant Character Class advancement without placing Subclass fields on a Class row. Feat occurrences have their own Character-owned entry identities independently from the Rules Core feat concept, so future acquisition metadata can distinguish advancement-granted and free/flavor occurrences while preserving the same underlying Rules Core concept identity.
+`ParentAdvancementEntryId` allows a future first-class Subclass advancement to reference its relevant Character Class advancement without placing Subclass fields on a Class row. The persistence relationship includes `CharacterId` in both the foreign key and principal key, so a progression row can not reference an advancement owned by a different Character. The self-reference uses database `NO ACTION`; this preserves referential integrity for surviving rows while allowing the root Character cascade to remove an entire parented advancement graph in one deletion.
+
+Feat occurrences have their own Character-owned entry identities independently from the Rules Core feat concept, so future acquisition metadata can distinguish advancement-granted and free/flavor occurrences while preserving the same underlying Rules Core concept identity.
 
 No total Character level is calculated from this immature progression model.
 
@@ -172,7 +176,7 @@ Subclass selection is therefore intentionally absent. A later coordinated Rules 
 
 ## Durable Site lifecycle cleanup
 
-Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades to both foundational selections and advancement entries in the same local transaction before the lifecycle event is acknowledged. A missing local root is still successful.
+Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades to both foundational selections and the complete advancement graph in the same Character Sheet database transaction before the lifecycle event is acknowledged. A missing local root is still successful.
 
 `campaign.deleted` remains unrelated to these base/global Character selections and does not remove them. Future Campaign-scoped Character module state belongs behind the existing Campaign cleanup boundary.
 
@@ -180,20 +184,33 @@ Permanent Site deletion is delivered through the existing trusted lifecycle inbo
 
 Production registration remains Embedded Module contract v2. The Site shell owns `#tool-root` and supplies host route/context attributes. Application-owned DOM uses the explicit application state/reducer/render lifecycle; `MutationObserver` is not used.
 
-The reducer now models sheet loading, basic/rich/archived screens, builder loading/failure, saved rule-reference resolution, chooser open/search/catalog loading/catalog failure, saving, save failure, unresolved references, and read-only behavior. Chooser actions feed state and then the single render path replaces application-owned DOM.
+The reducer models sheet loading, basic/rich/archived screens, builder loading/failure, saved rule-reference resolution, chooser open/search/catalog loading/catalog failure, saving, save failure, unresolved references, and read-only behavior. Chooser actions feed state and then the single render path replaces application-owned DOM.
 
 Nested `/characters/{characterId}` routes and `/new` continue to use the host-provided Tool route/base path.
 
-## SQLite deployment
+## PostgreSQL deployment
 
-EF Core migrations are applied at startup. Production Compose continues to use:
+Character Sheet uses its own external PostgreSQL database, following the persistent-tool deployment pattern used by Rules Core. `CharacterSheetDbContext` remains the EF Core persistence model, and EF Core migrations are applied to PostgreSQL at application startup.
+
+Production requires the externally supplied connection setting:
 
 ```text
-ConnectionStrings__CharacterSheet=Data Source=/data/character-sheet.db
-volume: dorks-and-dice-character-sheet-data -> /data
+ConnectionStrings__CharacterSheet=<PostgreSQL connection string>
 ```
 
-The builder tables are added to that same durable SQLite database. No production persistence path or volume contract changes in this feature.
+The application does not silently fall back to SQLite or an application-local database file. The production Compose definition does not define a PostgreSQL service, mount `/data`, or own a database volume. It only consumes `ConnectionStrings__CharacterSheet` and joins the existing `dorks-and-dice-backend` network.
+
+Deployment reads the connection configuration from the server-side environment file:
+
+```text
+/mnt/HDDs/www/dorks-and-dice-character-sheet/.env
+```
+
+The deployment fails before Compose if that file is missing. The repository contains only `.env.example` with non-production example values; real credentials are not committed.
+
+The PostgreSQL database lifecycle is independent from the application container lifecycle. A normal Character Sheet redeployment may rebuild or recreate the application container but does not recreate, replace, or destroy the external database. `/ready` reports PostgreSQL connectivity as `postgresql-ready` or `postgresql-unavailable`.
+
+CI and deployment smoke tests use disposable PostgreSQL 18 containers. Integration tests create isolated temporary databases on the disposable server so persistence, concurrency constraints, foreign-key behavior, canonical key storage, lifecycle cleanup, authorization, and builder workflows execute against the same database engine used in production.
 
 ## Deferred systems
 

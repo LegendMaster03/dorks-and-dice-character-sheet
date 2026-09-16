@@ -37,14 +37,125 @@ jobs:
             exit 1
           fi
 
+      - name: Start disposable PostgreSQL
+        run: |
+          docker rm -f dorks-and-dice-character-sheet-validate-postgres 2>/dev/null || true
+          docker run -d --name dorks-and-dice-character-sheet-validate-postgres \
+            -p 127.0.0.1:55433:5432 \
+            -e POSTGRES_DB=character_sheet_test \
+            -e POSTGRES_USER=character_sheet_test \
+            -e POSTGRES_PASSWORD=character_sheet_test \
+            postgres:18
+
+          ready=false
+          for i in {1..30}; do
+            if docker exec dorks-and-dice-character-sheet-validate-postgres \
+              pg_isready -U character_sheet_test -d character_sheet_test; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" != "true" ]; then
+            docker logs dorks-and-dice-character-sheet-validate-postgres
+            exit 1
+          fi
+
       - name: Restore
         run: dotnet restore dorks-and-dice-character-sheet.slnx
 
       - name: Test
+        env:
+          ConnectionStrings__CharacterSheet: Host=127.0.0.1;Port=55433;Database=character_sheet_test;Username=character_sheet_test;Password=character_sheet_test
         run: dotnet test dorks-and-dice-character-sheet.slnx --configuration Release --no-restore -p:BuildClient=false
 
+      - name: Cleanup disposable PostgreSQL
+        if: always()
+        run: docker rm -f dorks-and-dice-character-sheet-validate-postgres 2>/dev/null || true
+
       - name: Validate Compose configuration
+        env:
+          ConnectionStrings__CharacterSheet: Host=postgres.example.invalid;Port=5432;Database=character_sheet;Username=character_sheet;Password=validation-only
         run: docker compose -f docker-compose.yml config >/dev/null
 
       - name: Build container
         run: docker build -t dorks-and-dice-character-sheet:test -f src/CharacterSheet.Web/Dockerfile .
+
+      - name: Smoke test container against PostgreSQL
+        run: |
+          docker rm -f dorks-and-dice-character-sheet-smoketest 2>/dev/null || true
+          docker rm -f dorks-and-dice-character-sheet-smoke-postgres 2>/dev/null || true
+          docker network create dorks-and-dice-character-sheet-smoke 2>/dev/null || true
+
+          docker run -d --name dorks-and-dice-character-sheet-smoke-postgres \
+            --network dorks-and-dice-character-sheet-smoke \
+            -e POSTGRES_DB=character_sheet_smoke \
+            -e POSTGRES_USER=character_sheet_smoke \
+            -e POSTGRES_PASSWORD=character_sheet_smoke \
+            postgres:18
+
+          ready=false
+          for i in {1..30}; do
+            if docker exec dorks-and-dice-character-sheet-smoke-postgres \
+              pg_isready -U character_sheet_smoke -d character_sheet_smoke; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != "true" ]; then
+            echo "Smoke-test PostgreSQL did not become ready."
+            docker logs dorks-and-dice-character-sheet-smoke-postgres || true
+            exit 1
+          fi
+
+          docker run -d --name dorks-and-dice-character-sheet-smoketest \
+            --network dorks-and-dice-character-sheet-smoke \
+            -e 'ConnectionStrings__CharacterSheet=Host=dorks-and-dice-character-sheet-smoke-postgres;Port=5432;Database=character_sheet_smoke;Username=character_sheet_smoke;Password=character_sheet_smoke' \
+            dorks-and-dice-character-sheet:test
+
+          app_ready=false
+          for i in {1..30}; do
+            if [ "$(docker inspect -f '{{.State.Running}}' dorks-and-dice-character-sheet-smoketest 2>/dev/null)" != "true" ]; then
+              echo "Character Sheet smoke-test container exited before becoming ready."
+              docker logs dorks-and-dice-character-sheet-smoketest || true
+              exit 1
+            fi
+
+            health=$(docker run --rm \
+              --network dorks-and-dice-character-sheet-smoke \
+              curlimages/curl:8.12.1 \
+              -fsS http://dorks-and-dice-character-sheet-smoketest:8080/health 2>/dev/null || true)
+            readiness=$(docker run --rm \
+              --network dorks-and-dice-character-sheet-smoke \
+              curlimages/curl:8.12.1 \
+              -fsS http://dorks-and-dice-character-sheet-smoketest:8080/ready 2>/dev/null || true)
+            appjs=$(docker run --rm \
+              --network dorks-and-dice-character-sheet-smoke \
+              curlimages/curl:8.12.1 \
+              -fsS http://dorks-and-dice-character-sheet-smoketest:8080/app.js 2>/dev/null || true)
+
+            if [ "$health" = "Healthy" ] \
+              && echo "$readiness" | grep -q '"status":"ready"' \
+              && echo "$readiness" | grep -q '"persistence":"postgresql-ready"' \
+              && echo "$readiness" | grep -q '"characterAuthorization":"tool-host-owner-projection"' \
+              && echo "$appjs" | grep -q 'Character Sheet'; then
+              app_ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$app_ready" != "true" ]; then
+            echo "Character Sheet PostgreSQL smoke test failed."
+            docker logs dorks-and-dice-character-sheet-smoketest || true
+            exit 1
+          fi
+
+      - name: Cleanup smoke-test infrastructure
+        if: always()
+        run: |
+          docker rm -f dorks-and-dice-character-sheet-smoketest 2>/dev/null || true
+          docker rm -f dorks-and-dice-character-sheet-smoke-postgres 2>/dev/null || true
+          docker network rm dorks-and-dice-character-sheet-smoke 2>/dev/null || true

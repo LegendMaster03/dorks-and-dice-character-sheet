@@ -15,10 +15,10 @@ public partial class AddLifecycleInbox : Migration
             name: "processed_lifecycle_events",
             columns: table => new
             {
-                EventId = table.Column<Guid>(type: "TEXT", nullable: false),
-                EventType = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false),
-                SubjectId = table.Column<Guid>(type: "TEXT", nullable: false),
-                ProcessedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                EventId = table.Column<Guid>(type: "uuid", nullable: false),
+                EventType = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                SubjectId = table.Column<Guid>(type: "uuid", nullable: false),
+                ProcessedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
             },
             constraints: table =>
             {

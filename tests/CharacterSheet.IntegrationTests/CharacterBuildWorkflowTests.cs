@@ -280,15 +280,13 @@ public sealed class CharacterBuildWorkflowTests
 
     private sealed class CharacterBuildWorkflowFactory : WebApplicationFactory<Program>
     {
-        private readonly string _databasePath = Path.Combine(
-            Path.GetTempPath(),
-            $"character-build-web-{Guid.NewGuid():N}.db");
+        private readonly PostgresTestDatabase _database = PostgresTestDatabase.Create();
 
         public ToolHostAuthenticationContext Context { get; set; } = Context();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            builder.UseSetting("ConnectionStrings:CharacterSheet", $"Data Source={_databasePath}");
+            builder.UseSetting("ConnectionStrings:CharacterSheet", _database.ConnectionString);
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IToolHostAuthenticationClient>();
@@ -317,20 +315,9 @@ public sealed class CharacterBuildWorkflowTests
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
-            if (!disposing) return;
-            DeleteIfExists(_databasePath);
-            DeleteIfExists(_databasePath + "-shm");
-            DeleteIfExists(_databasePath + "-wal");
-        }
-
-        private static void DeleteIfExists(string path)
-        {
-            try
+            if (disposing)
             {
-                if (File.Exists(path)) File.Delete(path);
-            }
-            catch (IOException)
-            {
+                _database.Dispose();
             }
         }
 

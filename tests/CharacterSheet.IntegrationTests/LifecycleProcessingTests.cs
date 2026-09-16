@@ -1,7 +1,6 @@
 using CharacterSheet.Application.Lifecycle;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.IntegrationTests;
@@ -11,8 +10,8 @@ public sealed class LifecycleProcessingTests
     [Fact]
     public async Task CharacterDeletedPermanentlyRemovesRootAndRecordsInboxEvent()
     {
-        await using var connection = await OpenConnectionAsync();
-        await using var db = await CreateDbAsync(connection);
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = await CreateDbAsync(database);
         var characterId = Guid.NewGuid();
         db.CharacterSheets.Add(new CharacterSheetRoot(characterId, DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
@@ -32,8 +31,8 @@ public sealed class LifecycleProcessingTests
     [Fact]
     public async Task CharacterDeletedSucceedsWhenNoLocalRootExists()
     {
-        await using var connection = await OpenConnectionAsync();
-        await using var db = await CreateDbAsync(connection);
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = await CreateDbAsync(database);
         var lifecycleEvent = Event(ToolLifecycleEventTypes.CharacterDeleted, Guid.NewGuid());
         var processor = new CharacterSheetLifecycleProcessor(db, TimeProvider.System);
 
@@ -46,8 +45,8 @@ public sealed class LifecycleProcessingTests
     [Fact]
     public async Task DuplicateEventIdDoesNotRepeatCharacterCleanup()
     {
-        await using var connection = await OpenConnectionAsync();
-        await using var db = await CreateDbAsync(connection);
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = await CreateDbAsync(database);
         var characterId = Guid.NewGuid();
         db.CharacterSheets.Add(new CharacterSheetRoot(characterId, DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
@@ -67,17 +66,23 @@ public sealed class LifecycleProcessingTests
     [Fact]
     public async Task CleanupAndInboxRecordingRollBackTogether()
     {
-        await using var connection = await OpenConnectionAsync();
-        await using var db = await CreateDbAsync(connection);
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = await CreateDbAsync(database);
         var characterId = Guid.NewGuid();
         db.CharacterSheets.Add(new CharacterSheetRoot(characterId, DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
         await db.Database.ExecuteSqlRawAsync("""
+            CREATE OR REPLACE FUNCTION fail_lifecycle_inbox_insert()
+            RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'forced lifecycle inbox failure';
+            END;
+            $$ LANGUAGE plpgsql;
+
             CREATE TRIGGER fail_lifecycle_inbox
             BEFORE INSERT ON processed_lifecycle_events
-            BEGIN
-                SELECT RAISE(ABORT, 'forced lifecycle inbox failure');
-            END;
+            FOR EACH ROW
+            EXECUTE FUNCTION fail_lifecycle_inbox_insert();
             """);
         var lifecycleEvent = Event(ToolLifecycleEventTypes.CharacterDeleted, characterId);
         var processor = new CharacterSheetLifecycleProcessor(db, TimeProvider.System);
@@ -92,8 +97,8 @@ public sealed class LifecycleProcessingTests
     [Fact]
     public async Task CampaignDeletedDoesNotDeleteBaseCharacterRootAndIsDurablyRecorded()
     {
-        await using var connection = await OpenConnectionAsync();
-        await using var db = await CreateDbAsync(connection);
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = await CreateDbAsync(database);
         var characterId = Guid.NewGuid();
         var campaignId = Guid.NewGuid();
         db.CharacterSheets.Add(new CharacterSheetRoot(characterId, DateTimeOffset.UtcNow));
@@ -113,8 +118,8 @@ public sealed class LifecycleProcessingTests
     [Fact]
     public async Task UnsupportedEventTypeIsNotMarkedProcessed()
     {
-        await using var connection = await OpenConnectionAsync();
-        await using var db = await CreateDbAsync(connection);
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = await CreateDbAsync(database);
         var lifecycleEvent = Event("future.event", Guid.NewGuid());
         var processor = new CharacterSheetLifecycleProcessor(db, TimeProvider.System);
 
@@ -132,20 +137,10 @@ public sealed class LifecycleProcessingTests
         subjectId,
         DateTimeOffset.UtcNow);
 
-    private static async Task<SqliteConnection> OpenConnectionAsync()
+    private static async Task<CharacterSheetDbContext> CreateDbAsync(PostgresTestDatabase database)
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        return connection;
-    }
-
-    private static async Task<CharacterSheetDbContext> CreateDbAsync(SqliteConnection connection)
-    {
-        var db = new CharacterSheetDbContext(
-            new DbContextOptionsBuilder<CharacterSheetDbContext>()
-                .UseSqlite(connection)
-                .Options);
-        await db.Database.EnsureCreatedAsync();
+        var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
         return db;
     }
 }

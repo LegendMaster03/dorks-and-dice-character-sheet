@@ -21,7 +21,7 @@ jobs:
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.conclusion == 'success')
     runs-on: [self-hosted, dorks-and-dice-character-sheet]
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,20 +31,54 @@ jobs:
         timeout-minutes: 10
         run: docker build -t dorks-and-dice-character-sheet:latest -f src/CharacterSheet.Web/Dockerfile .
 
+      - name: Start smoke-test PostgreSQL
+        timeout-minutes: 2
+        run: |
+          docker rm -f dorks-and-dice-character-sheet-test-postgres 2>/dev/null || true
+          docker network create dorks-and-dice-character-sheet-test 2>/dev/null || true
+          docker run -d --name dorks-and-dice-character-sheet-test-postgres \
+            --network dorks-and-dice-character-sheet-test \
+            -e POSTGRES_DB=character_sheet_test \
+            -e POSTGRES_USER=character_sheet_test \
+            -e POSTGRES_PASSWORD=character_sheet_test \
+            postgres:18
+
+          # Match Rules Core's deployment smoke convention: wait through the official image's
+          # initialization handoff, then require several consecutive SQL queries to succeed.
+          sleep 10
+          consecutive=0
+          for i in {1..30}; do
+            result=$(docker exec dorks-and-dice-character-sheet-test-postgres \
+              psql -v ON_ERROR_STOP=1 -U character_sheet_test -d character_sheet_test -tAc 'SELECT 1' \
+              2>/dev/null || true)
+            if [ "$(echo "$result" | tr -d '[:space:]')" = "1" ]; then
+              consecutive=$((consecutive + 1))
+              if [ "$consecutive" -ge 3 ]; then
+                break
+              fi
+            else
+              consecutive=0
+            fi
+            sleep 1
+          done
+
+          if [ "$consecutive" -lt 3 ]; then
+            echo "Smoke-test PostgreSQL did not become stably query-ready."
+            docker logs dorks-and-dice-character-sheet-test-postgres || true
+            exit 1
+          fi
+
       - name: Smoke test container
         timeout-minutes: 5
         run: |
           docker rm -f dorks-and-dice-character-sheet-smoketest 2>/dev/null || true
-          docker network create dorks-and-dice-character-sheet-test 2>/dev/null || true
-
           docker run -d --name dorks-and-dice-character-sheet-smoketest \
             --network dorks-and-dice-character-sheet-test \
-            --tmpfs /data:rw,noexec,nosuid,size=32m \
-            -e 'ConnectionStrings__CharacterSheet=Data Source=/data/smoke-test.db' \
+            -e 'ConnectionStrings__CharacterSheet=Host=dorks-and-dice-character-sheet-test-postgres;Port=5432;Database=character_sheet_test;Username=character_sheet_test;Password=character_sheet_test' \
             dorks-and-dice-character-sheet:latest
 
           ready=false
-          for i in {1..20}; do
+          for i in {1..30}; do
             if [ "$(docker inspect -f '{{.State.Running}}' dorks-and-dice-character-sheet-smoketest 2>/dev/null)" != "true" ]; then
               echo "Character Sheet smoke-test container exited before becoming ready."
               docker logs dorks-and-dice-character-sheet-smoketest || true
@@ -66,7 +100,7 @@ jobs:
 
             if [ "$health" = "Healthy" ] \
               && echo "$readiness" | grep -q '"status":"ready"' \
-              && echo "$readiness" | grep -q '"persistence":"sqlite-ready"' \
+              && echo "$readiness" | grep -q '"persistence":"postgresql-ready"' \
               && echo "$readiness" | grep -q '"characterAuthorization":"tool-host-owner-projection"' \
               && echo "$appjs" | grep -q 'Character Sheet'; then
               ready=true
@@ -86,13 +120,21 @@ jobs:
         timeout-minutes: 3
         run: |
           docker rm -f dorks-and-dice-character-sheet-smoketest 2>/dev/null || true
+          docker rm -f dorks-and-dice-character-sheet-test-postgres 2>/dev/null || true
           docker network rm dorks-and-dice-character-sheet-test 2>/dev/null || true
 
       - name: Deploy
         timeout-minutes: 5
         run: |
+          ENV_FILE=/mnt/HDDs/www/dorks-and-dice-character-sheet/.env
+          if [ ! -f "$ENV_FILE" ]; then
+            echo "Character Sheet deployment configuration is missing: $ENV_FILE"
+            exit 1
+          fi
+
           docker compose \
             --project-name dorks-and-dice-character-sheet \
+            --env-file "$ENV_FILE" \
             -f docker-compose.yml \
             config >/dev/null
 
@@ -100,6 +142,7 @@ jobs:
 
           docker compose \
             --project-name dorks-and-dice-character-sheet \
+            --env-file "$ENV_FILE" \
             -f docker-compose.yml \
             up -d --force-recreate --remove-orphans
 
@@ -107,7 +150,7 @@ jobs:
         timeout-minutes: 5
         run: |
           ready=false
-          for i in {1..30}; do
+          for i in {1..60}; do
             health=$(docker run --rm \
               --network dorks-and-dice-backend \
               curlimages/curl:8.12.1 \
@@ -123,7 +166,7 @@ jobs:
 
             if [ "$health" = "Healthy" ] \
               && echo "$readiness" | grep -q '"status":"ready"' \
-              && echo "$readiness" | grep -q '"persistence":"sqlite-ready"' \
+              && echo "$readiness" | grep -q '"persistence":"postgresql-ready"' \
               && echo "$readiness" | grep -q '"characterAuthorization":"tool-host-owner-projection"' \
               && echo "$appjs" | grep -q 'Character Sheet'; then
               echo "$readiness"

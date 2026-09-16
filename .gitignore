@@ -8,3 +8,8 @@
 .vscode/
 .idea/
 .DS_Store
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example

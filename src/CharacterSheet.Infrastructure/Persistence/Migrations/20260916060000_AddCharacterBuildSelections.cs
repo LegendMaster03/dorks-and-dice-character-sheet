@@ -15,14 +15,14 @@ public partial class AddCharacterBuildSelections : Migration
             name: "character_advancement_entries",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                CharacterId = table.Column<Guid>(type: "TEXT", nullable: false),
-                Kind = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                RuleConceptKey = table.Column<string>(type: "TEXT", maxLength: 300, nullable: false),
-                Ordinal = table.Column<int>(type: "INTEGER", nullable: true),
-                ParentAdvancementEntryId = table.Column<Guid>(type: "TEXT", nullable: true),
-                CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                CharacterId = table.Column<Guid>(type: "uuid", nullable: false),
+                Kind = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                RuleConceptKey = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
+                Ordinal = table.Column<int>(type: "integer", nullable: true),
+                ParentAdvancementEntryId = table.Column<Guid>(type: "uuid", nullable: true),
+                CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
             },
             constraints: table =>
             {
@@ -48,12 +48,12 @@ public partial class AddCharacterBuildSelections : Migration
             name: "character_foundational_rule_selections",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                CharacterId = table.Column<Guid>(type: "TEXT", nullable: false),
-                Category = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                RuleConceptKey = table.Column<string>(type: "TEXT", maxLength: 300, nullable: false),
-                CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                UpdatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                CharacterId = table.Column<Guid>(type: "uuid", nullable: false),
+                Category = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                RuleConceptKey = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
+                CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
             },
             constraints: table =>
             {
