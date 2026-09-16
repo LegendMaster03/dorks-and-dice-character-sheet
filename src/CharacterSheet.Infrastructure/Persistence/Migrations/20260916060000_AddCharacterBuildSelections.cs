@@ -35,7 +35,7 @@ public partial class AddCharacterBuildSelections : Migration
                     columns: x => new { x.ParentAdvancementEntryId, x.CharacterId },
                     principalTable: "character_advancement_entries",
                     principalColumns: new[] { "Id", "CharacterId" },
-                    onDelete: ReferentialAction.Restrict);
+                    onDelete: ReferentialAction.NoAction);
                 table.ForeignKey(
                     name: "FK_character_advancement_entries_character_sheet_roots_CharacterId",
                     column: x => x.CharacterId,

@@ -148,7 +148,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .WithMany()
                 .HasForeignKey("ParentAdvancementEntryId", "CharacterId")
                 .HasPrincipalKey("Id", "CharacterId")
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>

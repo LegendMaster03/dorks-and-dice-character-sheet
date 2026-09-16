@@ -91,7 +91,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .WithMany()
             .HasForeignKey(value => new { value.ParentAdvancementEntryId, value.CharacterId })
             .HasPrincipalKey(value => new { value.Id, value.CharacterId })
-            .OnDelete(DeleteBehavior.Restrict);
+            .OnDelete(DeleteBehavior.NoAction);
 
         var processedLifecycleEvent = modelBuilder.Entity<ProcessedLifecycleEvent>();
         processedLifecycleEvent.ToTable("processed_lifecycle_events");

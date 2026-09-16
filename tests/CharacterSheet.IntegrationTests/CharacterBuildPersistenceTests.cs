@@ -203,55 +203,79 @@ public sealed class CharacterBuildPersistenceTests
     }
 
     [Fact]
-    public async Task CharacterDeletedCascadesAllBuilderRowsWhileCampaignDeletedDoesNot()
+    public async Task CharacterDeletedCascadesParentedAdvancementGraphAndOtherBuilderRowsWhileCampaignDeletedDoesNot()
     {
         var path = Path.Combine(Path.GetTempPath(), $"character-build-lifecycle-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<CharacterSheetDbContext>()
             .UseSqlite($"Data Source={path}")
             .Options;
         var characterId = Guid.NewGuid();
+        var characterDeletedEventId = Guid.NewGuid();
 
         try
         {
-            await using var db = new CharacterSheetDbContext(options);
-            await db.Database.MigrateAsync();
-            await new SqliteCharacterSheetStore(db).GetOrCreateAsync(characterId);
-            var buildStore = new SqliteCharacterBuildStore(db);
-            await buildStore.SetFoundationalSelectionAsync(
-                characterId,
-                CharacterFoundationalSelectionCategory.RaceSpecies,
-                "race:elf",
-                DateTimeOffset.UtcNow);
-            await buildStore.SetStartingClassAsync(
-                characterId,
-                "class:fighter",
-                DateTimeOffset.UtcNow);
-            var processor = new CharacterSheetLifecycleProcessor(db, TimeProvider.System);
+            await using (var setup = new CharacterSheetDbContext(options))
+            {
+                await setup.Database.MigrateAsync();
+                var root = await new SqliteCharacterSheetStore(setup).GetOrCreateAsync(characterId);
+                root.SetFoundationalSelection(
+                    CharacterFoundationalSelectionCategory.RaceSpecies,
+                    "race:elf",
+                    DateTimeOffset.UtcNow);
+                var parentClass = root.SetStartingClass(
+                    "class:fighter",
+                    DateTimeOffset.UtcNow.AddMinutes(1));
+                root.AddAdvancement(
+                    CharacterAdvancementKind.Subclass,
+                    "subclass:champion",
+                    null,
+                    parentClass.Id,
+                    DateTimeOffset.UtcNow.AddMinutes(2));
+                root.AddAdvancement(
+                    CharacterAdvancementKind.Feat,
+                    "feat:alert",
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow.AddMinutes(3));
+                await setup.SaveChangesAsync();
 
-            Assert.Equal(
-                LifecycleProcessingStatus.Processed,
-                await processor.ProcessAsync(new ToolLifecycleContext(
-                    1,
-                    "character-sheet",
-                    Guid.NewGuid(),
-                    ToolLifecycleEventTypes.CampaignDeleted,
-                    Guid.NewGuid(),
-                    DateTimeOffset.UtcNow)));
-            Assert.Equal(1, await db.FoundationalRuleSelections.CountAsync());
-            Assert.Equal(1, await db.CharacterAdvancementEntries.CountAsync());
+                var campaignProcessor = new CharacterSheetLifecycleProcessor(setup, TimeProvider.System);
+                Assert.Equal(
+                    LifecycleProcessingStatus.Processed,
+                    await campaignProcessor.ProcessAsync(new ToolLifecycleContext(
+                        1,
+                        "character-sheet",
+                        Guid.NewGuid(),
+                        ToolLifecycleEventTypes.CampaignDeleted,
+                        Guid.NewGuid(),
+                        DateTimeOffset.UtcNow)));
+                Assert.Equal(1, await setup.CharacterSheets.CountAsync());
+                Assert.Equal(1, await setup.FoundationalRuleSelections.CountAsync());
+                Assert.Equal(3, await setup.CharacterAdvancementEntries.CountAsync());
+            }
 
-            Assert.Equal(
-                LifecycleProcessingStatus.Processed,
-                await processor.ProcessAsync(new ToolLifecycleContext(
-                    1,
-                    "character-sheet",
-                    Guid.NewGuid(),
-                    ToolLifecycleEventTypes.CharacterDeleted,
-                    characterId,
-                    DateTimeOffset.UtcNow)));
-            Assert.Equal(0, await db.CharacterSheets.CountAsync());
-            Assert.Equal(0, await db.FoundationalRuleSelections.CountAsync());
-            Assert.Equal(0, await db.CharacterAdvancementEntries.CountAsync());
+            await using (var deletion = new CharacterSheetDbContext(options))
+            {
+                var processor = new CharacterSheetLifecycleProcessor(deletion, TimeProvider.System);
+                Assert.Equal(
+                    LifecycleProcessingStatus.Processed,
+                    await processor.ProcessAsync(new ToolLifecycleContext(
+                        1,
+                        "character-sheet",
+                        characterDeletedEventId,
+                        ToolLifecycleEventTypes.CharacterDeleted,
+                        characterId,
+                        DateTimeOffset.UtcNow)));
+
+                Assert.Equal(0, await deletion.CharacterSheets.CountAsync());
+                Assert.Equal(0, await deletion.FoundationalRuleSelections.CountAsync());
+                Assert.Equal(0, await deletion.CharacterAdvancementEntries.CountAsync());
+
+                var recorded = await deletion.ProcessedLifecycleEvents
+                    .SingleAsync(value => value.EventId == characterDeletedEventId);
+                Assert.Equal(ToolLifecycleEventTypes.CharacterDeleted, recorded.EventType);
+                Assert.Equal(characterId, recorded.SubjectId);
+            }
         }
         finally
         {
