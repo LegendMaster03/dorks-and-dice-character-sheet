@@ -1,18 +1,17 @@
 using System.Net;
 using CharacterSheet.Application.Lifecycle;
 using CharacterSheet.Infrastructure.Hosting;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CharacterSheet.IntegrationTests;
 
-public sealed class LifecycleEndpointAuthenticationTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class LifecycleEndpointAuthenticationTests : IClassFixture<PostgresWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly PostgresWebApplicationFactory _factory;
 
-    public LifecycleEndpointAuthenticationTests(WebApplicationFactory<Program> factory)
+    public LifecycleEndpointAuthenticationTests(PostgresWebApplicationFactory factory)
     {
         _factory = factory;
     }
