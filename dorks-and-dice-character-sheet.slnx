@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="src/CharacterSheet.Domain/CharacterSheet.Domain.csproj" />
+  <Project Path="src/CharacterSheet.Application/CharacterSheet.Application.csproj" />
+  <Project Path="src/CharacterSheet.Infrastructure/CharacterSheet.Infrastructure.csproj" />
+  <Project Path="src/CharacterSheet.Web/CharacterSheet.Web.csproj" />
+  <Project Path="tests/CharacterSheet.UnitTests/CharacterSheet.UnitTests.csproj" />
+  <Project Path="tests/CharacterSheet.IntegrationTests/CharacterSheet.IntegrationTests.csproj" />
+</Solution>

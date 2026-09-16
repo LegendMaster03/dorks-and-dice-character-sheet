@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.test-dist/
+**/wwwroot/app.js
+**/wwwroot/app.js.map
+**/wwwroot/.vite/
+.vscode/
+.idea/
+.DS_Store
