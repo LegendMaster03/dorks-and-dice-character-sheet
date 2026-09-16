@@ -7,6 +7,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     : DbContext(options)
 {
     public DbSet<CharacterSheetRoot> CharacterSheets => Set<CharacterSheetRoot>();
+    public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +25,19 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         root.Property(character => character.CreatedAt)
             .IsRequired();
         root.Property(character => character.UpdatedAt)
+            .IsRequired();
+
+        var processedLifecycleEvent = modelBuilder.Entity<ProcessedLifecycleEvent>();
+        processedLifecycleEvent.ToTable("processed_lifecycle_events");
+        processedLifecycleEvent.HasKey(item => item.EventId);
+        processedLifecycleEvent.Property(item => item.EventId)
+            .ValueGeneratedNever();
+        processedLifecycleEvent.Property(item => item.EventType)
+            .HasMaxLength(80)
+            .IsRequired();
+        processedLifecycleEvent.Property(item => item.SubjectId)
+            .IsRequired();
+        processedLifecycleEvent.Property(item => item.ProcessedAt)
             .IsRequired();
     }
 }

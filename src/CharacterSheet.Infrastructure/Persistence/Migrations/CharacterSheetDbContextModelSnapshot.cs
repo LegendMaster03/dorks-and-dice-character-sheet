@@ -37,6 +37,26 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.HasKey("CharacterId");
             b.ToTable("character_sheet_roots");
         });
+
+        modelBuilder.Entity("CharacterSheet.Infrastructure.Persistence.ProcessedLifecycleEvent", b =>
+        {
+            b.Property<Guid>("EventId")
+                .HasColumnType("TEXT");
+
+            b.Property<string>("EventType")
+                .IsRequired()
+                .HasMaxLength(80)
+                .HasColumnType("TEXT");
+
+            b.Property<DateTimeOffset>("ProcessedAt")
+                .HasColumnType("TEXT");
+
+            b.Property<Guid>("SubjectId")
+                .HasColumnType("TEXT");
+
+            b.HasKey("EventId");
+            b.ToTable("processed_lifecycle_events");
+        });
 #pragma warning restore 612, 618
     }
 }

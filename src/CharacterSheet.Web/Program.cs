@@ -1,5 +1,6 @@
 using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Hosting;
+using CharacterSheet.Application.Lifecycle;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Infrastructure.Hosting;
@@ -32,6 +33,17 @@ builder.Services
         AllowAutoRedirect = false,
         UseCookies = false
     });
+builder.Services
+    .AddHttpClient<IToolLifecycleIntrospectionClient, DorksAndDiceToolLifecycleIntrospectionClient>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(3);
+        client.BaseAddress = toolHostBaseUri;
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
 
 var characterSheetConnectionString = builder.Configuration.GetConnectionString("CharacterSheet");
 if (string.IsNullOrWhiteSpace(characterSheetConnectionString))
@@ -41,7 +53,9 @@ if (string.IsNullOrWhiteSpace(characterSheetConnectionString))
 
 builder.Services.AddDbContext<CharacterSheetDbContext>(options =>
     options.UseSqlite(characterSheetConnectionString));
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICharacterSheetStore, SqliteCharacterSheetStore>();
+builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
@@ -99,6 +113,8 @@ app.MapGet("/api", () => Results.Ok(new
     status = "character-bootstrap"
 }));
 
+app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
+
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,
     CharacterSheetBootstrapService service,
@@ -133,6 +149,76 @@ app.MapGet("/new", StandaloneShell);
 app.MapGet("/characters/{**route}", StandaloneShell);
 
 app.Run();
+
+static async Task<IResult> ReceiveLifecycleEventAsync(
+    HttpContext httpContext,
+    IToolLifecycleIntrospectionClient introspectionClient,
+    ICharacterSheetLifecycleProcessor processor,
+    CancellationToken cancellationToken)
+{
+    httpContext.Response.Headers.CacheControl = "no-store";
+
+    var tickets = httpContext.Request.Headers[ToolLifecycleHeaders.Ticket];
+    var introspectionPaths = httpContext.Request.Headers[ToolLifecycleHeaders.IntrospectionPath];
+    if (tickets.Count != 1
+        || introspectionPaths.Count != 1
+        || string.IsNullOrWhiteSpace(tickets[0])
+        || string.IsNullOrWhiteSpace(introspectionPaths[0])
+        || !string.Equals(
+            introspectionPaths[0],
+            DorksAndDiceToolLifecycleIntrospectionClient.ExpectedIntrospectionPath,
+            StringComparison.Ordinal))
+    {
+        return Results.Unauthorized();
+    }
+
+    ToolLifecycleContext? lifecycleContext;
+    try
+    {
+        lifecycleContext = await introspectionClient.RedeemAsync(
+            tickets[0]!,
+            introspectionPaths[0]!,
+            cancellationToken);
+    }
+    catch (InvalidOperationException)
+    {
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (InvalidDataException exception)
+    {
+        return Results.Json(
+            new { error = exception.Message },
+            statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+    catch (ArgumentException)
+    {
+        return Results.Unauthorized();
+    }
+    catch (HttpRequestException)
+    {
+        return Results.StatusCode(StatusCodes.Status502BadGateway);
+    }
+    catch (OperationCanceledException) when (!httpContext.RequestAborted.IsCancellationRequested)
+    {
+        return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
+    }
+
+    if (lifecycleContext is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var processingStatus = await processor.ProcessAsync(lifecycleContext, cancellationToken);
+    return processingStatus switch
+    {
+        LifecycleProcessingStatus.Processed => Results.NoContent(),
+        LifecycleProcessingStatus.AlreadyProcessed => Results.NoContent(),
+        LifecycleProcessingStatus.Unsupported => Results.Json(
+            new { error = $"Unsupported lifecycle event type '{lifecycleContext.EventType}'." },
+            statusCode: StatusCodes.Status422UnprocessableEntity),
+        _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+    };
+}
 
 static IResult ToApiResult(CharacterSheetBootstrapResult result, bool initializing) => result.Status switch
 {
