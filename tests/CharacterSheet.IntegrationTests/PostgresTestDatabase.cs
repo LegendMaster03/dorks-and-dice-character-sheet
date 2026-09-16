@@ -113,7 +113,7 @@ internal sealed class PostgresTestDatabase : IDisposable, IAsyncDisposable
     }
 }
 
-internal sealed class PostgresWebApplicationFactory : WebApplicationFactory<Program>
+public sealed class PostgresWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly PostgresTestDatabase _database = PostgresTestDatabase.Create();
 
