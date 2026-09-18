@@ -415,3 +415,91 @@ test("frontend does not infer Proficiency Bonus when the backend does not supply
     assert.doesNotMatch(visibleText(rendered), /Proficiency Bonus/);
     assert.equal(byAttribute(rendered, "data-unimplemented-mechanic", "proficiency").length, 0);
 });
+
+
+test("workspace renders specialized, composite, independent, and unconfigured competencies from backend data", () => {
+    const mechanics = {
+        competencies: {
+            entries: [
+                mechanical("skill.stealth", "Stealth", "Not configured", { kind: "skill" }),
+                mechanical("skill.hide", "Hide", "Not configured", { kind: "skill", governingAbility: "dexterity" }),
+                mechanical("skill.move-silently", "Move Silently", "Not configured", { kind: "skill" }),
+                mechanical("skill.knowledge-planes", "Knowledge (the planes)", "Not configured", {
+                    kind: "skill",
+                    specialty: "Knowledge (the planes)",
+                    trainedOnly: true,
+                    armorCheckPenalty: { applies: false }
+                }),
+                mechanical("skill.perception", "Perception", "Not configured", { kind: "skill" }),
+                mechanical("skill.listen", "Listen", "Not configured", { kind: "skill" }),
+                mechanical("skill.spot", "Spot", "Not configured", { kind: "skill" })
+            ],
+            relationships: [{
+                parentKey: "skill.stealth",
+                componentKeys: ["skill.hide", "skill.move-silently"]
+            }]
+        }
+    };
+
+    const rendered = render("actions", mechanics);
+    assert.equal(byAttribute(rendered, "data-skill-id", "skill.stealth")[0].getAttribute("data-skill-role"), "parent");
+    assert.equal(byAttribute(rendered, "data-skill-id", "skill.hide")[0].getAttribute("data-skill-role"), "component");
+    assert.equal(byAttribute(rendered, "data-skill-id", "skill.move-silently")[0].getAttribute("data-skill-role"), "component");
+
+    const specialty = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
+    assert.match(visibleText(specialty), /Knowledge \(the planes\)/);
+    assert.match(visibleText(specialty), /Not configured/);
+    assert.doesNotMatch(visibleText(specialty), /\b0\b/);
+
+    for (const key of ["skill.perception", "skill.listen", "skill.spot"]) {
+        assert.equal(byAttribute(rendered, "data-skill-id", key)[0].getAttribute("data-skill-role"), "standalone");
+    }
+});
+
+test("workspace renders backend-supplied 3.x saving throws, defenses, combat, and nonlethal state without formulas", () => {
+    const mechanics = {
+        savingThrows: [
+            mechanical("save.fortitude", "Fortitude Save", "+7"),
+            mechanical("save.reflex", "Reflex Save", "+5"),
+            mechanical("save.will", "Will Save", "+6")
+        ],
+        defenses: {
+            primaryKey: "defense.ac",
+            values: [
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "17"),
+                mechanical("defense.spell-resistance", "Spell Resistance", "18"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5/magic")
+            ]
+        },
+        combatFundamentals: [
+            mechanical("combat.base-attack-bonus", "Base Attack Bonus", "+6/+1"),
+            mechanical("combat.grapple", "Grapple", "+9")
+        ],
+        healthTracks: [{
+            key: "resource.nonlethal-damage",
+            label: "Nonlethal Damage",
+            role: "nonlethal-damage",
+            current: 4
+        }]
+    };
+
+    const rendered = render("actions", mechanics);
+    for (const key of [
+        "save.fortitude",
+        "save.reflex",
+        "save.will",
+        "defense.ac.touch",
+        "defense.ac.flat-footed",
+        "defense.spell-resistance",
+        "defense.damage-reduction",
+        "combat.base-attack-bonus",
+        "combat.grapple"
+    ]) {
+        assert.equal(byAttribute(rendered, "data-mechanic-key", key).length, 1, key);
+    }
+    assert.equal(byAttribute(rendered, "data-health-track-key", "resource.nonlethal-damage").length, 1);
+    assert.match(visibleText(rendered), /Touch Armor Class/);
+    assert.match(visibleText(rendered), /Base Attack Bonus/);
+    assert.match(visibleText(rendered), /Nonlethal Damage/);
+});
