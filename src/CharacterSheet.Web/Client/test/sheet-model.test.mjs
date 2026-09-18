@@ -161,3 +161,11 @@ test("embedded module loads its stylesheet from the same Tool Module asset subtr
     assert.match(appSource, /new URL\("\.\/app\.css", import\.meta\.url\)/);
     assert.match(appSource, /data-character-sheet-stylesheet/);
 });
+
+
+test("Character workspace does not create a nested document-level main landmark", () => {
+    assert.doesNotMatch(sheetSource, /createElement\("main"/);
+    assert.match(
+        sheetSource,
+        /createElement\("section", "dd-sheet__main"\)[\s\S]*aria-label", "Character details and controls"/);
+});
