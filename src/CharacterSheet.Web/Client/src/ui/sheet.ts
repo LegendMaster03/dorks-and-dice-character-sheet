@@ -9,6 +9,34 @@ import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
 import {
+    createCompactAdvancementSummary,
+    type CharacterAdvancementView
+} from "./character-advancement.js";
+import { renderAdvancementDetails } from "./advancement.js";
+import {
+    buildCompetencyPresentation,
+    findAbilityValue,
+    findItemOccurrenceMechanics,
+    formatMechanicalValue,
+    type CalculatedMechanicalValueView,
+    type CharacterMechanicsView,
+    type InventoryMechanicsView
+} from "./character-mechanics.js";
+import {
+    renderActionsPresentation,
+    renderCombatMechanicsSummary,
+    renderFacts,
+    renderMechanicalValue,
+    renderMovementValues,
+    renderSavingThrowsCard
+} from "./mechanics-components.js";
+import {
+    renderChecksAndProceduresPresentation,
+    renderInventoryMechanics,
+    renderItemOccurrenceMechanics,
+    renderSpellcastingPresentation
+} from "./procedure-components.js";
+import {
     createButton,
     createElement,
     createInlineState,
@@ -16,6 +44,7 @@ import {
     createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
+import { renderSourceAttributions } from "./source-attribution.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
@@ -78,6 +107,8 @@ export function renderCharacterWorkspace(
     forceReadOnly: boolean,
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
+    advancement: CharacterAdvancementView | null,
+    mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
@@ -92,7 +123,10 @@ export function renderCharacterWorkspace(
     shell.setAttribute("data-sheet-mode", sheetMode);
     shell.setAttribute("data-guided-builder-open", guidedBuilder.open ? "true" : "false");
 
-    shell.append(renderCharacterHeader(character, builder, forceReadOnly));
+    shell.append(renderCharacterHeader(character, builder, forceReadOnly, advancement));
+    if (advancement !== null && advancement.occurrences.length > 0) {
+        shell.append(renderAdvancementDetails(advancement));
+    }
     if (editable) {
         shell.append(renderModeControls(sheetMode, guidedBuilder, handlers));
     }
@@ -105,24 +139,30 @@ export function renderCharacterWorkspace(
         return shell;
     }
 
-    shell.append(renderCoreStats(builder, structuralEditing, readOnly, handlers.structural));
+    const mechanicsSources = renderCharacterMechanicsSources(mechanics);
+    if (mechanicsSources !== null) shell.append(mechanicsSources);
+
+    shell.append(renderCoreStats(builder, structuralEditing, readOnly, mechanics, handlers.structural));
 
     const workspace = createElement("div", "dd-sheet__workspace");
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderPlaceholderCard("Saving Throws", placeholders("saving-throws")),
+        renderSavingThrowsCard(mechanics?.savingThrows),
         renderPlaceholderCard("Passive Values", placeholders("passive-values")),
         renderPlaceholderCard("Proficiencies & Training", placeholders("training"))
     );
 
     const skills = createElement("section", "dd-sheet__skills");
     skills.setAttribute("aria-label", "Character skills");
-    skills.append(renderSkillsCard(null));
+    const competencyPresentation = mechanics?.competencies === undefined
+        ? null
+        : buildCompetencyPresentation(mechanics.competencies);
+    skills.append(renderSkillsCard(competencyPresentation));
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
-    primary.append(renderCombatSummary());
+    primary.append(renderCombatMechanicsSummary(mechanics));
     if (structuralEditing) {
         primary.append(renderCharacterBuilder(
             character.characterId,
@@ -136,6 +176,7 @@ export function renderCharacterWorkspace(
         routine,
         structuralEditing,
         readOnly,
+        mechanics,
         handlers));
 
     workspace.append(support, skills, primary);
@@ -296,7 +337,8 @@ function guidedStatusLabel(status: ReturnType<typeof getGuidedBuilderSectionStat
 export function renderCharacterHeader(
     character: CharacterSheetBootstrapResponse,
     builder: CharacterBuilderUiState,
-    forceReadOnly: boolean
+    forceReadOnly: boolean,
+    advancement: CharacterAdvancementView | null = null
 ): HTMLElement {
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
     const header = createElement("header", "dd-sheet-header");
@@ -320,15 +362,13 @@ export function renderCharacterHeader(
     text.append(name, statusLine);
     identity.append(monogram, text);
 
+    const advancementSummary = advancement === null
+        ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
+        : createCompactAdvancementSummary(advancement);
     const summary = createElement("dl", "dd-sheet-header__summary");
     summary.append(
         headerSummaryItem("Race / Species", model.raceSpecies.value, model.raceSpecies.detail),
-        headerSummaryItem("Class", model.startingClass.value, model.startingClass.detail),
-        headerSummaryItem("Subclass", model.subclass.value, model.subclass.detail),
-        headerSummaryItem(
-            "Advancement",
-            "Not yet available",
-            "Level, multiclass, and Prestige Class summaries are not implemented yet.")
+        headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
     );
     if (model.readOnly) {
         summary.append(headerSummaryItem("Sheet state", "Read-only", "Restore the Character through the Site to edit."));
@@ -359,6 +399,7 @@ function renderCoreStats(
     builder: CharacterBuilderUiState,
     structuralEditing: boolean,
     readOnly: boolean,
+    mechanics: CharacterMechanicsView | null,
     handlers: StructuralCharacterHandlers
 ): HTMLElement {
     const section = createElement("section", "dd-core-stats");
@@ -369,14 +410,31 @@ function renderCoreStats(
 
     const abilityGrid = createElement("div", "dd-core-stats__abilities");
     for (const definition of ABILITY_SCORE_DEFINITIONS) {
-        abilityGrid.append(renderAbilityScoreCard(definition, builder, structuralEditing, readOnly, handlers));
+        abilityGrid.append(renderAbilityScoreCard(
+            definition,
+            builder,
+            structuralEditing,
+            readOnly,
+            handlers,
+            findAbilityValue(mechanics?.abilityValues, definition.key)));
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
-    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "quick")) {
+    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "quick" && value.id !== "movement")) {
         quickGrid.append(createStatPlaceholder(placeholder));
     }
+    const movement = createElement("article", "dd-stat dd-stat--movement");
+    movement.append(
+        createElement("h3", "dd-stat__label", "Movement"),
+        renderMovementValues(mechanics?.movement));
+    quickGrid.append(movement);
     section.append(abilityGrid, quickGrid);
+
+    const standardAbilityKeys = new Set(ABILITY_SCORE_DEFINITIONS.map(definition => definition.key));
+    const additionalAbilityValues = mechanics?.abilityValues?.filter(value => !standardAbilityKeys.has(value.key as CharacterAbilityKey)) ?? [];
+    if (additionalAbilityValues.length > 0) {
+        section.append(renderAdditionalAbilityValues(additionalAbilityValues));
+    }
     return section;
 }
 
@@ -385,7 +443,8 @@ function renderAbilityScoreCard(
     builder: CharacterBuilderUiState,
     structuralEditing: boolean,
     readOnly: boolean,
-    handlers: StructuralCharacterHandlers
+    handlers: StructuralCharacterHandlers,
+    effectiveValue?: CalculatedMechanicalValueView
 ): HTMLElement {
     const display = getBaseAbilityScoreDisplay(builder, definition.key);
     const configured = display.status === "configured";
@@ -393,12 +452,42 @@ function renderAbilityScoreCard(
     const card = createElement("article", "dd-stat dd-stat--ability");
     card.setAttribute("data-ability-key", definition.key);
     card.setAttribute("data-ability-score-state", display.status);
-    card.append(
-        createElement("h3", "dd-stat__label", definition.label),
-        createElement("p", "dd-stat__value", display.value),
-        createElement("p", "dd-stat__detail", display.detail),
-        createElement("p", "dd-stat__modifier", "Modifier not available yet.")
-    );
+    card.setAttribute("data-effective-ability-state", effectiveValue === undefined ? "unavailable" : "resolved");
+    card.append(createElement("h3", "dd-stat__label", definition.label));
+
+    if (effectiveValue === undefined) {
+        card.append(
+            createElement("p", "dd-stat__value", display.value),
+            createElement("p", "dd-stat__detail", display.detail),
+            createElement("p", "dd-stat__modifier", "Modifier not available yet.")
+        );
+    } else {
+        card.setAttribute("data-effective-ability-key", effectiveValue.key);
+        card.append(
+            createElement("p", "dd-stat__value", formatMechanicalValue(effectiveValue)),
+            createElement("p", "dd-stat__detail", "Effective value"),
+            createElement(
+                "p",
+                "dd-stat__base-context",
+                `Base input: ${display.value}`)
+        );
+
+        if (effectiveValue.relatedValues?.length) {
+            const related = createElement("div", "dd-stat__related-values");
+            for (const value of effectiveValue.relatedValues) {
+                related.append(createElement(
+                    "span",
+                    "dd-stat__related-value",
+                    `${value.label} ${formatMechanicalValue(value)}`));
+            }
+            card.append(related);
+        } else {
+            card.append(createElement("p", "dd-stat__modifier", "Modifier not available yet."));
+        }
+
+        const details = renderAbilityMechanicalDetails(effectiveValue);
+        if (details !== null) card.append(details);
+    }
 
     if (structuralEditing && !readOnly && (display.status === "configured" || display.status === "unconfigured")) {
         const editor = createElement("div", "dd-stat__editor");
@@ -449,6 +538,48 @@ function renderAbilityScoreCard(
     return card;
 }
 
+function renderAbilityMechanicalDetails(value: CalculatedMechanicalValueView): HTMLElement | null {
+    if (!(value.breakdown?.length || value.sourceAttributions?.length)) return null;
+
+    const details = createElement("details", "dd-stat__mechanics-details");
+    details.append(createElement("summary", "dd-stat__mechanics-details-toggle", "Details"));
+    const body = createElement("div", "dd-stat__mechanics-details-body");
+    const breakdown = renderFacts((value.breakdown ?? []).map(entry =>
+        [entry.label, formatMechanicalValue(entry)] as const));
+    if (breakdown !== null) body.append(breakdown);
+    const sources = renderSourceAttributions(value.sourceAttributions, true);
+    if (sources !== null) body.append(sources);
+    details.append(body);
+    return details;
+}
+
+function renderAdditionalAbilityValues(values: readonly CalculatedMechanicalValueView[]): HTMLElement {
+    const section = createElement("section", "dd-core-stats__additional-abilities");
+    section.setAttribute("aria-label", "Additional effective abilities");
+    section.append(createElement("h3", "dd-core-stats__additional-title", "Additional Abilities"));
+    const grid = createElement("div", "dd-core-stats__additional-grid");
+    for (const value of values) {
+        const card = createElement("article", "dd-additional-ability");
+        card.setAttribute("data-additional-ability-key", value.key);
+        card.append(renderMechanicalValue(value));
+        grid.append(card);
+    }
+    section.append(grid);
+    return section;
+}
+
+function renderCharacterMechanicsSources(mechanics: CharacterMechanicsView | null): HTMLElement | null {
+    const sources = renderSourceAttributions(mechanics?.sourceAttributions, true);
+    if (sources === null) return null;
+
+    const surface = createElement("aside", "dd-character-mechanics-sources");
+    surface.setAttribute("aria-label", "Character mechanics rule modules");
+    surface.append(
+        createElement("span", "dd-character-mechanics-sources__label", "Rules modules"),
+        sources);
+    return surface;
+}
+
 function createStatPlaceholder(definition: MechanicPlaceholderDefinition): HTMLElement {
     const card = createElement("article", "dd-stat");
     card.setAttribute("data-unimplemented-mechanic", definition.id);
@@ -468,24 +599,13 @@ function renderPlaceholderCard(title: string, definitions: readonly MechanicPlac
     return card;
 }
 
-function renderCombatSummary(): HTMLElement {
-    const section = createElement("section", "dd-combat-summary");
-    section.setAttribute("aria-labelledby", "dd-combat-heading");
-    const heading = createElement("h2", "dd-visually-hidden", "Combat summary");
-    heading.id = "dd-combat-heading";
-    section.append(heading);
-    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "combat")) {
-        section.append(createPlaceholder(placeholder.label, placeholder.message, true));
-    }
-    return section;
-}
-
 function renderPrimaryContent(
     activeSection: SheetSection,
     builder: CharacterBuilderUiState,
     routine: CharacterRoutineUiState,
     structuralEditing: boolean,
     readOnly: boolean,
+    mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const card = createElement("section", "dd-primary-content");
@@ -508,9 +628,17 @@ function renderPrimaryContent(
     if (definition.id === "notes") {
         panel.append(renderNotesSection(routine, readOnly, handlers.routine));
     } else if (definition.id === "inventory") {
-        panel.append(renderInventorySection(routine, readOnly, handlers.routine));
+        panel.append(renderInventorySection(routine, readOnly, handlers.routine, mechanics?.inventory));
     } else if (definition.id === "features") {
         panel.append(renderFeaturesSection(builder, structuralEditing, readOnly, handlers.feats));
+    } else if (definition.id === "actions") {
+        const presentation = createElement("div", "dd-action-workflows");
+        presentation.append(
+            renderActionsPresentation(mechanics?.actions),
+            renderChecksAndProceduresPresentation(mechanics?.checks, mechanics?.procedures));
+        panel.append(presentation);
+    } else if (definition.id === "spells") {
+        panel.append(renderSpellcastingPresentation(mechanics?.spellcastingProfiles));
     } else {
         panel.append(
             createElement("h3", "dd-primary-content__empty-title", definition.emptyTitle),
@@ -675,17 +803,20 @@ function renderFeatChooser(
 function renderInventorySection(
     routine: CharacterRoutineUiState,
     readOnly: boolean,
-    handlers: RoutineCharacterHandlers
+    handlers: RoutineCharacterHandlers,
+    mechanics: InventoryMechanicsView | undefined
 ): HTMLElement {
     const content = createElement("div", "dd-routine-section dd-inventory");
     if (routine.status === "idle" || routine.status === "loading") {
         content.append(createInlineState("Loading Character inventory…", "loading"));
+        appendInventoryMechanicsPresentation(content, mechanics);
         return content;
     }
     if (routine.status === "error" || routine.state === null) {
         content.append(createInlineState(
             routine.message ?? "Character inventory is unavailable.",
             "error"));
+        appendInventoryMechanicsPresentation(content, mechanics);
         return content;
     }
 
@@ -716,7 +847,6 @@ function renderInventorySection(
             editable
                 ? "No item occurrences yet. Add an item from the Rules Core catalog."
                 : "No item occurrences have been recorded."));
-        return content;
     }
 
     const list = createElement("div", "dd-inventory-list");
@@ -738,6 +868,9 @@ function renderInventorySection(
                 "dd-routine-meta",
                 display.detail ?? occurrence.ruleConceptKey)
         );
+        const occurrenceMechanics = renderItemOccurrenceMechanics(
+            findItemOccurrenceMechanics(mechanics, occurrence.id));
+        if (occurrenceMechanics !== null) item.append(occurrenceMechanics);
         if (editable) {
             item.append(createButton(
                 routine.mutation?.kind === "inventory-delete"
@@ -754,8 +887,17 @@ function renderInventorySection(
         }
         list.append(item);
     }
-    content.append(list);
+    if (list.children.length > 0) content.append(list);
+    appendInventoryMechanicsPresentation(content, mechanics);
     return content;
+}
+
+function appendInventoryMechanicsPresentation(
+    target: HTMLElement,
+    mechanics: InventoryMechanicsView | undefined
+): void {
+    const rendered = renderInventoryMechanics(mechanics);
+    if (rendered !== null) target.append(rendered);
 }
 
 function renderInventoryChooser(
@@ -916,6 +1058,17 @@ function renderNotesSection(
     }
     content.append(list);
     return content;
+}
+
+function legacyAdvancementHeaderSummary(
+    startingClass: string,
+    subclass: string
+): { value: string; detail?: string } {
+    const values = [...new Set([startingClass, subclass].map(value => value.trim()).filter(Boolean))];
+    return {
+        value: values[0] ?? "Not configured",
+        detail: values.length > 1 ? values.slice(1).join(" • ") : undefined
+    };
 }
 
 function headerSummaryItem(label: string, value: string, detail?: string): HTMLElement {
