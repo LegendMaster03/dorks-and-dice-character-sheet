@@ -48,14 +48,15 @@ export function renderCharacterWorkspace(
     skills.setAttribute("aria-label", "Character skills");
     skills.append(renderPlaceholderCard("Skills", placeholders("skills")));
 
-    const main = createElement("main", "dd-sheet__main");
-    main.append(
+    const primary = createElement("section", "dd-sheet__main");
+    primary.setAttribute("aria-label", "Character details and controls");
+    primary.append(
         renderCombatSummary(),
         renderCharacterBuilder(character.characterId, builder, forceReadOnly, handlers),
         renderPrimaryContent(activeSection, handlers)
     );
 
-    workspace.append(support, skills, main);
+    workspace.append(support, skills, primary);
     shell.append(workspace);
     return shell;
 }
