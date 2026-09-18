@@ -180,6 +180,50 @@ app.MapDelete("/api/characters/{characterId:guid}/build/race-species", async (
         await service.ClearRaceSpeciesAsync(characterId, cancellationToken),
         mutating: true));
 
+app.MapPut("/api/characters/{characterId:guid}/build/ability-scores/{abilityKey}", async (
+    Guid characterId,
+    string abilityKey,
+    BaseAbilityScoreInputRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.SetBaseAbilityScoreInputAsync(
+                characterId,
+                abilityKey,
+                request.Score,
+                cancellationToken),
+            mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/ability-scores/{abilityKey}", async (
+    Guid characterId,
+    string abilityKey,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.ClearBaseAbilityScoreInputAsync(
+                characterId,
+                abilityKey,
+                cancellationToken),
+            mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
 app.MapPut("/api/characters/{characterId:guid}/build/starting-class", async (
     Guid characterId,
     RuleConceptSelectionRequest request,
@@ -429,5 +473,7 @@ static IResult ToBuildApiResult(CharacterBuildResult result, bool mutating) => r
 };
 
 public sealed record RuleConceptSelectionRequest(string ConceptKey);
+
+public sealed record BaseAbilityScoreInputRequest(int Score);
 
 public partial class Program;

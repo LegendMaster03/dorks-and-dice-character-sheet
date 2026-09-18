@@ -48,6 +48,41 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> SetBaseAbilityScoreInputAsync(
+        Guid characterId,
+        string abilityKey,
+        int score,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.SetBaseAbilityScoreInput(abilityKey, score, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> ClearBaseAbilityScoreInputAsync(
+        Guid characterId,
+        string abilityKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.ClearBaseAbilityScoreInput(abilityKey, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> SetStartingClassAsync(
         Guid characterId,
         string ruleConceptKey,
@@ -160,6 +195,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
     {
         var query = dbContext.CharacterSheets
             .Include(value => value.FoundationalSelections)
+            .Include(value => value.BaseAbilityScoreInputs)
             .Include(value => value.AdvancementEntries)
             .AsQueryable();
         return tracking ? query : query.AsNoTracking();

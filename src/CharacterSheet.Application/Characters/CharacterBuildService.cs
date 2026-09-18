@@ -43,11 +43,19 @@ public sealed record CharacterAdvancementEntryView(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public sealed record BaseAbilityScoreInputView(
+    Guid Id,
+    string AbilityKey,
+    int Score,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record CharacterBuildView(
     Guid CharacterId,
     string BuilderStatus,
     bool ReadOnly,
     IReadOnlyList<FoundationalRuleSelectionView> FoundationalSelections,
+    IReadOnlyList<BaseAbilityScoreInputView> BaseAbilityScoreInputs,
     IReadOnlyList<CharacterAdvancementEntryView> ProgressionEntries);
 
 public sealed record CharacterBuildResult(
@@ -101,6 +109,34 @@ public sealed class CharacterBuildService(
             (changedAt, token) => buildStore.ClearFoundationalSelectionAsync(
                 characterId,
                 CharacterFoundationalSelectionCategory.RaceSpecies,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> SetBaseAbilityScoreInputAsync(
+        Guid characterId,
+        string abilityKey,
+        int score,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.SetBaseAbilityScoreInputAsync(
+                characterId,
+                abilityKey,
+                score,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> ClearBaseAbilityScoreInputAsync(
+        Guid characterId,
+        string abilityKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.ClearBaseAbilityScoreInputAsync(
+                characterId,
+                abilityKey,
                 changedAt,
                 token),
             cancellationToken);
@@ -237,6 +273,16 @@ public sealed class CharacterBuildService(
                     value.Id,
                     MapCategory(value.Category),
                     value.RuleConceptKey,
+                    value.CreatedAt,
+                    value.UpdatedAt))
+                .ToArray(),
+            root.BaseAbilityScoreInputs
+                .OrderBy(value => value.AbilityKey, StringComparer.Ordinal)
+                .ThenBy(value => value.Id)
+                .Select(value => new BaseAbilityScoreInputView(
+                    value.Id,
+                    value.AbilityKey,
+                    value.Score,
                     value.CreatedAt,
                     value.UpdatedAt))
                 .ToArray(),

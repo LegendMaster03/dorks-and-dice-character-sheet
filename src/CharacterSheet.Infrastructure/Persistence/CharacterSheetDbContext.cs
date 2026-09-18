@@ -9,6 +9,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterSheetRoot> CharacterSheets => Set<CharacterSheetRoot>();
     public DbSet<CharacterFoundationalRuleSelection> FoundationalRuleSelections => Set<CharacterFoundationalRuleSelection>();
     public DbSet<CharacterAdvancementEntry> CharacterAdvancementEntries => Set<CharacterAdvancementEntry>();
+    public DbSet<CharacterBaseAbilityScoreInput> BaseAbilityScoreInputs => Set<CharacterBaseAbilityScoreInput>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -51,6 +52,30 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         foundationalSelection.HasIndex(value => new { value.CharacterId, value.Category })
             .IsUnique();
         root.HasMany(value => value.FoundationalSelections)
+            .WithOne()
+            .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var baseAbilityScoreInput = modelBuilder.Entity<CharacterBaseAbilityScoreInput>();
+        baseAbilityScoreInput.ToTable("character_base_ability_score_inputs");
+        baseAbilityScoreInput.HasKey(value => value.Id);
+        baseAbilityScoreInput.Property(value => value.Id)
+            .ValueGeneratedNever();
+        baseAbilityScoreInput.Property(value => value.CharacterId)
+            .ValueGeneratedNever()
+            .IsRequired();
+        baseAbilityScoreInput.Property(value => value.AbilityKey)
+            .HasMaxLength(CharacterAbilityKey.MaxKeyLength)
+            .IsRequired();
+        baseAbilityScoreInput.Property(value => value.Score)
+            .IsRequired();
+        baseAbilityScoreInput.Property(value => value.CreatedAt)
+            .IsRequired();
+        baseAbilityScoreInput.Property(value => value.UpdatedAt)
+            .IsRequired();
+        baseAbilityScoreInput.HasIndex(value => new { value.CharacterId, value.AbilityKey })
+            .IsUnique();
+        root.HasMany(value => value.BaseAbilityScoreInputs)
             .WithOne()
             .HasForeignKey(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
