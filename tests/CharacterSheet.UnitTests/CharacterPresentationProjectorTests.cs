@@ -113,6 +113,50 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void CompositeCheckRelationshipProjectsGenericProcedureWithoutSourceSpecificLogic()
+    {
+        var assessment = Check("check.harvesting.assessment", "Assessment");
+        var carving = Check("check.harvesting.carving", "Carving");
+        var total = new RulesCoreMechanicView(
+            "check.harvesting.total",
+            "check",
+            "Harvesting",
+            null,
+            true,
+            new RulesCoreMechanicApplicabilityView("always", true, [], null),
+            "sum",
+            false,
+            [],
+            [new RulesCoreMechanicRelationshipView(
+                "check-composite.harvesting",
+                "composite-check",
+                "check.harvesting.total",
+                ["check.harvesting.assessment", "check.harvesting.carving"],
+                "sum",
+                "components-to-parent",
+                null,
+                true,
+                [])],
+            [],
+            null,
+            null,
+            [],
+            []);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(
+            Catalog(assessment, carving, total),
+            null);
+
+        var procedure = Assert.Single(mechanics.Procedures!);
+        Assert.Equal("check.harvesting.total", procedure.Key);
+        Assert.Equal("Harvesting", procedure.Name);
+        Assert.Equal(
+            ["check.harvesting.assessment", "check.harvesting.carving"],
+            procedure.Components.Select(value => value.Key).ToArray());
+        Assert.Null(procedure.Result);
+    }
+
+    [Fact]
     public void MissingCharacterInputsAndCapabilitiesAreNeverSubmittedAsZero()
     {
         var mechanic = new RulesCoreMechanicView(
@@ -217,6 +261,26 @@ public sealed class CharacterPresentationProjectorTests
             "Fixture Rules",
             "3.5e",
             "3.5e");
+
+    private static RulesCoreMechanicView Check(string mechanicKey, string displayName) =>
+        new(
+            mechanicKey,
+            "check",
+            displayName,
+            null,
+            true,
+            new RulesCoreMechanicApplicabilityView("always", true, [], null),
+            "sum",
+            false,
+            [],
+            [],
+            [],
+            new RulesCoreMechanicCheckView(
+                new RulesCoreCheckAbilityView("rule-resolved", null, []),
+                new RulesCoreCheckCompetencyView("rule-resolved", ["skill"], null)),
+            null,
+            [],
+            []);
 
     private static RulesCoreMechanicView Competency(
         string mechanicKey,

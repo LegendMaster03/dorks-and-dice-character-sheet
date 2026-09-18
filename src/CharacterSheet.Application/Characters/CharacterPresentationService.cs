@@ -19,7 +19,6 @@ public sealed record CharacterPresentationResult(
 
 public sealed record CharacterPresentationView(
     CharacterAdvancementPresentationView Advancement,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     CharacterMechanicsPresentationView? Mechanics);
 
 public sealed record CharacterAdvancementPresentationView(
@@ -172,6 +171,17 @@ public sealed record CharacterCheckPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
+public sealed record CharacterProcedurePresentationView(
+    string Key,
+    string Name,
+    IReadOnlyList<CharacterCheckPresentationView> Components,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DisplayFieldPresentationView? Result = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DisplayFieldPresentationView? State = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
 public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CalculatedMechanicalValuePresentationView>? AbilityValues = null,
@@ -186,7 +196,9 @@ public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     CompetencyCollectionPresentationView? Competencies = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CharacterCheckPresentationView>? Checks = null);
+    IReadOnlyList<CharacterCheckPresentationView>? Checks = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterProcedurePresentationView>? Procedures = null);
 
 public sealed class CharacterPresentationService(
     CharacterBuildService buildService,
@@ -376,6 +388,22 @@ public static class CharacterPresentationProjector
                 competencyNameByConcept,
                 evaluationByKey.GetValueOrDefault(value.MechanicKey)))
             .ToArray();
+        var checkByMechanicKey = checks.ToDictionary(value => value.Key, StringComparer.Ordinal);
+
+        var procedures = catalog.Mechanics
+            .SelectMany(value => value.Relationships)
+            .Where(value => string.Equals(value.Kind, "composite-check", StringComparison.Ordinal)
+                && value.CanResolve
+                && value.MissingMechanicKeys.Count == 0)
+            .DistinctBy(value => value.RelationshipKey, StringComparer.Ordinal)
+            .Select(value => ProjectProcedure(
+                value,
+                mechanicByKey,
+                checkByMechanicKey,
+                evaluationByKey))
+            .Where(value => value is not null)
+            .Cast<CharacterProcedurePresentationView>()
+            .ToArray();
 
         var evaluated = catalog.Mechanics
             .Where(value => evaluationByKey.ContainsKey(value.MechanicKey))
@@ -428,7 +456,51 @@ public static class CharacterPresentationProjector
             Competencies: new CompetencyCollectionPresentationView(
                 competencies,
                 relationships.Length == 0 ? null : relationships),
-            Checks: checks.Length == 0 ? null : checks);
+            Checks: checks.Length == 0 ? null : checks,
+            Procedures: procedures.Length == 0 ? null : procedures);
+    }
+
+    private static CharacterProcedurePresentationView? ProjectProcedure(
+        RulesCoreMechanicRelationshipView relationship,
+        IReadOnlyDictionary<string, RulesCoreMechanicView> mechanicByKey,
+        IReadOnlyDictionary<string, CharacterCheckPresentationView> checkByMechanicKey,
+        IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey)
+    {
+        if (!mechanicByKey.TryGetValue(relationship.ParentMechanicKey, out var parent)
+            || !parent.IsAvailableUnderRuleset)
+        {
+            return null;
+        }
+
+        var components = new List<CharacterCheckPresentationView>();
+        foreach (var componentKey in relationship.ComponentMechanicKeys)
+        {
+            if (!checkByMechanicKey.TryGetValue(componentKey, out var component))
+            {
+                return null;
+            }
+
+            components.Add(component);
+        }
+
+        if (components.Count == 0)
+        {
+            return null;
+        }
+
+        var result = evaluationByKey.TryGetValue(parent.MechanicKey, out var evaluation)
+            ? new DisplayFieldPresentationView(
+                $"{parent.MechanicKey}:result",
+                "Result",
+                evaluation.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            : null;
+
+        return new CharacterProcedurePresentationView(
+            parent.MechanicKey,
+            parent.DisplayName,
+            components,
+            Result: result,
+            SourceAttributions: MapAttributions(parent.SourceAttributions));
     }
 
     private static CompetencyPresentationView ProjectCompetency(
