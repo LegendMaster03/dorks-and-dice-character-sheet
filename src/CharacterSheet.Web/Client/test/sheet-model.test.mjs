@@ -420,9 +420,9 @@ test("Notes are rendered from routine Character state and remain routine View-mo
 });
 
 
-test("Inventory renders distinct Character occurrences and uses the Rules Core item chooser", () => {
+test("Inventory keeps distinct occurrence identity without exposing raw UUIDs to players", () => {
     assert.match(sheetSource, /data-inventory-occurrence-id/);
-    assert.match(sheetSource, /Occurrence \${occurrence\.id}/);
+    assert.doesNotMatch(sheetSource, /\`Occurrence \${occurrence\.id}\`/);
     assert.match(sheetSource, /handlers\.addInventoryItem\(rule\.conceptKey\)/);
     assert.match(sheetSource, /handlers\.removeInventoryItem\(occurrence\.id\)/);
     assert.match(appSource, /searchResolvedRules\(environment, "item", normalizedQuery\)/);
@@ -430,10 +430,10 @@ test("Inventory renders distinct Character occurrences and uses the Rules Core i
 });
 
 
-test("Features and Traits renders real Feat occurrences while keeping mutations structural", () => {
+test("Features and Traits keeps Feat occurrence identity internal while mutations remain structural", () => {
     assert.match(sheetSource, /renderFeaturesSection\(builder, structuralEditing, readOnly, handlers\.feats\)/);
     assert.match(sheetSource, /data-feat-occurrence-id/);
-    assert.match(sheetSource, /Occurrence \${occurrence\.id}/);
+    assert.doesNotMatch(sheetSource, /\`Occurrence \${occurrence\.id}\`/);
     assert.match(sheetSource, /if \(editable\) \{[\s\S]*"Add Feat"/);
     assert.match(sheetSource, /handlers\.remove\(occurrence\.id\)/);
     assert.match(appSource, /searchResolvedRules\(environment, "feat", normalizedQuery\)/);
