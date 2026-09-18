@@ -18,13 +18,26 @@ export interface CharacterBuilderHandlers {
     saveChoice(target: CharacterBuilderChoice, conceptKey: string): void;
 }
 
+export interface CharacterBuilderRenderOptions {
+    title?: string;
+    choices?: readonly CharacterBuilderChoice[];
+}
+
+const ALL_CHARACTER_BUILDER_CHOICES: readonly CharacterBuilderChoice[] = [
+    "raceSpecies",
+    "startingClass",
+    "subclass"
+];
+
 export function renderCharacterBuilder(
     characterId: string,
     builder: CharacterBuilderUiState,
     forceReadOnly: boolean,
-    handlers: CharacterBuilderHandlers
+    handlers: CharacterBuilderHandlers,
+    options: CharacterBuilderRenderOptions = {}
 ): HTMLElement {
-    const section = createSectionCard("Character Build", "dd-build");
+    const choices = options.choices ?? ALL_CHARACTER_BUILDER_CHOICES;
+    const section = createSectionCard(options.title ?? "Character Build", "dd-build");
     section.setAttribute("data-character-builder", characterId);
     const mutationPending = hasPendingBuildMutation(builder);
     section.setAttribute("aria-busy", builder.status === "loading" || mutationPending ? "true" : "false");
@@ -55,25 +68,29 @@ export function renderCharacterBuilder(
 
     const grid = createElement("div", "dd-build__grid");
     const startingClass = getStartingClassEntry(builder.build);
-    grid.append(
-        renderChoice("raceSpecies", "Race / Species", builder, readOnly, true, undefined, handlers),
-        renderChoice("startingClass", "Starting Class", builder, readOnly, true, undefined, handlers),
-        renderChoice(
+    if (choices.includes("raceSpecies")) {
+        grid.append(renderChoice("raceSpecies", "Race / Species", builder, readOnly, true, undefined, handlers));
+    }
+    if (choices.includes("startingClass")) {
+        grid.append(renderChoice("startingClass", "Starting Class", builder, readOnly, true, undefined, handlers));
+    }
+    if (choices.includes("subclass")) {
+        grid.append(renderChoice(
             "subclass",
             "Subclass",
             builder,
             readOnly,
             startingClass !== null,
             "Choose a Class before selecting a Subclass.",
-            handlers)
-    );
+            handlers));
+    }
     section.append(grid);
 
     if (builder.saveError !== undefined) {
         section.append(createInlineState(builder.saveError, "error"));
     }
 
-    if (builder.chooser.kind === "open") {
+    if (builder.chooser.kind === "open" && choices.includes(builder.chooser.target)) {
         section.append(renderRuleChooser(builder, handlers));
     }
 
