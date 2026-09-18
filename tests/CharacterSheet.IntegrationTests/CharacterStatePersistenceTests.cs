@@ -1,0 +1,161 @@
+using CharacterSheet.Application.Lifecycle;
+using CharacterSheet.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+
+namespace CharacterSheet.IntegrationTests;
+
+public sealed class CharacterStatePersistenceTests
+{
+    [Fact]
+    public async Task RoutineStatePersistsAcrossDbContextRecreationAndDuplicateItemsRemainDistinct()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+        Guid firstItemId;
+        Guid secondItemId;
+        Guid noteId;
+
+        await using (var firstContext = new CharacterSheetDbContext(options))
+        {
+            await firstContext.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
+            var stateStore = new PostgresCharacterStateStore(firstContext);
+
+            await stateStore.AddInventoryItemOccurrenceAsync(
+                characterId,
+                "  ITEM:TORCH  ",
+                DateTimeOffset.UtcNow);
+            await stateStore.AddInventoryItemOccurrenceAsync(
+                characterId,
+                "item:torch",
+                DateTimeOffset.UtcNow.AddSeconds(1));
+            await stateStore.AddNoteAsync(
+                characterId,
+                "Initial note",
+                DateTimeOffset.UtcNow.AddSeconds(2));
+
+            var state = await stateStore.GetAsync(characterId);
+            Assert.NotNull(state);
+            var items = state.InventoryItemOccurrences.ToArray();
+            Assert.Equal(2, items.Length);
+            Assert.All(items, value => Assert.Equal("item:torch", value.RuleConceptKey));
+            firstItemId = items[0].Id;
+            secondItemId = items[1].Id;
+            Assert.NotEqual(firstItemId, secondItemId);
+            noteId = Assert.Single(state.Notes).Id;
+        }
+
+        await using (var secondContext = new CharacterSheetDbContext(options))
+        {
+            var stateStore = new PostgresCharacterStateStore(secondContext);
+            var state = await stateStore.GetAsync(characterId);
+            Assert.NotNull(state);
+            Assert.Equal(2, state.InventoryItemOccurrences.Count);
+            Assert.Equal("Initial note", Assert.Single(state.Notes).Content);
+
+            await stateStore.RemoveInventoryItemOccurrenceAsync(
+                characterId,
+                firstItemId,
+                DateTimeOffset.UtcNow.AddMinutes(1));
+            await stateStore.UpdateNoteAsync(
+                characterId,
+                noteId,
+                "Updated note",
+                DateTimeOffset.UtcNow.AddMinutes(2));
+        }
+
+        await using (var thirdContext = new CharacterSheetDbContext(options))
+        {
+            var state = await new PostgresCharacterStateStore(thirdContext).GetAsync(characterId);
+            Assert.NotNull(state);
+            var item = Assert.Single(state.InventoryItemOccurrences);
+            Assert.Equal(secondItemId, item.Id);
+            var note = Assert.Single(state.Notes);
+            Assert.Equal(noteId, note.Id);
+            Assert.Equal("Updated note", note.Content);
+        }
+    }
+
+    [Fact]
+    public async Task RoutineStateForeignKeysRequireAnExistingCharacterRoot()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+
+        await using var db = new CharacterSheetDbContext(options);
+        await db.Database.MigrateAsync();
+        var missingCharacterId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO character_inventory_item_occurrences
+                ("Id", "CharacterId", "RuleConceptKey", "CreatedAt")
+            VALUES
+                ({Guid.NewGuid()}, {missingCharacterId}, {"item:torch"}, {now});
+            """));
+
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO character_notes
+                ("Id", "CharacterId", "Content", "CreatedAt", "UpdatedAt")
+            VALUES
+                ({Guid.NewGuid()}, {missingCharacterId}, {"orphan"}, {now}, {now});
+            """));
+    }
+
+    [Fact]
+    public async Task CharacterDeletionCascadesRoutineStateWhileCampaignDeletionDoesNot()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+
+        await using (var setup = new CharacterSheetDbContext(options))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(characterId);
+            var stateStore = new PostgresCharacterStateStore(setup);
+            await stateStore.AddInventoryItemOccurrenceAsync(
+                characterId,
+                "item:rope",
+                DateTimeOffset.UtcNow);
+            await stateStore.AddNoteAsync(
+                characterId,
+                "Keep this through Campaign deletion.",
+                DateTimeOffset.UtcNow.AddSeconds(1));
+
+            var processor = new CharacterSheetLifecycleProcessor(setup, TimeProvider.System);
+            Assert.Equal(
+                LifecycleProcessingStatus.Processed,
+                await processor.ProcessAsync(new ToolLifecycleContext(
+                    1,
+                    "character-sheet",
+                    Guid.NewGuid(),
+                    ToolLifecycleEventTypes.CampaignDeleted,
+                    Guid.NewGuid(),
+                    DateTimeOffset.UtcNow)));
+
+            Assert.Equal(1, await setup.InventoryItemOccurrences.CountAsync());
+            Assert.Equal(1, await setup.CharacterNotes.CountAsync());
+        }
+
+        await using (var deletion = new CharacterSheetDbContext(options))
+        {
+            var processor = new CharacterSheetLifecycleProcessor(deletion, TimeProvider.System);
+            Assert.Equal(
+                LifecycleProcessingStatus.Processed,
+                await processor.ProcessAsync(new ToolLifecycleContext(
+                    1,
+                    "character-sheet",
+                    Guid.NewGuid(),
+                    ToolLifecycleEventTypes.CharacterDeleted,
+                    characterId,
+                    DateTimeOffset.UtcNow)));
+
+            Assert.Equal(0, await deletion.CharacterSheets.CountAsync());
+            Assert.Equal(0, await deletion.InventoryItemOccurrences.CountAsync());
+            Assert.Equal(0, await deletion.CharacterNotes.CountAsync());
+        }
+    }
+}

@@ -75,11 +75,13 @@ builder.Services.AddDbContext<CharacterSheetDbContext>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICharacterSheetStore, PostgresCharacterSheetStore>();
 builder.Services.AddScoped<ICharacterBuildStore, PostgresCharacterBuildStore>();
+builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
+builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -135,6 +137,7 @@ app.MapGet("/api", () => Results.Ok(new
 }));
 
 app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
+app.MapCharacterStateEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,

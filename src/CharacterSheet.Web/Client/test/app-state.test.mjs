@@ -251,3 +251,87 @@ test("ability mutation failure is attached to the attempted ability", () => {
         message: "save failed"
     });
 });
+
+
+test("rich Character defaults to View mode and structural editing is explicit", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+
+    assert.equal(state.sheetMode, "view");
+    assert.equal(state.guidedBuilder.open, false);
+
+    state = reduceAppState(state, { type: "sheet-edit-entered" });
+    assert.equal(state.sheetMode, "edit");
+
+    state = reduceAppState(state, { type: "sheet-edit-exited" });
+    assert.equal(state.sheetMode, "view");
+});
+
+test("archived and backend read-only Characters can not enter Edit Mode or Guided Builder", () => {
+    let archivedState = createInitialState({ kind: "character", characterId });
+    archivedState = reduceAppState(archivedState, {
+        type: "character-loaded",
+        character: { ...rich, lifecycle: "Archived", archivedAt: "2026-09-18T00:00:00Z" }
+    });
+    archivedState = reduceAppState(archivedState, { type: "builder-loaded", build });
+    archivedState = reduceAppState(archivedState, { type: "sheet-edit-entered" });
+    archivedState = reduceAppState(archivedState, { type: "guided-builder-opened" });
+    assert.equal(archivedState.sheetMode, "view");
+    assert.equal(archivedState.guidedBuilder.open, false);
+
+    let readOnlyState = createInitialState({ kind: "character", characterId });
+    readOnlyState = reduceAppState(readOnlyState, { type: "character-loaded", character: rich });
+    readOnlyState = reduceAppState(readOnlyState, {
+        type: "builder-loaded",
+        build: { ...build, readOnly: true }
+    });
+    readOnlyState = reduceAppState(readOnlyState, { type: "sheet-edit-entered" });
+    readOnlyState = reduceAppState(readOnlyState, { type: "guided-builder-opened" });
+    assert.equal(readOnlyState.sheetMode, "view");
+    assert.equal(readOnlyState.guidedBuilder.open, false);
+});
+
+test("Guided Builder is optional, directly navigable, and does not replace Character state", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+
+    assert.equal(state.screen.kind, "rich-character");
+    assert.equal(state.guidedBuilder.open, false);
+
+    state = reduceAppState(state, { type: "guided-builder-opened" });
+    assert.equal(state.guidedBuilder.open, true);
+    assert.equal(state.screen.kind, "rich-character");
+    assert.equal(state.builder.build, build);
+
+    state = reduceAppState(state, {
+        type: "guided-builder-section-selected",
+        section: "abilities"
+    });
+    assert.equal(state.guidedBuilder.activeSection, "abilities");
+    assert.equal(state.screen.kind, "rich-character");
+
+    state = reduceAppState(state, { type: "guided-builder-closed" });
+    assert.equal(state.guidedBuilder.open, false);
+    assert.equal(state.sheetMode, "view");
+    assert.equal(state.screen.kind, "rich-character");
+});
+
+test("incomplete build configuration never prevents normal rich Character rendering", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, {
+        type: "builder-loaded",
+        build: {
+            ...build,
+            foundationalSelections: [],
+            progressionEntries: [],
+            baseAbilityScoreInputs: []
+        }
+    });
+
+    assert.equal(state.screen.kind, "rich-character");
+    assert.equal(state.sheetMode, "view");
+    assert.equal(state.guidedBuilder.open, false);
+});

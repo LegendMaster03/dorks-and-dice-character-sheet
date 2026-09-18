@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createInitialState, reduceAppState } from "../.test-dist/app-state.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
+    getGuidedBuilderSectionStates,
     createCharacterHeaderModel,
     getAbilityScoreActionPolicy,
     getBaseAbilityScoreDisplay,
@@ -275,4 +276,133 @@ test("ability editor uses integer input without edition-specific min or max attr
     assert.match(sheetSource, /input\.step = "1"/);
     assert.doesNotMatch(sheetSource, /input\.(?:min|max)\s*=/);
     assert.doesNotMatch(sheetSource, /setAttribute\("(?:min|max)"/);
+});
+
+
+function cssRule(selectorPattern) {
+    const match = css.match(new RegExp(selectorPattern + "\\s*\\{([^}]*)\\}", "s"));
+    assert.ok(match, `Expected CSS rule matching ${selectorPattern}`);
+    return match[1];
+}
+
+test("Character Sheet semantic colors inherit the Site Bootstrap theme contract", () => {
+    const themeBlock = cssRule("\\.dd-sheet,\\s*\\.dd-sheet-screen");
+    const hostMappings = [
+        ["--dd-sheet-background", "--bs-body-bg"],
+        ["--dd-sheet-surface", "--bs-tertiary-bg"],
+        ["--dd-sheet-surface-muted", "--bs-secondary-bg"],
+        ["--dd-sheet-ink", "--bs-body-color"],
+        ["--dd-sheet-muted", "--bs-secondary-color"],
+        ["--dd-sheet-border", "--bs-border-color"],
+        ["--dd-sheet-accent", "--bs-primary"],
+        ["--dd-sheet-danger", "--bs-danger-text-emphasis"],
+        ["--dd-sheet-warning", "--bs-warning-text-emphasis"]
+    ];
+
+    for (const [sheetToken, hostToken] of hostMappings) {
+        assert.match(themeBlock, new RegExp(sheetToken + ":\\s*var\\(" + hostToken));
+    }
+});
+
+test("Site light and dark appearance drive Character Sheet native color schemes", () => {
+    assert.match(
+        css,
+        /:root\[data-bs-theme="light"\][\s\S]*?\.dd-sheet-screen\s*\{[^}]*color-scheme:\s*light;/s);
+    assert.match(
+        css,
+        /:root\[data-bs-theme="dark"\][\s\S]*?\.dd-sheet-screen\s*\{[^}]*color-scheme:\s*dark;/s);
+});
+
+test("focus indication uses the semantic host-driven focus token", () => {
+    const focusMatch = css.match(/\.dd-sheet button:focus-visible,[\s\S]*?\.dd-sheet summary:focus-visible\s*\{([^}]*)\}/);
+    assert.ok(focusMatch);
+    assert.match(focusMatch[1], /outline:\s*3px solid var\(--dd-sheet-focus\)/);
+    assert.match(cssRule("\\.dd-sheet,\\s*\\.dd-sheet-screen"), /--dd-sheet-focus:\s*var\(--bs-primary,/);
+});
+
+test("major Character Sheet surfaces consume semantic tokens instead of local palette literals", () => {
+    const majorSurfaceRules = [
+        cssRule("\\.dd-sheet"),
+        cssRule("\\.dd-sheet-header"),
+        cssRule("\\.dd-stat"),
+        cssRule("\\.dd-readonly-banner"),
+        cssRule("\\.dd-rule-chooser"),
+        cssRule("\\.dd-primary-nav__button--active"),
+        cssRule("\\.dd-inline-state--error")
+    ].join("\n");
+
+    assert.match(majorSurfaceRules, /var\(--dd-sheet-(?:background|surface|header|warning-surface|danger-surface)/);
+
+    const semanticTokenBlock = css.match(/^\.dd-sheet,\n\.dd-sheet-screen \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const componentRules = css.replace(semanticTokenBlock, "");
+    assert.doesNotMatch(componentRules, /#[0-9a-f]{3,8}\b|rgba?\s*\(|hsla?\s*\(/i);
+    assert.doesNotMatch(
+        componentRules,
+        /(?:color|background(?:-color)?|border-color|outline):\s*(?:white|black)\b/i);
+});
+
+test("Character Sheet theme adds no external visual assets or custom font branding", () => {
+    assert.doesNotMatch(css, /@font-face/i);
+    assert.doesNotMatch(css, /url\s*\(/i);
+    const portraitRule = cssRule("\\.dd-sheet-header__portrait");
+    assert.match(portraitRule, /background:\s*var\(--dd-sheet-accent\)/);
+    assert.doesNotMatch(portraitRule, /gradient\s*\(/i);
+});
+
+test("guided setup reports only backend-known unresolved structural configuration", () => {
+    const current = builder({
+        foundationalSelections: [],
+        progressionEntries: [],
+        baseAbilityScoreInputs: []
+    });
+    const states = getGuidedBuilderSectionStates(current);
+    assert.deepEqual(
+        states.map(section => [section.id, section.status]),
+        [
+            ["species", "incomplete"],
+            ["advancement", "incomplete"],
+            ["abilities", "incomplete"],
+            ["review", "available"]
+        ]
+    );
+    assert.match(states.find(section => section.id === "advancement").detail, /No Starting Class/);
+    assert.doesNotMatch(states.find(section => section.id === "advancement").detail, /Subclass.*required/i);
+});
+
+test("normal View rendering keeps structural editors out of the sheet until Edit Mode is active", () => {
+    assert.match(sheetSource, /const structuralEditing = editable && sheetMode === "edit"/);
+    assert.match(sheetSource, /if \(structuralEditing\) \{[\s\S]*renderCharacterBuilder/);
+    assert.match(
+        sheetSource,
+        /if \(structuralEditing && !readOnly && \(display\.status === "configured" \|\| display\.status === "unconfigured"\)\)/
+    );
+});
+
+test("Guided Builder remains optional and supports direct section navigation", () => {
+    assert.match(sheetSource, /data-guided-builder-section/);
+    assert.match(sheetSource, /aria-current", "page"/);
+    assert.match(sheetSource, /selectGuidedBuilderSection/);
+    assert.match(sheetSource, /The Character Sheet remains available even when setup is incomplete/);
+});
+
+test("structural mutation handlers are namespaced separately from ordinary sheet interaction", () => {
+    assert.match(sheetSource, /interface CharacterSheetHandlers \{[\s\S]*structural: StructuralCharacterHandlers;/);
+    assert.match(sheetSource, /selectSection\(section: SheetSection\): void;/);
+    assert.doesNotMatch(sheetSource, /if \(sheetMode === "edit"\)[\s\S]*renderPrimaryContent/);
+});
+
+test("new Edit and Guided Builder styling uses only Character Sheet semantic theme variables", () => {
+    const marker = "/* Structural edit and guided builder presentation */";
+    const start = css.indexOf(marker);
+    assert.notEqual(start, -1);
+    const end = css.indexOf("@media (max-width: 1099px)", start);
+    const modeCss = css.slice(start, end);
+    assert.doesNotMatch(modeCss, /#[0-9a-f]{3,8}\b|rgb\(/i);
+    assert.match(modeCss, /var\(--dd-sheet-/);
+});
+
+test("Character Sheet implementation does not copy D&D Beyond source identifiers or assets", () => {
+    for (const source of [sheetSource, appSource]) {
+        assert.doesNotMatch(source, /dndbeyond|ddbc-|builder-sections-|Character Builder - D&D Beyond/i);
+    }
 });

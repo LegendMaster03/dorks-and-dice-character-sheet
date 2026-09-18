@@ -1,0 +1,116 @@
+using CharacterSheet.Application.Persistence;
+using CharacterSheet.Domain.Characters;
+using Microsoft.EntityFrameworkCore;
+
+namespace CharacterSheet.Infrastructure.Persistence;
+
+public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContext)
+    : ICharacterStateStore
+{
+    public Task<CharacterSheetRoot?> GetAsync(
+        Guid characterId,
+        CancellationToken cancellationToken = default) =>
+        BuildQuery(tracking: false)
+            .SingleOrDefaultAsync(value => value.CharacterId == characterId, cancellationToken);
+
+    public async Task<CharacterSheetRoot?> AddInventoryItemOccurrenceAsync(
+        Guid characterId,
+        string ruleConceptKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.AddInventoryItemOccurrence(ruleConceptKey, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveInventoryItemOccurrenceAsync(
+        Guid characterId,
+        Guid occurrenceId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.RemoveInventoryItemOccurrence(occurrenceId, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> AddNoteAsync(
+        Guid characterId,
+        string content,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.AddNote(content, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> UpdateNoteAsync(
+        Guid characterId,
+        Guid noteId,
+        string content,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.UpdateNote(noteId, content, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveNoteAsync(
+        Guid characterId,
+        Guid noteId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.RemoveNote(noteId, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    private Task<CharacterSheetRoot?> GetTrackedAsync(
+        Guid characterId,
+        CancellationToken cancellationToken) =>
+        BuildQuery(tracking: true)
+            .SingleOrDefaultAsync(value => value.CharacterId == characterId, cancellationToken);
+
+    private IQueryable<CharacterSheetRoot> BuildQuery(bool tracking)
+    {
+        var query = dbContext.CharacterSheets
+            .Include(value => value.InventoryItemOccurrences)
+            .Include(value => value.Notes)
+            .AsQueryable();
+        return tracking ? query : query.AsNoTracking();
+    }
+}

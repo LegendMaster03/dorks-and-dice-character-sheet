@@ -10,6 +10,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterFoundationalRuleSelection> FoundationalRuleSelections => Set<CharacterFoundationalRuleSelection>();
     public DbSet<CharacterAdvancementEntry> CharacterAdvancementEntries => Set<CharacterAdvancementEntry>();
     public DbSet<CharacterBaseAbilityScoreInput> BaseAbilityScoreInputs => Set<CharacterBaseAbilityScoreInput>();
+    public DbSet<CharacterInventoryItemOccurrence> InventoryItemOccurrences => Set<CharacterInventoryItemOccurrence>();
+    public DbSet<CharacterNote> CharacterNotes => Set<CharacterNote>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -121,6 +123,46 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .HasForeignKey(value => new { value.ParentAdvancementEntryId, value.CharacterId })
             .HasPrincipalKey(value => new { value.Id, value.CharacterId })
             .OnDelete(DeleteBehavior.NoAction);
+
+        var inventoryItemOccurrence = modelBuilder.Entity<CharacterInventoryItemOccurrence>();
+        inventoryItemOccurrence.ToTable("character_inventory_item_occurrences");
+        inventoryItemOccurrence.HasKey(value => value.Id);
+        inventoryItemOccurrence.Property(value => value.Id)
+            .ValueGeneratedNever();
+        inventoryItemOccurrence.Property(value => value.CharacterId)
+            .ValueGeneratedNever()
+            .IsRequired();
+        inventoryItemOccurrence.Property(value => value.RuleConceptKey)
+            .HasMaxLength(CharacterRuleReference.MaxConceptKeyLength)
+            .IsRequired();
+        inventoryItemOccurrence.Property(value => value.CreatedAt)
+            .IsRequired();
+        inventoryItemOccurrence.HasIndex(value => new { value.CharacterId, value.RuleConceptKey });
+        root.HasMany(value => value.InventoryItemOccurrences)
+            .WithOne()
+            .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var characterNote = modelBuilder.Entity<CharacterNote>();
+        characterNote.ToTable("character_notes");
+        characterNote.HasKey(value => value.Id);
+        characterNote.Property(value => value.Id)
+            .ValueGeneratedNever();
+        characterNote.Property(value => value.CharacterId)
+            .ValueGeneratedNever()
+            .IsRequired();
+        characterNote.Property(value => value.Content)
+            .HasColumnType("text")
+            .IsRequired();
+        characterNote.Property(value => value.CreatedAt)
+            .IsRequired();
+        characterNote.Property(value => value.UpdatedAt)
+            .IsRequired();
+        characterNote.HasIndex(value => value.CharacterId);
+        root.HasMany(value => value.Notes)
+            .WithOne()
+            .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         var processedLifecycleEvent = modelBuilder.Entity<ProcessedLifecycleEvent>();
         processedLifecycleEvent.ToTable("processed_lifecycle_events");

@@ -1,18 +1,40 @@
 .dd-sheet,
 .dd-sheet-screen {
-    --dd-sheet-accent: #9f2f35;
-    --dd-sheet-accent-strong: #7b2026;
-    --dd-sheet-accent-soft: #f5e8e8;
-    --dd-sheet-ink: #1d2429;
-    --dd-sheet-muted: #64717a;
-    --dd-sheet-border: #d6dcdf;
-    --dd-sheet-border-strong: #b9c1c6;
-    --dd-sheet-surface: #ffffff;
-    --dd-sheet-surface-muted: #f4f6f7;
-    --dd-sheet-surface-warm: #faf8f4;
-    --dd-sheet-header: #202427;
-    --dd-sheet-header-muted: #c5ccd0;
-    --dd-sheet-shadow: 0 10px 30px rgb(28 34 38 / 0.08);
+    /*
+     * Embedded production inherits Bootstrap theme tokens from the Dorks & Dice Site.
+     * The Site switches documentElement[data-bs-theme] between light and dark, so these
+     * semantic Character Sheet tokens update without a parallel theme selector or script.
+     * Fallbacks exist only for standalone development without the Site stylesheet.
+     */
+    --dd-sheet-background: var(--bs-body-bg, #f8f9fa);
+    --dd-sheet-surface: var(--bs-tertiary-bg, #f8f9fa);
+    --dd-sheet-surface-raised: var(--bs-body-bg, #ffffff);
+    --dd-sheet-surface-muted: var(--bs-secondary-bg, #e9ecef);
+    --dd-sheet-control-bg: var(--bs-body-bg, #ffffff);
+    --dd-sheet-ink: var(--bs-body-color, #212529);
+    --dd-sheet-ink-strong: var(--bs-emphasis-color, #000000);
+    --dd-sheet-muted: var(--bs-secondary-color, #6c757d);
+    --dd-sheet-border: var(--bs-border-color, #dee2e6);
+    --dd-sheet-border-strong: var(--bs-secondary-color, #6c757d);
+    --dd-sheet-accent: var(--bs-primary, #0d6efd);
+    --dd-sheet-accent-strong: var(--bs-primary-text-emphasis, #052c65);
+    --dd-sheet-accent-soft: var(--bs-primary-bg-subtle, #cfe2ff);
+    --dd-sheet-accent-border: var(--bs-primary-border-subtle, #9ec5fe);
+    --dd-sheet-on-accent: var(--bs-white, #ffffff);
+    --dd-sheet-focus: var(--bs-primary, #0d6efd);
+    --dd-sheet-header: var(--bs-secondary-bg, #e9ecef);
+    --dd-sheet-header-ink: var(--bs-emphasis-color, #000000);
+    --dd-sheet-header-muted: var(--bs-secondary-color, #6c757d);
+    --dd-sheet-warning: var(--bs-warning-text-emphasis, #664d03);
+    --dd-sheet-warning-surface: var(--bs-warning-bg-subtle, #fff3cd);
+    --dd-sheet-warning-border: var(--bs-warning-border-subtle, #ffecb5);
+    --dd-sheet-danger: var(--bs-danger-text-emphasis, #58151c);
+    --dd-sheet-danger-surface: var(--bs-danger-bg-subtle, #f8d7da);
+    --dd-sheet-danger-border: var(--bs-danger-border-subtle, #f1aeb5);
+    --dd-sheet-success: var(--bs-success-text-emphasis, #0a3622);
+    --dd-sheet-success-surface: var(--bs-success-bg-subtle, #d1e7dd);
+    --dd-sheet-success-border: var(--bs-success-border-subtle, #a3cfbb);
+    --dd-sheet-shadow: var(--bs-box-shadow-sm, 0 0.125rem 0.25rem rgb(0 0 0 / 0.075));
     --dd-sheet-radius-sm: 6px;
     --dd-sheet-radius: 10px;
     --dd-sheet-radius-lg: 14px;
@@ -26,6 +48,16 @@
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+:root[data-bs-theme="light"] .dd-sheet,
+:root[data-bs-theme="light"] .dd-sheet-screen {
+    color-scheme: light;
+}
+
+:root[data-bs-theme="dark"] .dd-sheet,
+:root[data-bs-theme="dark"] .dd-sheet-screen {
+    color-scheme: dark;
+}
+
 .dd-sheet *,
 .dd-sheet-screen * {
     box-sizing: border-box;
@@ -33,7 +65,7 @@
 
 .dd-sheet {
     min-width: 0;
-    background: var(--dd-sheet-surface-warm);
+    background: var(--dd-sheet-background);
     border: 1px solid var(--dd-sheet-border);
     border-radius: var(--dd-sheet-radius-lg);
     box-shadow: var(--dd-sheet-shadow);
@@ -52,7 +84,7 @@
 .dd-sheet-screen button:focus-visible,
 .dd-sheet-screen input:focus-visible,
 .dd-sheet summary:focus-visible {
-    outline: 3px solid #d78a8e;
+    outline: 3px solid var(--dd-sheet-focus);
     outline-offset: 2px;
 }
 
@@ -75,7 +107,7 @@
     align-items: center;
     min-height: 7.5rem;
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5);
-    color: white;
+    color: var(--dd-sheet-header-ink);
     background: var(--dd-sheet-header);
     border-bottom: 4px solid var(--dd-sheet-accent);
 }
@@ -95,8 +127,8 @@
     height: 4.5rem;
     border: 2px solid var(--dd-sheet-accent);
     border-radius: 12px;
-    color: white;
-    background: linear-gradient(145deg, #373d42, #171a1c);
+    color: var(--dd-sheet-on-accent);
+    background: var(--dd-sheet-accent);
     font-size: 1.35rem;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -110,7 +142,7 @@
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: white;
+    color: var(--dd-sheet-header-ink);
     font-size: clamp(1.5rem, 2.4vw, 2.1rem);
     line-height: 1.05;
     white-space: nowrap;
@@ -140,9 +172,9 @@
 .dd-sheet-header__summary-item {
     min-width: 0;
     padding: 0.65rem 0.75rem;
-    border: 1px solid rgb(255 255 255 / 0.18);
+    border: 1px solid var(--dd-sheet-border);
     border-radius: var(--dd-sheet-radius-sm);
-    background: rgb(255 255 255 / 0.055);
+    background: var(--dd-sheet-surface);
 }
 
 .dd-sheet-header__summary-label,
@@ -163,7 +195,7 @@
     margin-top: 0.2rem;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: white;
+    color: var(--dd-sheet-header-ink);
     font-size: 0.95rem;
     font-weight: 700;
     white-space: nowrap;
@@ -183,9 +215,9 @@
     gap: var(--dd-sheet-space-3);
     align-items: baseline;
     padding: 0.7rem var(--dd-sheet-space-5);
-    color: #5d4119;
-    background: #fff4d8;
-    border-bottom: 1px solid #ead09c;
+    color: var(--dd-sheet-warning);
+    background: var(--dd-sheet-warning-surface);
+    border-bottom: 1px solid var(--dd-sheet-warning-border);
 }
 
 .dd-readonly-banner__message {
@@ -265,7 +297,7 @@
     box-sizing: border-box;
     padding: 0.4rem 0.45rem;
     color: var(--dd-sheet-ink);
-    background: var(--dd-sheet-surface);
+    background: var(--dd-sheet-control-bg);
     border: 1px solid var(--dd-sheet-border-strong);
     border-radius: var(--dd-sheet-radius-sm);
     font: inherit;
@@ -302,6 +334,7 @@
 
 .dd-stat__error {
     margin: 0.4rem 0 0;
+    color: var(--dd-sheet-danger);
     font-size: 0.64rem;
     line-height: 1.25;
 }
@@ -382,7 +415,7 @@
     grid-column: 1;
     grid-row: 1 / span var(--dd-skill-component-count);
     align-self: stretch;
-    background: var(--dd-sheet-surface-warm);
+    background: var(--dd-sheet-surface);
     border-right: 1px solid var(--dd-sheet-border);
 }
 
@@ -394,11 +427,13 @@
     border-top: 1px solid var(--dd-sheet-border);
 }
 
+.dd-sheet-card,
+.dd-primary-content,
 .dd-combat-summary {
     background: var(--dd-sheet-surface);
     border: 1px solid var(--dd-sheet-border);
     border-radius: var(--dd-sheet-radius);
-    box-shadow: 0 2px 8px rgb(28 34 38 / 0.035);
+    box-shadow: var(--dd-sheet-shadow);
 }
 
 .dd-sheet-card {
@@ -472,16 +507,16 @@
     align-items: center;
     min-height: 1.65rem;
     padding: 0.2rem 0.55rem;
-    color: #344047;
-    background: #edf1f2;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-muted);
     border-radius: 999px;
     font-size: 0.72rem;
     font-weight: 750;
 }
 
 .dd-status-pill--readonly {
-    color: #5d4119;
-    background: #fff0c8;
+    color: var(--dd-sheet-warning);
+    background: var(--dd-sheet-warning-surface);
 }
 
 .dd-build__grid {
@@ -521,7 +556,7 @@
 
 .dd-build-choice__value--unavailable,
 .dd-build-choice__value--error {
-    color: #823334;
+    color: var(--dd-sheet-danger);
 }
 
 .dd-build-choice__detail {
@@ -563,7 +598,7 @@
 }
 
 .dd-button--primary {
-    color: white;
+    color: var(--dd-sheet-on-accent);
     background: var(--dd-sheet-accent);
     border-color: var(--dd-sheet-accent);
 }
@@ -574,7 +609,7 @@
 
 .dd-button--secondary {
     color: var(--dd-sheet-accent-strong);
-    background: white;
+    background: var(--dd-sheet-surface-raised);
     border-color: var(--dd-sheet-accent);
 }
 
@@ -589,7 +624,7 @@
 }
 
 .dd-button--ghost:hover:not(:disabled) {
-    background: #eceff0;
+    background: var(--dd-sheet-surface-muted);
 }
 
 .dd-inline-state {
@@ -617,13 +652,13 @@
 
 .dd-inline-state--warning,
 .dd-inline-state--readonly {
-    color: #5d4119;
-    background: #fff4d8;
+    color: var(--dd-sheet-warning);
+    background: var(--dd-sheet-warning-surface);
 }
 
 .dd-inline-state--error {
-    color: #6f2528;
-    background: #fbe8e8;
+    color: var(--dd-sheet-danger);
+    background: var(--dd-sheet-danger-surface);
 }
 
 @keyframes dd-sheet-spin {
@@ -635,7 +670,7 @@
     z-index: 2;
     margin-top: var(--dd-sheet-space-4);
     padding: var(--dd-sheet-space-4);
-    background: white;
+    background: var(--dd-sheet-surface);
     border: 2px solid var(--dd-sheet-accent);
     border-radius: var(--dd-sheet-radius);
     box-shadow: var(--dd-sheet-shadow);
@@ -674,7 +709,7 @@
     min-height: 2.35rem;
     padding: 0.45rem 0.6rem;
     color: var(--dd-sheet-ink);
-    background: white;
+    background: var(--dd-sheet-control-bg);
     border: 1px solid var(--dd-sheet-border-strong);
     border-radius: var(--dd-sheet-radius-sm);
 }
@@ -754,12 +789,12 @@
 
 .dd-primary-nav__button:hover {
     color: var(--dd-sheet-ink);
-    background: #eceff0;
+    background: var(--dd-sheet-surface-muted);
 }
 
 .dd-primary-nav__button--active {
     color: var(--dd-sheet-accent-strong);
-    background: white;
+    background: var(--dd-sheet-surface);
 }
 
 .dd-primary-nav__button--active::after {
@@ -806,7 +841,7 @@
     max-width: 44rem;
     margin: clamp(2rem, 8vh, 6rem) auto;
     padding: clamp(1.25rem, 3vw, 2.25rem);
-    background: white;
+    background: var(--dd-sheet-surface);
     border: 1px solid var(--dd-sheet-border);
     border-top: 4px solid var(--dd-sheet-accent);
     border-radius: var(--dd-sheet-radius-lg);
@@ -844,17 +879,19 @@
 .dd-sheet-screen__input {
     min-height: 2.6rem;
     padding: 0.5rem 0.65rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-control-bg);
     border: 1px solid var(--dd-sheet-border-strong);
     border-radius: var(--dd-sheet-radius-sm);
 }
 
 .dd-sheet-state--error {
-    border-top-color: #9f2f35;
+    border-top-color: var(--dd-sheet-danger);
 }
 
 .dd-sheet-state--warning,
 .dd-sheet-state--readonly {
-    border-top-color: #a77725;
+    border-top-color: var(--dd-sheet-warning);
 }
 
 .dd-character-init {
@@ -884,6 +921,115 @@
 .dd-sheet-details summary {
     cursor: pointer;
     font-weight: 700;
+}
+
+/* Structural edit and guided builder presentation */
+.dd-sheet-mode-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dd-sheet-space-2);
+    align-items: center;
+    justify-content: flex-end;
+    padding: var(--dd-sheet-space-3) var(--dd-sheet-space-5);
+    background: var(--dd-sheet-surface);
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
+.dd-guided-builder {
+    display: grid;
+    gap: var(--dd-sheet-space-4);
+    padding: var(--dd-sheet-space-5);
+}
+
+.dd-guided-builder__title {
+    margin: 0;
+    color: var(--dd-sheet-ink);
+    font-size: 1.2rem;
+}
+
+.dd-guided-builder__intro,
+.dd-guided-builder__section-copy {
+    margin: 0;
+    color: var(--dd-sheet-muted);
+    line-height: 1.5;
+}
+
+.dd-guided-builder__nav {
+    display: flex;
+    gap: var(--dd-sheet-space-2);
+    overflow-x: auto;
+    padding-bottom: var(--dd-sheet-space-1);
+}
+
+.dd-guided-builder__nav-button {
+    flex: 0 0 auto;
+    min-height: 2.6rem;
+    padding: var(--dd-sheet-space-2) var(--dd-sheet-space-3);
+    color: var(--dd-sheet-muted);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 750;
+}
+
+.dd-guided-builder__nav-button:hover,
+.dd-guided-builder__nav-button--active {
+    color: var(--dd-sheet-accent-strong);
+    background: var(--dd-sheet-accent-soft);
+    border-color: var(--dd-sheet-accent);
+}
+
+.dd-guided-builder__panel {
+    min-width: 0;
+}
+
+.dd-guided-builder__abilities,
+.dd-guided-builder__review {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    padding: var(--dd-sheet-space-4);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius);
+}
+
+.dd-guided-builder__ability-grid {
+    width: 100%;
+}
+
+.dd-guided-builder__review-list {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dd-guided-builder__review-item {
+    display: grid;
+    grid-template-columns: minmax(8rem, auto) auto minmax(0, 1fr);
+    gap: var(--dd-sheet-space-3);
+    align-items: baseline;
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-guided-builder__review-label {
+    color: var(--dd-sheet-ink);
+}
+
+.dd-guided-builder__review-status {
+    color: var(--dd-sheet-accent-strong);
+    font-weight: 750;
+}
+
+.dd-guided-builder__review-detail {
+    color: var(--dd-sheet-muted);
+    font-size: 0.82rem;
 }
 
 @media (max-width: 1099px) {
@@ -938,6 +1084,21 @@
     .dd-sheet-header {
         padding: var(--dd-sheet-space-3);
         border-bottom-width: 3px;
+    }
+
+    .dd-sheet-mode-bar,
+    .dd-guided-builder {
+        padding-right: var(--dd-sheet-space-3);
+        padding-left: var(--dd-sheet-space-3);
+    }
+
+    .dd-sheet-mode-bar {
+        justify-content: flex-start;
+    }
+
+    .dd-guided-builder__review-item {
+        grid-template-columns: 1fr;
+        gap: var(--dd-sheet-space-1);
     }
 
     .dd-sheet-header__portrait {

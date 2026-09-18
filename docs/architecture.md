@@ -224,6 +224,52 @@ The current UI applies this contract to the Starting Class because that is the o
 
 Prestige Classes remain distinct from ordinary Classes and Subclasses in Character Sheet as `CharacterAdvancementKind.PrestigeClass`, matching Rules Core's distinct `prestigeClass` rule concept type. This slice does not define when Prestige Classes are acquired, how their levels interact with ordinary Class levels, how prerequisites are evaluated, or how prestige spellcasting progression works.
 
+## Routine Character-owned state
+
+Routine Character state is separate from builder/progression decisions and from calculated/effective
+mechanics. The current persisted routine-state resource contains only inventory ownership occurrences
+and plain Character notes:
+
+```text
+character_inventory_item_occurrences
+  Id              Character-owned occurrence identity
+  CharacterId     Site CharacterId, FK -> root, cascade delete
+  RuleConceptKey  stable Rules Core item ConceptKey
+  CreatedAt
+
+character_notes
+  Id              Character-owned note identity
+  CharacterId     Site CharacterId, FK -> root, cascade delete
+  Content         Character-authored note text
+  CreatedAt
+  UpdatedAt
+```
+
+An inventory occurrence means only that the Character owns one logical occurrence of the referenced
+Rules Core item concept. Duplicate concept keys remain distinct Character-owned occurrences. The model
+does not claim equipped, carried, active, attuned, container, currency, ammunition, encumbrance, or
+mechanical-effect state. As with builder rule references, the backend persists only the stable
+`ConceptKey`; it does not copy display names or resolved mechanical JSON and does not call Rules Core
+to grant or validate source access while persisting the reference.
+
+Notes are global Character-owned state. They are not Campaign-scoped modules, rule definitions, or
+mechanical effects.
+
+The coherent routine-state API is:
+
+```text
+GET    /api/characters/{characterId}/state
+POST   /api/characters/{characterId}/state/inventory
+DELETE /api/characters/{characterId}/state/inventory/{occurrenceId}
+POST   /api/characters/{characterId}/state/notes
+PUT    /api/characters/{characterId}/state/notes/{noteId}
+DELETE /api/characters/{characterId}/state/notes/{noteId}
+```
+
+Successful mutations return the same `CharacterStateView` used by `GET /state`. Active owned
+Characters may mutate it; archived owned Characters may read it but can not mutate it. These mutation
+endpoints never initialize a basic Site Character implicitly.
+
 ## Durable Site lifecycle cleanup
 
 Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades to foundational selections, base ability-score inputs, and the complete advancement graph in the same Character Sheet database transaction before the lifecycle event is acknowledged. A missing local root is still successful.
