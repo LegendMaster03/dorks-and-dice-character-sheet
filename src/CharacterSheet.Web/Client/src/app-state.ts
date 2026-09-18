@@ -9,6 +9,7 @@ import {
 } from "./builder-rules.js";
 import type { ResolvedRuleCatalogItem } from "./rules-core-api.js";
 import type { CharacterSheetRoute } from "./routes.js";
+import type { SheetSection } from "./ui/sheet-model.js";
 
 export type CharacterSheetScreen =
     | { kind: "new-character"; status: "ready" | "error"; message?: string; recoveryCharacterId?: string }
@@ -46,6 +47,7 @@ export interface CharacterSheetAppState {
     route: CharacterSheetRoute;
     screen: CharacterSheetScreen;
     builder: CharacterBuilderUiState;
+    activeSheetSection: SheetSection;
     renderRevision: number;
 }
 
@@ -68,6 +70,7 @@ export type CharacterSheetAction =
     | { type: "selection-save-started"; target: CharacterBuilderChoice }
     | { type: "selection-saved"; build: CharacterBuildResponse }
     | { type: "selection-save-failed"; message: string }
+    | { type: "sheet-section-selected"; section: SheetSection }
     | { type: "rerender" };
 
 export function createInitialState(route: CharacterSheetRoute): CharacterSheetAppState {
@@ -84,7 +87,13 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
             break;
     }
 
-    return { route, screen, builder: createInitialBuilderState(), renderRevision: 0 };
+    return {
+        route,
+        screen,
+        builder: createInitialBuilderState(),
+        activeSheetSection: "actions",
+        renderRevision: 0
+    };
 }
 
 export function reduceAppState(
@@ -93,10 +102,12 @@ export function reduceAppState(
 ): CharacterSheetAppState {
     let screen = state.screen;
     let builder = state.builder;
+    let activeSheetSection = state.activeSheetSection;
 
     switch (action.type) {
         case "character-loaded":
             builder = createInitialBuilderState();
+            activeSheetSection = "actions";
             if (action.character === null) {
                 screen = { kind: "not-found" };
             } else if (action.character.lifecycle === "Archived") {
@@ -232,11 +243,20 @@ export function reduceAppState(
         case "selection-save-failed":
             builder = { ...builder, saving: null, saveError: action.message };
             break;
+        case "sheet-section-selected":
+            activeSheetSection = action.section;
+            break;
         case "rerender":
             break;
     }
 
-    return { ...state, screen, builder, renderRevision: state.renderRevision + 1 };
+    return {
+        ...state,
+        screen,
+        builder,
+        activeSheetSection,
+        renderRevision: state.renderRevision + 1
+    };
 }
 
 function createInitialBuilderState(): CharacterBuilderUiState {

@@ -1,3 +1,4 @@
+import "./styles.css";
 import { createInitialState } from "./app-state.js";
 import {
     clearCharacterBuildChoice,
@@ -10,8 +11,7 @@ import {
     filterSubclassesForClass,
     getStartingClassEntry,
     getStoredChoiceConceptKey,
-    resolveStoredChoice,
-    type RuleReferenceState
+    resolveStoredChoice
 } from "./builder-rules.js";
 import {
     buildCharacterRouteUrl,
@@ -23,11 +23,11 @@ import {
 } from "./character-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
 import { createApplication } from "./render-lifecycle.js";
-import {
-    searchResolvedRules,
-    type ResolvedRuleCatalogItem
-} from "./rules-core-api.js";
+import { searchResolvedRules } from "./rules-core-api.js";
 import { parseCharacterSheetRoute } from "./routes.js";
+import { createButton, createElement, createInlineState, createStateCard } from "./ui/components.js";
+import { renderCharacterHeader, renderCharacterWorkspace } from "./ui/sheet.js";
+import type { SheetSection } from "./ui/sheet-model.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -38,360 +38,171 @@ const appRoot: HTMLElement = root;
 const environment = resolveHostEnvironment(appRoot, window.location.pathname);
 const route = parseCharacterSheetRoute(environment.toolRoute);
 const initialState = createInitialState(route);
+ensureCharacterSheetStylesheet();
+
+function ensureCharacterSheetStylesheet(): void {
+    const href = new URL("./app.css", import.meta.url).href;
+    const existing = document.querySelector<HTMLLinkElement>("link[data-character-sheet-stylesheet]");
+    if (existing?.href === href) return;
+
+    existing?.remove();
+    const stylesheet = document.createElement("link");
+    stylesheet.rel = "stylesheet";
+    stylesheet.href = href;
+    stylesheet.dataset.characterSheetStylesheet = "true";
+    document.head.append(stylesheet);
+}
 
 function render(): void {
     const state = application.getState();
-    const section = document.createElement("section");
-    section.setAttribute("data-character-sheet-state", state.screen.kind);
-
-    const heading = document.createElement("h1");
-    heading.textContent = "Character Sheet";
-    section.append(heading);
+    let content: HTMLElement;
 
     switch (state.screen.kind) {
         case "new-character":
-            renderNewCharacter(
-                section,
+            content = renderNewCharacter(
                 state.screen.status === "error" ? state.screen.message : undefined,
                 state.screen.recoveryCharacterId);
             break;
         case "loading":
-            appendParagraph(section, "Loading Character Sheet…");
+            content = renderStateScreen("Loading Character Sheet", "Loading Character and sheet state…", "loading");
             break;
         case "submitting":
-            appendParagraph(
-                section,
+            content = renderStateScreen(
+                state.screen.operation === "new-character" ? "Creating Character" : "Starting digital Character Sheet",
                 state.screen.operation === "new-character"
-                    ? "Creating Character…"
-                    : "Starting digital Character Sheet…");
+                    ? "Creating the canonical Site Character and initializing its digital sheet…"
+                    : "Initializing the digital Character Sheet…",
+                "loading");
             break;
         case "basic-character":
-            renderBasicCharacter(section, state.screen.character);
+            content = renderBasicCharacter(state.screen.character);
             break;
         case "rich-character":
-            renderRichCharacter(section, state.screen.character);
+            content = renderWorkspace(state.screen.character, false, state.activeSheetSection);
             break;
         case "archived":
-            renderArchivedCharacter(section, state.screen.character);
+            content = renderWorkspace(state.screen.character, true, state.activeSheetSection);
             break;
         case "not-found":
-            appendParagraph(section, "This Character is unavailable.");
+            content = renderStateScreen("Character unavailable", "This Character could not be found or is not available to this account.", "warning");
             break;
         case "error":
-            appendParagraph(section, state.screen.message);
+            content = renderStateScreen("Character Sheet unavailable", state.screen.message, "error");
             break;
         case "invalid":
-            appendParagraph(section, `Unsupported Character Sheet route: ${state.screen.route}`);
+            content = renderStateScreen("Unsupported Character Sheet route", state.screen.route, "warning");
             break;
     }
 
-    appRoot.replaceChildren(section);
+    content.setAttribute("data-character-sheet-state", state.screen.kind);
+    appRoot.replaceChildren(content);
 }
 
-function renderNewCharacter(section: HTMLElement, message?: string, recoveryCharacterId?: string): void {
-    const title = document.createElement("h2");
-    title.textContent = "Build a Character";
-    section.append(title);
+function renderNewCharacter(message?: string, recoveryCharacterId?: string): HTMLElement {
+    const screen = createElement("section", "dd-sheet-screen");
+    const panel = createElement("section", "dd-sheet-screen__panel");
+    panel.append(
+        createElement("h1", "dd-sheet-screen__title", "Build a Character"),
+        createElement(
+            "p",
+            "dd-sheet-screen__copy",
+            "Create the Site-owned Character first. Character Sheet will then attach its digital build state to that canonical Character identity."));
 
     if (!environment.embedded) {
-        appendParagraph(
-            section,
-            "Standalone development does not invent Site Character ownership. Open this route through Dorks & Dice to create a canonical Character.");
-        return;
+        panel.append(createInlineState(
+            "Standalone development does not invent Site Character ownership. Open this route through Dorks & Dice to create a canonical Character.",
+            "warning"));
+        screen.append(panel);
+        return screen;
     }
 
     if (message !== undefined) {
-        appendParagraph(section, message);
+        panel.append(createInlineState(message, "error"));
     }
 
     if (recoveryCharacterId !== undefined) {
-        const recoveryButton = document.createElement("button");
-        recoveryButton.type = "button";
-        recoveryButton.textContent = "Open Character";
-        recoveryButton.addEventListener("click", () => {
+        panel.append(createButton("Open Character", "dd-button dd-button--primary", () => {
             window.location.assign(buildCharacterRouteUrl(environment, recoveryCharacterId));
-        });
-        section.append(recoveryButton);
-        return;
+        }));
+        screen.append(panel);
+        return screen;
     }
 
-    const form = document.createElement("form");
-    const label = document.createElement("label");
-    label.textContent = "Character name";
-    const input = document.createElement("input");
+    const form = createElement("form", "dd-sheet-screen__form");
+    const label = createElement("label", "dd-sheet-screen__label", "Character name");
+    const input = createElement("input", "dd-sheet-screen__input");
     input.name = "characterName";
     input.required = true;
     input.autocomplete = "off";
     label.append(input);
-    form.append(label);
-
-    const submit = document.createElement("button");
+    const submit = createElement("button", "dd-button dd-button--primary", "Build Character");
     submit.type = "submit";
-    submit.textContent = "Build Character";
-    form.append(submit);
-
+    form.append(label, submit);
     form.addEventListener("submit", event => {
         event.preventDefault();
         if (application.getState().screen.kind === "submitting") return;
         void submitNewCharacter(input.value);
     });
-
-    section.append(form);
+    panel.append(form);
+    screen.append(panel);
+    return screen;
 }
 
-function renderBasicCharacter(section: HTMLElement, character: CharacterSheetBootstrapResponse): void {
-    appendCharacterHeading(section, character.name);
-    appendParagraph(section, "This Site Character does not have a digital Character Sheet yet.");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Build Digital Sheet";
-    button.addEventListener("click", () => void initializeExistingCharacter(character));
-    section.append(button);
+function renderBasicCharacter(character: CharacterSheetBootstrapResponse): HTMLElement {
+    const shell = createElement("article", "dd-sheet");
+    shell.append(renderCharacterHeader(character, application.getState().builder, false));
+    const body = createElement("div", "dd-sheet-screen");
+    const panel = createElement("section", "dd-character-init");
+    panel.append(
+        createElement("h2", "dd-character-init__name", "Digital sheet not initialized"),
+        createElement(
+            "p",
+            "dd-character-init__copy",
+            "This Site Character exists, but Character Sheet does not yet have rich Character-owned build state for it."),
+        createButton("Build Digital Sheet", "dd-button dd-button--primary", () => void initializeExistingCharacter(character)));
+    body.append(panel);
+    shell.append(body);
+    return shell;
 }
 
-function renderRichCharacter(section: HTMLElement, character: CharacterSheetBootstrapResponse): void {
-    appendCharacterHeading(section, character.name);
-    renderCharacterBuilder(section, character, false);
-    appendDevelopmentDetails(section, character);
-}
-
-function renderArchivedCharacter(section: HTMLElement, character: CharacterSheetBootstrapResponse): void {
-    appendCharacterHeading(section, character.name);
-    appendParagraph(
-        section,
-        "This Character is archived. Its digital Character Sheet is preserved and read-only until the Character is restored through the Dorks & Dice Site.");
-    if (character.hasRichSheet) {
-        renderCharacterBuilder(section, character, true);
-    }
-    appendDevelopmentDetails(section, character);
-}
-
-function renderCharacterBuilder(
-    section: HTMLElement,
+function renderWorkspace(
     character: CharacterSheetBootstrapResponse,
-    forceReadOnly: boolean
-): void {
-    const title = document.createElement("h2");
-    title.textContent = "Character Builder";
-    section.append(title);
-
-    const builder = application.getState().builder;
-    if (builder.status === "idle" || builder.status === "loading") {
-        appendParagraph(section, "Loading character build…");
-        return;
-    }
-    if (builder.status === "error") {
-        appendParagraph(section, builder.message ?? "Unable to load character build state.");
-        return;
-    }
-    if (builder.build === null) {
-        appendParagraph(section, "Character build state is unavailable.");
-        return;
-    }
-
-    const readOnly = forceReadOnly || builder.build.readOnly;
-    renderChoice(
-        section,
-        character.characterId,
-        "raceSpecies",
-        "Race / Species",
-        builder.references.raceSpecies,
-        readOnly);
-    renderChoice(
-        section,
-        character.characterId,
-        "startingClass",
-        "Starting Class",
-        builder.references.startingClass,
-        readOnly);
-
-    const startingClass = getStartingClassEntry(builder.build);
-    renderChoice(
-        section,
-        character.characterId,
-        "subclass",
-        "Subclass",
-        builder.references.subclass,
-        readOnly,
-        startingClass !== null,
-        "Choose a Class before selecting a Subclass.");
-
-    appendParagraph(section, "Build status: In progress");
-    if (builder.saveError !== undefined) {
-        appendParagraph(section, builder.saveError);
-    }
-
-    if (builder.chooser.kind === "open") {
-        renderRuleChooser(section, character.characterId, builder.chooser.target);
-    }
+    forceReadOnly: boolean,
+    activeSection: SheetSection
+): HTMLElement {
+    const workspace = renderCharacterWorkspace(
+        character,
+        application.getState().builder,
+        activeSection,
+        forceReadOnly,
+        {
+            openChooser,
+            clearChoice: target => void clearChoice(character.characterId, target),
+            submitChooserSearch: (target, query) => void loadChooser(target, query),
+            closeChooser: () => application.dispatch({ type: "chooser-closed" }),
+            saveChoice: (target, conceptKey) => void saveChoice(character.characterId, target, conceptKey),
+            selectSection: section => application.dispatch({ type: "sheet-section-selected", section })
+        });
+    workspace.append(renderDevelopmentDetails(character));
+    return workspace;
 }
 
-function renderChoice(
-    section: HTMLElement,
-    characterId: string,
-    target: CharacterBuilderChoice,
-    labelText: string,
-    reference: RuleReferenceState,
-    readOnly: boolean,
-    available = true,
-    unavailableMessage?: string
-): void {
-    const container = document.createElement("div");
-    container.setAttribute("data-builder-choice", target);
-
-    const label = document.createElement("h3");
-    label.textContent = labelText;
-    container.append(label);
-    renderRuleReference(container, reference);
-
-    if (!available) {
-        if (unavailableMessage !== undefined) {
-            appendParagraph(container, unavailableMessage);
-        }
-        section.append(container);
-        return;
-    }
-
-    if (!readOnly) {
-        const choose = document.createElement("button");
-        choose.type = "button";
-        choose.disabled = application.getState().builder.saving !== null;
-        choose.textContent = reference.status === "none" ? "Choose" : "Replace";
-        choose.addEventListener("click", () => openChooser(target));
-        container.append(choose);
-
-        if (reference.status !== "none") {
-            const clear = document.createElement("button");
-            clear.type = "button";
-            clear.disabled = application.getState().builder.saving !== null;
-            clear.textContent = "Clear";
-            clear.addEventListener("click", () => void clearChoice(characterId, target));
-            container.append(clear);
-        }
-    }
-
-    section.append(container);
+function renderStateScreen(
+    title: string,
+    message: string,
+    tone: "neutral" | "loading" | "warning" | "error" | "readonly"
+): HTMLElement {
+    const screen = createElement("section", "dd-sheet-screen");
+    screen.append(createStateCard(title, message, tone));
+    return screen;
 }
 
-function renderRuleReference(container: HTMLElement, reference: RuleReferenceState): void {
-    switch (reference.status) {
-        case "none":
-            appendParagraph(container, "Not selected.");
-            break;
-        case "loading":
-            appendParagraph(container, "Resolving saved choice through Rules Core…");
-            break;
-        case "resolved":
-            appendParagraph(container, reference.rule.displayName);
-            appendRuleMetadata(container, reference.rule.editionDisplayName, reference.rule.sourceCode, reference.rule.packageDisplayName);
-            break;
-        case "unavailable":
-            appendParagraph(container, `Unavailable saved rule (${reference.conceptKey}). The selection has been retained.`);
-            break;
-        case "error":
-            appendParagraph(
-                container,
-                `Rules Core could not resolve saved rule ${reference.conceptKey}: ${reference.message}`);
-            break;
-    }
-}
-
-function renderRuleChooser(
-    section: HTMLElement,
-    characterId: string,
-    target: CharacterBuilderChoice
-): void {
-    const chooser = application.getState().builder.chooser;
-    if (chooser.kind !== "open" || chooser.target !== target) return;
-
-    const container = document.createElement("div");
-    container.setAttribute("data-rule-chooser", target);
-    const heading = document.createElement("h3");
-    heading.textContent = target === "raceSpecies"
-        ? "Choose Race / Species"
-        : target === "startingClass" ? "Choose Starting Class" : "Choose Subclass";
-    container.append(heading);
-
-    const form = document.createElement("form");
-    const input = document.createElement("input");
-    input.type = "search";
-    input.name = "ruleSearch";
-    input.value = chooser.query;
-    input.placeholder = "Search available rules";
-    input.autocomplete = "off";
-    form.append(input);
-    const search = document.createElement("button");
-    search.type = "submit";
-    search.textContent = "Search";
-    form.append(search);
-    form.addEventListener("submit", event => {
-        event.preventDefault();
-        void loadChooser(target, input.value);
-    });
-    container.append(form);
-
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => application.dispatch({ type: "chooser-closed" }));
-    container.append(cancel);
-
-    if (chooser.status === "idle" || chooser.status === "loading") {
-        appendParagraph(container, "Loading Rules Core catalog…");
-    } else if (chooser.status === "error") {
-        appendParagraph(container, chooser.message ?? "Rules Core catalog is unavailable.");
-    } else if (chooser.results.length === 0) {
-        appendParagraph(container, "No matching rules are available.");
-    } else {
-        const list = document.createElement("ul");
-        for (const rule of chooser.results) {
-            list.append(renderRuleChooserResult(characterId, target, rule));
-        }
-        container.append(list);
-    }
-
-    section.append(container);
-}
-
-function renderRuleChooserResult(
-    characterId: string,
-    target: CharacterBuilderChoice,
-    rule: ResolvedRuleCatalogItem
-): HTMLLIElement {
-    const item = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.disabled = application.getState().builder.saving !== null;
-    button.textContent = rule.displayName;
-    button.addEventListener("click", () => void saveChoice(characterId, target, rule.conceptKey));
-    item.append(button);
-    appendRuleMetadata(item, rule.editionDisplayName, rule.sourceCode, rule.packageDisplayName);
-    return item;
-}
-
-function appendRuleMetadata(
-    container: HTMLElement,
-    editionDisplayName: string,
-    sourceCode: string,
-    packageDisplayName: string
-): void {
-    const parts = [editionDisplayName, sourceCode, packageDisplayName]
-        .map(value => value.trim())
-        .filter(value => value.length > 0);
-    if (parts.length > 0) {
-        const metadata = document.createElement("small");
-        metadata.textContent = parts.join(" • ");
-        container.append(metadata);
-    }
-}
-
-function appendDevelopmentDetails(section: HTMLElement, character: CharacterSheetBootstrapResponse): void {
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.textContent = "Details";
-    details.append(summary);
-    appendParagraph(details, `Character ID: ${character.characterId}`);
-    section.append(details);
+function renderDevelopmentDetails(character: CharacterSheetBootstrapResponse): HTMLElement {
+    const details = createElement("details", "dd-sheet-details");
+    const summary = createElement("summary", undefined, "Technical details");
+    const characterId = createElement("p", undefined, `Character ID: ${character.characterId}`);
+    details.append(summary, characterId);
+    return details;
 }
 
 async function bootstrapCharacter(): Promise<void> {
@@ -419,16 +230,11 @@ async function bootstrapBuild(characterId: string): Promise<void> {
 }
 
 async function resolveBuildReferences(build: CharacterBuildResponse): Promise<void> {
-    await Promise.all(((["raceSpecies", "startingClass", "subclass"] as const)).map(async target => {
+    await Promise.all((["raceSpecies", "startingClass", "subclass"] as const).map(async target => {
         const conceptKey = getStoredChoiceConceptKey(build, target);
         if (conceptKey === null) return;
         const reference = await resolveStoredChoice(environment, build, target);
-        application.dispatch({
-            type: "rule-reference-resolved",
-            target,
-            conceptKey,
-            reference
-        });
+        application.dispatch({ type: "rule-reference-resolved", target, conceptKey, reference });
     }));
 }
 
@@ -452,16 +258,9 @@ async function loadChooser(target: CharacterBuilderChoice, query: string): Promi
             if (startingClass === null) {
                 throw new Error("Choose a Class before selecting a Subclass.");
             }
-
             results = filterSubclassesForClass(results, startingClass.ruleConceptKey);
         }
-
-        application.dispatch({
-            type: "chooser-loaded",
-            target,
-            query: normalizedQuery,
-            results
-        });
+        application.dispatch({ type: "chooser-loaded", target, query: normalizedQuery, results });
     } catch (error) {
         application.dispatch({
             type: "chooser-load-failed",
@@ -532,7 +331,6 @@ async function submitNewCharacter(name: string): Promise<void> {
             });
             return;
         }
-
         application.dispatch({ type: "new-submit-failed", message: errorMessage(error) });
     }
 }
@@ -546,18 +344,6 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
     } catch (error) {
         application.dispatch({ type: "load-failed", message: errorMessage(error) });
     }
-}
-
-function appendCharacterHeading(section: HTMLElement, name: string): void {
-    const heading = document.createElement("h2");
-    heading.textContent = name;
-    section.append(heading);
-}
-
-function appendParagraph(section: HTMLElement, text: string): void {
-    const paragraph = document.createElement("p");
-    paragraph.textContent = text;
-    section.append(paragraph);
 }
 
 function errorMessage(error: unknown): string {
