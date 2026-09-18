@@ -157,6 +157,32 @@ public sealed class CharacterBuildService(
                 token),
             cancellationToken);
 
+    public Task<CharacterBuildResult> AddFeatOccurrenceAsync(
+        Guid characterId,
+        string ruleConceptKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.AddFeatOccurrenceAsync(
+                characterId,
+                ruleConceptKey,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> RemoveFeatOccurrenceAsync(
+        Guid characterId,
+        Guid featAdvancementEntryId,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.RemoveFeatOccurrenceAsync(
+                characterId,
+                featAdvancementEntryId,
+                changedAt,
+                token),
+            cancellationToken);
+
     private async Task<CharacterBuildResult> MutateAsync(
         Guid characterId,
         Func<DateTimeOffset, CancellationToken, Task<CharacterSheetRoot?>> mutation,

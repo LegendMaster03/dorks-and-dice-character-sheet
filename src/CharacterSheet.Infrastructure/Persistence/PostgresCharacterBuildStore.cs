@@ -116,6 +116,40 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> AddFeatOccurrenceAsync(
+        Guid characterId,
+        string ruleConceptKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.AddFeatOccurrence(ruleConceptKey, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveFeatOccurrenceAsync(
+        Guid characterId,
+        Guid featAdvancementEntryId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.RemoveFeatOccurrence(featAdvancementEntryId, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     private Task<CharacterSheetRoot?> GetTrackedAsync(
         Guid characterId,
         CancellationToken cancellationToken) =>

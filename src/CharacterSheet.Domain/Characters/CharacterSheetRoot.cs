@@ -205,6 +205,47 @@ public sealed class CharacterSheetRoot
     }
 
     /// <summary>
+    /// Adds one Character-owned Feat occurrence. Duplicate Rules Core concept keys are intentional:
+    /// occurrence identity, not concept identity, distinguishes multiple grants of the same Feat.
+    /// Acquisition provenance is deliberately deferred until grant/level-up semantics are defined.
+    /// </summary>
+    public CharacterAdvancementEntry AddFeatOccurrence(
+        string ruleConceptKey,
+        DateTimeOffset createdAt) =>
+        AddAdvancement(
+            CharacterAdvancementKind.Feat,
+            ruleConceptKey,
+            null,
+            null,
+            createdAt);
+
+    public bool RemoveFeatOccurrence(Guid featAdvancementEntryId, DateTimeOffset changedAt)
+    {
+        if (featAdvancementEntryId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Feat advancement entry ID can not be empty.",
+                nameof(featAdvancementEntryId));
+        }
+
+        var entry = AdvancementEntries.SingleOrDefault(value => value.Id == featAdvancementEntryId);
+        if (entry is null)
+        {
+            return false;
+        }
+
+        if (entry.Kind != CharacterAdvancementKind.Feat)
+        {
+            throw new InvalidOperationException(
+                "Advancement entry does not identify a Feat occurrence for this Character.");
+        }
+
+        AdvancementEntries.Remove(entry);
+        Touch(changedAt);
+        return true;
+    }
+
+    /// <summary>
     /// General progression primitive for later level-up, prestige-class, subclass, and feat work.
     /// This deliberately does not impose mature level-slot or prerequisite semantics.
     /// </summary>

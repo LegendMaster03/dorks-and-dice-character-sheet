@@ -247,6 +247,45 @@ app.MapDelete("/api/characters/{characterId:guid}/build/classes/{classAdvancemen
     }
 });
 
+app.MapPost("/api/characters/{characterId:guid}/build/feats", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.AddFeatOccurrenceAsync(characterId, request.ConceptKey, cancellationToken),
+            mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/feats/{featAdvancementEntryId:guid}", async (
+    Guid characterId,
+    Guid featAdvancementEntryId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.RemoveFeatOccurrenceAsync(
+                characterId,
+                featAdvancementEntryId,
+                cancellationToken),
+            mutating: true);
+    }
+    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
 var standaloneDevelopmentAttributes = app.Environment.IsDevelopment()
     ? " data-standalone-development=\"true\""
         + (rulesCoreDevelopmentBaseUrl is null
