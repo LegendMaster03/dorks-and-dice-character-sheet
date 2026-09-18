@@ -1,9 +1,20 @@
-import type { CharacterBuilderUiState, GuidedBuilderUiState, SheetMode } from "../app-state.js";
+import type {
+    CharacterBuilderUiState,
+    CharacterRoutineUiState,
+    GuidedBuilderUiState,
+    SheetMode
+} from "../app-state.js";
 import type { CharacterAbilityKey } from "../builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
-import { createButton, createElement, createPlaceholder, createSectionCard } from "./components.js";
+import {
+    createButton,
+    createElement,
+    createInlineState,
+    createPlaceholder,
+    createSectionCard
+} from "./components.js";
 import { renderSkillsCard } from "./skills.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
@@ -26,8 +37,15 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
     clearBaseAbilityScore(abilityKey: CharacterAbilityKey): void;
 }
 
+export interface RoutineCharacterHandlers {
+    addNote(content: string): void;
+    updateNote(noteId: string, content: string): void;
+    deleteNote(noteId: string): void;
+}
+
 export interface CharacterSheetHandlers {
     structural: StructuralCharacterHandlers;
+    routine: RoutineCharacterHandlers;
     selectSection(section: SheetSection): void;
     enterEditMode(): void;
     leaveEditMode(): void;
@@ -39,6 +57,7 @@ export interface CharacterSheetHandlers {
 export function renderCharacterWorkspace(
     character: CharacterSheetBootstrapResponse,
     builder: CharacterBuilderUiState,
+    routine: CharacterRoutineUiState,
     activeSection: SheetSection,
     forceReadOnly: boolean,
     sheetMode: SheetMode,
@@ -47,7 +66,10 @@ export function renderCharacterWorkspace(
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
-    const readOnly = forceReadOnly || builder.build?.readOnly === true || character.lifecycle === "Archived";
+    const readOnly = forceReadOnly
+        || builder.build?.readOnly === true
+        || routine.state?.readOnly === true
+        || character.lifecycle === "Archived";
     const editable = !readOnly && builder.status === "ready" && builder.build !== null;
     const structuralEditing = editable && sheetMode === "edit";
     shell.setAttribute("data-read-only", readOnly ? "true" : "false");
@@ -92,7 +114,7 @@ export function renderCharacterWorkspace(
             forceReadOnly,
             handlers.structural));
     }
-    primary.append(renderPrimaryContent(activeSection, handlers));
+    primary.append(renderPrimaryContent(activeSection, routine, readOnly, handlers));
 
     workspace.append(support, skills, primary);
     shell.append(workspace);
@@ -436,7 +458,12 @@ function renderCombatSummary(): HTMLElement {
     return section;
 }
 
-function renderPrimaryContent(activeSection: SheetSection, handlers: CharacterSheetHandlers): HTMLElement {
+function renderPrimaryContent(
+    activeSection: SheetSection,
+    routine: CharacterRoutineUiState,
+    readOnly: boolean,
+    handlers: CharacterSheetHandlers
+): HTMLElement {
     const card = createElement("section", "dd-primary-content");
     const nav = createElement("nav", "dd-primary-nav");
     nav.setAttribute("aria-label", "Character sheet sections");
@@ -453,13 +480,117 @@ function renderPrimaryContent(activeSection: SheetSection, handlers: CharacterSh
     const definition = SHEET_SECTIONS.find(value => value.id === activeSection) ?? SHEET_SECTIONS[0];
     const panel = createElement("div", "dd-primary-content__panel");
     panel.setAttribute("data-sheet-section", definition.id);
-    panel.append(
-        createElement("h2", "dd-primary-content__title", definition.label),
-        createElement("h3", "dd-primary-content__empty-title", definition.emptyTitle),
-        createElement("p", "dd-primary-content__empty-message", definition.emptyMessage)
-    );
+    panel.append(createElement("h2", "dd-primary-content__title", definition.label));
+    if (definition.id === "notes") {
+        panel.append(renderNotesSection(routine, readOnly, handlers.routine));
+    } else {
+        panel.append(
+            createElement("h3", "dd-primary-content__empty-title", definition.emptyTitle),
+            createElement("p", "dd-primary-content__empty-message", definition.emptyMessage)
+        );
+    }
     card.append(nav, panel);
     return card;
+}
+
+function renderNotesSection(
+    routine: CharacterRoutineUiState,
+    readOnly: boolean,
+    handlers: RoutineCharacterHandlers
+): HTMLElement {
+    const content = createElement("div", "dd-routine-section dd-notes");
+    if (routine.status === "idle" || routine.status === "loading") {
+        content.append(createInlineState("Loading Character notes…", "loading"));
+        return content;
+    }
+    if (routine.status === "error" || routine.state === null) {
+        content.append(createInlineState(
+            routine.message ?? "Character notes are unavailable.",
+            "error"));
+        return content;
+    }
+
+    const pending = routine.mutation !== null;
+    const editable = !readOnly && !routine.state.readOnly;
+    if (routine.mutationError !== undefined) {
+        content.append(createInlineState(routine.mutationError, "error"));
+    }
+
+    if (editable) {
+        const form = createElement("form", "dd-note-form");
+        const label = createElement("label", "dd-routine-label", "Add note");
+        const input = createElement("textarea", "dd-routine-textarea");
+        input.rows = 4;
+        input.maxLength = 10000;
+        input.setAttribute("aria-label", "New Character note");
+        const submit = createElement("button", "dd-button dd-button--primary", "Add Note");
+        submit.type = "submit";
+        submit.disabled = pending;
+        form.append(label, input, submit);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            if (pending || input.value.trim().length === 0) return;
+            handlers.addNote(input.value);
+        });
+        content.append(form);
+    }
+
+    if (routine.state.notes.length === 0) {
+        content.append(createElement(
+            "p",
+            "dd-routine-empty",
+            editable
+                ? "No notes yet. Add a Character-owned note above."
+                : "No Character-owned notes have been recorded."));
+        return content;
+    }
+
+    const list = createElement("div", "dd-note-list");
+    for (const note of routine.state.notes) {
+        const item = createElement("article", "dd-note");
+        item.setAttribute("data-note-id", note.id);
+        const meta = createElement(
+            "p",
+            "dd-routine-meta",
+            `Updated ${new Date(note.updatedAt).toLocaleString()}`);
+
+        if (editable) {
+            const editor = createElement("textarea", "dd-routine-textarea dd-note__editor");
+            editor.rows = Math.max(3, Math.min(12, note.content.split(/\r?\n/).length + 1));
+            editor.maxLength = 10000;
+            editor.value = note.content;
+            editor.setAttribute("aria-label", "Character note");
+            editor.disabled = pending;
+
+            const actions = createElement("div", "dd-routine-actions");
+            const save = createButton(
+                routine.mutation?.kind === "note-update" && routine.mutation.entryId === note.id
+                    ? "Saving…"
+                    : "Save",
+                "dd-button dd-button--secondary",
+                () => handlers.updateNote(note.id, editor.value),
+                pending);
+            const remove = createButton(
+                routine.mutation?.kind === "note-delete" && routine.mutation.entryId === note.id
+                    ? "Deleting…"
+                    : "Delete",
+                "dd-button dd-button--ghost",
+                () => {
+                    if (window.confirm("Delete this Character note?")) {
+                        handlers.deleteNote(note.id);
+                    }
+                },
+                pending);
+            actions.append(save, remove);
+            item.append(editor, meta, actions);
+        } else {
+            const body = createElement("p", "dd-note__body", note.content);
+            item.append(body, meta);
+        }
+        list.append(item);
+    }
+    content.append(list);
+    return content;
 }
 
 function headerSummaryItem(label: string, value: string, detail?: string): HTMLElement {

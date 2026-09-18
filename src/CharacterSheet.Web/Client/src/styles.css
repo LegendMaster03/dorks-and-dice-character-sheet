@@ -1204,3 +1204,74 @@
         animation: none;
     }
 }
+
+
+.dd-routine-section {
+    display: grid;
+    gap: var(--dd-sheet-space-4);
+}
+
+.dd-note-form,
+.dd-note {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+}
+
+.dd-routine-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--dd-sheet-muted);
+}
+
+.dd-routine-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    padding: 0.75rem;
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 8px;
+    background: var(--dd-sheet-surface);
+    color: var(--dd-sheet-text);
+    font: inherit;
+    line-height: 1.45;
+}
+
+.dd-routine-textarea:focus {
+    outline: 2px solid var(--dd-sheet-focus);
+    outline-offset: 2px;
+}
+
+.dd-routine-textarea:disabled {
+    opacity: 0.65;
+}
+
+.dd-note-list {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+}
+
+.dd-note {
+    padding: var(--dd-sheet-space-3);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 10px;
+    background: var(--dd-sheet-surface-raised);
+}
+
+.dd-note__body {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.dd-routine-meta,
+.dd-routine-empty {
+    margin: 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.8rem;
+}
+
+.dd-routine-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dd-sheet-space-2);
+}

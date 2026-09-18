@@ -406,3 +406,12 @@ test("Character Sheet implementation does not copy D&D Beyond source identifiers
         assert.doesNotMatch(source, /dndbeyond|ddbc-|builder-sections-|Character Builder - D&D Beyond/i);
     }
 });
+
+
+test("Notes are rendered from routine Character state and remain routine View-mode interactions", () => {
+    assert.match(sheetSource, /renderNotesSection\(routine, readOnly, handlers\.routine\)/);
+    assert.match(sheetSource, /handlers\.addNote\(input\.value\)/);
+    assert.match(sheetSource, /handlers\.updateNote\(note\.id, editor\.value\)/);
+    assert.match(sheetSource, /handlers\.deleteNote\(note\.id\)/);
+    assert.doesNotMatch(sheetModelSource, /future Campaign-scoped modules/);
+});

@@ -24,7 +24,12 @@ import {
     RichSheetInitializationError,
     type CharacterSheetBootstrapResponse
 } from "./character-api.js";
-import { loadCharacterState } from "./character-state-api.js";
+import {
+    addCharacterNote,
+    loadCharacterState,
+    removeCharacterNote,
+    updateCharacterNote
+} from "./character-state-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
 import { createApplication } from "./render-lifecycle.js";
 import { resolveRuleConcept, searchResolvedRules } from "./rules-core-api.js";
@@ -178,6 +183,7 @@ function renderWorkspace(
     const workspace = renderCharacterWorkspace(
         character,
         state.builder,
+        state.routine,
         activeSection,
         forceReadOnly,
         state.sheetMode,
@@ -193,6 +199,11 @@ function renderWorkspace(
                     void saveBaseAbilityScore(character.characterId, abilityKey, score),
                 clearBaseAbilityScore: abilityKey =>
                     void clearBaseAbilityScore(character.characterId, abilityKey)
+            },
+            routine: {
+                addNote: content => void addNote(character.characterId, content),
+                updateNote: (noteId, content) => void updateNote(character.characterId, noteId, content),
+                deleteNote: noteId => void deleteNote(character.characterId, noteId)
             },
             selectSection: section => application.dispatch({ type: "sheet-section-selected", section }),
             enterEditMode: () => dispatchAndFocus(
@@ -299,6 +310,51 @@ async function resolveRoutineReferences(routine: Awaited<ReturnType<typeof loadC
             });
         }
     }));
+}
+
+async function applyRoutineMutation(
+    kind: "note-add" | "note-update" | "note-delete",
+    operation: () => ReturnType<typeof addCharacterNote>,
+    entryId?: string
+): Promise<void> {
+    const routine = application.getState().routine;
+    if (routine.status !== "ready"
+        || routine.state === null
+        || routine.state.readOnly
+        || routine.mutation !== null) {
+        return;
+    }
+
+    application.dispatch({ type: "routine-mutation-started", kind, entryId });
+    try {
+        const next = await operation();
+        application.dispatch({ type: "routine-mutation-succeeded", state: next });
+        await resolveRoutineReferences(next);
+    } catch (error) {
+        application.dispatch({ type: "routine-mutation-failed", message: errorMessage(error) });
+    }
+}
+
+async function addNote(characterId: string, content: string): Promise<void> {
+    if (content.trim().length === 0) return;
+    await applyRoutineMutation(
+        "note-add",
+        () => addCharacterNote(environment, characterId, content));
+}
+
+async function updateNote(characterId: string, noteId: string, content: string): Promise<void> {
+    if (content.trim().length === 0) return;
+    await applyRoutineMutation(
+        "note-update",
+        () => updateCharacterNote(environment, characterId, noteId, content),
+        noteId);
+}
+
+async function deleteNote(characterId: string, noteId: string): Promise<void> {
+    await applyRoutineMutation(
+        "note-delete",
+        () => removeCharacterNote(environment, characterId, noteId),
+        noteId);
 }
 
 async function bootstrapBuild(characterId: string): Promise<void> {

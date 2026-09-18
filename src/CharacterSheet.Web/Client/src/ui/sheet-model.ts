@@ -46,8 +46,8 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     {
         id: "notes",
         label: "Notes",
-        emptyTitle: "Notes are not available yet",
-        emptyMessage: "Character notes and future Campaign-scoped modules will appear here when Character-owned note state is implemented."
+        emptyTitle: "No notes yet",
+        emptyMessage: "Character-owned notes are stored with the Character."
     }
 ];
 
