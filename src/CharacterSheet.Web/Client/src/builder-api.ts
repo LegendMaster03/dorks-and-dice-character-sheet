@@ -88,6 +88,19 @@ export function buildCharacterAbilityScoreBackendUrl(
         `/api/characters/${encodeURIComponent(characterId)}/build/ability-scores/${encodeURIComponent(abilityKey)}`);
 }
 
+export function buildCharacterFeatBackendUrl(
+    environment: HostEnvironment,
+    characterId: string,
+    featAdvancementEntryId?: string
+): string {
+    const base = `/api/characters/${encodeURIComponent(characterId)}/build/feats`;
+    return buildCharacterSheetApiUrl(
+        environment,
+        featAdvancementEntryId === undefined
+            ? base
+            : `${base}/${encodeURIComponent(featAdvancementEntryId)}`);
+}
+
 export async function loadCharacterBuild(
     environment: HostEnvironment,
     characterId: string,
@@ -192,6 +205,43 @@ export async function clearCharacterBaseAbilityScore(
     if (!response.ok) {
         throw new CharacterSheetApiError(
             await readApiError(response, "Unable to clear base Ability Score."),
+            response.status);
+    }
+    return await response.json() as CharacterBuildResponse;
+}
+
+
+export async function addCharacterFeatOccurrence(
+    environment: HostEnvironment,
+    characterId: string,
+    conceptKey: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterBuildResponse> {
+    const response = await fetcher(buildCharacterFeatBackendUrl(environment, characterId), {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptKey })
+    });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to add Feat occurrence."),
+            response.status);
+    }
+    return await response.json() as CharacterBuildResponse;
+}
+
+export async function removeCharacterFeatOccurrence(
+    environment: HostEnvironment,
+    characterId: string,
+    featAdvancementEntryId: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterBuildResponse> {
+    const response = await fetcher(
+        buildCharacterFeatBackendUrl(environment, characterId, featAdvancementEntryId),
+        { method: "DELETE", headers: { Accept: "application/json" } });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to remove Feat occurrence."),
             response.status);
     }
     return await response.json() as CharacterBuildResponse;

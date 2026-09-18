@@ -40,8 +40,8 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     {
         id: "features",
         label: "Features & Traits",
-        emptyTitle: "Features and traits are not available yet",
-        emptyMessage: "Class, Subclass, Prestige Class, Feat, species, and other resolved features will appear here as those mechanics become available."
+        emptyTitle: "No Feat occurrences yet",
+        emptyMessage: "Character-owned Feat occurrences appear here; other granted features remain contract-dependent."
     },
     {
         id: "notes",
@@ -177,7 +177,9 @@ export interface AbilityScoreActionPolicy {
 }
 
 export function hasPendingBuildMutation(builder: CharacterBuilderUiState): boolean {
-    return builder.saving !== null || builder.savingAbility !== null;
+    return builder.saving !== null
+        || builder.savingAbility !== null
+        || builder.savingFeat !== null;
 }
 
 export function getBaseAbilityScoreInput(
