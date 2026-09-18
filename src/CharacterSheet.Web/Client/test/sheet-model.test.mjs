@@ -68,6 +68,9 @@ function builder(overrides = {}) {
         chooser: { kind: "closed" },
         saving: null,
         savingAbility: null,
+        featReferences: {},
+        featChooser: { kind: "closed" },
+        savingFeat: null,
         ...overrides
     };
 }
@@ -424,4 +427,21 @@ test("Inventory renders distinct Character occurrences and uses the Rules Core i
     assert.match(sheetSource, /handlers\.removeInventoryItem\(occurrence\.id\)/);
     assert.match(appSource, /searchResolvedRules\(environment, "item", normalizedQuery\)/);
     assert.doesNotMatch(sheetModelSource, /Equipment, carried items, currency/);
+});
+
+
+test("Features and Traits renders real Feat occurrences while keeping mutations structural", () => {
+    assert.match(sheetSource, /renderFeaturesSection\(builder, structuralEditing, readOnly, handlers\.feats\)/);
+    assert.match(sheetSource, /data-feat-occurrence-id/);
+    assert.match(sheetSource, /Occurrence \${occurrence\.id}/);
+    assert.match(sheetSource, /if \(editable\) \{[\s\S]*"Add Feat"/);
+    assert.match(sheetSource, /handlers\.remove\(occurrence\.id\)/);
+    assert.match(appSource, /searchResolvedRules\(environment, "feat", normalizedQuery\)/);
+    assert.match(sheetSource, /Other Features & Traits/);
+    assert.doesNotMatch(sheetModelSource, /Features and traits are not available yet/);
+});
+
+test("Feat mutations participate in the shared structural build mutation lock", () => {
+    assert.equal(hasPendingBuildMutation(builder({ savingFeat: "add" })), true);
+    assert.equal(hasPendingBuildMutation(builder({ savingFeat: "99999999-9999-9999-9999-999999999999" })), true);
 });

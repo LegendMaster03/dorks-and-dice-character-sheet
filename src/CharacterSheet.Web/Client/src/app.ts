@@ -1,9 +1,11 @@
 import "./styles.css";
 import { createInitialState } from "./app-state.js";
 import {
+    addCharacterFeatOccurrence,
     clearCharacterBaseAbilityScore,
     clearCharacterBuildChoice,
     loadCharacterBuild,
+    removeCharacterFeatOccurrence,
     setCharacterBaseAbilityScore,
     setCharacterBuildChoice,
     type CharacterAbilityKey,
@@ -201,6 +203,13 @@ function renderWorkspace(
                     void saveBaseAbilityScore(character.characterId, abilityKey, score),
                 clearBaseAbilityScore: abilityKey =>
                     void clearBaseAbilityScore(character.characterId, abilityKey)
+            },
+            feats: {
+                openChooser: () => openFeatChooser(),
+                closeChooser: () => application.dispatch({ type: "feat-chooser-closed" }),
+                search: query => void loadFeatChooser(query),
+                add: conceptKey => void addFeat(character.characterId, conceptKey),
+                remove: occurrenceId => void removeFeat(character.characterId, occurrenceId)
             },
             routine: {
                 addNote: content => void addNote(character.characterId, content),
@@ -413,12 +422,42 @@ async function bootstrapBuild(characterId: string): Promise<void> {
 }
 
 async function resolveBuildReferences(build: CharacterBuildResponse): Promise<void> {
-    await Promise.all((["raceSpecies", "startingClass", "subclass"] as const).map(async target => {
+    const structural = (["raceSpecies", "startingClass", "subclass"] as const).map(async target => {
         const conceptKey = getStoredChoiceConceptKey(build, target);
         if (conceptKey === null) return;
         const reference = await resolveStoredChoice(environment, build, target);
         application.dispatch({ type: "rule-reference-resolved", target, conceptKey, reference });
-    }));
+    });
+    const feats = build.progressionEntries
+        .filter(value => value.kind === "feat")
+        .map(async occurrence => {
+            try {
+                const rule = await resolveRuleConcept(environment, occurrence.ruleConceptKey);
+                const reference = rule !== null
+                    && rule.entityType === "feat"
+                    && rule.conceptKey === occurrence.ruleConceptKey
+                    ? { status: "resolved" as const, conceptKey: occurrence.ruleConceptKey, rule }
+                    : { status: "unavailable" as const, conceptKey: occurrence.ruleConceptKey };
+                application.dispatch({
+                    type: "feat-reference-resolved",
+                    occurrenceId: occurrence.id,
+                    conceptKey: occurrence.ruleConceptKey,
+                    reference
+                });
+            } catch (error) {
+                application.dispatch({
+                    type: "feat-reference-resolved",
+                    occurrenceId: occurrence.id,
+                    conceptKey: occurrence.ruleConceptKey,
+                    reference: {
+                        status: "error",
+                        conceptKey: occurrence.ruleConceptKey,
+                        message: errorMessage(error)
+                    }
+                });
+            }
+        });
+    await Promise.all([...structural, ...feats]);
 }
 
 function openChooser(target: CharacterBuilderChoice): void {
@@ -451,6 +490,72 @@ async function loadChooser(target: CharacterBuilderChoice, query: string): Promi
             query: normalizedQuery,
             message: errorMessage(error)
         });
+    }
+}
+
+function openFeatChooser(): void {
+    application.dispatch({ type: "feat-chooser-opened" });
+    void loadFeatChooser("");
+}
+
+async function loadFeatChooser(query: string): Promise<void> {
+    const normalizedQuery = query.trim();
+    application.dispatch({ type: "feat-chooser-load-started", query: normalizedQuery });
+    try {
+        const catalog = await searchResolvedRules(environment, "feat", normalizedQuery);
+        application.dispatch({
+            type: "feat-chooser-loaded",
+            query: normalizedQuery,
+            results: catalog.rules.filter(rule => rule.entityType === "feat")
+        });
+    } catch (error) {
+        application.dispatch({
+            type: "feat-chooser-load-failed",
+            query: normalizedQuery,
+            message: errorMessage(error)
+        });
+    }
+}
+
+async function addFeat(characterId: string, conceptKey: string): Promise<void> {
+    const builder = application.getState().builder;
+    if (builder.status !== "ready"
+        || builder.build === null
+        || builder.build.readOnly
+        || builder.saving !== null
+        || builder.savingAbility !== null
+        || builder.savingFeat !== null) {
+        return;
+    }
+
+    application.dispatch({ type: "feat-save-started" });
+    try {
+        const build = await addCharacterFeatOccurrence(environment, characterId, conceptKey);
+        application.dispatch({ type: "feat-saved", build });
+        await resolveBuildReferences(build);
+    } catch (error) {
+        application.dispatch({ type: "feat-save-failed", message: errorMessage(error) });
+    }
+}
+
+async function removeFeat(characterId: string, occurrenceId: string): Promise<void> {
+    const builder = application.getState().builder;
+    if (builder.status !== "ready"
+        || builder.build === null
+        || builder.build.readOnly
+        || builder.saving !== null
+        || builder.savingAbility !== null
+        || builder.savingFeat !== null) {
+        return;
+    }
+
+    application.dispatch({ type: "feat-save-started", occurrenceId });
+    try {
+        const build = await removeCharacterFeatOccurrence(environment, characterId, occurrenceId);
+        application.dispatch({ type: "feat-saved", build });
+        await resolveBuildReferences(build);
+    } catch (error) {
+        application.dispatch({ type: "feat-save-failed", message: errorMessage(error) });
     }
 }
 

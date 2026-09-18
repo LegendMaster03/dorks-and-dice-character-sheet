@@ -1329,3 +1329,72 @@
         justify-self: start;
     }
 }
+
+
+.dd-feature-sections,
+.dd-feature-subsection,
+.dd-feat-list {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+}
+
+.dd-feature-subsection + .dd-feature-subsection {
+    padding-top: var(--dd-sheet-space-4);
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-feature-subsection__title,
+.dd-feat__name {
+    margin: 0;
+}
+
+.dd-feature-subsection__title {
+    font-size: 1rem;
+}
+
+.dd-feat {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--dd-sheet-space-1) var(--dd-sheet-space-3);
+    align-items: center;
+    padding: var(--dd-sheet-space-3);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 10px;
+    background: var(--dd-sheet-surface-raised);
+}
+
+.dd-feat__name {
+    font-size: 1rem;
+}
+
+.dd-feat .dd-routine-meta {
+    grid-column: 1;
+}
+
+.dd-feat > .dd-button {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+}
+
+.dd-feat__occurrence {
+    overflow-wrap: anywhere;
+}
+
+.dd-feat-chooser {
+    padding: var(--dd-sheet-space-3);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 10px;
+    background: var(--dd-sheet-surface-raised);
+}
+
+@media (max-width: 720px) {
+    .dd-feat {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-feat > .dd-button {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: start;
+    }
+}

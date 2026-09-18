@@ -432,3 +432,112 @@ test("inventory chooser request state ignores stale search results", () => {
     assert.equal(state.routine.inventoryChooser.status, "loading");
     assert.equal(state.routine.inventoryChooser.query, "sword");
 });
+
+
+test("Feat occurrences retain duplicate Character-owned identities and stale resolutions can not overwrite them", () => {
+    const firstId = "66666666-6666-6666-6666-666666666666";
+    const secondId = "77777777-7777-7777-7777-777777777777";
+    const featBuild = {
+        ...build,
+        progressionEntries: [
+            ...build.progressionEntries,
+            {
+                id: firstId,
+                ordinal: null,
+                kind: "feat",
+                ruleConceptKey: "feat:alert",
+                parentAdvancementEntryId: null,
+                createdAt: "now",
+                updatedAt: "now"
+            },
+            {
+                id: secondId,
+                ordinal: null,
+                kind: "feat",
+                ruleConceptKey: "feat:alert",
+                parentAdvancementEntryId: null,
+                createdAt: "later",
+                updatedAt: "later"
+            }
+        ]
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build: featBuild });
+
+    assert.deepEqual(state.builder.featReferences[firstId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+    assert.deepEqual(state.builder.featReferences[secondId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+
+    state = reduceAppState(state, {
+        type: "feat-reference-resolved",
+        occurrenceId: firstId,
+        conceptKey: "feat:old",
+        reference: { status: "unavailable", conceptKey: "feat:old" }
+    });
+    assert.deepEqual(state.builder.featReferences[firstId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+});
+
+test("Feat chooser ignores stale search results and Feat mutation replaces coherent build state", () => {
+    const featId = "88888888-8888-8888-8888-888888888888";
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+    state = reduceAppState(state, { type: "feat-chooser-opened" });
+    state = reduceAppState(state, { type: "feat-chooser-load-started", query: "alert" });
+    state = reduceAppState(state, { type: "feat-chooser-query-changed", query: "lucky" });
+    state = reduceAppState(state, {
+        type: "feat-chooser-loaded",
+        query: "alert",
+        results: [{ conceptKey: "feat:alert", entityType: "feat", displayName: "Alert" }]
+    });
+    assert.equal(state.builder.featChooser.query, "lucky");
+    assert.equal(state.builder.featChooser.status, "loading");
+
+    state = reduceAppState(state, { type: "feat-save-started" });
+    assert.equal(state.builder.savingFeat, "add");
+    const withFeat = {
+        ...build,
+        progressionEntries: [
+            ...build.progressionEntries,
+            {
+                id: featId,
+                ordinal: null,
+                kind: "feat",
+                ruleConceptKey: "feat:alert",
+                parentAdvancementEntryId: null,
+                createdAt: "now",
+                updatedAt: "now"
+            }
+        ]
+    };
+    state = reduceAppState(state, { type: "feat-saved", build: withFeat });
+    assert.equal(state.builder.savingFeat, null);
+    assert.equal(state.builder.featChooser.kind, "closed");
+    assert.deepEqual(state.builder.featReferences[featId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+});
+
+test("archived build state can not open the Feat chooser or begin a Feat mutation", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, {
+        type: "character-loaded",
+        character: { ...rich, lifecycle: "Archived", archivedAt: "2026-09-18T00:00:00Z" }
+    });
+    state = reduceAppState(state, { type: "builder-loaded", build: { ...build, readOnly: true } });
+    state = reduceAppState(state, { type: "feat-chooser-opened" });
+    state = reduceAppState(state, { type: "feat-save-started" });
+
+    assert.equal(state.builder.featChooser.kind, "closed");
+    assert.equal(state.builder.savingFeat, null);
+});
