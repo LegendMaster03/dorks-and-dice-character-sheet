@@ -4,6 +4,7 @@ import type {
     CharacterBuilderChoice
 } from "./builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "./character-api.js";
+import type { CharacterStateResponse } from "./character-state-api.js";
 import {
     loadingRuleReference,
     type RuleReferenceState
@@ -34,6 +35,16 @@ export type RuleChooserState =
         message?: string;
     };
 
+export type FeatChooserState =
+    | { kind: "closed" }
+    | {
+        kind: "open";
+        query: string;
+        status: "idle" | "loading" | "ready" | "error";
+        results: ResolvedRuleCatalogItem[];
+        message?: string;
+    };
+
 export interface CharacterBuilderUiState {
     status: "idle" | "loading" | "ready" | "error";
     build: CharacterBuildResponse | null;
@@ -47,6 +58,10 @@ export interface CharacterBuilderUiState {
         abilityKey: CharacterAbilityKey;
         message: string;
     };
+    featReferences: Record<string, RuleReferenceState>;
+    featChooser: FeatChooserState;
+    savingFeat: "add" | string | null;
+    featSaveError?: string;
 }
 
 export type SheetMode = "view" | "edit";
@@ -57,10 +72,38 @@ export interface GuidedBuilderUiState {
     returnSheetMode: SheetMode;
 }
 
+export type RoutineMutationKind =
+    | "note-add"
+    | "note-update"
+    | "note-delete"
+    | "inventory-add"
+    | "inventory-delete";
+
+export type InventoryChooserState =
+    | { kind: "closed" }
+    | {
+        kind: "open";
+        query: string;
+        status: "idle" | "loading" | "ready" | "error";
+        results: ResolvedRuleCatalogItem[];
+        message?: string;
+    };
+
+export interface CharacterRoutineUiState {
+    status: "idle" | "loading" | "ready" | "error";
+    state: CharacterStateResponse | null;
+    message?: string;
+    references: Record<string, RuleReferenceState>;
+    inventoryChooser: InventoryChooserState;
+    mutation: { kind: RoutineMutationKind; entryId?: string } | null;
+    mutationError?: string;
+}
+
 export interface CharacterSheetAppState {
     route: CharacterSheetRoute;
     screen: CharacterSheetScreen;
     builder: CharacterBuilderUiState;
+    routine: CharacterRoutineUiState;
     activeSheetSection: SheetSection;
     sheetMode: SheetMode;
     guidedBuilder: GuidedBuilderUiState;
@@ -89,6 +132,29 @@ export type CharacterSheetAction =
     | { type: "ability-save-started"; abilityKey: CharacterAbilityKey }
     | { type: "ability-saved"; build: CharacterBuildResponse }
     | { type: "ability-save-failed"; abilityKey: CharacterAbilityKey; message: string }
+    | { type: "feat-reference-resolved"; occurrenceId: string; conceptKey: string; reference: RuleReferenceState }
+    | { type: "feat-chooser-opened" }
+    | { type: "feat-chooser-query-changed"; query: string }
+    | { type: "feat-chooser-load-started"; query: string }
+    | { type: "feat-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "feat-chooser-load-failed"; query: string; message: string }
+    | { type: "feat-chooser-closed" }
+    | { type: "feat-save-started"; occurrenceId?: string }
+    | { type: "feat-saved"; build: CharacterBuildResponse }
+    | { type: "feat-save-failed"; message: string }
+    | { type: "routine-load-started" }
+    | { type: "routine-loaded"; state: CharacterStateResponse }
+    | { type: "routine-load-failed"; message: string }
+    | { type: "routine-reference-resolved"; occurrenceId: string; conceptKey: string; reference: RuleReferenceState }
+    | { type: "inventory-chooser-opened" }
+    | { type: "inventory-chooser-query-changed"; query: string }
+    | { type: "inventory-chooser-load-started"; query: string }
+    | { type: "inventory-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "inventory-chooser-load-failed"; query: string; message: string }
+    | { type: "inventory-chooser-closed" }
+    | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
+    | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
+    | { type: "routine-mutation-failed"; message: string }
     | { type: "sheet-edit-entered" }
     | { type: "sheet-edit-exited" }
     | { type: "guided-builder-opened" }
@@ -115,6 +181,7 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
         route,
         screen,
         builder: createInitialBuilderState(),
+        routine: createInitialRoutineState(),
         activeSheetSection: "actions",
         sheetMode: "view",
         guidedBuilder: createInitialGuidedBuilderState(),
@@ -128,6 +195,7 @@ export function reduceAppState(
 ): CharacterSheetAppState {
     let screen = state.screen;
     let builder = state.builder;
+    let routine = state.routine;
     let activeSheetSection = state.activeSheetSection;
     let sheetMode = state.sheetMode;
     let guidedBuilder = state.guidedBuilder;
@@ -135,6 +203,7 @@ export function reduceAppState(
     switch (action.type) {
         case "character-loaded":
             builder = createInitialBuilderState();
+            routine = createInitialRoutineState();
             activeSheetSection = "actions";
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
@@ -151,6 +220,7 @@ export function reduceAppState(
         case "load-failed":
             screen = { kind: "error", message: action.message };
             builder = createInitialBuilderState();
+            routine = createInitialRoutineState();
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
             break;
@@ -266,7 +336,11 @@ export function reduceAppState(
             }
             break;
         case "chooser-closed":
-            builder = { ...builder, chooser: { kind: "closed" } };
+            builder = {
+                    ...builder,
+                    chooser: { kind: "closed" },
+                    featChooser: { kind: "closed" }
+                };
             break;
         case "selection-save-started":
             builder = { ...builder, saving: action.target, saveError: undefined };
@@ -298,16 +372,248 @@ export function reduceAppState(
                 abilitySaveError: { abilityKey: action.abilityKey, message: action.message }
             };
             break;
+        case "feat-reference-resolved": {
+            const occurrence = builder.build?.progressionEntries.find(value =>
+                value.id === action.occurrenceId && value.kind === "feat");
+            const currentReference = builder.featReferences[action.occurrenceId];
+            if (occurrence?.ruleConceptKey === action.conceptKey
+                && currentReference !== undefined
+                && "conceptKey" in currentReference
+                && currentReference.conceptKey === action.conceptKey) {
+                builder = {
+                    ...builder,
+                    featReferences: {
+                        ...builder.featReferences,
+                        [action.occurrenceId]: action.reference
+                    }
+                };
+            }
+            break;
+        }
+        case "feat-chooser-opened":
+            if (builder.status === "ready" && builder.build !== null && !builder.build.readOnly) {
+                builder = {
+                    ...builder,
+                    featChooser: { kind: "open", query: "", status: "idle", results: [] },
+                    featSaveError: undefined
+                };
+            }
+            break;
+        case "feat-chooser-query-changed":
+            if (builder.featChooser.kind === "open") {
+                builder = { ...builder, featChooser: { ...builder.featChooser, query: action.query } };
+            }
+            break;
+        case "feat-chooser-load-started":
+            if (builder.featChooser.kind === "open") {
+                builder = {
+                    ...builder,
+                    featChooser: {
+                        ...builder.featChooser,
+                        query: action.query,
+                        status: "loading",
+                        results: [],
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "feat-chooser-loaded":
+            if (builder.featChooser.kind === "open" && builder.featChooser.query === action.query) {
+                builder = {
+                    ...builder,
+                    featChooser: {
+                        ...builder.featChooser,
+                        status: "ready",
+                        results: action.results,
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "feat-chooser-load-failed":
+            if (builder.featChooser.kind === "open" && builder.featChooser.query === action.query) {
+                builder = {
+                    ...builder,
+                    featChooser: {
+                        ...builder.featChooser,
+                        status: "error",
+                        results: [],
+                        message: action.message
+                    }
+                };
+            }
+            break;
+        case "feat-chooser-closed":
+            builder = { ...builder, featChooser: { kind: "closed" } };
+            break;
+        case "feat-save-started":
+            if (builder.status === "ready"
+                && builder.build !== null
+                && !builder.build.readOnly
+                && builder.saving === null
+                && builder.savingAbility === null
+                && builder.savingFeat === null) {
+                builder = {
+                    ...builder,
+                    savingFeat: action.occurrenceId ?? "add",
+                    featSaveError: undefined
+                };
+            }
+            break;
+        case "feat-saved":
+            builder = builderStateFromBuild(
+                {
+                    ...builder,
+                    featChooser: { kind: "closed" },
+                    savingFeat: null,
+                    featSaveError: undefined
+                },
+                action.build);
+            break;
+        case "feat-save-failed":
+            builder = { ...builder, savingFeat: null, featSaveError: action.message };
+            break;
+        case "routine-load-started":
+            routine = {
+                ...createInitialRoutineState(),
+                status: "loading"
+            };
+            break;
+        case "routine-loaded":
+            routine = routineStateFromResponse(action.state);
+            break;
+        case "routine-load-failed":
+            routine = {
+                ...createInitialRoutineState(),
+                status: "error",
+                message: action.message
+            };
+            break;
+        case "routine-reference-resolved": {
+            const occurrence = routine.state?.inventoryItemOccurrences.find(value => value.id === action.occurrenceId);
+            const currentReference = routine.references[action.occurrenceId];
+            if (occurrence?.ruleConceptKey === action.conceptKey
+                && currentReference !== undefined
+                && "conceptKey" in currentReference
+                && currentReference.conceptKey === action.conceptKey) {
+                routine = {
+                    ...routine,
+                    references: {
+                        ...routine.references,
+                        [action.occurrenceId]: action.reference
+                    }
+                };
+            }
+            break;
+        }
+        case "inventory-chooser-opened":
+            if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly) {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        kind: "open",
+                        query: "",
+                        status: "idle",
+                        results: []
+                    },
+                    mutationError: undefined
+                };
+            }
+            break;
+        case "inventory-chooser-query-changed":
+            if (routine.inventoryChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        query: action.query
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-load-started":
+            if (routine.inventoryChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        query: action.query,
+                        status: "loading",
+                        results: [],
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-loaded":
+            if (routine.inventoryChooser.kind === "open"
+                && routine.inventoryChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        status: "ready",
+                        results: action.results,
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-load-failed":
+            if (routine.inventoryChooser.kind === "open"
+                && routine.inventoryChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        status: "error",
+                        results: [],
+                        message: action.message
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-closed":
+            routine = { ...routine, inventoryChooser: { kind: "closed" } };
+            break;
+        case "routine-mutation-started":
+            if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly && routine.mutation === null) {
+                routine = {
+                    ...routine,
+                    mutation: { kind: action.kind, entryId: action.entryId },
+                    mutationError: undefined
+                };
+            }
+            break;
+        case "routine-mutation-succeeded":
+            routine = routineStateFromResponse(action.state);
+            break;
+        case "routine-mutation-failed":
+            routine = {
+                ...routine,
+                mutation: null,
+                mutationError: action.message
+            };
+            break;
         case "sheet-edit-entered":
             if (canEditStructuralConfiguration(screen, builder)) {
                 sheetMode = "edit";
                 guidedBuilder = { ...guidedBuilder, open: false, returnSheetMode: "view" };
-                builder = { ...builder, chooser: { kind: "closed" } };
+                builder = {
+                    ...builder,
+                    chooser: { kind: "closed" },
+                    featChooser: { kind: "closed" }
+                };
             }
             break;
         case "sheet-edit-exited":
             sheetMode = "view";
-            builder = { ...builder, chooser: { kind: "closed" } };
+            builder = {
+                    ...builder,
+                    chooser: { kind: "closed" },
+                    featChooser: { kind: "closed" }
+                };
             break;
         case "guided-builder-opened":
             if (canEditStructuralConfiguration(screen, builder)) {
@@ -317,7 +623,11 @@ export function reduceAppState(
                     returnSheetMode: sheetMode
                 };
                 sheetMode = "view";
-                builder = { ...builder, chooser: { kind: "closed" } };
+                builder = {
+                    ...builder,
+                    chooser: { kind: "closed" },
+                    featChooser: { kind: "closed" }
+                };
             }
             break;
         case "guided-builder-closed":
@@ -331,13 +641,21 @@ export function reduceAppState(
                 sheetMode = canEditStructuralConfiguration(screen, builder)
                     ? returnSheetMode
                     : "view";
-                builder = { ...builder, chooser: { kind: "closed" } };
+                builder = {
+                    ...builder,
+                    chooser: { kind: "closed" },
+                    featChooser: { kind: "closed" }
+                };
             }
             break;
         case "guided-builder-section-selected":
             if (guidedBuilder.open) {
                 guidedBuilder = { ...guidedBuilder, activeSection: action.section };
-                builder = { ...builder, chooser: { kind: "closed" } };
+                builder = {
+                    ...builder,
+                    chooser: { kind: "closed" },
+                    featChooser: { kind: "closed" }
+                };
             }
             break;
         case "sheet-section-selected":
@@ -351,10 +669,38 @@ export function reduceAppState(
         ...state,
         screen,
         builder,
+        routine,
         activeSheetSection,
         sheetMode,
         guidedBuilder,
         renderRevision: state.renderRevision + 1
+    };
+}
+
+function createInitialRoutineState(): CharacterRoutineUiState {
+    return {
+        status: "idle",
+        state: null,
+        references: {},
+        inventoryChooser: { kind: "closed" },
+        mutation: null
+    };
+}
+
+function routineStateFromResponse(state: CharacterStateResponse): CharacterRoutineUiState {
+    const references: Record<string, RuleReferenceState> = {};
+    for (const occurrence of state.inventoryItemOccurrences) {
+        references[occurrence.id] = {
+            status: "loading",
+            conceptKey: occurrence.ruleConceptKey
+        };
+    }
+    return {
+        status: "ready",
+        state,
+        references,
+        inventoryChooser: { kind: "closed" },
+        mutation: null
     };
 }
 
@@ -388,7 +734,10 @@ function createInitialBuilderState(): CharacterBuilderUiState {
         },
         chooser: { kind: "closed" },
         saving: null,
-        savingAbility: null
+        savingAbility: null,
+        featReferences: {},
+        featChooser: { kind: "closed" },
+        savingFeat: null
     };
 }
 
@@ -409,7 +758,16 @@ function builderStateFromBuild(
         saving: null,
         saveError: undefined,
         savingAbility: null,
-        abilitySaveError: undefined
+        abilitySaveError: undefined,
+        featReferences: Object.fromEntries(
+            build.progressionEntries
+                .filter(value => value.kind === "feat")
+                .map(value => [value.id, {
+                    status: "loading" as const,
+                    conceptKey: value.ruleConceptKey
+                }])),
+        savingFeat: null,
+        featSaveError: undefined
     };
 }
 

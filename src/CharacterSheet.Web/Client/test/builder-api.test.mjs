@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    addCharacterFeatOccurrence,
     buildCharacterAbilityScoreBackendUrl,
+    buildCharacterFeatBackendUrl,
     buildCharacterBuildBackendUrl,
     clearCharacterBaseAbilityScore,
     clearCharacterBuildChoice,
     loadCharacterBuild,
+    removeCharacterFeatOccurrence,
     setCharacterBaseAbilityScore,
     setCharacterBuildChoice
 } from "../.test-dist/builder-api.js";
@@ -173,4 +176,30 @@ test("clearing a base ability score uses DELETE and the coherent returned build"
         body: undefined
     }]);
     assert.deepEqual(result.baseAbilityScoreInputs, []);
+});
+
+
+test("Feat occurrence API uses stable build occurrence routes and concept identity", async () => {
+    const featId = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+    assert.equal(
+        buildCharacterFeatBackendUrl(environment, characterId),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/feats`);
+    assert.equal(
+        buildCharacterFeatBackendUrl(environment, characterId, featId),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/feats/${featId}`);
+
+    const calls = [];
+    const fetcher = async (input, init) => {
+        calls.push({ input: String(input), method: init?.method, body: init?.body });
+        return Response.json(build);
+    };
+
+    await addCharacterFeatOccurrence(environment, characterId, "feat:alert", fetcher);
+    await removeCharacterFeatOccurrence(environment, characterId, featId, fetcher);
+
+    assert.equal(calls[0].method, "POST");
+    assert.deepEqual(JSON.parse(calls[0].body), { conceptKey: "feat:alert" });
+    assert.equal(calls[1].method, "DELETE");
+    assert.equal(calls[1].body, undefined);
+    assert.equal(String(calls[0].body).includes("displayName"), false);
 });

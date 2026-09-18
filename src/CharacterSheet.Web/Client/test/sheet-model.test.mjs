@@ -68,6 +68,9 @@ function builder(overrides = {}) {
         chooser: { kind: "closed" },
         saving: null,
         savingAbility: null,
+        featReferences: {},
+        featChooser: { kind: "closed" },
+        savingFeat: null,
         ...overrides
     };
 }
@@ -405,4 +408,40 @@ test("Character Sheet implementation does not copy D&D Beyond source identifiers
     for (const source of [sheetSource, appSource]) {
         assert.doesNotMatch(source, /dndbeyond|ddbc-|builder-sections-|Character Builder - D&D Beyond/i);
     }
+});
+
+
+test("Notes are rendered from routine Character state and remain routine View-mode interactions", () => {
+    assert.match(sheetSource, /renderNotesSection\(routine, readOnly, handlers\.routine\)/);
+    assert.match(sheetSource, /handlers\.addNote\(input\.value\)/);
+    assert.match(sheetSource, /handlers\.updateNote\(note\.id, editor\.value\)/);
+    assert.match(sheetSource, /handlers\.deleteNote\(note\.id\)/);
+    assert.doesNotMatch(sheetModelSource, /future Campaign-scoped modules/);
+});
+
+
+test("Inventory keeps distinct occurrence identity without exposing raw UUIDs to players", () => {
+    assert.match(sheetSource, /data-inventory-occurrence-id/);
+    assert.doesNotMatch(sheetSource, /\`Occurrence \${occurrence\.id}\`/);
+    assert.match(sheetSource, /handlers\.addInventoryItem\(rule\.conceptKey\)/);
+    assert.match(sheetSource, /handlers\.removeInventoryItem\(occurrence\.id\)/);
+    assert.match(appSource, /searchResolvedRules\(environment, "item", normalizedQuery\)/);
+    assert.doesNotMatch(sheetModelSource, /Equipment, carried items, currency/);
+});
+
+
+test("Features and Traits keeps Feat occurrence identity internal while mutations remain structural", () => {
+    assert.match(sheetSource, /renderFeaturesSection\(builder, structuralEditing, readOnly, handlers\.feats\)/);
+    assert.match(sheetSource, /data-feat-occurrence-id/);
+    assert.doesNotMatch(sheetSource, /\`Occurrence \${occurrence\.id}\`/);
+    assert.match(sheetSource, /if \(editable\) \{[\s\S]*"Add Feat"/);
+    assert.match(sheetSource, /handlers\.remove\(occurrence\.id\)/);
+    assert.match(appSource, /searchResolvedRules\(environment, "feat", normalizedQuery\)/);
+    assert.match(sheetSource, /Other Features & Traits/);
+    assert.doesNotMatch(sheetModelSource, /Features and traits are not available yet/);
+});
+
+test("Feat mutations participate in the shared structural build mutation lock", () => {
+    assert.equal(hasPendingBuildMutation(builder({ savingFeat: "add" })), true);
+    assert.equal(hasPendingBuildMutation(builder({ savingFeat: "99999999-9999-9999-9999-999999999999" })), true);
 });

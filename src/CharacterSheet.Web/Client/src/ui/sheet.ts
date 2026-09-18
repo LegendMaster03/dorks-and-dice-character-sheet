@@ -1,9 +1,20 @@
-import type { CharacterBuilderUiState, GuidedBuilderUiState, SheetMode } from "../app-state.js";
+import type {
+    CharacterBuilderUiState,
+    CharacterRoutineUiState,
+    GuidedBuilderUiState,
+    SheetMode
+} from "../app-state.js";
 import type { CharacterAbilityKey } from "../builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
-import { createButton, createElement, createPlaceholder, createSectionCard } from "./components.js";
+import {
+    createButton,
+    createElement,
+    createInlineState,
+    createPlaceholder,
+    createSectionCard
+} from "./components.js";
 import { renderSkillsCard } from "./skills.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
@@ -11,10 +22,12 @@ import {
     getAbilityScoreActionPolicy,
     getBaseAbilityScoreDisplay,
     getGuidedBuilderSectionStates,
+    hasPendingBuildMutation,
     humanizeBuilderStatus,
     MECHANIC_PLACEHOLDERS,
     parseBaseAbilityScoreInput,
     SHEET_SECTIONS,
+    toRuleReferenceDisplay,
     type AbilityScoreDefinition,
     type GuidedBuilderSection,
     type MechanicPlaceholderDefinition,
@@ -26,8 +39,29 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
     clearBaseAbilityScore(abilityKey: CharacterAbilityKey): void;
 }
 
+export interface RoutineCharacterHandlers {
+    addNote(content: string): void;
+    updateNote(noteId: string, content: string): void;
+    deleteNote(noteId: string): void;
+    openInventoryChooser(): void;
+    closeInventoryChooser(): void;
+    searchInventory(query: string): void;
+    addInventoryItem(conceptKey: string): void;
+    removeInventoryItem(occurrenceId: string): void;
+}
+
+export interface FeatCharacterHandlers {
+    openChooser(): void;
+    closeChooser(): void;
+    search(query: string): void;
+    add(conceptKey: string): void;
+    remove(occurrenceId: string): void;
+}
+
 export interface CharacterSheetHandlers {
     structural: StructuralCharacterHandlers;
+    feats: FeatCharacterHandlers;
+    routine: RoutineCharacterHandlers;
     selectSection(section: SheetSection): void;
     enterEditMode(): void;
     leaveEditMode(): void;
@@ -39,6 +73,7 @@ export interface CharacterSheetHandlers {
 export function renderCharacterWorkspace(
     character: CharacterSheetBootstrapResponse,
     builder: CharacterBuilderUiState,
+    routine: CharacterRoutineUiState,
     activeSection: SheetSection,
     forceReadOnly: boolean,
     sheetMode: SheetMode,
@@ -47,7 +82,10 @@ export function renderCharacterWorkspace(
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
-    const readOnly = forceReadOnly || builder.build?.readOnly === true || character.lifecycle === "Archived";
+    const readOnly = forceReadOnly
+        || builder.build?.readOnly === true
+        || routine.state?.readOnly === true
+        || character.lifecycle === "Archived";
     const editable = !readOnly && builder.status === "ready" && builder.build !== null;
     const structuralEditing = editable && sheetMode === "edit";
     shell.setAttribute("data-read-only", readOnly ? "true" : "false");
@@ -92,7 +130,13 @@ export function renderCharacterWorkspace(
             forceReadOnly,
             handlers.structural));
     }
-    primary.append(renderPrimaryContent(activeSection, handlers));
+    primary.append(renderPrimaryContent(
+        activeSection,
+        builder,
+        routine,
+        structuralEditing,
+        readOnly,
+        handlers));
 
     workspace.append(support, skills, primary);
     shell.append(workspace);
@@ -436,7 +480,14 @@ function renderCombatSummary(): HTMLElement {
     return section;
 }
 
-function renderPrimaryContent(activeSection: SheetSection, handlers: CharacterSheetHandlers): HTMLElement {
+function renderPrimaryContent(
+    activeSection: SheetSection,
+    builder: CharacterBuilderUiState,
+    routine: CharacterRoutineUiState,
+    structuralEditing: boolean,
+    readOnly: boolean,
+    handlers: CharacterSheetHandlers
+): HTMLElement {
     const card = createElement("section", "dd-primary-content");
     const nav = createElement("nav", "dd-primary-nav");
     nav.setAttribute("aria-label", "Character sheet sections");
@@ -453,13 +504,418 @@ function renderPrimaryContent(activeSection: SheetSection, handlers: CharacterSh
     const definition = SHEET_SECTIONS.find(value => value.id === activeSection) ?? SHEET_SECTIONS[0];
     const panel = createElement("div", "dd-primary-content__panel");
     panel.setAttribute("data-sheet-section", definition.id);
-    panel.append(
-        createElement("h2", "dd-primary-content__title", definition.label),
-        createElement("h3", "dd-primary-content__empty-title", definition.emptyTitle),
-        createElement("p", "dd-primary-content__empty-message", definition.emptyMessage)
-    );
+    panel.append(createElement("h2", "dd-primary-content__title", definition.label));
+    if (definition.id === "notes") {
+        panel.append(renderNotesSection(routine, readOnly, handlers.routine));
+    } else if (definition.id === "inventory") {
+        panel.append(renderInventorySection(routine, readOnly, handlers.routine));
+    } else if (definition.id === "features") {
+        panel.append(renderFeaturesSection(builder, structuralEditing, readOnly, handlers.feats));
+    } else {
+        panel.append(
+            createElement("h3", "dd-primary-content__empty-title", definition.emptyTitle),
+            createElement("p", "dd-primary-content__empty-message", definition.emptyMessage)
+        );
+    }
     card.append(nav, panel);
     return card;
+}
+
+function renderFeaturesSection(
+    builder: CharacterBuilderUiState,
+    structuralEditing: boolean,
+    readOnly: boolean,
+    handlers: FeatCharacterHandlers
+): HTMLElement {
+    const content = createElement("div", "dd-feature-sections");
+    const feats = createElement("section", "dd-feature-subsection");
+    feats.append(createElement("h3", "dd-feature-subsection__title", "Feats"));
+
+    if (builder.status === "idle" || builder.status === "loading") {
+        feats.append(createInlineState("Loading Character Feats…", "loading"));
+    } else if (builder.status === "error" || builder.build === null) {
+        feats.append(createInlineState(
+            builder.message ?? "Character Feats are unavailable.",
+            "error"));
+    } else {
+        const pending = hasPendingBuildMutation(builder);
+        const editable = structuralEditing && !readOnly && !builder.build.readOnly;
+
+        if (builder.featSaveError !== undefined) {
+            feats.append(createInlineState(builder.featSaveError, "error"));
+        }
+        if (editable) {
+            const actions = createElement("div", "dd-routine-actions");
+            actions.append(createButton(
+                "Add Feat",
+                "dd-button dd-button--primary",
+                handlers.openChooser,
+                pending));
+            feats.append(actions);
+        }
+        if (builder.featChooser.kind === "open" && editable) {
+            feats.append(renderFeatChooser(builder, handlers));
+        }
+
+        const occurrences = builder.build.progressionEntries.filter(value => value.kind === "feat");
+        if (occurrences.length === 0) {
+            feats.append(createElement(
+                "p",
+                "dd-routine-empty",
+                editable
+                    ? "No Feat occurrences yet. Add one from the Rules Core catalog."
+                    : "No Character-owned Feat occurrences have been recorded."));
+        } else {
+            const list = createElement("div", "dd-feat-list");
+            for (const occurrence of occurrences) {
+                const item = createElement("article", "dd-feat");
+                item.setAttribute("data-feat-occurrence-id", occurrence.id);
+                const reference = builder.featReferences[occurrence.id] ?? {
+                    status: "loading" as const,
+                    conceptKey: occurrence.ruleConceptKey
+                };
+                const display = toRuleReferenceDisplay(reference);
+                const title = display.tone === "unavailable"
+                    ? "Unavailable Feat reference"
+                    : display.value;
+                item.append(
+                    createElement("h4", "dd-feat__name", title),
+                    createElement(
+                        "p",
+                        "dd-routine-meta",
+                        display.detail ?? occurrence.ruleConceptKey)
+                );
+                if (editable) {
+                    item.append(createButton(
+                        builder.savingFeat === occurrence.id ? "Removing…" : "Remove",
+                        "dd-button dd-button--ghost",
+                        () => {
+                            if (window.confirm("Remove this Feat occurrence from the Character?")) {
+                                handlers.remove(occurrence.id);
+                            }
+                        },
+                        pending));
+                }
+                list.append(item);
+            }
+            feats.append(list);
+        }
+    }
+
+    const other = createElement("section", "dd-feature-subsection");
+    other.append(
+        createElement("h3", "dd-feature-subsection__title", "Other Features & Traits"),
+        createInlineState(
+            "Class, Subclass, Species, and other granted features are not available yet because Rules Core does not expose the normalized ordinary-Character feature/effect consumer contract.",
+            "neutral"));
+    content.append(feats, other);
+    return content;
+}
+
+function renderFeatChooser(
+    builder: CharacterBuilderUiState,
+    handlers: FeatCharacterHandlers
+): HTMLElement {
+    const chooser = builder.featChooser;
+    const section = createElement("section", "dd-rule-chooser dd-feat-chooser");
+    if (chooser.kind !== "open") return section;
+
+    const heading = createElement("h4", "dd-rule-chooser__title", "Add Feat");
+    const search = createElement("form", "dd-rule-chooser__search");
+    const input = createElement("input", "dd-rule-chooser__input");
+    input.type = "search";
+    input.value = chooser.query;
+    input.placeholder = "Search Rules Core Feats";
+    input.setAttribute("aria-label", "Search Rules Core Feats");
+    const submit = createElement("button", "dd-button dd-button--secondary", "Search");
+    submit.type = "submit";
+    const close = createButton("Close", "dd-button dd-button--ghost", handlers.closeChooser);
+    search.append(input, submit, close);
+    search.addEventListener("submit", event => {
+        event.preventDefault();
+        handlers.search(input.value);
+    });
+    section.append(heading, search);
+
+    if (chooser.status === "idle" || chooser.status === "loading") {
+        section.append(createInlineState("Loading Rules Core Feats…", "loading"));
+        return section;
+    }
+    if (chooser.status === "error") {
+        section.append(createInlineState(chooser.message ?? "Rules Core Feat search failed.", "error"));
+        return section;
+    }
+    if (chooser.results.length === 0) {
+        section.append(createElement("p", "dd-routine-empty", "No matching Rules Core Feats."));
+        return section;
+    }
+
+    const results = createElement("div", "dd-rule-chooser__results");
+    for (const rule of chooser.results) {
+        const result = createElement("article", "dd-rule-chooser__result");
+        result.append(
+            createElement("strong", "dd-rule-chooser__result-name", rule.displayName),
+            createElement(
+                "span",
+                "dd-rule-chooser__result-meta",
+                [rule.editionDisplayName, rule.sourceCode].filter(Boolean).join(" • ")),
+            createElement("span", "dd-rule-chooser__result-key", rule.conceptKey),
+            createButton(
+                builder.savingFeat === "add" ? "Adding…" : "Add",
+                "dd-button dd-button--primary",
+                () => handlers.add(rule.conceptKey),
+                hasPendingBuildMutation(builder))
+        );
+        results.append(result);
+    }
+    section.append(results);
+    return section;
+}
+
+function renderInventorySection(
+    routine: CharacterRoutineUiState,
+    readOnly: boolean,
+    handlers: RoutineCharacterHandlers
+): HTMLElement {
+    const content = createElement("div", "dd-routine-section dd-inventory");
+    if (routine.status === "idle" || routine.status === "loading") {
+        content.append(createInlineState("Loading Character inventory…", "loading"));
+        return content;
+    }
+    if (routine.status === "error" || routine.state === null) {
+        content.append(createInlineState(
+            routine.message ?? "Character inventory is unavailable.",
+            "error"));
+        return content;
+    }
+
+    const pending = routine.mutation !== null;
+    const editable = !readOnly && !routine.state.readOnly;
+    if (routine.mutationError !== undefined) {
+        content.append(createInlineState(routine.mutationError, "error"));
+    }
+
+    if (editable) {
+        const actions = createElement("div", "dd-routine-actions");
+        actions.append(createButton(
+            "Add Item",
+            "dd-button dd-button--primary",
+            handlers.openInventoryChooser,
+            pending));
+        content.append(actions);
+    }
+
+    if (routine.inventoryChooser.kind === "open" && editable) {
+        content.append(renderInventoryChooser(routine, handlers));
+    }
+
+    if (routine.state.inventoryItemOccurrences.length === 0) {
+        content.append(createElement(
+            "p",
+            "dd-routine-empty",
+            editable
+                ? "No item occurrences yet. Add an item from the Rules Core catalog."
+                : "No item occurrences have been recorded."));
+        return content;
+    }
+
+    const list = createElement("div", "dd-inventory-list");
+    for (const occurrence of routine.state.inventoryItemOccurrences) {
+        const item = createElement("article", "dd-inventory-item");
+        item.setAttribute("data-inventory-occurrence-id", occurrence.id);
+        const reference = routine.references[occurrence.id] ?? {
+            status: "loading" as const,
+            conceptKey: occurrence.ruleConceptKey
+        };
+        const display = toRuleReferenceDisplay(reference);
+        const title = display.tone === "unavailable"
+            ? "Unavailable item reference"
+            : display.value;
+        item.append(
+            createElement("h3", "dd-inventory-item__name", title),
+            createElement(
+                "p",
+                "dd-routine-meta",
+                display.detail ?? occurrence.ruleConceptKey)
+        );
+        if (editable) {
+            item.append(createButton(
+                routine.mutation?.kind === "inventory-delete"
+                    && routine.mutation.entryId === occurrence.id
+                    ? "Removing…"
+                    : "Remove",
+                "dd-button dd-button--ghost",
+                () => {
+                    if (window.confirm("Remove this item occurrence from the Character?")) {
+                        handlers.removeInventoryItem(occurrence.id);
+                    }
+                },
+                pending));
+        }
+        list.append(item);
+    }
+    content.append(list);
+    return content;
+}
+
+function renderInventoryChooser(
+    routine: CharacterRoutineUiState,
+    handlers: RoutineCharacterHandlers
+): HTMLElement {
+    const chooser = routine.inventoryChooser;
+    const section = createElement("section", "dd-rule-chooser dd-inventory-chooser");
+    if (chooser.kind !== "open") return section;
+
+    const heading = createElement("h3", "dd-rule-chooser__title", "Add Inventory Item");
+    const search = createElement("form", "dd-rule-chooser__search");
+    const input = createElement("input", "dd-rule-chooser__input");
+    input.type = "search";
+    input.value = chooser.query;
+    input.placeholder = "Search Rules Core items";
+    input.setAttribute("aria-label", "Search Rules Core items");
+    const submit = createElement("button", "dd-button dd-button--secondary", "Search");
+    submit.type = "submit";
+    const close = createButton("Close", "dd-button dd-button--ghost", handlers.closeInventoryChooser);
+    search.append(input, submit, close);
+    search.addEventListener("submit", event => {
+        event.preventDefault();
+        handlers.searchInventory(input.value);
+    });
+    section.append(heading, search);
+
+    if (chooser.status === "idle" || chooser.status === "loading") {
+        section.append(createInlineState("Loading Rules Core items…", "loading"));
+        return section;
+    }
+    if (chooser.status === "error") {
+        section.append(createInlineState(chooser.message ?? "Rules Core item search failed.", "error"));
+        return section;
+    }
+    if (chooser.results.length === 0) {
+        section.append(createElement("p", "dd-routine-empty", "No matching Rules Core items."));
+        return section;
+    }
+
+    const results = createElement("div", "dd-rule-chooser__results");
+    for (const rule of chooser.results) {
+        const result = createElement("article", "dd-rule-chooser__result");
+        result.append(
+            createElement("strong", "dd-rule-chooser__result-name", rule.displayName),
+            createElement(
+                "span",
+                "dd-rule-chooser__result-meta",
+                [rule.editionDisplayName, rule.sourceCode].filter(Boolean).join(" • ")),
+            createElement("span", "dd-rule-chooser__result-key", rule.conceptKey),
+            createButton(
+                "Add",
+                "dd-button dd-button--primary",
+                () => handlers.addInventoryItem(rule.conceptKey),
+                routine.mutation !== null)
+        );
+        results.append(result);
+    }
+    section.append(results);
+    return section;
+}
+
+function renderNotesSection(
+    routine: CharacterRoutineUiState,
+    readOnly: boolean,
+    handlers: RoutineCharacterHandlers
+): HTMLElement {
+    const content = createElement("div", "dd-routine-section dd-notes");
+    if (routine.status === "idle" || routine.status === "loading") {
+        content.append(createInlineState("Loading Character notes…", "loading"));
+        return content;
+    }
+    if (routine.status === "error" || routine.state === null) {
+        content.append(createInlineState(
+            routine.message ?? "Character notes are unavailable.",
+            "error"));
+        return content;
+    }
+
+    const pending = routine.mutation !== null;
+    const editable = !readOnly && !routine.state.readOnly;
+    if (routine.mutationError !== undefined) {
+        content.append(createInlineState(routine.mutationError, "error"));
+    }
+
+    if (editable) {
+        const form = createElement("form", "dd-note-form");
+        const label = createElement("label", "dd-routine-label", "Add note");
+        const input = createElement("textarea", "dd-routine-textarea");
+        input.rows = 4;
+        input.maxLength = 10000;
+        input.setAttribute("aria-label", "New Character note");
+        const submit = createElement("button", "dd-button dd-button--primary", "Add Note");
+        submit.type = "submit";
+        submit.disabled = pending;
+        form.append(label, input, submit);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            if (pending || input.value.trim().length === 0) return;
+            handlers.addNote(input.value);
+        });
+        content.append(form);
+    }
+
+    if (routine.state.notes.length === 0) {
+        content.append(createElement(
+            "p",
+            "dd-routine-empty",
+            editable
+                ? "No notes yet. Add a Character-owned note above."
+                : "No Character-owned notes have been recorded."));
+        return content;
+    }
+
+    const list = createElement("div", "dd-note-list");
+    for (const note of routine.state.notes) {
+        const item = createElement("article", "dd-note");
+        item.setAttribute("data-note-id", note.id);
+        const meta = createElement(
+            "p",
+            "dd-routine-meta",
+            `Updated ${new Date(note.updatedAt).toLocaleString()}`);
+
+        if (editable) {
+            const editor = createElement("textarea", "dd-routine-textarea dd-note__editor");
+            editor.rows = Math.max(3, Math.min(12, note.content.split(/\r?\n/).length + 1));
+            editor.maxLength = 10000;
+            editor.value = note.content;
+            editor.setAttribute("aria-label", "Character note");
+            editor.disabled = pending;
+
+            const actions = createElement("div", "dd-routine-actions");
+            const save = createButton(
+                routine.mutation?.kind === "note-update" && routine.mutation.entryId === note.id
+                    ? "Saving…"
+                    : "Save",
+                "dd-button dd-button--secondary",
+                () => handlers.updateNote(note.id, editor.value),
+                pending);
+            const remove = createButton(
+                routine.mutation?.kind === "note-delete" && routine.mutation.entryId === note.id
+                    ? "Deleting…"
+                    : "Delete",
+                "dd-button dd-button--ghost",
+                () => {
+                    if (window.confirm("Delete this Character note?")) {
+                        handlers.deleteNote(note.id);
+                    }
+                },
+                pending);
+            actions.append(save, remove);
+            item.append(editor, meta, actions);
+        } else {
+            const body = createElement("p", "dd-note__body", note.content);
+            item.append(body, meta);
+        }
+        list.append(item);
+    }
+    content.append(list);
+    return content;
 }
 
 function headerSummaryItem(label: string, value: string, detail?: string): HTMLElement {

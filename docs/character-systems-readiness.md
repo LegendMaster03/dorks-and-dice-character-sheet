@@ -1,8 +1,12 @@
 # Character systems readiness audit
 
 This audit is based on Character Sheet `main` at
-`1aaa46c6524387f26e04118e345d96e8cc3a954c` and Rules Core `main` at
-`650868cfa616d33672089cbe91c78ee471b33904`, verified before the feature branch was created.
+`fcd823c6b833c624170cd68942c9ebb1eb3f8467` and Rules Core `main` at
+`650868cfa616d33672089cbe91c78ee471b33904`, verified before this implementation pass.
+
+On `feature/full-stack-character-systems`, the systems classified as ready below are now wired
+end-to-end through frontend API clients, reducer/application state, real sheet UI, mutation behavior,
+and focused frontend tests. No Rules Core branch was required for those slices.
 
 The governing boundary remains:
 
@@ -13,13 +17,15 @@ persisted Character decision/state
 != explicit override
 ```
 
-## READY and implemented
+## READY and implemented end-to-end
 
 ### Character notes
 
 Plain Character-owned notes have unambiguous ownership and lifecycle semantics. They are persisted as
 stable Character-owned note occurrences with content and timestamps. They are not Campaign-scoped
-modules and do not contain rule mechanics.
+modules and do not contain rule mechanics. The Notes tab now loads this state and permits add, edit,
+and delete in normal View mode for active Characters. Archived/read-only Characters render notes
+without mutation affordances.
 
 ### Minimal inventory ownership occurrences
 
@@ -35,13 +41,19 @@ This Character owns one logical occurrence referencing Rules Core ConceptKey X.
 
 Duplicate concept keys are permitted and retain separate Character-owned occurrence IDs. No equipped,
 carried, active, attuned, container, currency, ammunition, quantity-stack, encumbrance, Armor Class,
-attack, or other effect semantics are inferred.
+attack, or other effect semantics are inferred. The Inventory tab now resolves each persisted
+`ConceptKey` through the ordinary Rules Core item catalog for display, keeps unavailable references
+visible by `ConceptKey`, and adds/removes individual occurrences in normal View mode. Duplicate item
+concepts remain separate visible Character occurrences rather than becoming quantity stacks.
 
 ### Existing Feat occurrence exposure
 
 Feat occurrences were already correctly persisted and exposed before this branch through
 `CharacterBuildView.ProgressionEntries`. Their Character-owned advancement IDs distinguish duplicate
-grants of the same Rules Core concept. No parallel Feat resource was added.
+grants of the same Rules Core concept. No parallel Feat resource was added. The Features & Traits tab now resolves and displays those
+Character-owned Feat occurrences in normal View mode. Add/remove uses the existing build APIs and is
+available only through structural Edit mode. The chooser uses the ordinary Rules Core Feat catalog;
+duplicate occurrences and unavailable persisted references remain distinct and visible.
 
 ## RULES CORE CONTRACT NEEDED
 
@@ -144,3 +156,26 @@ No Character-side rules engine was added. The reusable foundation is currently a
 not an implementation, because Rules Core does not yet provide the normalized ordinary-consumer effect
 contract needed to implement it correctly. Character Sheet continues to persist only Character-owned
 inputs/selections/state and stable Rules Core concept references.
+
+
+## Category A continuation audit
+
+After Notes, minimal Inventory, and Feat UI were completed, the remaining placeholder regions were
+re-evaluated against current Character Sheet and Rules Core contracts.
+
+No additional unimplemented Character system is currently Category A without moving mechanical
+interpretation into Character Sheet or inventing unresolved Character/product semantics.
+
+The remaining visible regions therefore stay intentionally blocked as follows:
+
+- Rules Core consumer contract: effective Ability Scores and modifiers, Saving Throws,
+  proficiency/training, movement, Armor Class, Initiative, Hit Points/Hit Dice, calculated actions,
+  effective composite Skills, feature-granted mechanics, item-granted mechanics, and complete
+  non-Feat Features & Traits presentation.
+- Rules/product decision: Background/additional foundational selection semantics, level/multiclass/
+  Prestige Class/ASI and acquisition provenance, spell state, rich inventory semantics, and generic
+  explicit overrides.
+
+The existing Race/Species, Starting Class, Class-bound Subclass, base Ability Score inputs, Feat
+occurrences, minimal Inventory occurrences, and Character Notes remain the Character-owned inputs/state
+that can currently be edited without violating the Rules Core boundary.

@@ -335,3 +335,209 @@ test("incomplete build configuration never prevents normal rich Character render
     assert.equal(state.sheetMode, "view");
     assert.equal(state.guidedBuilder.open, false);
 });
+
+
+test("routine state loads independently from Character build state", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+    state = reduceAppState(state, { type: "routine-load-started" });
+    assert.equal(state.builder.status, "ready");
+    assert.equal(state.routine.status, "loading");
+
+    state = reduceAppState(state, { type: "routine-load-failed", message: "state unavailable" });
+    assert.equal(state.builder.status, "ready");
+    assert.equal(state.routine.status, "error");
+    assert.equal(state.routine.message, "state unavailable");
+});
+
+test("routine state preserves duplicate inventory occurrences and protects stale reference resolution", () => {
+    const occurrenceA = "33333333-3333-3333-3333-333333333333";
+    const occurrenceB = "44444444-4444-4444-4444-444444444444";
+    const routine = {
+        characterId,
+        readOnly: false,
+        inventoryItemOccurrences: [
+            { id: occurrenceA, ruleConceptKey: "item:rope", createdAt: "now" },
+            { id: occurrenceB, ruleConceptKey: "item:rope", createdAt: "later" }
+        ],
+        notes: []
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "routine-loaded", state: routine });
+
+    assert.equal(state.routine.state.inventoryItemOccurrences.length, 2);
+    assert.deepEqual(state.routine.references[occurrenceA], { status: "loading", conceptKey: "item:rope" });
+    assert.deepEqual(state.routine.references[occurrenceB], { status: "loading", conceptKey: "item:rope" });
+
+    state = reduceAppState(state, {
+        type: "routine-reference-resolved",
+        occurrenceId: occurrenceA,
+        conceptKey: "item:old",
+        reference: { status: "unavailable", conceptKey: "item:old" }
+    });
+    assert.deepEqual(state.routine.references[occurrenceA], { status: "loading", conceptKey: "item:rope" });
+});
+
+test("routine mutation state is explicit and coherent response replacement clears pending state", () => {
+    const routine = {
+        characterId,
+        readOnly: false,
+        inventoryItemOccurrences: [],
+        notes: []
+    };
+    const withNote = {
+        ...routine,
+        notes: [{
+            id: "55555555-5555-5555-5555-555555555555",
+            content: "Remember this",
+            createdAt: "now",
+            updatedAt: "now"
+        }]
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "routine-loaded", state: routine });
+    state = reduceAppState(state, { type: "routine-mutation-started", kind: "note-add" });
+    assert.deepEqual(state.routine.mutation, { kind: "note-add", entryId: undefined });
+
+    state = reduceAppState(state, { type: "routine-mutation-succeeded", state: withNote });
+    assert.equal(state.routine.mutation, null);
+    assert.equal(state.routine.state.notes[0].content, "Remember this");
+
+    state = reduceAppState(state, { type: "routine-mutation-started", kind: "note-update", entryId: withNote.notes[0].id });
+    state = reduceAppState(state, { type: "routine-mutation-failed", message: "save failed" });
+    assert.equal(state.routine.mutation, null);
+    assert.equal(state.routine.mutationError, "save failed");
+});
+
+
+test("inventory chooser request state ignores stale search results", () => {
+    const routine = {
+        characterId,
+        readOnly: false,
+        inventoryItemOccurrences: [],
+        notes: []
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "routine-loaded", state: routine });
+    state = reduceAppState(state, { type: "inventory-chooser-opened" });
+    state = reduceAppState(state, { type: "inventory-chooser-load-started", query: "rope" });
+    state = reduceAppState(state, { type: "inventory-chooser-query-changed", query: "sword" });
+    state = reduceAppState(state, {
+        type: "inventory-chooser-loaded",
+        query: "rope",
+        results: [{ conceptKey: "item:rope", entityType: "item", displayName: "Rope" }]
+    });
+    assert.equal(state.routine.inventoryChooser.status, "loading");
+    assert.equal(state.routine.inventoryChooser.query, "sword");
+});
+
+
+test("Feat occurrences retain duplicate Character-owned identities and stale resolutions can not overwrite them", () => {
+    const firstId = "66666666-6666-6666-6666-666666666666";
+    const secondId = "77777777-7777-7777-7777-777777777777";
+    const featBuild = {
+        ...build,
+        progressionEntries: [
+            ...build.progressionEntries,
+            {
+                id: firstId,
+                ordinal: null,
+                kind: "feat",
+                ruleConceptKey: "feat:alert",
+                parentAdvancementEntryId: null,
+                createdAt: "now",
+                updatedAt: "now"
+            },
+            {
+                id: secondId,
+                ordinal: null,
+                kind: "feat",
+                ruleConceptKey: "feat:alert",
+                parentAdvancementEntryId: null,
+                createdAt: "later",
+                updatedAt: "later"
+            }
+        ]
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build: featBuild });
+
+    assert.deepEqual(state.builder.featReferences[firstId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+    assert.deepEqual(state.builder.featReferences[secondId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+
+    state = reduceAppState(state, {
+        type: "feat-reference-resolved",
+        occurrenceId: firstId,
+        conceptKey: "feat:old",
+        reference: { status: "unavailable", conceptKey: "feat:old" }
+    });
+    assert.deepEqual(state.builder.featReferences[firstId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+});
+
+test("Feat chooser ignores stale search results and Feat mutation replaces coherent build state", () => {
+    const featId = "88888888-8888-8888-8888-888888888888";
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+    state = reduceAppState(state, { type: "feat-chooser-opened" });
+    state = reduceAppState(state, { type: "feat-chooser-load-started", query: "alert" });
+    state = reduceAppState(state, { type: "feat-chooser-query-changed", query: "lucky" });
+    state = reduceAppState(state, {
+        type: "feat-chooser-loaded",
+        query: "alert",
+        results: [{ conceptKey: "feat:alert", entityType: "feat", displayName: "Alert" }]
+    });
+    assert.equal(state.builder.featChooser.query, "lucky");
+    assert.equal(state.builder.featChooser.status, "loading");
+
+    state = reduceAppState(state, { type: "feat-save-started" });
+    assert.equal(state.builder.savingFeat, "add");
+    const withFeat = {
+        ...build,
+        progressionEntries: [
+            ...build.progressionEntries,
+            {
+                id: featId,
+                ordinal: null,
+                kind: "feat",
+                ruleConceptKey: "feat:alert",
+                parentAdvancementEntryId: null,
+                createdAt: "now",
+                updatedAt: "now"
+            }
+        ]
+    };
+    state = reduceAppState(state, { type: "feat-saved", build: withFeat });
+    assert.equal(state.builder.savingFeat, null);
+    assert.equal(state.builder.featChooser.kind, "closed");
+    assert.deepEqual(state.builder.featReferences[featId], {
+        status: "loading",
+        conceptKey: "feat:alert"
+    });
+});
+
+test("archived build state can not open the Feat chooser or begin a Feat mutation", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, {
+        type: "character-loaded",
+        character: { ...rich, lifecycle: "Archived", archivedAt: "2026-09-18T00:00:00Z" }
+    });
+    state = reduceAppState(state, { type: "builder-loaded", build: { ...build, readOnly: true } });
+    state = reduceAppState(state, { type: "feat-chooser-opened" });
+    state = reduceAppState(state, { type: "feat-save-started" });
+
+    assert.equal(state.builder.featChooser.kind, "closed");
+    assert.equal(state.builder.savingFeat, null);
+});
