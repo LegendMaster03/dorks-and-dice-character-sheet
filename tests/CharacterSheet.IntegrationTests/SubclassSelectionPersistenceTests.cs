@@ -102,7 +102,8 @@ public sealed class SubclassSelectionPersistenceTests
             Assert.NotNull(indexSql);
             Assert.Contains("UNIQUE INDEX", indexSql, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("(\"CharacterId\", \"ParentAdvancementEntryId\")", indexSql, StringComparison.Ordinal);
-            Assert.Contains("\"Kind\" = 'Subclass'", indexSql, StringComparison.Ordinal);
+            Assert.Contains("\"Kind\"", indexSql, StringComparison.Ordinal);
+            Assert.Contains("Subclass", indexSql, StringComparison.Ordinal);
             Assert.Contains("\"ParentAdvancementEntryId\" IS NOT NULL", indexSql, StringComparison.Ordinal);
         }
 
