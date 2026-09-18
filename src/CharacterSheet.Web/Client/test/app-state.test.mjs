@@ -541,3 +541,38 @@ test("archived build state can not open the Feat chooser or begin a Feat mutatio
     assert.equal(state.builder.featChooser.kind, "closed");
     assert.equal(state.builder.savingFeat, null);
 });
+
+
+test("presentation state ignores stale out-of-order responses and fails independently", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+
+    state = reduceAppState(state, { type: "presentation-load-started", requestId: 1 });
+    state = reduceAppState(state, { type: "presentation-load-started", requestId: 2 });
+    state = reduceAppState(state, {
+        type: "presentation-loaded",
+        requestId: 1,
+        presentation: { advancement: { occurrences: [] }, mechanics: { competencies: { entries: [] } } }
+    });
+    assert.equal(state.presentation.status, "loading");
+    assert.equal(state.presentation.requestId, 2);
+
+    state = reduceAppState(state, {
+        type: "presentation-loaded",
+        requestId: 2,
+        presentation: {
+            advancement: { occurrences: [{ occurrenceId: "feat-1", conceptKey: "feat:alert", kind: "feat", displayName: "Alert" }] },
+            mechanics: { competencies: { entries: [{ key: "skill.hide", label: "Hide", effectiveValue: "Not configured" }] } }
+        }
+    });
+    assert.equal(state.presentation.status, "ready");
+    assert.equal(state.presentation.advancement.occurrences[0].displayName, "Alert");
+
+    state = reduceAppState(state, { type: "routine-load-failed", message: "routine failed" });
+    state = reduceAppState(state, { type: "presentation-load-started", requestId: 3 });
+    state = reduceAppState(state, { type: "presentation-load-failed", requestId: 3, message: "projection failed" });
+    assert.equal(state.presentation.status, "error");
+    assert.equal(state.presentation.mechanics, null);
+    assert.equal(state.routine.status, "error");
+    assert.equal(state.screen.kind, "rich-character");
+});

@@ -19,10 +19,17 @@ public sealed class ToolHostAuthenticationClientTests
             [],
             [],
             []);
-        var handler = new RecordingHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        var introspectionResponse = new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = JsonContent.Create(context)
-        });
+        };
+        introspectionResponse.Headers.Add(
+            ToolHostAuthenticationHeaders.DelegationCapability,
+            "ddtd_v1_test-capability");
+        introspectionResponse.Headers.Add(
+            ToolHostAuthenticationHeaders.DelegationPath,
+            "/tool-host/character-sheet/api/delegate/{targetSlug}/upstream");
+        var handler = new RecordingHandler(introspectionResponse);
         var httpClient = new HttpClient(handler)
         {
             BaseAddress = new Uri("https://site.example")
@@ -36,6 +43,10 @@ public sealed class ToolHostAuthenticationClientTests
         Assert.NotNull(result);
         Assert.Equal("character-sheet", result.ToolSlug);
         Assert.NotNull(result.Characters);
+        Assert.Equal("ddtd_v1_test-capability", result.DelegationCapability);
+        Assert.Equal(
+            "/tool-host/character-sheet/api/delegate/{targetSlug}/upstream",
+            result.DelegationPath);
         Assert.Equal(
             new Uri("https://site.example/tool-host/character-sheet/api/introspect"),
             handler.RequestUri);

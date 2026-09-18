@@ -3,7 +3,9 @@ using System.Text.Json.Serialization;
 namespace CharacterSheet.Application.RulesCore;
 
 public sealed class RulesCoreGatewayException(string message, Exception? innerException = null)
-    : Exception(message, innerException);
+    : Exception(message, innerException)
+{
+}
 
 public sealed record RulesCoreRuleReference(string ConceptKey, string EntityType);
 

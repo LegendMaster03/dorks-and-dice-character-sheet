@@ -224,9 +224,25 @@ test("spellcasting profiles render only when supplied", () => {
     assert.equal(byClass(unavailable, "dd-spellcasting-profile").length, 0);
 });
 
-test("production passes nullable advancement and mechanics projections without fixture substitution", async () => {
+test("production consumes backend advancement and mechanics projections instead of hard-coded nulls", async () => {
     const source = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
-    assert.match(source, /state\.guidedBuilder,\s*null,\s*null,\s*\{/s);
+    assert.match(source, /state\.presentation\.status === "ready" \? state\.presentation\.advancement : null/);
+    assert.match(source, /state\.presentation\.status === "ready" \? state\.presentation\.mechanics : null/);
+    assert.doesNotMatch(source, /state\.guidedBuilder,\s*null,\s*null,\s*\{/s);
+});
+
+test("production refreshes presentation after structural, Ability, Feat, and Inventory mutations", async () => {
+    const source = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
+    assert.match(source, /async function bootstrapPresentation/);
+    assert.match(source, /addInventoryItem[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.match(source, /removeInventoryItem[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.match(source, /addFeat[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.match(source, /removeFeat[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.match(source, /saveChoice[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.match(source, /clearChoice[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.match(source, /saveBaseAbilityScore[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.match(source, /clearBaseAbilityScore[\s\S]*bootstrapPresentation\(characterId\)/);
+    assert.doesNotMatch(source, /calculateAbilityModifier|score\s*-\s*10/i);
 });
 
 test("generalized presentation contains no source-specific Loot Tavern formula or prose", async () => {

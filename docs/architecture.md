@@ -42,6 +42,24 @@ The builder intentionally uses global rules only. A Site Character can belong to
 
 For standalone ASP.NET development only, `RulesCore:DevelopmentBaseUrl` may expose an explicit direct Rules Core base URL to the frontend. The standalone shell emits that adapter only when the ASP.NET environment is `Development`; embedded mode ignores standalone adapter attributes and always uses the Site Tool Host path. Production authentication is not weakened for standalone convenience.
 
+## Character presentation projection
+
+The rich sheet has a backend presentation read surface:
+
+```text
+GET /api/characters/{characterId}/presentation
+```
+
+It returns the frontend-owned `CharacterPresentation` shape with independent `advancement` and nullable `mechanics` projections. The read follows the same Site Character ownership/lifecycle rules as the existing build APIs, does not initialize an uninitialized sheet, and remains readable for archived owned Characters.
+
+For production Rules Core access, Character Sheet consumes the Site-issued Tool-to-Tool delegation capability returned with successful Character Sheet ticket introspection. Requests go through the source-bound Site route for `character-sheet -> rules-core`; Character Sheet never forwards its own Tool ticket, submits a browser/user-supplied user ID, or uses a service identity in place of the requesting user. The Site reconstructs Rules Core's target-specific Tool Host authentication context and Rules Core applies the same user's source grants.
+
+The projection uses global effective Rules Core mechanics only. Character-to-Campaign associations are not a mechanics-scope selector. Campaign mechanics remain deferred until the sheet exposes an explicit Campaign context.
+
+Rules Core owns evaluation arithmetic. Character Sheet supplies only inputs it can establish from authoritative Character state, batches safe evaluations, and never substitutes zero for missing state. Current persisted Character state does not yet establish effective Ability scores/modifiers, competency ranks/training/class-skill state, equipment state, spellcasting state, or rule capability grants derived from selected Classes/Species/Feats. Capability-gated 3.x mechanics therefore remain omitted until those contracts/state exist. Item-occurrence mechanics also remain absent because the current Rules Core consumer contract does not expose them.
+
+The browser stores presentation loading state in the explicit application reducer. Each request has a monotonic request ID so stale/out-of-order responses are ignored. Successful mutations of base Ability input, Race/Species, Starting Class, Subclass, Feats, and Inventory ownership refresh the projection. Notes do not trigger a mechanics refresh. Projection failure never replaces the separately loaded build/routine state.
+
 ## Stable rule-reference semantics
 
 Character Sheet persists Rules Core `RuleConcept.Key`, exposed as `ConceptKey` by the resolved catalog, as its stable rule reference. The resolved catalog also exposes `RuleConceptId`, display metadata, relationship metadata, source IDs, and source revision IDs, but Character Sheet does not use display name, source-native ID, `SourceEntityRevisionId`, package revision, source JSON, or resolved mechanical `Document` as Character decision identity.

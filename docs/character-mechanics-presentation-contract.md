@@ -306,20 +306,15 @@ Every collection is optional so the backend can expose mechanics incrementally. 
 
 ## Current production bridge state
 
-The current application passes `null` for both generalized projections:
+Production now reads `GET /api/characters/{characterId}/presentation` and passes the returned `advancement` and `mechanics` projections into `renderCharacterWorkspace(...)`. The frontend owns loading/error/stale-request state only; it does not call Rules Core mechanics endpoints directly.
 
-```text
-renderCharacterWorkspace(
-    ...,
-    advancement = null,
-    mechanics = null,
-    ...
-)
-```
+The Character Sheet backend uses the Site's source-bound Tool-to-Tool delegation capability to call Rules Core as the same authenticated Site user. Rules Core therefore continues applying that user's source grants. The bridge uses global effective rules only. A Character's Campaign associations never select a Campaign mechanics scope implicitly.
 
-This is intentional. Test fixtures exercise the presentation contract, but production does not substitute fixture values.
+Advancement always preserves Character-owned occurrence identity, concept identity, persisted parent occurrence identity, and open-ended kind. Accessible Rules Core catalog metadata supplies the display name and attribution. An inaccessible or unresolved reference remains present as an unavailable occurrence. Progression is omitted because the current Character-owned model does not establish Class level, Prestige Class level, Position rank, tier, standing, or another progression value.
 
-The next Character Sheet backend task should assemble `CharacterAdvancementView` and `CharacterMechanicsView` from Character-owned state plus Rules Core semantics/calculations. It should not require changes to the sheet layout or introduce source-native DTO knowledge into the frontend.
+Mechanics are capability- and input-driven. The current bridge projects accessible competency definitions, specialized competency metadata, effective `derive-parent` relationships, generalized check metadata, source attribution, and any values Rules Core can safely evaluate without missing Character/runtime/source inputs. A competency whose Character inputs are not modeled is shown as `Not configured`, never zero. Base Ability inputs are not relabeled as effective Abilities.
+
+Rules Core failure degrades mechanics independently. The Character page continues to load its build, Inventory, and Notes state, and Character-owned advancement occurrences remain present even when Rules Core display metadata is unavailable.
 
 ## Explicit frontend non-responsibilities
 
