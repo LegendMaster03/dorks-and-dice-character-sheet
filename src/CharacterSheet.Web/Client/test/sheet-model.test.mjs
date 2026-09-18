@@ -127,8 +127,11 @@ test("builder mutation policy removes editing affordances in read-only state", (
     });
 });
 
-test("unfinished mechanics remain explicit placeholders without treating abilities as unimplemented", () => {
-    assert.ok(MECHANIC_PLACEHOLDERS.length >= 10);
+test("unfinished mechanics remain explicit placeholders without treating resolved generalized mechanics as placeholders", () => {
+    assert.ok(MECHANIC_PLACEHOLDERS.length > 0);
+    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "proficiency"), false);
+    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "passive-values"), true);
+    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "training"), true);
     assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder =>
         ABILITY_SCORE_DEFINITIONS.some(ability => ability.key === placeholder.id)), false);
     for (const placeholder of MECHANIC_PLACEHOLDERS) {

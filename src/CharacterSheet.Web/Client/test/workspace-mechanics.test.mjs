@@ -380,3 +380,22 @@ test("legacy combat placeholder renderer is removed in favor of the generalized 
     assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
     assert.match(source, /renderCombatMechanicsSummary\(mechanics\)/);
 });
+
+
+test("backend-supplied Proficiency Bonus renders only through generalized combat fundamentals", () => {
+    const rendered = render("actions", {
+        combatFundamentals: [mechanical("proficiency-bonus", "Proficiency Bonus", "+3")]
+    });
+    const resolved = byAttribute(rendered, "data-mechanic-key", "proficiency-bonus");
+    assert.equal(resolved.length, 1);
+    assert.match(visibleText(resolved[0]), /Proficiency Bonus/);
+    assert.match(visibleText(resolved[0]), /\+3/);
+    assert.equal(byAttribute(rendered, "data-unimplemented-mechanic", "proficiency").length, 0);
+    assert.doesNotMatch(visibleText(rendered), /Proficiency Bonus\s+Not (?:configured|yet configured)/i);
+});
+
+test("frontend does not infer Proficiency Bonus when the backend does not supply it", () => {
+    const rendered = render("actions", { combatFundamentals: [] });
+    assert.doesNotMatch(visibleText(rendered), /Proficiency Bonus/);
+    assert.equal(byAttribute(rendered, "data-unimplemented-mechanic", "proficiency").length, 0);
+});
