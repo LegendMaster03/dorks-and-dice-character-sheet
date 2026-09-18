@@ -3,9 +3,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createInitialState, reduceAppState } from "../.test-dist/app-state.js";
 import {
+    ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
+    getAbilityScoreActionPolicy,
+    getBaseAbilityScoreDisplay,
     getChoiceActionPolicy,
     MECHANIC_PLACEHOLDERS,
+    parseBaseAbilityScoreInput,
     SHEET_SECTIONS,
     toRuleReferenceDisplay
 } from "../.test-dist/ui/sheet-model.js";
@@ -30,6 +34,7 @@ const build = {
     builderStatus: "BuildInProgress",
     readOnly: false,
     foundationalSelections: [],
+    baseAbilityScoreInputs: [],
     progressionEntries: []
 };
 const resolved = (conceptKey, entityType, displayName) => ({
@@ -116,8 +121,10 @@ test("builder mutation policy removes editing affordances in read-only state", (
     });
 });
 
-test("unfinished mechanics are explicit placeholders and contain no fabricated numeric values", () => {
-    assert.ok(MECHANIC_PLACEHOLDERS.length >= 16);
+test("unfinished mechanics remain explicit placeholders without treating abilities as unimplemented", () => {
+    assert.ok(MECHANIC_PLACEHOLDERS.length >= 10);
+    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder =>
+        ABILITY_SCORE_DEFINITIONS.some(ability => ability.key === placeholder.id)), false);
     for (const placeholder of MECHANIC_PLACEHOLDERS) {
         assert.equal(Object.hasOwn(placeholder, "value"), false);
         assert.equal(/(^|\s)[+-]?\d+(?:\.\d+)?(?:\s|$)/.test(placeholder.message), false);
@@ -141,8 +148,73 @@ test("sheet section selection is explicit application state rather than DOM-only
     assert.equal(state.activeSheetSection, "inventory");
 });
 
+
+test("all six stable Character ability keys are represented once", () => {
+    assert.deepEqual(
+        ABILITY_SCORE_DEFINITIONS.map(ability => ability.key),
+        ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]);
+});
+
+test("persisted base score is displayed as a base input", () => {
+    const configuredBuilder = builder({
+        build: {
+            ...build,
+            baseAbilityScoreInputs: [{
+                id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                abilityKey: "strength",
+                score: 15,
+                createdAt: "now",
+                updatedAt: "now"
+            }]
+        }
+    });
+    assert.deepEqual(getBaseAbilityScoreDisplay(configuredBuilder, "strength"), {
+        status: "configured",
+        value: "15",
+        detail: "Base Score",
+        score: 15
+    });
+});
+
+test("missing base score remains unconfigured instead of becoming ten", () => {
+    const display = getBaseAbilityScoreDisplay(builder(), "dexterity");
+    assert.equal(display.status, "unconfigured");
+    assert.equal(display.value, "Not configured");
+    assert.equal(display.score, null);
+    assert.notEqual(display.value, "10");
+});
+
+test("active Character ability policy supports set, replace, and clear while read-only does not mutate", () => {
+    const activeBuilder = builder();
+    assert.deepEqual(getAbilityScoreActionPolicy(activeBuilder, false, false), {
+        canSave: true,
+        canClear: false,
+        saveLabel: "Set"
+    });
+    assert.deepEqual(getAbilityScoreActionPolicy(activeBuilder, false, true), {
+        canSave: true,
+        canClear: true,
+        saveLabel: "Replace"
+    });
+    assert.deepEqual(getAbilityScoreActionPolicy(activeBuilder, true, true), {
+        canSave: false,
+        canClear: false,
+        saveLabel: "Replace"
+    });
+});
+
+test("base score parsing enforces only backend integer representation, not D&D score limits", () => {
+    assert.deepEqual(parseBaseAbilityScoreInput("-2147483648"), { ok: true, score: -2147483648 });
+    assert.deepEqual(parseBaseAbilityScoreInput("2147483647"), { ok: true, score: 2147483647 });
+    assert.equal(parseBaseAbilityScoreInput("2147483648").ok, false);
+    assert.equal(parseBaseAbilityScoreInput("3.5").ok, false);
+    assert.equal(parseBaseAbilityScoreInput("").ok, false);
+});
+
 const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+const sheetModelSource = await readFile(new URL("../src/ui/sheet-model.ts", import.meta.url), "utf8");
+const builderApiSource = await readFile(new URL("../src/builder-api.ts", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
 
 test("UI shell defines materially different tablet and mobile compositions", () => {
@@ -168,4 +240,20 @@ test("Character workspace does not create a nested document-level main landmark"
     assert.match(
         sheetSource,
         /createElement\("section", "dd-sheet__main"\)[\s\S]*aria-label", "Character details and controls"/);
+});
+
+test("ability UI does not invent effective-score or modifier calculations", () => {
+    assert.doesNotMatch(builderApiSource, /effectiveScore/);
+    assert.doesNotMatch(sheetModelSource, /effectiveScore/);
+    assert.doesNotMatch(sheetSource, /effectiveScore/);
+    assert.doesNotMatch(sheetModelSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
+    assert.doesNotMatch(sheetSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
+    assert.match(sheetSource, /Modifier not available yet\./);
+});
+
+test("ability editor uses integer input without edition-specific min or max attributes", () => {
+    assert.match(sheetSource, /input\.type = "number"/);
+    assert.match(sheetSource, /input\.step = "1"/);
+    assert.doesNotMatch(sheetSource, /input\.(?:min|max)\s*=/);
+    assert.doesNotMatch(sheetSource, /setAttribute\("(?:min|max)"/);
 });

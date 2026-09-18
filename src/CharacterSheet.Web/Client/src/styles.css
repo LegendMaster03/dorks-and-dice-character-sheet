@@ -246,6 +246,66 @@
     line-height: 1.25;
 }
 
+.dd-stat__modifier {
+    margin: 0.2rem 0 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.62rem;
+    line-height: 1.25;
+}
+
+.dd-stat__editor {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.55rem;
+}
+
+.dd-stat__input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 0.4rem 0.45rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    font: inherit;
+    text-align: center;
+}
+
+.dd-stat__actions {
+    display: flex;
+    gap: 0.3rem;
+    justify-content: center;
+}
+
+.dd-stat__button {
+    min-width: 0;
+    padding: 0.35rem 0.45rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+.dd-stat__button:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.dd-stat__button--secondary {
+    font-weight: 650;
+}
+
+.dd-stat__error {
+    margin: 0.4rem 0 0;
+    font-size: 0.64rem;
+    line-height: 1.25;
+}
+
 .dd-sheet__workspace {
     display: grid;
     grid-template-columns: minmax(13rem, 0.62fr) minmax(15rem, 0.72fr) minmax(0, 2fr);

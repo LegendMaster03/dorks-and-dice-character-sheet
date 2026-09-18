@@ -1,4 +1,9 @@
-import type { CharacterBuilderChoice } from "../builder-api.js";
+import {
+    CHARACTER_ABILITY_KEYS,
+    type BaseAbilityScoreInputResponse,
+    type CharacterAbilityKey,
+    type CharacterBuilderChoice
+} from "../builder-api.js";
 import type { CharacterBuilderUiState } from "../app-state.js";
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
@@ -49,16 +54,10 @@ export interface MechanicPlaceholderDefinition {
     id: string;
     label: string;
     message: string;
-    group: "ability" | "quick" | "support" | "combat";
+    group: "quick" | "support" | "combat";
 }
 
 export const MECHANIC_PLACEHOLDERS: readonly MechanicPlaceholderDefinition[] = [
-    { id: "strength", label: "Strength", message: "Ability scores are not available yet.", group: "ability" },
-    { id: "dexterity", label: "Dexterity", message: "Ability scores are not available yet.", group: "ability" },
-    { id: "constitution", label: "Constitution", message: "Ability scores are not available yet.", group: "ability" },
-    { id: "intelligence", label: "Intelligence", message: "Ability scores are not available yet.", group: "ability" },
-    { id: "wisdom", label: "Wisdom", message: "Ability scores are not available yet.", group: "ability" },
-    { id: "charisma", label: "Charisma", message: "Ability scores are not available yet.", group: "ability" },
     { id: "proficiency", label: "Proficiency Bonus", message: "Not yet configured.", group: "quick" },
     { id: "movement", label: "Movement", message: "Speed is not available yet.", group: "quick" },
     { id: "saving-throws", label: "Saving Throws", message: "Saving throw modifiers are not available yet.", group: "support" },
@@ -70,6 +69,101 @@ export const MECHANIC_PLACEHOLDERS: readonly MechanicPlaceholderDefinition[] = [
     { id: "hit-points", label: "Hit Points", message: "Hit points are not available yet.", group: "combat" },
     { id: "hit-dice", label: "Hit Dice", message: "Hit dice are not available yet.", group: "combat" }
 ];
+
+
+export interface AbilityScoreDefinition {
+    key: CharacterAbilityKey;
+    label: string;
+}
+
+const ABILITY_LABELS: Record<CharacterAbilityKey, string> = {
+    strength: "Strength",
+    dexterity: "Dexterity",
+    constitution: "Constitution",
+    intelligence: "Intelligence",
+    wisdom: "Wisdom",
+    charisma: "Charisma"
+};
+
+export const ABILITY_SCORE_DEFINITIONS: readonly AbilityScoreDefinition[] =
+    CHARACTER_ABILITY_KEYS.map(key => ({ key, label: ABILITY_LABELS[key] }));
+
+export type BaseAbilityScoreDisplayStatus = "loading" | "unavailable" | "unconfigured" | "configured";
+
+export interface BaseAbilityScoreDisplay {
+    status: BaseAbilityScoreDisplayStatus;
+    value: string;
+    detail: string;
+    score: number | null;
+}
+
+export interface AbilityScoreActionPolicy {
+    canSave: boolean;
+    canClear: boolean;
+    saveLabel: "Set" | "Replace";
+}
+
+export function getBaseAbilityScoreInput(
+    builder: CharacterBuilderUiState,
+    abilityKey: CharacterAbilityKey
+): BaseAbilityScoreInputResponse | null {
+    return builder.build?.baseAbilityScoreInputs.find(value => value.abilityKey === abilityKey) ?? null;
+}
+
+export function getBaseAbilityScoreDisplay(
+    builder: CharacterBuilderUiState,
+    abilityKey: CharacterAbilityKey
+): BaseAbilityScoreDisplay {
+    if (builder.status === "idle" || builder.status === "loading") {
+        return { status: "loading", value: "Loading…", detail: "Base Score", score: null };
+    }
+    if (builder.status === "error" || builder.build === null) {
+        return { status: "unavailable", value: "Unavailable", detail: "Base Score unavailable", score: null };
+    }
+    const input = getBaseAbilityScoreInput(builder, abilityKey);
+    if (input === null) {
+        return { status: "unconfigured", value: "Not configured", detail: "Base Score", score: null };
+    }
+    return { status: "configured", value: String(input.score), detail: "Base Score", score: input.score };
+}
+
+export function getAbilityScoreActionPolicy(
+    builder: CharacterBuilderUiState,
+    readOnly: boolean,
+    configured: boolean
+): AbilityScoreActionPolicy {
+    const canMutate =
+        builder.status === "ready"
+        && builder.build !== null
+        && !builder.build.readOnly
+        && !readOnly
+        && builder.saving === null
+        && builder.savingAbility === null;
+    return {
+        canSave: canMutate,
+        canClear: canMutate && configured,
+        saveLabel: configured ? "Replace" : "Set"
+    };
+}
+
+export type ParsedBaseAbilityScoreInput =
+    | { ok: true; score: number }
+    | { ok: false; message: string };
+
+const BACKEND_INT32_MIN = -2147483648;
+const BACKEND_INT32_MAX = 2147483647;
+
+export function parseBaseAbilityScoreInput(value: string): ParsedBaseAbilityScoreInput {
+    const normalized = value.trim();
+    if (!/^-?\d+$/.test(normalized)) {
+        return { ok: false, message: "Enter a whole-number base score." };
+    }
+    const score = Number(normalized);
+    if (!Number.isSafeInteger(score) || score < BACKEND_INT32_MIN || score > BACKEND_INT32_MAX) {
+        return { ok: false, message: "Enter an integer that can be represented by the Character Sheet API." };
+    }
+    return { ok: true, score };
+}
 
 export type ReferenceTone = "empty" | "loading" | "resolved" | "unavailable" | "error";
 
