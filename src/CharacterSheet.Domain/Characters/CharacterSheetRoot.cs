@@ -50,6 +50,12 @@ public sealed class CharacterSheetRoot
     public ICollection<CharacterBaseAbilityScoreInput> BaseAbilityScoreInputs { get; private set; } =
         new List<CharacterBaseAbilityScoreInput>();
 
+    public ICollection<CharacterInventoryItemOccurrence> InventoryItemOccurrences { get; private set; } =
+        new List<CharacterInventoryItemOccurrence>();
+
+    public ICollection<CharacterNote> Notes { get; private set; } =
+        new List<CharacterNote>();
+
     public CharacterFoundationalRuleSelection SetFoundationalSelection(
         CharacterFoundationalSelectionCategory category,
         string ruleConceptKey,
@@ -347,6 +353,89 @@ public sealed class CharacterSheetRoot
         AdvancementEntries.Add(entry);
         Touch(createdAt);
         return entry;
+    }
+
+    public CharacterInventoryItemOccurrence AddInventoryItemOccurrence(
+        string ruleConceptKey,
+        DateTimeOffset createdAt)
+    {
+        var occurrence = new CharacterInventoryItemOccurrence(
+            Guid.NewGuid(),
+            CharacterId,
+            CharacterRuleReference.NormalizeConceptKey(ruleConceptKey),
+            createdAt);
+        InventoryItemOccurrences.Add(occurrence);
+        Touch(createdAt);
+        return occurrence;
+    }
+
+    public bool RemoveInventoryItemOccurrence(
+        Guid occurrenceId,
+        DateTimeOffset changedAt)
+    {
+        if (occurrenceId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Inventory occurrence ID can not be empty.",
+                nameof(occurrenceId));
+        }
+
+        var occurrence = InventoryItemOccurrences.SingleOrDefault(value => value.Id == occurrenceId);
+        if (occurrence is null)
+        {
+            return false;
+        }
+
+        InventoryItemOccurrences.Remove(occurrence);
+        Touch(changedAt);
+        return true;
+    }
+
+    public CharacterNote AddNote(string content, DateTimeOffset createdAt)
+    {
+        var note = new CharacterNote(
+            Guid.NewGuid(),
+            CharacterId,
+            content,
+            createdAt);
+        Notes.Add(note);
+        Touch(createdAt);
+        return note;
+    }
+
+    public CharacterNote UpdateNote(
+        Guid noteId,
+        string content,
+        DateTimeOffset changedAt)
+    {
+        if (noteId == Guid.Empty)
+        {
+            throw new ArgumentException("Note ID can not be empty.", nameof(noteId));
+        }
+
+        var note = Notes.SingleOrDefault(value => value.Id == noteId)
+            ?? throw new KeyNotFoundException("Character note was not found.");
+        note.ReplaceContent(content, changedAt);
+        Touch(changedAt);
+        return note;
+    }
+
+    public bool RemoveNote(Guid noteId, DateTimeOffset changedAt)
+    {
+        if (noteId == Guid.Empty)
+        {
+            throw new ArgumentException("Note ID can not be empty.", nameof(noteId));
+        }
+
+        var note = Notes.SingleOrDefault(value => value.Id == noteId);
+        if (note is null)
+        {
+            return false;
+        }
+
+        Notes.Remove(note);
+        Touch(changedAt);
+        return true;
     }
 
     private CharacterAdvancementEntry RequireClassAdvancement(Guid classAdvancementEntryId)
