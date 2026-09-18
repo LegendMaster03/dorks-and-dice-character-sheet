@@ -113,7 +113,9 @@ A `Subclass` entry must reference a Character-owned `Class` advancement through 
 
 The persistence relationship includes `CharacterId` in both the foreign key and principal key, so a progression row can not reference an advancement owned by a different Character. The self-reference uses database `NO ACTION`; this preserves referential integrity for surviving rows while allowing the root Character cascade to remove an entire parented advancement graph in one deletion.
 
-Feat occurrences have their own Character-owned entry identities independently from the Rules Core feat concept, so future acquisition metadata can distinguish advancement-granted and free/flavor occurrences while preserving the same underlying Rules Core concept identity.
+Feat occurrences have their own Character-owned entry identities independently from the Rules Core feat concept. Multiple occurrences may reference the same Rules Core concept key and remain distinct rows. The current occurrence contract intentionally leaves `Ordinal` and `ParentAdvancementEntryId` null because the backend does not yet know which level, class feature, ASI exchange, free/flavor grant, DM grant, or other rule produced the Feat.
+
+Acquisition provenance is therefore deferred rather than represented by a speculative enum. A later grant/effect model can attach explicit provenance to the Character-owned occurrence without changing Rules Core identity or collapsing duplicate Feats.
 
 No total Character level is calculated from this immature progression model.
 
@@ -129,15 +131,19 @@ PUT    /api/characters/{characterId}/build/starting-class
 DELETE /api/characters/{characterId}/build/starting-class
 PUT    /api/characters/{characterId}/build/classes/{classAdvancementEntryId}/subclass
 DELETE /api/characters/{characterId}/build/classes/{classAdvancementEntryId}/subclass
+POST   /api/characters/{characterId}/build/feats
+DELETE /api/characters/{characterId}/build/feats/{featAdvancementEntryId}
 ```
 
-A `PUT` body is only:
+A rule-selection mutation body, including `POST /build/feats`, is only:
 
 ```json
 { "conceptKey": "<stable Rules Core ConceptKey>" }
 ```
 
-Display names and mechanical JSON are neither accepted as Character Sheet identity nor required for persistence. The response contains Character Sheet-owned builder references/state, not copied Rules Core mechanics. The Class advancement ID in the Subclass route is Character Sheet-owned identity; the Subclass body remains only a stable Rules Core concept reference.
+Each Feat POST appends a new Character-owned occurrence, even when another occurrence already references the same canonical concept key. Feat deletion uses the Character-owned advancement entry ID, not the Rules Core concept key, so removing one duplicate occurrence preserves the others. Deleting an occurrence ID that is not present on the authorized Character is idempotent and returns the unchanged build; an ID that resolves to a non-Feat advancement on that Character is rejected as an invalid Feat target.
+
+Display names and mechanical JSON are neither accepted as Character Sheet identity nor required for persistence. Mutation responses return the coherent `CharacterBuildView`, not a second Feat-state representation or copied Rules Core mechanics. The Class advancement ID in the Subclass route and the Feat advancement ID in the Feat delete route are Character Sheet-owned identities.
 
 The existing rich-sheet bootstrap API remains:
 

@@ -82,6 +82,111 @@ public sealed class CharacterBuildPersistenceTests
     }
 
     [Fact]
+    public async Task FeatOccurrencesPersistAcrossDbContextRecreationAndDuplicateConceptsRemainDistinct()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+        Guid firstAlertId;
+        Guid secondAlertId;
+
+        await using (var firstContext = new CharacterSheetDbContext(options))
+        {
+            await firstContext.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
+            var buildStore = new PostgresCharacterBuildStore(firstContext);
+
+            await buildStore.AddFeatOccurrenceAsync(characterId, "  FEAT:ALERT  ", DateTimeOffset.UtcNow);
+            await buildStore.AddFeatOccurrenceAsync(characterId, "feat:alert", DateTimeOffset.UtcNow.AddSeconds(1));
+            await buildStore.AddFeatOccurrenceAsync(characterId, "feat:tough", DateTimeOffset.UtcNow.AddSeconds(2));
+
+            var feats = (await buildStore.GetAsync(characterId))!.AdvancementEntries
+                .Where(value => value.Kind == CharacterAdvancementKind.Feat)
+                .ToArray();
+            Assert.Equal(3, feats.Length);
+            var alerts = feats.Where(value => value.RuleConceptKey == "feat:alert").ToArray();
+            Assert.Equal(2, alerts.Length);
+            firstAlertId = alerts[0].Id;
+            secondAlertId = alerts[1].Id;
+            Assert.NotEqual(firstAlertId, secondAlertId);
+        }
+
+        await using (var secondContext = new CharacterSheetDbContext(options))
+        {
+            var buildStore = new PostgresCharacterBuildStore(secondContext);
+            var persisted = await buildStore.GetAsync(characterId);
+            Assert.NotNull(persisted);
+
+            var feats = persisted.AdvancementEntries
+                .Where(value => value.Kind == CharacterAdvancementKind.Feat)
+                .ToArray();
+            Assert.Equal(3, feats.Length);
+            Assert.All(feats, value =>
+            {
+                Assert.Null(value.Ordinal);
+                Assert.Null(value.ParentAdvancementEntryId);
+            });
+            Assert.Contains(feats, value => value.Id == firstAlertId);
+            Assert.Contains(feats, value => value.Id == secondAlertId);
+
+            await buildStore.RemoveFeatOccurrenceAsync(
+                characterId,
+                firstAlertId,
+                DateTimeOffset.UtcNow.AddMinutes(1));
+        }
+
+        await using (var thirdContext = new CharacterSheetDbContext(options))
+        {
+            var persisted = await new PostgresCharacterBuildStore(thirdContext).GetAsync(characterId);
+            Assert.NotNull(persisted);
+            var feats = persisted.AdvancementEntries
+                .Where(value => value.Kind == CharacterAdvancementKind.Feat)
+                .ToArray();
+            Assert.Equal(2, feats.Length);
+            Assert.DoesNotContain(feats, value => value.Id == firstAlertId);
+            Assert.Contains(feats, value => value.Id == secondAlertId);
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentWritersMayAddTheSameFeatConceptAsDistinctOccurrences()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+
+        await using (var setup = new CharacterSheetDbContext(options))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(characterId);
+        }
+
+        await using var writerA = new CharacterSheetDbContext(options);
+        await using var writerB = new CharacterSheetDbContext(options);
+        var rootA = await writerA.CharacterSheets
+            .Include(value => value.AdvancementEntries)
+            .SingleAsync(value => value.CharacterId == characterId);
+        var rootB = await writerB.CharacterSheets
+            .Include(value => value.AdvancementEntries)
+            .SingleAsync(value => value.CharacterId == characterId);
+
+        var featA = rootA.AddFeatOccurrence("feat:alert", DateTimeOffset.UtcNow);
+        var featB = rootB.AddFeatOccurrence("feat:alert", DateTimeOffset.UtcNow.AddMilliseconds(1));
+
+        await Task.WhenAll(writerA.SaveChangesAsync(), writerB.SaveChangesAsync());
+
+        await using var verification = new CharacterSheetDbContext(options);
+        var feats = await verification.CharacterAdvancementEntries
+            .Where(value => value.CharacterId == characterId
+                && value.Kind == CharacterAdvancementKind.Feat)
+            .ToArrayAsync();
+
+        Assert.Equal(2, feats.Length);
+        Assert.NotEqual(featA.Id, featB.Id);
+        Assert.All(feats, value => Assert.Equal("feat:alert", value.RuleConceptKey));
+    }
+
+    [Fact]
     public async Task StartingClassUniqueIndexRejectsConcurrentWritersAndAllowsLaterProgression()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
@@ -199,12 +304,12 @@ public sealed class CharacterBuildPersistenceTests
                 null,
                 parentClass.Id,
                 DateTimeOffset.UtcNow.AddMinutes(2));
-            root.AddAdvancement(
-                CharacterAdvancementKind.Feat,
+            root.AddFeatOccurrence(
                 "feat:alert",
-                null,
-                null,
                 DateTimeOffset.UtcNow.AddMinutes(3));
+            root.AddFeatOccurrence(
+                "feat:alert",
+                DateTimeOffset.UtcNow.AddMinutes(4));
             await setup.SaveChangesAsync();
 
             var campaignProcessor = new CharacterSheetLifecycleProcessor(setup, TimeProvider.System);
@@ -219,7 +324,11 @@ public sealed class CharacterBuildPersistenceTests
                     DateTimeOffset.UtcNow)));
             Assert.Equal(1, await setup.CharacterSheets.CountAsync());
             Assert.Equal(1, await setup.FoundationalRuleSelections.CountAsync());
-            Assert.Equal(3, await setup.CharacterAdvancementEntries.CountAsync());
+            Assert.Equal(4, await setup.CharacterAdvancementEntries.CountAsync());
+            Assert.Equal(
+                2,
+                await setup.CharacterAdvancementEntries.CountAsync(value =>
+                    value.Kind == CharacterAdvancementKind.Feat));
         }
 
         await using (var deletion = new CharacterSheetDbContext(options))
