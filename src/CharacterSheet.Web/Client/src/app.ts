@@ -193,6 +193,7 @@ function renderWorkspace(
         state.sheetMode,
         state.guidedBuilder,
         null,
+        null,
         {
             structural: {
                 openChooser,

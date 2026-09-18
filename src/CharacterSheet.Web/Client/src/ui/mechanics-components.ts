@@ -68,7 +68,7 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
         cell.setAttribute("data-health-track-key", track.key);
         cell.setAttribute("data-health-track-role", track.role);
         const head = createElement("div", "dd-mechanic-value__summary");
-        head.append(createElement("span", "dd-mechanic-value-_label", track.label), createElement("strong", "dd-mechanic-value-_value", formatHealthTrack(track)));
+        head.append(createElement("span", "dd-mechanic-value__label", track.label), createElement("strong", "dd-mechanic-value__value", formatHealthTrack(track)));
         cell.append(head);
         if (track.detail) cell.append(createElement("span", "dd-mechanic-value__meta", track.detail));
         appendSources(cell, track.sourceAttributions);
@@ -82,8 +82,14 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
 
 export function renderMovementValues(values: readonly CalculatedMechanicalValueView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-movement-values");
-    if (values === undefined || values.length === 0) root.append(createInlineState("Movement mechanics are not available.", "neutral"));
-    else root.append(...values.map(value => renderMechanicalValue(value, true)));
+    root.setAttribute("data-movement-state", values === undefined ? "unavailable" : "resolved");
+    if (values === undefined) {
+        root.append(createInlineState("Movement mechanics are not available.", "neutral"));
+    } else if (values.length === 0) {
+        root.append(createInlineState("No movement values were supplied for this Character.", "neutral"));
+    } else {
+        root.append(...values.map(value => renderMechanicalValue(value, true)));
+    }
     return root;
 }
 

@@ -7,7 +7,7 @@ import {
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
 import { renderProcedure } from "../.test-dist/ui/procedure-components.js";
-import { renderSourceAttributions } from "../.test-dist/ui/source-attribution.js";
+import { getSafeExternalSourceUrl, renderSourceAttributions } from "../.test-dist/ui/source-attribution.js";
 
 class FakeStyle {
     values = new Map();
@@ -168,4 +168,33 @@ test("source attribution renders the official link supplied by data and has no s
     const genericSource = await readFile(new URL("../src/ui/source-attribution.ts", import.meta.url), "utf8");
     const mechanicsSource = await readFile(new URL("../src/ui/mechanics-components.ts", import.meta.url), "utf8");
     assert.doesNotMatch(genericSource + mechanicsSource, /Loot Tavern|Harvest Assessment|Carving/i);
+});
+
+
+test("health track uses the standard mechanic value label and value classes", () => {
+    const rendered = renderCombatMechanicsSummary({
+        healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", current: 7, maximum: 12 }]
+    });
+    assert.equal(byClass(rendered, "dd-mechanic-value__label").length, 1);
+    assert.equal(byClass(rendered, "dd-mechanic-value__value").length, 1);
+    assert.equal(byClass(rendered, "dd-mechanic-value-_label").length, 0);
+    assert.equal(byClass(rendered, "dd-mechanic-value-_value").length, 0);
+});
+
+test("source attribution only links valid HTTPS external URLs and retains invalid attribution text", () => {
+    assert.equal(getSafeExternalSourceUrl("https://example.test/rules"), "https://example.test/rules");
+    assert.equal(getSafeExternalSourceUrl("http://example.test/rules"), null);
+    assert.equal(getSafeExternalSourceUrl("javascript:alert(1)"), null);
+    assert.equal(getSafeExternalSourceUrl("not a url"), null);
+
+    const rendered = renderSourceAttributions([
+        { key: "good", label: "Safe source", officialUrl: "https://example.test/rules" },
+        { key: "script", label: "Unsafe source", detail: "Attribution remains", officialUrl: "javascript:alert(1)" },
+        { key: "bad", label: "Malformed source", officialUrl: "not a url" }
+    ]);
+    assert.equal(byTag(rendered, "a").length, 1);
+    assert.match(visibleText(rendered), /Safe source/);
+    assert.match(visibleText(rendered), /Unsafe source/);
+    assert.match(visibleText(rendered), /Attribution remains/);
+    assert.match(visibleText(rendered), /Malformed source/);
 });

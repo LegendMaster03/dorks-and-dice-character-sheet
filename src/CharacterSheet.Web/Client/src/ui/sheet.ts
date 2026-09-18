@@ -14,6 +14,24 @@ import {
 } from "./character-advancement.js";
 import { renderAdvancementDetails } from "./advancement.js";
 import {
+    buildCompetencyPresentation,
+    findItemOccurrenceMechanics,
+    type CharacterMechanicsView,
+    type InventoryMechanicsView
+} from "./character-mechanics.js";
+import {
+    renderActionsPresentation,
+    renderCombatMechanicsSummary,
+    renderMovementValues,
+    renderSavingThrowsCard
+} from "./mechanics-components.js";
+import {
+    renderChecksAndProceduresPresentation,
+    renderInventoryMechanics,
+    renderItemOccurrenceMechanics,
+    renderSpellcastingPresentation
+} from "./procedure-components.js";
+import {
     createButton,
     createElement,
     createInlineState,
@@ -84,6 +102,7 @@ export function renderCharacterWorkspace(
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
     advancement: CharacterAdvancementView | null,
+    mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
@@ -114,24 +133,27 @@ export function renderCharacterWorkspace(
         return shell;
     }
 
-    shell.append(renderCoreStats(builder, structuralEditing, readOnly, handlers.structural));
+    shell.append(renderCoreStats(builder, structuralEditing, readOnly, mechanics, handlers.structural));
 
     const workspace = createElement("div", "dd-sheet__workspace");
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderPlaceholderCard("Saving Throws", placeholders("saving-throws")),
+        renderSavingThrowsCard(mechanics?.savingThrows),
         renderPlaceholderCard("Passive Values", placeholders("passive-values")),
         renderPlaceholderCard("Proficiencies & Training", placeholders("training"))
     );
 
     const skills = createElement("section", "dd-sheet__skills");
     skills.setAttribute("aria-label", "Character skills");
-    skills.append(renderSkillsCard(null));
+    const competencyPresentation = mechanics?.competencies === undefined
+        ? null
+        : buildCompetencyPresentation(mechanics.competencies);
+    skills.append(renderSkillsCard(competencyPresentation));
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
-    primary.append(renderCombatSummary());
+    primary.append(renderCombatMechanicsSummary(mechanics));
     if (structuralEditing) {
         primary.append(renderCharacterBuilder(
             character.characterId,
@@ -145,6 +167,7 @@ export function renderCharacterWorkspace(
         routine,
         structuralEditing,
         readOnly,
+        mechanics,
         handlers));
 
     workspace.append(support, skills, primary);
@@ -367,6 +390,7 @@ function renderCoreStats(
     builder: CharacterBuilderUiState,
     structuralEditing: boolean,
     readOnly: boolean,
+    mechanics: CharacterMechanicsView | null,
     handlers: StructuralCharacterHandlers
 ): HTMLElement {
     const section = createElement("section", "dd-core-stats");
@@ -381,9 +405,14 @@ function renderCoreStats(
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
-    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "quick")) {
+    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "quick" && value.id !== "movement")) {
         quickGrid.append(createStatPlaceholder(placeholder));
     }
+    const movement = createElement("article", "dd-stat dd-stat--movement");
+    movement.append(
+        createElement("h3", "dd-stat__label", "Movement"),
+        renderMovementValues(mechanics?.movement));
+    quickGrid.append(movement);
     section.append(abilityGrid, quickGrid);
     return section;
 }
@@ -494,6 +523,7 @@ function renderPrimaryContent(
     routine: CharacterRoutineUiState,
     structuralEditing: boolean,
     readOnly: boolean,
+    mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const card = createElement("section", "dd-primary-content");
@@ -516,9 +546,17 @@ function renderPrimaryContent(
     if (definition.id === "notes") {
         panel.append(renderNotesSection(routine, readOnly, handlers.routine));
     } else if (definition.id === "inventory") {
-        panel.append(renderInventorySection(routine, readOnly, handlers.routine));
+        panel.append(renderInventorySection(routine, readOnly, handlers.routine, mechanics?.inventory));
     } else if (definition.id === "features") {
         panel.append(renderFeaturesSection(builder, structuralEditing, readOnly, handlers.feats));
+    } else if (definition.id === "actions") {
+        const presentation = createElement("div", "dd-action-workflows");
+        presentation.append(
+            renderActionsPresentation(mechanics?.actions),
+            renderChecksAndProceduresPresentation(mechanics?.checks, mechanics?.procedures));
+        panel.append(presentation);
+    } else if (definition.id === "spells") {
+        panel.append(renderSpellcastingPresentation(mechanics?.spellcastingProfiles));
     } else {
         panel.append(
             createElement("h3", "dd-primary-content__empty-title", definition.emptyTitle),
@@ -683,17 +721,20 @@ function renderFeatChooser(
 function renderInventorySection(
     routine: CharacterRoutineUiState,
     readOnly: boolean,
-    handlers: RoutineCharacterHandlers
+    handlers: RoutineCharacterHandlers,
+    mechanics: InventoryMechanicsView | undefined
 ): HTMLElement {
     const content = createElement("div", "dd-routine-section dd-inventory");
     if (routine.status === "idle" || routine.status === "loading") {
         content.append(createInlineState("Loading Character inventory…", "loading"));
+        appendInventoryMechanicsPresentation(content, mechanics);
         return content;
     }
     if (routine.status === "error" || routine.state === null) {
         content.append(createInlineState(
             routine.message ?? "Character inventory is unavailable.",
             "error"));
+        appendInventoryMechanicsPresentation(content, mechanics);
         return content;
     }
 
@@ -724,7 +765,6 @@ function renderInventorySection(
             editable
                 ? "No item occurrences yet. Add an item from the Rules Core catalog."
                 : "No item occurrences have been recorded."));
-        return content;
     }
 
     const list = createElement("div", "dd-inventory-list");
@@ -746,6 +786,9 @@ function renderInventorySection(
                 "dd-routine-meta",
                 display.detail ?? occurrence.ruleConceptKey)
         );
+        const occurrenceMechanics = renderItemOccurrenceMechanics(
+            findItemOccurrenceMechanics(mechanics, occurrence.id));
+        if (occurrenceMechanics !== null) item.append(occurrenceMechanics);
         if (editable) {
             item.append(createButton(
                 routine.mutation?.kind === "inventory-delete"
@@ -762,8 +805,17 @@ function renderInventorySection(
         }
         list.append(item);
     }
-    content.append(list);
+    if (list.children.length > 0) content.append(list);
+    appendInventoryMechanicsPresentation(content, mechanics);
     return content;
+}
+
+function appendInventoryMechanicsPresentation(
+    target: HTMLElement,
+    mechanics: InventoryMechanicsView | undefined
+): void {
+    const rendered = renderInventoryMechanics(mechanics);
+    if (rendered !== null) target.append(rendered);
 }
 
 function renderInventoryChooser(

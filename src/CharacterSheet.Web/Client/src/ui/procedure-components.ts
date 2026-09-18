@@ -34,6 +34,37 @@ export function renderProcedure(procedure: CharacterProcedureView): HTMLElement 
     return root;
 }
 
+export function renderChecksAndProceduresPresentation(
+    checks: readonly CharacterCheckView[] | undefined,
+    procedures: readonly CharacterProcedureView[] | undefined
+): HTMLElement {
+    const root = createElement("section", "dd-check-procedure-presentation");
+    root.append(createElement("h3", "dd-check-procedure-presentation__title", "Checks & Procedures"));
+    root.setAttribute(
+        "data-check-procedure-state",
+        checks === undefined && procedures === undefined ? "unavailable" : "resolved");
+
+    if (checks === undefined && procedures === undefined) {
+        root.append(createInlineState("Resolved checks and procedures are not available.", "neutral"));
+        return root;
+    }
+
+    if (checks?.length) {
+        const group = createElement("div", "dd-check-procedure-presentation__checks");
+        group.append(...checks.map(renderCheck));
+        root.append(group);
+    }
+    if (procedures?.length) {
+        const group = createElement("div", "dd-check-procedure-presentation__procedures");
+        group.append(...procedures.map(renderProcedure));
+        root.append(group);
+    }
+    if (!(checks?.length || procedures?.length)) {
+        root.append(createInlineState("No standalone checks or procedures were supplied for this Character.", "neutral"));
+    }
+    return root;
+}
+
 export function renderItemOccurrenceMechanics(mechanics: ItemOccurrenceMechanicsView | undefined): HTMLElement | null {
     if (mechanics === undefined || !(mechanics.values?.length || mechanics.facts?.length || mechanics.sourceAttributions?.length)) return null;
     const details = createElement("details", "dd-item-mechanics");

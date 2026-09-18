@@ -1,5 +1,7 @@
 export type MechanicalScalar = string | number;
 
+export type ExtensiblePresentationKey<Known extends string> = Known | (string & {});
+
 export interface DisplayFieldView {
     key: string;
     label: string;
@@ -47,8 +49,10 @@ export interface SavingThrowView extends CalculatedMechanicalValueView {
     training?: string;
 }
 
+export type DefensePresentationRole = ExtensiblePresentationKey<"primary" | "related" | "other">;
+
 export interface DefenseView extends CalculatedMechanicalValueView {
-    role?: "primary" | "related" | "other";
+    role?: DefensePresentationRole;
 }
 
 export interface DefenseGroupView {
@@ -56,11 +60,9 @@ export interface DefenseGroupView {
     values: readonly DefenseView[];
 }
 
-export type HealthTrackRole =
-    | "hit-points"
-    | "temporary-hit-points"
-    | "nonlethal-damage"
-    | "resource";
+export type HealthTrackRole = ExtensiblePresentationKey<
+    "hit-points" | "temporary-hit-points" | "nonlethal-damage" | "resource"
+>;
 
 export interface HealthTrackView {
     key: string;
@@ -78,8 +80,10 @@ export interface ArmorCheckPenaltyView {
     formattedEffect?: string;
 }
 
+export type CompetencyKind = ExtensiblePresentationKey<"skill" | "tool" | "other">;
+
 export interface CompetencyView extends CalculatedMechanicalValueView {
-    kind?: "skill" | "tool" | "other";
+    kind?: CompetencyKind;
     ranks?: MechanicalScalar;
     governingAbility?: string;
     training?: string;
