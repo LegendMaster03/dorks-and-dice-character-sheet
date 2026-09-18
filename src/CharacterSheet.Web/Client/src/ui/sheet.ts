@@ -4,6 +4,7 @@ import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
 import { createButton, createElement, createPlaceholder, createSectionCard } from "./components.js";
+import { renderSkillsCard } from "./skills.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
@@ -54,7 +55,7 @@ export function renderCharacterWorkspace(
 
     const skills = createElement("section", "dd-sheet__skills");
     skills.setAttribute("aria-label", "Character skills");
-    skills.append(renderPlaceholderCard("Skills", placeholders("skills")));
+    skills.append(renderSkillsCard(null));
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
