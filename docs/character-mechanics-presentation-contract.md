@@ -79,6 +79,36 @@ The frontend may choose `formattedValue` over raw `effectiveValue`, but it does 
 
 `RelatedMechanicalValueView` is similar but represents a related resolved value rather than a calculation contribution.
 
+## Ability values
+
+`CharacterMechanicsView.abilityValues` contains backend-prepared effective Ability values using the calculated-value primitive.
+
+For the six structural Ability cards, the stable join is exact key equality between `CalculatedMechanicalValueView.key` and the existing Character `CharacterAbilityKey` values:
+
+- `strength`;
+- `dexterity`;
+- `constitution`;
+- `intelligence`;
+- `wisdom`;
+- `charisma`.
+
+This join is a presentation contract, not name matching. The frontend does not compare labels such as "Strength" to identify an Ability.
+
+| Data | Classification | Frontend behavior |
+| --- | --- | --- |
+| persisted base Ability input | Character-owned | remains the editable structural input and is shown as base-input context |
+| effective `effectiveValue` / `formattedValue` | backend-calculated | displayed as the normal effective Ability value when supplied |
+| `relatedValues` such as a supplied modifier | backend-calculated/display-only | displayed exactly as supplied; the frontend does not derive which modifier should exist |
+| `breakdown` | backend-calculated/provenance | shown through progressive disclosure |
+| `sourceAttributions` | Rules Core-derived/display-only | shown with the effective Ability details |
+| `key` | stable projection identity | joins the six structural cards when it exactly matches a `CharacterAbilityKey` |
+
+The base input and effective value are deliberately separate. Editing a base score changes only Character-owned base input state through the existing structural mutation path. It does not overwrite the effective projection.
+
+If an effective Ability entry uses a key that is not one of the six current structural `CharacterAbilityKey` values, the frontend renders it in the generic **Additional Abilities** presentation instead of silently discarding it. Such an entry has no structural base-score editor unless the Character backend later adds an owned input contract for that key.
+
+Omitted or unmatched effective data never causes the frontend to calculate a value or modifier. The browser does not implement an Ability modifier formula and does not assume a relationship such as `(score - 10) / 2`.
+
 ## Saving throws
 
 `SavingThrowView` extends the calculated-value primitive with optional `governingAbility` and `training`.
@@ -229,6 +259,8 @@ Recipe requirements, progress rules, success criteria, and results are backend/R
 
 `SourceAttributionView` contains required `key` and `label`, plus optional detail, official URL, and link label.
 
+`CharacterMechanicsView.sourceAttributions` is retained for projection-wide or rules-module attribution that legitimately applies across several Character mechanics. The sheet renders it once in a restrained Character-mechanics-level **Rules modules** surface. It is not intended to be a roll-up of every child mechanic source; when attribution applies only to a particular Ability, defense, action, component, procedure, or other mechanic, it belongs on that specific projection instead. The backend/integration layer should therefore avoid repeating the same attribution at both levels without a semantic reason.
+
 Attribution text is always preserved when supplied. The frontend validates `officialUrl` before rendering a link. The current presentation policy permits absolute HTTPS URLs only. Unsupported schemes such as `javascript:`, HTTP, relative URLs, and malformed values render attribution without a clickable link.
 
 External-rule integrations should identify the source and official creator/site where available without redistributing protected source prose, tables, recipes, books, files, artwork, or layouts.
@@ -268,7 +300,7 @@ The projection may supply:
 - `checks`;
 - `procedures`;
 - `spellcastingProfiles`;
-- `sourceAttributions`.
+- `sourceAttributions` for projection-wide rules-module attribution.
 
 Every collection is optional so the backend can expose mechanics incrementally. Omitted data means unavailable. An explicitly supplied empty collection means the backend resolved the category and found no entries.
 

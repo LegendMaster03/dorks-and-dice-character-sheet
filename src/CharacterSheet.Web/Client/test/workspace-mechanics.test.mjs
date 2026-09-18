@@ -46,6 +46,7 @@ function walk(root) {
 }
 function byAttribute(root, name, value) { return walk(root).filter(node => node.getAttribute(name) === value); }
 function byClass(root, className) { return walk(root).filter(node => node.className.split(/\s+/).includes(className)); }
+function byTag(root, tagName) { return walk(root).filter(node => node.tagName === tagName.toUpperCase()); }
 function visibleText(root) { return walk(root).map(node => node.textContent).filter(Boolean).join(" "); }
 
 const characterId = "8f62ed58-0f5f-4e71-9a18-8d9dcfe71dc7";
@@ -87,9 +88,9 @@ const handlers = {
     selectSection() {}, enterEditMode() {}, leaveEditMode() {}, openGuidedBuilder() {},
     closeGuidedBuilder() {}, selectGuidedBuilderSection() {}
 };
-const routine = (occurrences = [], references = {}) => ({
+const routine = (occurrences = [], references = {}, readOnly = true) => ({
     status: "ready",
-    state: { characterId, readOnly: true, inventoryItemOccurrences: occurrences, notes: [] },
+    state: { characterId, readOnly, inventoryItemOccurrences: occurrences, notes: [] },
     references,
     inventoryChooser: { kind: "closed" },
     mutation: null
@@ -250,4 +251,132 @@ test("generalized mechanics styles use host semantic tokens and include mobile l
     const mechanicsCss = css.slice(start);
     assert.match(mechanicsCss, /var\(--dd-sheet-/);
     assert.doesNotMatch(mechanicsCss, /#[0-9a-f]{3,8}\b|rgba?\s*\(|hsla?\s*\(/i);
+});
+
+
+test("effective Ability projection is separate from Character-owned base Ability input", () => {
+    const configuredBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [{ abilityKey: "strength", score: 12 }],
+            progressionEntries: []
+        }
+    };
+    const mechanics = {
+        abilityValues: [{
+            key: "strength",
+            label: "Strength",
+            effectiveValue: 18,
+            formattedValue: "18",
+            relatedValues: [{ key: "modifier", label: "Modifier", effectiveValue: 4, formattedValue: "+4" }],
+            breakdown: [{ key: "enhancement", label: "Enhancement", effectiveValue: 6, formattedValue: "+6" }],
+            sourceAttributions: [{ key: "module", label: "Rules module" }]
+        }]
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        configuredBuilder,
+        routine([], {}, false),
+        "actions",
+        false,
+        "edit",
+        guidedBuilder,
+        null,
+        mechanics,
+        handlers
+    );
+    const strength = byAttribute(rendered, "data-ability-key", "strength")[0];
+    assert.equal(strength.getAttribute("data-effective-ability-state"), "resolved");
+    assert.match(visibleText(strength), /18/);
+    assert.match(visibleText(strength), /Base input: 12/);
+    assert.match(visibleText(strength), /Modifier \+4/);
+    assert.match(visibleText(strength), /Enhancement \+6/);
+    assert.match(visibleText(strength), /Rules module/);
+
+    const editor = byTag(strength, "input")[0];
+    assert.ok(editor);
+    assert.equal(editor.value, "12");
+    assert.notEqual(editor.value, "18");
+});
+
+test("absent effective Ability mechanics preserve base input and honest modifier unavailability", () => {
+    const configuredBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [{ abilityKey: "strength", score: 12 }],
+            progressionEntries: []
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        configuredBuilder,
+        routine([], {}, false),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        { abilityValues: [] },
+        handlers
+    );
+    const strength = byAttribute(rendered, "data-ability-key", "strength")[0];
+    assert.equal(strength.getAttribute("data-effective-ability-state"), "unavailable");
+    assert.match(visibleText(strength), /12/);
+    assert.match(visibleText(strength), /Base Score/);
+    assert.match(visibleText(strength), /Modifier not available yet/);
+});
+
+test("backend-supplied Ability values outside the six structural keys use the generic fallback presentation", () => {
+    const rendered = render("actions", {
+        abilityValues: [mechanical("honor", "Honor", "14", {
+            relatedValues: [{ key: "modifier", label: "Modifier", effectiveValue: 2, formattedValue: "+2" }]
+        })]
+    });
+    const extra = byAttribute(rendered, "data-additional-ability-key", "honor")[0];
+    assert.ok(extra);
+    assert.match(visibleText(extra), /Honor/);
+    assert.match(visibleText(extra), /14/);
+    assert.match(visibleText(extra), /Modifier/);
+});
+
+test("top-level Character mechanics attribution renders once as a projection-wide rules-module surface", () => {
+    const rendered = render("actions", {
+        sourceAttributions: [{
+            key: "module",
+            label: "External rules module",
+            detail: "Applies across several Character mechanics",
+            officialUrl: "https://example.test/module"
+        }]
+    });
+    const surfaces = byClass(rendered, "dd-character-mechanics-sources");
+    assert.equal(surfaces.length, 1);
+    assert.match(visibleText(surfaces[0]), /Rules modules/);
+    assert.match(visibleText(surfaces[0]), /External rules module/);
+    assert.equal(byTag(surfaces[0], "a").length, 1);
+});
+
+test("production Ability presentation contains no D&D Ability modifier formula", async () => {
+    const sources = await Promise.all([
+        "sheet.ts",
+        "character-mechanics.ts",
+        "mechanics-components.ts"
+    ].map(name => readFile(new URL(`../src/ui/${name}`, import.meta.url), "utf8")));
+    const production = sources.join("\n");
+    assert.doesNotMatch(production, /score\s*-\s*10|Math\.floor\s*\([^\n]*-\s*10|calculateAbilityModifier/i);
+});
+
+test("legacy combat placeholder renderer is removed in favor of the generalized combat path", async () => {
+    const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
+    assert.match(source, /renderCombatMechanicsSummary\(mechanics\)/);
 });

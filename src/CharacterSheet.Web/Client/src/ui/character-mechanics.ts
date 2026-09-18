@@ -296,6 +296,13 @@ export function buildCompetencyPresentation(
     return result;
 }
 
+export function findAbilityValue(
+    values: readonly CalculatedMechanicalValueView[] | undefined,
+    abilityKey: string
+): CalculatedMechanicalValueView | undefined {
+    return values?.find(value => value.key === abilityKey);
+}
+
 export function findItemOccurrenceMechanics(
     mechanics: InventoryMechanicsView | undefined,
     occurrenceId: string

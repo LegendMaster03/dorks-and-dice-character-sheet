@@ -15,13 +15,18 @@ import {
 import { renderAdvancementDetails } from "./advancement.js";
 import {
     buildCompetencyPresentation,
+    findAbilityValue,
     findItemOccurrenceMechanics,
+    formatMechanicalValue,
+    type CalculatedMechanicalValueView,
     type CharacterMechanicsView,
     type InventoryMechanicsView
 } from "./character-mechanics.js";
 import {
     renderActionsPresentation,
     renderCombatMechanicsSummary,
+    renderFacts,
+    renderMechanicalValue,
     renderMovementValues,
     renderSavingThrowsCard
 } from "./mechanics-components.js";
@@ -39,6 +44,7 @@ import {
     createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
+import { renderSourceAttributions } from "./source-attribution.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
@@ -132,6 +138,9 @@ export function renderCharacterWorkspace(
         shell.append(renderGuidedBuilder(character.characterId, builder, guidedBuilder, handlers));
         return shell;
     }
+
+    const mechanicsSources = renderCharacterMechanicsSources(mechanics);
+    if (mechanicsSources !== null) shell.append(mechanicsSources);
 
     shell.append(renderCoreStats(builder, structuralEditing, readOnly, mechanics, handlers.structural));
 
@@ -401,7 +410,13 @@ function renderCoreStats(
 
     const abilityGrid = createElement("div", "dd-core-stats__abilities");
     for (const definition of ABILITY_SCORE_DEFINITIONS) {
-        abilityGrid.append(renderAbilityScoreCard(definition, builder, structuralEditing, readOnly, handlers));
+        abilityGrid.append(renderAbilityScoreCard(
+            definition,
+            builder,
+            structuralEditing,
+            readOnly,
+            handlers,
+            findAbilityValue(mechanics?.abilityValues, definition.key)));
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
@@ -414,6 +429,12 @@ function renderCoreStats(
         renderMovementValues(mechanics?.movement));
     quickGrid.append(movement);
     section.append(abilityGrid, quickGrid);
+
+    const standardAbilityKeys = new Set(ABILITY_SCORE_DEFINITIONS.map(definition => definition.key));
+    const additionalAbilityValues = mechanics?.abilityValues?.filter(value => !standardAbilityKeys.has(value.key as CharacterAbilityKey)) ?? [];
+    if (additionalAbilityValues.length > 0) {
+        section.append(renderAdditionalAbilityValues(additionalAbilityValues));
+    }
     return section;
 }
 
@@ -422,7 +443,8 @@ function renderAbilityScoreCard(
     builder: CharacterBuilderUiState,
     structuralEditing: boolean,
     readOnly: boolean,
-    handlers: StructuralCharacterHandlers
+    handlers: StructuralCharacterHandlers,
+    effectiveValue?: CalculatedMechanicalValueView
 ): HTMLElement {
     const display = getBaseAbilityScoreDisplay(builder, definition.key);
     const configured = display.status === "configured";
@@ -430,12 +452,42 @@ function renderAbilityScoreCard(
     const card = createElement("article", "dd-stat dd-stat--ability");
     card.setAttribute("data-ability-key", definition.key);
     card.setAttribute("data-ability-score-state", display.status);
-    card.append(
-        createElement("h3", "dd-stat__label", definition.label),
-        createElement("p", "dd-stat__value", display.value),
-        createElement("p", "dd-stat__detail", display.detail),
-        createElement("p", "dd-stat__modifier", "Modifier not available yet.")
-    );
+    card.setAttribute("data-effective-ability-state", effectiveValue === undefined ? "unavailable" : "resolved");
+    card.append(createElement("h3", "dd-stat__label", definition.label));
+
+    if (effectiveValue === undefined) {
+        card.append(
+            createElement("p", "dd-stat__value", display.value),
+            createElement("p", "dd-stat__detail", display.detail),
+            createElement("p", "dd-stat__modifier", "Modifier not available yet.")
+        );
+    } else {
+        card.setAttribute("data-effective-ability-key", effectiveValue.key);
+        card.append(
+            createElement("p", "dd-stat__value", formatMechanicalValue(effectiveValue)),
+            createElement("p", "dd-stat__detail", "Effective value"),
+            createElement(
+                "p",
+                "dd-stat__base-context",
+                `Base input: ${display.value}`)
+        );
+
+        if (effectiveValue.relatedValues?.length) {
+            const related = createElement("div", "dd-stat__related-values");
+            for (const value of effectiveValue.relatedValues) {
+                related.append(createElement(
+                    "span",
+                    "dd-stat__related-value",
+                    `${value.label} ${formatMechanicalValue(value)}`));
+            }
+            card.append(related);
+        } else {
+            card.append(createElement("p", "dd-stat__modifier", "Modifier not available yet."));
+        }
+
+        const details = renderAbilityMechanicalDetails(effectiveValue);
+        if (details !== null) card.append(details);
+    }
 
     if (structuralEditing && !readOnly && (display.status === "configured" || display.status === "unconfigured")) {
         const editor = createElement("div", "dd-stat__editor");
@@ -486,6 +538,48 @@ function renderAbilityScoreCard(
     return card;
 }
 
+function renderAbilityMechanicalDetails(value: CalculatedMechanicalValueView): HTMLElement | null {
+    if (!(value.breakdown?.length || value.sourceAttributions?.length)) return null;
+
+    const details = createElement("details", "dd-stat__mechanics-details");
+    details.append(createElement("summary", "dd-stat__mechanics-details-toggle", "Details"));
+    const body = createElement("div", "dd-stat__mechanics-details-body");
+    const breakdown = renderFacts((value.breakdown ?? []).map(entry =>
+        [entry.label, formatMechanicalValue(entry)] as const));
+    if (breakdown !== null) body.append(breakdown);
+    const sources = renderSourceAttributions(value.sourceAttributions, true);
+    if (sources !== null) body.append(sources);
+    details.append(body);
+    return details;
+}
+
+function renderAdditionalAbilityValues(values: readonly CalculatedMechanicalValueView[]): HTMLElement {
+    const section = createElement("section", "dd-core-stats__additional-abilities");
+    section.setAttribute("aria-label", "Additional effective abilities");
+    section.append(createElement("h3", "dd-core-stats__additional-title", "Additional Abilities"));
+    const grid = createElement("div", "dd-core-stats__additional-grid");
+    for (const value of values) {
+        const card = createElement("article", "dd-additional-ability");
+        card.setAttribute("data-additional-ability-key", value.key);
+        card.append(renderMechanicalValue(value));
+        grid.append(card);
+    }
+    section.append(grid);
+    return section;
+}
+
+function renderCharacterMechanicsSources(mechanics: CharacterMechanicsView | null): HTMLElement | null {
+    const sources = renderSourceAttributions(mechanics?.sourceAttributions, true);
+    if (sources === null) return null;
+
+    const surface = createElement("aside", "dd-character-mechanics-sources");
+    surface.setAttribute("aria-label", "Character mechanics rule modules");
+    surface.append(
+        createElement("span", "dd-character-mechanics-sources__label", "Rules modules"),
+        sources);
+    return surface;
+}
+
 function createStatPlaceholder(definition: MechanicPlaceholderDefinition): HTMLElement {
     const card = createElement("article", "dd-stat");
     card.setAttribute("data-unimplemented-mechanic", definition.id);
@@ -503,18 +597,6 @@ function renderPlaceholderCard(title: string, definitions: readonly MechanicPlac
         card.append(createPlaceholder(definition.label, definition.message, true));
     }
     return card;
-}
-
-function renderCombatSummary(): HTMLElement {
-    const section = createElement("section", "dd-combat-summary");
-    section.setAttribute("aria-labelledby", "dd-combat-heading");
-    const heading = createElement("h2", "dd-visually-hidden", "Combat summary");
-    heading.id = "dd-combat-heading";
-    section.append(heading);
-    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "combat")) {
-        section.append(createPlaceholder(placeholder.label, placeholder.message, true));
-    }
-    return section;
 }
 
 function renderPrimaryContent(

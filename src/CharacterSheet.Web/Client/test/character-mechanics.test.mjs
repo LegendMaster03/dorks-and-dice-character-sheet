@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
     buildCompetencyPresentation,
+    findAbilityValue,
     findItemOccurrenceMechanics,
     formatHealthTrack,
     formatMechanicalValue,
@@ -104,4 +105,15 @@ test("inventory mechanics are keyed by Character-owned occurrence identity", () 
     };
     assert.equal(findItemOccurrenceMechanics(mechanics, "one").facts[0].value, "2 lb");
     assert.equal(findItemOccurrenceMechanics(mechanics, "two").facts[0].value, "3 lb");
+});
+
+
+test("effective Ability values join standard Ability cards only by the supplied stable key", () => {
+    const values = [
+        value("strength", "Strength", 18, { formattedValue: "18" }),
+        value("honor", "Honor", 14, { formattedValue: "14" })
+    ];
+    assert.equal(findAbilityValue(values, "strength").formattedValue, "18");
+    assert.equal(findAbilityValue(values, "dexterity"), undefined);
+    assert.equal(findAbilityValue(values, "honor").label, "Honor");
 });
