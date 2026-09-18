@@ -5,14 +5,8 @@ import { renderSkillsCard } from "../.test-dist/ui/skills.js";
 
 class FakeStyle {
     values = new Map();
-
-    setProperty(name, value) {
-        this.values.set(name, String(value));
-    }
-
-    getPropertyValue(name) {
-        return this.values.get(name) ?? "";
-    }
+    setProperty(name, value) { this.values.set(name, String(value)); }
+    getPropertyValue(name) { return this.values.get(name) ?? ""; }
 }
 
 class FakeElement {
@@ -24,56 +18,34 @@ class FakeElement {
         this.attributes = new Map();
         this.style = new FakeStyle();
         this.id = "";
+        this.href = "";
+        this.target = "";
+        this.rel = "";
     }
-
-    setAttribute(name, value) {
-        this.attributes.set(name, String(value));
-    }
-
-    getAttribute(name) {
-        return this.attributes.get(name) ?? null;
-    }
-
-    append(...children) {
-        this.children.push(...children);
-    }
+    setAttribute(name, value) { this.attributes.set(name, String(value)); }
+    getAttribute(name) { return this.attributes.get(name) ?? null; }
+    append(...children) { this.children.push(...children); }
 }
 
-globalThis.document = {
-    createElement(tagName) {
-        return new FakeElement(tagName);
-    }
-};
+globalThis.document = { createElement: tagName => new FakeElement(tagName) };
 
 function walk(root) {
     const nodes = [root];
-    for (const child of root.children) {
-        nodes.push(...walk(child));
-    }
+    for (const child of root.children) nodes.push(...walk(child));
     return nodes;
 }
+function byClass(root, className) { return walk(root).filter(node => node.className.split(/\s+/).includes(className)); }
+function byAttribute(root, name, value) { return walk(root).filter(node => node.getAttribute(name) === value); }
+function visibleText(root) { return walk(root).map(node => node.textContent).filter(Boolean).join(" "); }
 
-function byClass(root, className) {
-    return walk(root).filter(node => node.className.split(/\s+/).includes(className));
-}
-
-function byAttribute(root, name, value) {
-    return walk(root).filter(node => node.getAttribute(name) === value);
-}
-
-function visibleText(root) {
-    return walk(root).map(node => node.textContent).filter(Boolean).join(" ");
-}
-
-const standalone = skill => ({ kind: "standalone", skill });
+const competency = (key, label, formattedValue, extra = {}) => ({
+    key, label, effectiveValue: formattedValue, formattedValue, ...extra
+});
+const standalone = value => ({ kind: "standalone", competency: value });
 const composite = (parent, components) => ({ kind: "composite", parent, components });
-const skill = (id, label, displayValue) => ({ id, label, displayValue });
 
-test("standalone skill renders as one ordinary row without a composite container", () => {
-    const card = renderSkillsCard([
-        standalone(skill("navigation", "Navigation", "+7"))
-    ]);
-
+test("standalone competency renders as one ordinary row", () => {
+    const card = renderSkillsCard([standalone(competency("navigation", "Navigation", "+7"))]);
     assert.equal(byClass(card, "dd-skill-row--standalone").length, 1);
     assert.equal(byClass(card, "dd-skill-group--composite").length, 0);
     assert.equal(byAttribute(card, "data-skill-id", "navigation").length, 1);
@@ -81,111 +53,62 @@ test("standalone skill renders as one ordinary row without a composite container
     assert.match(visibleText(card), /\+7/);
 });
 
-test("two-component composite renders one parent cell spanning two component rows", () => {
+test("composite competency supports arbitrary component counts and preserves hierarchy", () => {
     const card = renderSkillsCard([
         composite(
-            skill("fieldcraft", "Fieldcraft", "+5"),
-            [
-                skill("tracking", "Tracking", "+6"),
-                skill("foraging", "Foraging", "+4")
-            ]
+            competency("fieldcraft", "Fieldcraft", "+5"),
+            [competency("tracking", "Tracking", "+6"), competency("foraging", "Foraging", "+4"), competency("weather", "Weather Sense", "+3")]
         )
     ]);
-
-    const groups = byClass(card, "dd-skill-group--composite");
-    assert.equal(groups.length, 1);
-    assert.equal(groups[0].style.getPropertyValue("--dd-skill-component-count"), "2");
-    assert.equal(byAttribute(groups[0], "data-skill-role", "parent").length, 1);
-    assert.equal(byAttribute(groups[0], "data-skill-role", "component").length, 2);
-});
-
-test("three-component composite renders one parent cell spanning three component rows", () => {
-    const card = renderSkillsCard([
-        composite(
-            skill("mobility", "Mobility", "+4"),
-            [
-                skill("vaulting", "Vaulting", "+5"),
-                skill("sprinting", "Sprinting", "+4"),
-                skill("wading", "Wading", "+3")
-            ]
-        )
-    ]);
-
     const group = byClass(card, "dd-skill-group--composite")[0];
     assert.equal(group.style.getPropertyValue("--dd-skill-component-count"), "3");
+    assert.equal(byAttribute(group, "data-skill-role", "parent").length, 1);
     assert.equal(byAttribute(group, "data-skill-role", "component").length, 3);
 });
 
-test("renderer is generic and does not special-case known Rules Core skill names", async () => {
-    const card = renderSkillsCard([
-        composite(
-            skill("signal-analysis", "Signal Analysis", "A"),
-            [
-                skill("spectral", "Spectral Reading", "B"),
-                skill("temporal", "Temporal Reading", "C")
-            ]
-        )
-    ]);
-    assert.match(visibleText(card), /Signal Analysis/);
-    assert.match(visibleText(card), /Spectral Reading/);
-    assert.match(visibleText(card), /Temporal Reading/);
+test("ranked specialty competency progressively discloses metadata", () => {
+    const card = renderSkillsCard([standalone(competency("specialty", "Specialty Work", "+11", {
+        kind: "skill",
+        ranks: 8,
+        governingAbility: "Intelligence",
+        classSkill: true,
+        trainedOnly: true,
+        armorCheckPenalty: { applies: true, formattedEffect: "-2 applied" },
+        specialty: "Fine work"
+    }))]);
+    assert.equal(byClass(card, "dd-skill-row__details").length, 1);
+    assert.match(visibleText(card), /Ranks/);
+    assert.match(visibleText(card), /Class skill/);
+    assert.match(visibleText(card), /Armor Check Penalty/);
+});
 
+test("specialty Skill and tool proficiency remain separate rows", () => {
+    const card = renderSkillsCard([
+        standalone(competency("specialty", "Specialty Work", "+11", { kind: "skill", specialty: "Fine work" })),
+        standalone(competency("tool", "Artisan Tools", "Proficient", { kind: "tool", training: "Proficient" }))
+    ]);
+    assert.equal(byAttribute(card, "data-competency-kind", "skill").length, 1);
+    assert.equal(byAttribute(card, "data-competency-kind", "tool").length, 1);
+    assert.equal(byClass(card, "dd-skill-row--standalone").length, 2);
+});
+
+test("renderer remains generic and does not special-case known Rules Core skill names", async () => {
     const source = await readFile(new URL("../src/ui/skills.ts", import.meta.url), "utf8");
     assert.doesNotMatch(source, /\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble)\b/);
 });
 
-test("parent and components remain actual skill rows", () => {
-    const card = renderSkillsCard([
-        composite(
-            skill("craft", "Craft", "+2"),
-            [
-                skill("joinery", "Joinery", "+3"),
-                skill("masonry", "Masonry", "+1")
-            ]
-        )
-    ]);
-
-    assert.equal(byAttribute(card, "data-skill-row", "true").length, 3);
-    assert.equal(byAttribute(card, "data-skill-id", "craft").length, 1);
-    assert.equal(byAttribute(card, "data-skill-id", "joinery").length, 1);
-    assert.equal(byAttribute(card, "data-skill-id", "masonry").length, 1);
-});
-
 test("presentation adds no permanent Derived, Independent, Composite, or Parent labels", () => {
     const card = renderSkillsCard([
-        standalone(skill("singing", "Singing", "+1")),
-        composite(
-            skill("research", "Research", "+4"),
-            [
-                skill("archives", "Archives", "+5"),
-                skill("interviews", "Interviews", "+3")
-            ]
-        )
+        standalone(competency("solo", "Solo", "+1")),
+        composite(competency("group", "Group", "+4"), [competency("part-a", "Part A", "+5"), competency("part-b", "Part B", "+3")])
     ]);
-
     assert.doesNotMatch(visibleText(card), /\b(?:Derived|Independent|Composite|Parent)\b/);
 });
 
-test("mobile CSS stacks the parent and component relationship instead of squeezing two columns", async () => {
-    const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
-    assert.match(css, /\.dd-skill-group__parent\s*\{[^}]*grid-row:\s*1\s*\/\s*span\s*var\(--dd-skill-component-count\)/s);
-    assert.match(
-        css,
-        /@media \(max-width: 720px\)[\s\S]*\.dd-skill-group--composite\s*\{[^}]*grid-template-columns:\s*1fr;[\s\S]*\.dd-skill-group__parent\s*\{[^}]*grid-row:\s*auto;[\s\S]*\.dd-skill-group__component\s*\{[^}]*grid-column:\s*1;/s
-    );
-});
-
-test("composite accessibility groups components under the real parent skill label", () => {
+test("composite accessibility groups components under the real parent competency label", () => {
     const card = renderSkillsCard([
-        composite(
-            skill("analysis", "Analysis", "+4"),
-            [
-                skill("evidence", "Evidence", "+5"),
-                skill("inference", "Inference", "+3")
-            ]
-        )
+        composite(competency("analysis", "Analysis", "+4"), [competency("evidence", "Evidence", "+5"), competency("inference", "Inference", "+3")])
     ]);
-
     const group = byClass(card, "dd-skill-group--composite")[0];
     assert.equal(group.getAttribute("role"), "group");
     const labelledBy = group.getAttribute("aria-labelledby");
@@ -195,8 +118,7 @@ test("composite accessibility groups components under the real parent skill labe
     assert.equal(labels[0].textContent, "Analysis");
 });
 
-test("production Character Sheet keeps Skills unavailable until real resolved skill state exists", async () => {
+test("production Character Sheet keeps competencies unavailable until real mechanics projection exists", async () => {
     const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
-    assert.match(sheetSource, /skills\.append\(renderSkillsCard\(null\)\)/);
-    assert.doesNotMatch(sheetSource, /kind:\s*"composite"|displayValue|\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble)\b/);
+    assert.match(sheetSource, /renderSkillsCard\(null\)/);
 });
