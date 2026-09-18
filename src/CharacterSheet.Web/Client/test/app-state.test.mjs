@@ -335,3 +335,78 @@ test("incomplete build configuration never prevents normal rich Character render
     assert.equal(state.sheetMode, "view");
     assert.equal(state.guidedBuilder.open, false);
 });
+
+
+test("routine state loads independently from Character build state", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+    state = reduceAppState(state, { type: "routine-load-started" });
+    assert.equal(state.builder.status, "ready");
+    assert.equal(state.routine.status, "loading");
+
+    state = reduceAppState(state, { type: "routine-load-failed", message: "state unavailable" });
+    assert.equal(state.builder.status, "ready");
+    assert.equal(state.routine.status, "error");
+    assert.equal(state.routine.message, "state unavailable");
+});
+
+test("routine state preserves duplicate inventory occurrences and protects stale reference resolution", () => {
+    const occurrenceA = "33333333-3333-3333-3333-333333333333";
+    const occurrenceB = "44444444-4444-4444-4444-444444444444";
+    const routine = {
+        characterId,
+        readOnly: false,
+        inventoryItemOccurrences: [
+            { id: occurrenceA, ruleConceptKey: "item:rope", createdAt: "now" },
+            { id: occurrenceB, ruleConceptKey: "item:rope", createdAt: "later" }
+        ],
+        notes: []
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "routine-loaded", state: routine });
+
+    assert.equal(state.routine.state.inventoryItemOccurrences.length, 2);
+    assert.deepEqual(state.routine.references[occurrenceA], { status: "loading", conceptKey: "item:rope" });
+    assert.deepEqual(state.routine.references[occurrenceB], { status: "loading", conceptKey: "item:rope" });
+
+    state = reduceAppState(state, {
+        type: "routine-reference-resolved",
+        occurrenceId: occurrenceA,
+        conceptKey: "item:old",
+        reference: { status: "unavailable", conceptKey: "item:old" }
+    });
+    assert.deepEqual(state.routine.references[occurrenceA], { status: "loading", conceptKey: "item:rope" });
+});
+
+test("routine mutation state is explicit and coherent response replacement clears pending state", () => {
+    const routine = {
+        characterId,
+        readOnly: false,
+        inventoryItemOccurrences: [],
+        notes: []
+    };
+    const withNote = {
+        ...routine,
+        notes: [{
+            id: "55555555-5555-5555-5555-555555555555",
+            content: "Remember this",
+            createdAt: "now",
+            updatedAt: "now"
+        }]
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "routine-loaded", state: routine });
+    state = reduceAppState(state, { type: "routine-mutation-started", kind: "note-add" });
+    assert.deepEqual(state.routine.mutation, { kind: "note-add", entryId: undefined });
+
+    state = reduceAppState(state, { type: "routine-mutation-succeeded", state: withNote });
+    assert.equal(state.routine.mutation, null);
+    assert.equal(state.routine.state.notes[0].content, "Remember this");
+
+    state = reduceAppState(state, { type: "routine-mutation-started", kind: "note-update", entryId: withNote.notes[0].id });
+    state = reduceAppState(state, { type: "routine-mutation-failed", message: "save failed" });
+    assert.equal(state.routine.mutation, null);
+    assert.equal(state.routine.mutationError, "save failed");
+});

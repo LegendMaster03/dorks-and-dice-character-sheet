@@ -4,6 +4,7 @@ import type {
     CharacterBuilderChoice
 } from "./builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "./character-api.js";
+import type { CharacterStateResponse } from "./character-state-api.js";
 import {
     loadingRuleReference,
     type RuleReferenceState
@@ -57,10 +58,27 @@ export interface GuidedBuilderUiState {
     returnSheetMode: SheetMode;
 }
 
+export type RoutineMutationKind =
+    | "note-add"
+    | "note-update"
+    | "note-delete"
+    | "inventory-add"
+    | "inventory-delete";
+
+export interface CharacterRoutineUiState {
+    status: "idle" | "loading" | "ready" | "error";
+    state: CharacterStateResponse | null;
+    message?: string;
+    references: Record<string, RuleReferenceState>;
+    mutation: { kind: RoutineMutationKind; entryId?: string } | null;
+    mutationError?: string;
+}
+
 export interface CharacterSheetAppState {
     route: CharacterSheetRoute;
     screen: CharacterSheetScreen;
     builder: CharacterBuilderUiState;
+    routine: CharacterRoutineUiState;
     activeSheetSection: SheetSection;
     sheetMode: SheetMode;
     guidedBuilder: GuidedBuilderUiState;
@@ -89,6 +107,13 @@ export type CharacterSheetAction =
     | { type: "ability-save-started"; abilityKey: CharacterAbilityKey }
     | { type: "ability-saved"; build: CharacterBuildResponse }
     | { type: "ability-save-failed"; abilityKey: CharacterAbilityKey; message: string }
+    | { type: "routine-load-started" }
+    | { type: "routine-loaded"; state: CharacterStateResponse }
+    | { type: "routine-load-failed"; message: string }
+    | { type: "routine-reference-resolved"; occurrenceId: string; conceptKey: string; reference: RuleReferenceState }
+    | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
+    | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
+    | { type: "routine-mutation-failed"; message: string }
     | { type: "sheet-edit-entered" }
     | { type: "sheet-edit-exited" }
     | { type: "guided-builder-opened" }
@@ -115,6 +140,7 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
         route,
         screen,
         builder: createInitialBuilderState(),
+        routine: createInitialRoutineState(),
         activeSheetSection: "actions",
         sheetMode: "view",
         guidedBuilder: createInitialGuidedBuilderState(),
@@ -128,6 +154,7 @@ export function reduceAppState(
 ): CharacterSheetAppState {
     let screen = state.screen;
     let builder = state.builder;
+    let routine = state.routine;
     let activeSheetSection = state.activeSheetSection;
     let sheetMode = state.sheetMode;
     let guidedBuilder = state.guidedBuilder;
@@ -135,6 +162,7 @@ export function reduceAppState(
     switch (action.type) {
         case "character-loaded":
             builder = createInitialBuilderState();
+            routine = createInitialRoutineState();
             activeSheetSection = "actions";
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
@@ -151,6 +179,7 @@ export function reduceAppState(
         case "load-failed":
             screen = { kind: "error", message: action.message };
             builder = createInitialBuilderState();
+            routine = createInitialRoutineState();
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
             break;
@@ -298,6 +327,58 @@ export function reduceAppState(
                 abilitySaveError: { abilityKey: action.abilityKey, message: action.message }
             };
             break;
+        case "routine-load-started":
+            routine = {
+                ...createInitialRoutineState(),
+                status: "loading"
+            };
+            break;
+        case "routine-loaded":
+            routine = routineStateFromResponse(action.state);
+            break;
+        case "routine-load-failed":
+            routine = {
+                ...createInitialRoutineState(),
+                status: "error",
+                message: action.message
+            };
+            break;
+        case "routine-reference-resolved": {
+            const occurrence = routine.state?.inventoryItemOccurrences.find(value => value.id === action.occurrenceId);
+            const currentReference = routine.references[action.occurrenceId];
+            if (occurrence?.ruleConceptKey === action.conceptKey
+                && currentReference !== undefined
+                && "conceptKey" in currentReference
+                && currentReference.conceptKey === action.conceptKey) {
+                routine = {
+                    ...routine,
+                    references: {
+                        ...routine.references,
+                        [action.occurrenceId]: action.reference
+                    }
+                };
+            }
+            break;
+        }
+        case "routine-mutation-started":
+            if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly && routine.mutation === null) {
+                routine = {
+                    ...routine,
+                    mutation: { kind: action.kind, entryId: action.entryId },
+                    mutationError: undefined
+                };
+            }
+            break;
+        case "routine-mutation-succeeded":
+            routine = routineStateFromResponse(action.state);
+            break;
+        case "routine-mutation-failed":
+            routine = {
+                ...routine,
+                mutation: null,
+                mutationError: action.message
+            };
+            break;
         case "sheet-edit-entered":
             if (canEditStructuralConfiguration(screen, builder)) {
                 sheetMode = "edit";
@@ -351,10 +432,36 @@ export function reduceAppState(
         ...state,
         screen,
         builder,
+        routine,
         activeSheetSection,
         sheetMode,
         guidedBuilder,
         renderRevision: state.renderRevision + 1
+    };
+}
+
+function createInitialRoutineState(): CharacterRoutineUiState {
+    return {
+        status: "idle",
+        state: null,
+        references: {},
+        mutation: null
+    };
+}
+
+function routineStateFromResponse(state: CharacterStateResponse): CharacterRoutineUiState {
+    const references: Record<string, RuleReferenceState> = {};
+    for (const occurrence of state.inventoryItemOccurrences) {
+        references[occurrence.id] = {
+            status: "loading",
+            conceptKey: occurrence.ruleConceptKey
+        };
+    }
+    return {
+        status: "ready",
+        state,
+        references,
+        mutation: null
     };
 }
 

@@ -24,9 +24,10 @@ import {
     RichSheetInitializationError,
     type CharacterSheetBootstrapResponse
 } from "./character-api.js";
+import { loadCharacterState } from "./character-state-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
 import { createApplication } from "./render-lifecycle.js";
-import { searchResolvedRules } from "./rules-core-api.js";
+import { resolveRuleConcept, searchResolvedRules } from "./rules-core-api.js";
 import { parseCharacterSheetRoute } from "./routes.js";
 import { createButton, createElement, createInlineState, createStateCard } from "./ui/components.js";
 import { renderCharacterHeader, renderCharacterWorkspace } from "./ui/sheet.js";
@@ -249,11 +250,55 @@ async function bootstrapCharacter(): Promise<void> {
         const character = await loadCharacterSheet(environment, route.characterId);
         application.dispatch({ type: "character-loaded", character });
         if (character?.hasRichSheet) {
-            await bootstrapBuild(character.characterId);
+            await Promise.all([
+                bootstrapBuild(character.characterId),
+                bootstrapRoutine(character.characterId)
+            ]);
         }
     } catch (error) {
         application.dispatch({ type: "load-failed", message: errorMessage(error) });
     }
+}
+
+async function bootstrapRoutine(characterId: string): Promise<void> {
+    application.dispatch({ type: "routine-load-started" });
+    try {
+        const routine = await loadCharacterState(environment, characterId);
+        application.dispatch({ type: "routine-loaded", state: routine });
+        await resolveRoutineReferences(routine);
+    } catch (error) {
+        application.dispatch({ type: "routine-load-failed", message: errorMessage(error) });
+    }
+}
+
+async function resolveRoutineReferences(routine: Awaited<ReturnType<typeof loadCharacterState>>): Promise<void> {
+    await Promise.all(routine.inventoryItemOccurrences.map(async occurrence => {
+        try {
+            const rule = await resolveRuleConcept(environment, occurrence.ruleConceptKey);
+            const reference = rule !== null
+                && rule.entityType === "item"
+                && rule.conceptKey === occurrence.ruleConceptKey
+                ? { status: "resolved" as const, conceptKey: occurrence.ruleConceptKey, rule }
+                : { status: "unavailable" as const, conceptKey: occurrence.ruleConceptKey };
+            application.dispatch({
+                type: "routine-reference-resolved",
+                occurrenceId: occurrence.id,
+                conceptKey: occurrence.ruleConceptKey,
+                reference
+            });
+        } catch (error) {
+            application.dispatch({
+                type: "routine-reference-resolved",
+                occurrenceId: occurrence.id,
+                conceptKey: occurrence.ruleConceptKey,
+                reference: {
+                    status: "error",
+                    conceptKey: occurrence.ruleConceptKey,
+                    message: errorMessage(error)
+                }
+            });
+        }
+    }));
 }
 
 async function bootstrapBuild(characterId: string): Promise<void> {
@@ -407,7 +452,10 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
     try {
         const initialized = await initializeCharacterSheet(environment, character.characterId);
         application.dispatch({ type: "character-loaded", character: initialized });
-        await bootstrapBuild(initialized.characterId);
+        await Promise.all([
+            bootstrapBuild(initialized.characterId),
+            bootstrapRoutine(initialized.characterId)
+        ]);
     } catch (error) {
         application.dispatch({ type: "load-failed", message: errorMessage(error) });
     }
