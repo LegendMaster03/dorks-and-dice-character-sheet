@@ -118,7 +118,10 @@ test("composite accessibility groups components under the real parent competency
     assert.equal(labels[0].textContent, "Analysis");
 });
 
-test("production Character Sheet keeps competencies unavailable until real mechanics projection exists", async () => {
+test("production Character Sheet drives competencies from the nullable mechanics projection", async () => {
     const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
-    assert.match(sheetSource, /renderSkillsCard\(null\)/);
+    assert.doesNotMatch(sheetSource, /renderSkillsCard\(null\)/);
+    assert.match(sheetSource, /mechanics\?\.competencies === undefined/);
+    assert.match(sheetSource, /buildCompetencyPresentation\(mechanics\.competencies\)/);
+    assert.match(sheetSource, /renderSkillsCard\(competencyPresentation\)/);
 });

@@ -163,9 +163,9 @@ test("sheet header is generalized around Advancement rather than fixed Class and
     assert.match(sheetSource, /createCompactAdvancementSummary\(advancement\)/);
 });
 
-test("production keeps generalized advancement projection unavailable until the backend bridge supplies it", async () => {
+test("production keeps generalized advancement and mechanics projections unavailable until the backend bridge supplies them", async () => {
     const appSource = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
-    assert.match(appSource, /state\.guidedBuilder,\s*null,\s*\{/s);
+    assert.match(appSource, /state\.guidedBuilder,\s*null,\s*null,\s*\{/s);
 });
 
 test("advancement type does not enumerate only current advancement kinds or make Position-specific mechanics", async () => {
