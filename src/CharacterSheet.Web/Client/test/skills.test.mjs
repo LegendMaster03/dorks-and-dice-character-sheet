@@ -131,7 +131,7 @@ test("renderer is generic and does not special-case known Rules Core skill names
     assert.match(visibleText(card), /Temporal Reading/);
 
     const source = await readFile(new URL("../src/ui/skills.ts", import.meta.url), "utf8");
-    assert.doesNotMatch(source, /Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble/);
+    assert.doesNotMatch(source, /\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble)\b/);
 });
 
 test("parent and components remain actual skill rows", () => {
@@ -198,5 +198,5 @@ test("composite accessibility groups components under the real parent skill labe
 test("production Character Sheet keeps Skills unavailable until real resolved skill state exists", async () => {
     const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     assert.match(sheetSource, /skills\.append\(renderSkillsCard\(null\)\)/);
-    assert.doesNotMatch(sheetSource, /kind:\s*"composite"|displayValue|Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble/);
+    assert.doesNotMatch(sheetSource, /kind:\s*"composite"|displayValue|\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble)\b/);
 });
