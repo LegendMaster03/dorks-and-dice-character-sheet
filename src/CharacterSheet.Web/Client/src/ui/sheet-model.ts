@@ -5,6 +5,7 @@ import {
     type CharacterBuilderChoice
 } from "../builder-api.js";
 import type { CharacterBuilderUiState } from "../app-state.js";
+import { getStartingClassEntry } from "../builder-rules.js";
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 
@@ -49,6 +50,78 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
         emptyMessage: "Character notes and future Campaign-scoped modules will appear here when Character-owned note state is implemented."
     }
 ];
+
+export type GuidedBuilderSection = "species" | "advancement" | "abilities" | "review";
+
+export interface GuidedBuilderSectionDefinition {
+    id: GuidedBuilderSection;
+    label: string;
+}
+
+export const GUIDED_BUILDER_SECTIONS: readonly GuidedBuilderSectionDefinition[] = [
+    { id: "species", label: "Species" },
+    { id: "advancement", label: "Advancement" },
+    { id: "abilities", label: "Abilities" },
+    { id: "review", label: "Review" }
+];
+
+export type GuidedBuilderSectionStatus = "resolved" | "incomplete" | "available" | "unavailable";
+
+export interface GuidedBuilderSectionState extends GuidedBuilderSectionDefinition {
+    status: GuidedBuilderSectionStatus;
+    detail: string;
+}
+
+export function getGuidedBuilderSectionStates(
+    builder: CharacterBuilderUiState
+): readonly GuidedBuilderSectionState[] {
+    if (builder.status !== "ready" || builder.build === null) {
+        return GUIDED_BUILDER_SECTIONS.map(section => ({
+            ...section,
+            status: "unavailable",
+            detail: "Character build state is not available."
+        }));
+    }
+
+    const speciesSelected = builder.build.foundationalSelections
+        .some(selection => selection.category === "raceSpecies");
+    const startingClassSelected = getStartingClassEntry(builder.build) !== null;
+    const configuredAbilities = new Set(
+        builder.build.baseAbilityScoreInputs.map(input => input.abilityKey)
+    ).size;
+    const allBaseAbilitiesConfigured = configuredAbilities === CHARACTER_ABILITY_KEYS.length;
+
+    return [
+        {
+            id: "species",
+            label: "Species",
+            status: speciesSelected ? "resolved" : "incomplete",
+            detail: speciesSelected ? "Species selected." : "No Species is selected."
+        },
+        {
+            id: "advancement",
+            label: "Advancement",
+            status: startingClassSelected ? "resolved" : "incomplete",
+            detail: startingClassSelected
+                ? "Starting Class selected. No Subclass requirement is inferred."
+                : "No Starting Class is selected."
+        },
+        {
+            id: "abilities",
+            label: "Abilities",
+            status: allBaseAbilitiesConfigured ? "resolved" : "incomplete",
+            detail: allBaseAbilitiesConfigured
+                ? "All backend-supported base Ability Score inputs are configured."
+                : `${configuredAbilities} of ${CHARACTER_ABILITY_KEYS.length} base Ability Score inputs are configured.`
+        },
+        {
+            id: "review",
+            label: "Review",
+            status: "available",
+            detail: "Review only the structural configuration the current backend exposes."
+        }
+    ];
+}
 
 export interface MechanicPlaceholderDefinition {
     id: string;
