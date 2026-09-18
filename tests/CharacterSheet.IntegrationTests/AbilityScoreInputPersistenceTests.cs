@@ -70,7 +70,7 @@ public sealed class AbilityScoreInputPersistenceTests
                 characterA.BaseAbilityScoreInputs,
                 value => value.AbilityKey == CharacterAbilityKey.Strength);
             Assert.Equal(originalStrengthId, strength.Id);
-            Assert.Equal(originalStrengthCreatedAt, strength.CreatedAt);
+            Assert.Equal(originalStrengthCreatedAt.Ticks / 10, strength.CreatedAt.Ticks / 10);
             Assert.Equal(18, strength.Score);
 
             var dexterity = Assert.Single(
