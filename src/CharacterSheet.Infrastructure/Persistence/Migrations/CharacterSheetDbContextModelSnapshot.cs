@@ -98,6 +98,54 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_base_ability_score_inputs");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterInventoryItemOccurrence", b =>
+        {
+            b.Property<Guid>("Id")
+                .HasColumnType("uuid");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("RuleConceptKey")
+                .IsRequired()
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CharacterId", "RuleConceptKey");
+
+            b.ToTable("character_inventory_item_occurrences");
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterNote", b =>
+        {
+            b.Property<Guid>("Id")
+                .HasColumnType("uuid");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<string>("Content")
+                .IsRequired()
+                .HasColumnType("text");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CharacterId");
+
+            b.ToTable("character_notes");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>
         {
             b.Property<Guid>("Id")
@@ -206,11 +254,31 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .IsRequired();
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterInventoryItemOccurrence", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithMany("InventoryItemOccurrences")
+                .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterNote", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithMany("Notes")
+                .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSheetRoot", b =>
         {
             b.Navigation("AdvancementEntries");
             b.Navigation("BaseAbilityScoreInputs");
             b.Navigation("FoundationalSelections");
+            b.Navigation("InventoryItemOccurrences");
+            b.Navigation("Notes");
         });
 #pragma warning restore 612, 618
     }
