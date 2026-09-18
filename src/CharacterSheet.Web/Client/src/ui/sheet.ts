@@ -29,8 +29,8 @@ export function renderCharacterWorkspace(
     shell.setAttribute("data-read-only", readOnly ? "true" : "false");
 
     shell.append(renderCharacterHeader(character, builder, forceReadOnly));
-    if (forceReadOnly || character.lifecycle === "Archived") {
-        shell.append(renderReadOnlyBanner());
+    if (readOnly) {
+        shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
     }
 
     shell.append(renderCoreStats());
@@ -105,14 +105,19 @@ export function renderCharacterHeader(
     return header;
 }
 
-function renderReadOnlyBanner(): HTMLElement {
+function renderReadOnlyBanner(archived: boolean): HTMLElement {
     const banner = createElement("section", "dd-readonly-banner");
     banner.setAttribute("role", "status");
-    const title = createElement("strong", "dd-readonly-banner__title", "Archived Character — read-only");
+    const title = createElement(
+        "strong",
+        "dd-readonly-banner__title",
+        archived ? "Archived Character — read-only" : "Character Sheet — read-only");
     const message = createElement(
         "span",
         "dd-readonly-banner__message",
-        "The digital Character Sheet is preserved. Restore the Character through the Dorks & Dice Site before making changes.");
+        archived
+            ? "The digital Character Sheet is preserved. Restore the Character through the Dorks & Dice Site before making changes."
+            : "Editing is unavailable for this Character Sheet state.");
     banner.append(title, message);
     return banner;
 }
