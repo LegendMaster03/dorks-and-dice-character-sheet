@@ -511,7 +511,7 @@ public static class CharacterPresentationProjector
         return new CompetencyPresentationView(
             mechanic.ConceptKey!,
             mechanic.DisplayName,
-            evaluation?.Value ?? Unconfigured,
+            evaluation is null ? Unconfigured : (object)evaluation.Value,
             Kind: competency.CompetencyKind,
             GoverningAbility: competency.GoverningAbilityKey,
             TrainedOnly: competency.TrainedOnly,
