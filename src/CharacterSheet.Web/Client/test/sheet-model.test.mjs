@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createInitialState, reduceAppState } from "../.test-dist/app-state.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
+    getGuidedBuilderSectionStates,
     createCharacterHeaderModel,
     getAbilityScoreActionPolicy,
     getBaseAbilityScoreDisplay,
@@ -346,4 +347,62 @@ test("Character Sheet theme adds no external visual assets or custom font brandi
     const portraitRule = cssRule("\\.dd-sheet-header__portrait");
     assert.match(portraitRule, /background:\s*var\(--dd-sheet-accent\)/);
     assert.doesNotMatch(portraitRule, /gradient\s*\(/i);
+});
+
+test("guided setup reports only backend-known unresolved structural configuration", () => {
+    const current = builder({
+        foundationalSelections: [],
+        progressionEntries: [],
+        baseAbilityScoreInputs: []
+    });
+    const states = getGuidedBuilderSectionStates(current);
+    assert.deepEqual(
+        states.map(section => [section.id, section.status]),
+        [
+            ["species", "incomplete"],
+            ["advancement", "incomplete"],
+            ["abilities", "incomplete"],
+            ["review", "available"]
+        ]
+    );
+    assert.match(states.find(section => section.id === "advancement").detail, /No Starting Class/);
+    assert.doesNotMatch(states.find(section => section.id === "advancement").detail, /Subclass.*required/i);
+});
+
+test("normal View rendering keeps structural editors out of the sheet until Edit Mode is active", () => {
+    assert.match(sheetSource, /const structuralEditing = editable && sheetMode === "edit"/);
+    assert.match(sheetSource, /if \(structuralEditing\) \{[\s\S]*renderCharacterBuilder/);
+    assert.match(
+        sheetSource,
+        /if \(structuralEditing && !readOnly && \(display\.status === "configured" \|\| display\.status === "unconfigured"\)\)/
+    );
+});
+
+test("Guided Builder remains optional and supports direct section navigation", () => {
+    assert.match(sheetSource, /data-guided-builder-section/);
+    assert.match(sheetSource, /aria-current", "page"/);
+    assert.match(sheetSource, /selectGuidedBuilderSection/);
+    assert.match(sheetSource, /The Character Sheet remains available even when setup is incomplete/);
+});
+
+test("structural mutation handlers are namespaced separately from ordinary sheet interaction", () => {
+    assert.match(sheetSource, /interface CharacterSheetHandlers \{[\s\S]*structural: StructuralCharacterHandlers;/);
+    assert.match(sheetSource, /selectSection\(section: SheetSection\): void;/);
+    assert.doesNotMatch(sheetSource, /if \(sheetMode === "edit"\)[\s\S]*renderPrimaryContent/);
+});
+
+test("new Edit and Guided Builder styling uses only Character Sheet semantic theme variables", () => {
+    const marker = "/* Structural edit and guided builder presentation */";
+    const start = css.indexOf(marker);
+    assert.notEqual(start, -1);
+    const end = css.indexOf("@media (max-width: 1099px)", start);
+    const modeCss = css.slice(start, end);
+    assert.doesNotMatch(modeCss, /#[0-9a-f]{3,8}\b|rgb\(/i);
+    assert.match(modeCss, /var\(--dd-sheet-/);
+});
+
+test("Character Sheet implementation does not copy D&D Beyond source identifiers or assets", () => {
+    for (const source of [sheetSource, appSource]) {
+        assert.doesNotMatch(source, /dndbeyond|ddbc-|builder-sections-|Character Builder - D&D Beyond/i);
+    }
 });
