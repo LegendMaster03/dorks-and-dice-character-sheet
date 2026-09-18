@@ -1,4 +1,4 @@
-import type { CharacterBuilderUiState } from "../app-state.js";
+import type { CharacterBuilderUiState, GuidedBuilderUiState, SheetMode } from "../app-state.js";
 import type { CharacterAbilityKey } from "../builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
@@ -10,19 +10,30 @@ import {
     createCharacterHeaderModel,
     getAbilityScoreActionPolicy,
     getBaseAbilityScoreDisplay,
+    getGuidedBuilderSectionStates,
     humanizeBuilderStatus,
     MECHANIC_PLACEHOLDERS,
     parseBaseAbilityScoreInput,
     SHEET_SECTIONS,
     type AbilityScoreDefinition,
+    type GuidedBuilderSection,
     type MechanicPlaceholderDefinition,
     type SheetSection
 } from "./sheet-model.js";
 
-export interface CharacterSheetHandlers extends CharacterBuilderHandlers {
+export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
     setBaseAbilityScore(abilityKey: CharacterAbilityKey, score: number): void;
     clearBaseAbilityScore(abilityKey: CharacterAbilityKey): void;
+}
+
+export interface CharacterSheetHandlers {
+    structural: StructuralCharacterHandlers;
     selectSection(section: SheetSection): void;
+    enterEditMode(): void;
+    leaveEditMode(): void;
+    openGuidedBuilder(): void;
+    closeGuidedBuilder(): void;
+    selectGuidedBuilderSection(section: GuidedBuilderSection): void;
 }
 
 export function renderCharacterWorkspace(
@@ -30,19 +41,33 @@ export function renderCharacterWorkspace(
     builder: CharacterBuilderUiState,
     activeSection: SheetSection,
     forceReadOnly: boolean,
+    sheetMode: SheetMode,
+    guidedBuilder: GuidedBuilderUiState,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
     const readOnly = forceReadOnly || builder.build?.readOnly === true || character.lifecycle === "Archived";
+    const editable = !readOnly && builder.status === "ready" && builder.build !== null;
+    const structuralEditing = editable && sheetMode === "edit";
     shell.setAttribute("data-read-only", readOnly ? "true" : "false");
+    shell.setAttribute("data-sheet-mode", sheetMode);
+    shell.setAttribute("data-guided-builder-open", guidedBuilder.open ? "true" : "false");
 
     shell.append(renderCharacterHeader(character, builder, forceReadOnly));
+    if (editable) {
+        shell.append(renderModeControls(sheetMode, guidedBuilder, handlers));
+    }
     if (readOnly) {
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
     }
 
-    shell.append(renderCoreStats(builder, readOnly, handlers));
+    if (guidedBuilder.open && editable) {
+        shell.append(renderGuidedBuilder(character.characterId, builder, guidedBuilder, handlers));
+        return shell;
+    }
+
+    shell.append(renderCoreStats(builder, structuralEditing, readOnly, handlers.structural));
 
     const workspace = createElement("div", "dd-sheet__workspace");
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
@@ -59,15 +84,169 @@ export function renderCharacterWorkspace(
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
-    primary.append(
-        renderCombatSummary(),
-        renderCharacterBuilder(character.characterId, builder, forceReadOnly, handlers),
-        renderPrimaryContent(activeSection, handlers)
-    );
+    primary.append(renderCombatSummary());
+    if (structuralEditing) {
+        primary.append(renderCharacterBuilder(
+            character.characterId,
+            builder,
+            forceReadOnly,
+            handlers.structural));
+    }
+    primary.append(renderPrimaryContent(activeSection, handlers));
 
     workspace.append(support, skills, primary);
     shell.append(workspace);
     return shell;
+}
+
+function renderModeControls(
+    sheetMode: SheetMode,
+    guidedBuilder: GuidedBuilderUiState,
+    handlers: CharacterSheetHandlers
+): HTMLElement {
+    const controls = createElement("div", "dd-sheet-mode-bar");
+    controls.setAttribute("role", "group");
+    controls.setAttribute("aria-label", "Character configuration mode");
+
+    if (guidedBuilder.open) {
+        const closeBuilder = createButton(
+            "Back to Character Sheet",
+            "dd-button dd-button--ghost",
+            handlers.closeGuidedBuilder);
+        closeBuilder.setAttribute("data-sheet-mode-control", "guided-close");
+        controls.append(closeBuilder);
+        return controls;
+    }
+
+    const editing = sheetMode === "edit";
+    const editToggle = createButton(
+        editing ? "Done Editing" : "Edit Character",
+        editing ? "dd-button dd-button--primary" : "dd-button dd-button--secondary",
+        editing ? handlers.leaveEditMode : handlers.enterEditMode);
+    editToggle.setAttribute("aria-pressed", editing ? "true" : "false");
+    editToggle.setAttribute("data-sheet-mode-control", editing ? "view" : "edit");
+
+    const guided = createButton(
+        "Guided Setup",
+        "dd-button dd-button--ghost",
+        handlers.openGuidedBuilder);
+    guided.setAttribute("data-sheet-mode-control", "guided");
+    controls.append(editToggle, guided);
+    return controls;
+}
+
+function renderGuidedBuilder(
+    characterId: string,
+    builder: CharacterBuilderUiState,
+    guidedBuilder: GuidedBuilderUiState,
+    handlers: CharacterSheetHandlers
+): HTMLElement {
+    const container = createElement("section", "dd-guided-builder");
+    container.setAttribute("aria-labelledby", "dd-guided-builder-heading");
+    container.setAttribute("data-guided-builder", "true");
+
+    const heading = createElement("h2", "dd-guided-builder__title", "Guided Character Setup");
+    heading.id = "dd-guided-builder-heading";
+    container.append(
+        heading,
+        createElement(
+            "p",
+            "dd-guided-builder__intro",
+            "Use any section that is useful. The Character Sheet remains available even when setup is incomplete."));
+
+    const sectionStates = getGuidedBuilderSectionStates(builder);
+    const nav = createElement("nav", "dd-guided-builder__nav");
+    nav.setAttribute("aria-label", "Guided builder sections");
+    for (const section of sectionStates) {
+        const active = section.id === guidedBuilder.activeSection;
+        const button = createButton(
+            `${section.label} · ${guidedStatusLabel(section.status)}`,
+            active
+                ? "dd-guided-builder__nav-button dd-guided-builder__nav-button--active"
+                : "dd-guided-builder__nav-button",
+            () => handlers.selectGuidedBuilderSection(section.id));
+        button.setAttribute("data-guided-builder-section", section.id);
+        if (active) button.setAttribute("aria-current", "page");
+        nav.append(button);
+    }
+    container.append(nav);
+
+    const panel = createElement("div", "dd-guided-builder__panel");
+    panel.setAttribute("data-guided-builder-active-section", guidedBuilder.activeSection);
+
+    switch (guidedBuilder.activeSection) {
+        case "species":
+            panel.append(renderCharacterBuilder(
+                characterId,
+                builder,
+                false,
+                handlers.structural,
+                { title: "Species", choices: ["raceSpecies"] }));
+            break;
+        case "advancement":
+            panel.append(renderCharacterBuilder(
+                characterId,
+                builder,
+                false,
+                handlers.structural,
+                { title: "Advancement", choices: ["startingClass", "subclass"] }));
+            break;
+        case "abilities": {
+            const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");
+            abilities.append(createElement(
+                "p",
+                "dd-guided-builder__section-copy",
+                "These are the persisted base-score inputs currently supported by the Character backend."));
+            const grid = createElement("div", "dd-core-stats__abilities dd-guided-builder__ability-grid");
+            for (const definition of ABILITY_SCORE_DEFINITIONS) {
+                grid.append(renderAbilityScoreCard(
+                    definition,
+                    builder,
+                    true,
+                    false,
+                    handlers.structural));
+            }
+            abilities.append(grid);
+            panel.append(abilities);
+            break;
+        }
+        case "review": {
+            const review = createSectionCard("Character Setup", "dd-guided-builder__review");
+            review.append(createElement(
+                "p",
+                "dd-guided-builder__section-copy",
+                "This list reports only configuration the current backend can determine. It does not invent edition-specific completion requirements."));
+            const list = createElement("ul", "dd-guided-builder__review-list");
+            for (const section of sectionStates.filter(value => value.id !== "review")) {
+                const item = createElement("li", "dd-guided-builder__review-item");
+                item.setAttribute("data-guided-builder-status", section.status);
+                item.append(
+                    createElement("strong", "dd-guided-builder__review-label", section.label),
+                    createElement("span", "dd-guided-builder__review-status", guidedStatusLabel(section.status)),
+                    createElement("span", "dd-guided-builder__review-detail", section.detail));
+                list.append(item);
+            }
+            review.append(list);
+            panel.append(review);
+            break;
+        }
+    }
+
+    container.append(panel);
+    return container;
+}
+
+function guidedStatusLabel(status: ReturnType<typeof getGuidedBuilderSectionStates>[number]["status"]): string {
+    switch (status) {
+        case "resolved":
+            return "Resolved";
+        case "incomplete":
+            return "Incomplete";
+        case "available":
+            return "Available";
+        case "unavailable":
+            return "Unavailable";
+    }
 }
 
 export function renderCharacterHeader(
@@ -134,8 +313,9 @@ function renderReadOnlyBanner(archived: boolean): HTMLElement {
 
 function renderCoreStats(
     builder: CharacterBuilderUiState,
+    structuralEditing: boolean,
     readOnly: boolean,
-    handlers: CharacterSheetHandlers
+    handlers: StructuralCharacterHandlers
 ): HTMLElement {
     const section = createElement("section", "dd-core-stats");
     section.setAttribute("aria-labelledby", "dd-core-stats-heading");
@@ -145,7 +325,7 @@ function renderCoreStats(
 
     const abilityGrid = createElement("div", "dd-core-stats__abilities");
     for (const definition of ABILITY_SCORE_DEFINITIONS) {
-        abilityGrid.append(renderAbilityScoreCard(definition, builder, readOnly, handlers));
+        abilityGrid.append(renderAbilityScoreCard(definition, builder, structuralEditing, readOnly, handlers));
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
@@ -159,8 +339,9 @@ function renderCoreStats(
 function renderAbilityScoreCard(
     definition: AbilityScoreDefinition,
     builder: CharacterBuilderUiState,
+    structuralEditing: boolean,
     readOnly: boolean,
-    handlers: CharacterSheetHandlers
+    handlers: StructuralCharacterHandlers
 ): HTMLElement {
     const display = getBaseAbilityScoreDisplay(builder, definition.key);
     const configured = display.status === "configured";
@@ -175,7 +356,7 @@ function renderAbilityScoreCard(
         createElement("p", "dd-stat__modifier", "Modifier not available yet.")
     );
 
-    if (!readOnly && (display.status === "configured" || display.status === "unconfigured")) {
+    if (structuralEditing && !readOnly && (display.status === "configured" || display.status === "unconfigured")) {
         const editor = createElement("div", "dd-stat__editor");
         const input = createElement("input", "dd-stat__input");
         input.type = "number";

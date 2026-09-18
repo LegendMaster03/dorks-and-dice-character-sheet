@@ -10,7 +10,7 @@ import {
 } from "./builder-rules.js";
 import type { ResolvedRuleCatalogItem } from "./rules-core-api.js";
 import type { CharacterSheetRoute } from "./routes.js";
-import type { SheetSection } from "./ui/sheet-model.js";
+import type { GuidedBuilderSection, SheetSection } from "./ui/sheet-model.js";
 
 export type CharacterSheetScreen =
     | { kind: "new-character"; status: "ready" | "error"; message?: string; recoveryCharacterId?: string }
@@ -49,11 +49,21 @@ export interface CharacterBuilderUiState {
     };
 }
 
+export type SheetMode = "view" | "edit";
+
+export interface GuidedBuilderUiState {
+    open: boolean;
+    activeSection: GuidedBuilderSection;
+    returnSheetMode: SheetMode;
+}
+
 export interface CharacterSheetAppState {
     route: CharacterSheetRoute;
     screen: CharacterSheetScreen;
     builder: CharacterBuilderUiState;
     activeSheetSection: SheetSection;
+    sheetMode: SheetMode;
+    guidedBuilder: GuidedBuilderUiState;
     renderRevision: number;
 }
 
@@ -79,6 +89,11 @@ export type CharacterSheetAction =
     | { type: "ability-save-started"; abilityKey: CharacterAbilityKey }
     | { type: "ability-saved"; build: CharacterBuildResponse }
     | { type: "ability-save-failed"; abilityKey: CharacterAbilityKey; message: string }
+    | { type: "sheet-edit-entered" }
+    | { type: "sheet-edit-exited" }
+    | { type: "guided-builder-opened" }
+    | { type: "guided-builder-closed" }
+    | { type: "guided-builder-section-selected"; section: GuidedBuilderSection }
     | { type: "sheet-section-selected"; section: SheetSection }
     | { type: "rerender" };
 
@@ -101,6 +116,8 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
         screen,
         builder: createInitialBuilderState(),
         activeSheetSection: "actions",
+        sheetMode: "view",
+        guidedBuilder: createInitialGuidedBuilderState(),
         renderRevision: 0
     };
 }
@@ -112,11 +129,15 @@ export function reduceAppState(
     let screen = state.screen;
     let builder = state.builder;
     let activeSheetSection = state.activeSheetSection;
+    let sheetMode = state.sheetMode;
+    let guidedBuilder = state.guidedBuilder;
 
     switch (action.type) {
         case "character-loaded":
             builder = createInitialBuilderState();
             activeSheetSection = "actions";
+            sheetMode = "view";
+            guidedBuilder = createInitialGuidedBuilderState();
             if (action.character === null) {
                 screen = { kind: "not-found" };
             } else if (action.character.lifecycle === "Archived") {
@@ -130,6 +151,8 @@ export function reduceAppState(
         case "load-failed":
             screen = { kind: "error", message: action.message };
             builder = createInitialBuilderState();
+            sheetMode = "view";
+            guidedBuilder = createInitialGuidedBuilderState();
             break;
         case "new-submit-started":
             screen = { kind: "submitting", operation: "new-character" };
@@ -156,6 +179,10 @@ export function reduceAppState(
             break;
         case "builder-loaded":
             builder = builderStateFromBuild(builder, action.build);
+            if (action.build.readOnly) {
+                sheetMode = "view";
+                guidedBuilder = createInitialGuidedBuilderState();
+            }
             break;
         case "builder-load-failed":
             builder = {
@@ -271,6 +298,48 @@ export function reduceAppState(
                 abilitySaveError: { abilityKey: action.abilityKey, message: action.message }
             };
             break;
+        case "sheet-edit-entered":
+            if (canEditStructuralConfiguration(screen, builder)) {
+                sheetMode = "edit";
+                guidedBuilder = { ...guidedBuilder, open: false, returnSheetMode: "view" };
+                builder = { ...builder, chooser: { kind: "closed" } };
+            }
+            break;
+        case "sheet-edit-exited":
+            sheetMode = "view";
+            builder = { ...builder, chooser: { kind: "closed" } };
+            break;
+        case "guided-builder-opened":
+            if (canEditStructuralConfiguration(screen, builder)) {
+                guidedBuilder = {
+                    ...guidedBuilder,
+                    open: true,
+                    returnSheetMode: sheetMode
+                };
+                sheetMode = "view";
+                builder = { ...builder, chooser: { kind: "closed" } };
+            }
+            break;
+        case "guided-builder-closed":
+            if (guidedBuilder.open) {
+                const returnSheetMode = guidedBuilder.returnSheetMode;
+                guidedBuilder = {
+                    ...guidedBuilder,
+                    open: false,
+                    returnSheetMode: "view"
+                };
+                sheetMode = canEditStructuralConfiguration(screen, builder)
+                    ? returnSheetMode
+                    : "view";
+                builder = { ...builder, chooser: { kind: "closed" } };
+            }
+            break;
+        case "guided-builder-section-selected":
+            if (guidedBuilder.open) {
+                guidedBuilder = { ...guidedBuilder, activeSection: action.section };
+                builder = { ...builder, chooser: { kind: "closed" } };
+            }
+            break;
         case "sheet-section-selected":
             activeSheetSection = action.section;
             break;
@@ -283,8 +352,29 @@ export function reduceAppState(
         screen,
         builder,
         activeSheetSection,
+        sheetMode,
+        guidedBuilder,
         renderRevision: state.renderRevision + 1
     };
+}
+
+function createInitialGuidedBuilderState(): GuidedBuilderUiState {
+    return {
+        open: false,
+        activeSection: "species",
+        returnSheetMode: "view"
+    };
+}
+
+function canEditStructuralConfiguration(
+    screen: CharacterSheetScreen,
+    builder: CharacterBuilderUiState
+): boolean {
+    return screen.kind === "rich-character"
+        && screen.character.lifecycle !== "Archived"
+        && builder.status === "ready"
+        && builder.build !== null
+        && !builder.build.readOnly;
 }
 
 function createInitialBuilderState(): CharacterBuilderUiState {

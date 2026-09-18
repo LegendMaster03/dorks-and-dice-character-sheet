@@ -173,25 +173,56 @@ function renderWorkspace(
     forceReadOnly: boolean,
     activeSection: SheetSection
 ): HTMLElement {
+    const state = application.getState();
     const workspace = renderCharacterWorkspace(
         character,
-        application.getState().builder,
+        state.builder,
         activeSection,
         forceReadOnly,
+        state.sheetMode,
+        state.guidedBuilder,
         {
-            openChooser,
-            clearChoice: target => void clearChoice(character.characterId, target),
-            submitChooserSearch: (target, query) => void loadChooser(target, query),
-            closeChooser: () => application.dispatch({ type: "chooser-closed" }),
-            saveChoice: (target, conceptKey) => void saveChoice(character.characterId, target, conceptKey),
-            setBaseAbilityScore: (abilityKey, score) =>
-                void saveBaseAbilityScore(character.characterId, abilityKey, score),
-            clearBaseAbilityScore: abilityKey =>
-                void clearBaseAbilityScore(character.characterId, abilityKey),
-            selectSection: section => application.dispatch({ type: "sheet-section-selected", section })
+            structural: {
+                openChooser,
+                clearChoice: target => void clearChoice(character.characterId, target),
+                submitChooserSearch: (target, query) => void loadChooser(target, query),
+                closeChooser: () => application.dispatch({ type: "chooser-closed" }),
+                saveChoice: (target, conceptKey) => void saveChoice(character.characterId, target, conceptKey),
+                setBaseAbilityScore: (abilityKey, score) =>
+                    void saveBaseAbilityScore(character.characterId, abilityKey, score),
+                clearBaseAbilityScore: abilityKey =>
+                    void clearBaseAbilityScore(character.characterId, abilityKey)
+            },
+            selectSection: section => application.dispatch({ type: "sheet-section-selected", section }),
+            enterEditMode: () => dispatchAndFocus(
+                { type: "sheet-edit-entered" },
+                '[data-sheet-mode-control="view"]'),
+            leaveEditMode: () => dispatchAndFocus(
+                { type: "sheet-edit-exited" },
+                '[data-sheet-mode-control="edit"]'),
+            openGuidedBuilder: () => dispatchAndFocus(
+                { type: "guided-builder-opened" },
+                '[data-sheet-mode-control="guided-close"]'),
+            closeGuidedBuilder: () => dispatchAndFocus(
+                { type: "guided-builder-closed" },
+                "[data-sheet-mode-control]"),
+            selectGuidedBuilderSection: section => dispatchAndFocus(
+                { type: "guided-builder-section-selected", section },
+                `[data-guided-builder-section="${section}"]`)
         });
     workspace.append(renderDevelopmentDetails(character));
     return workspace;
+}
+
+function dispatchAndFocus(
+    action: Parameters<typeof application.dispatch>[0],
+    selector: string
+): void {
+    application.dispatch(action);
+    queueMicrotask(() => {
+        const target = appRoot.querySelector<HTMLElement>(selector);
+        target?.focus();
+    });
 }
 
 function renderStateScreen(
