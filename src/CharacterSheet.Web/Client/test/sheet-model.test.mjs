@@ -65,6 +65,7 @@ function builder(overrides = {}) {
         },
         chooser: { kind: "closed" },
         saving: null,
+        savingAbility: null,
         ...overrides
     };
 }
