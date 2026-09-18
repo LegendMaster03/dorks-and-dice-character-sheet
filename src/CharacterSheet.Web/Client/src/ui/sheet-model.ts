@@ -34,8 +34,8 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     {
         id: "inventory",
         label: "Inventory",
-        emptyTitle: "Inventory is not available yet",
-        emptyMessage: "Equipment, carried items, currency, and related Character-owned state will appear here when implemented."
+        emptyTitle: "No items yet",
+        emptyMessage: "Inventory currently tracks distinct Character-owned item occurrences."
     },
     {
         id: "features",

@@ -1275,3 +1275,57 @@
     flex-wrap: wrap;
     gap: var(--dd-sheet-space-2);
 }
+
+
+.dd-inventory-list {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+}
+
+.dd-inventory-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--dd-sheet-space-1) var(--dd-sheet-space-3);
+    align-items: center;
+    padding: var(--dd-sheet-space-3);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 10px;
+    background: var(--dd-sheet-surface-raised);
+}
+
+.dd-inventory-item__name {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.dd-inventory-item .dd-routine-meta {
+    grid-column: 1;
+}
+
+.dd-inventory-item > .dd-button {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+}
+
+.dd-inventory-item__occurrence {
+    overflow-wrap: anywhere;
+}
+
+.dd-inventory-chooser {
+    padding: var(--dd-sheet-space-3);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 10px;
+    background: var(--dd-sheet-surface-raised);
+}
+
+@media (max-width: 720px) {
+    .dd-inventory-item {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-inventory-item > .dd-button {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: start;
+    }
+}

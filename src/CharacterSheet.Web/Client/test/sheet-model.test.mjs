@@ -415,3 +415,13 @@ test("Notes are rendered from routine Character state and remain routine View-mo
     assert.match(sheetSource, /handlers\.deleteNote\(note\.id\)/);
     assert.doesNotMatch(sheetModelSource, /future Campaign-scoped modules/);
 });
+
+
+test("Inventory renders distinct Character occurrences and uses the Rules Core item chooser", () => {
+    assert.match(sheetSource, /data-inventory-occurrence-id/);
+    assert.match(sheetSource, /Occurrence \${occurrence\.id}/);
+    assert.match(sheetSource, /handlers\.addInventoryItem\(rule\.conceptKey\)/);
+    assert.match(sheetSource, /handlers\.removeInventoryItem\(occurrence\.id\)/);
+    assert.match(appSource, /searchResolvedRules\(environment, "item", normalizedQuery\)/);
+    assert.doesNotMatch(sheetModelSource, /Equipment, carried items, currency/);
+});

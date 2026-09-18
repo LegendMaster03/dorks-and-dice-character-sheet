@@ -65,11 +65,22 @@ export type RoutineMutationKind =
     | "inventory-add"
     | "inventory-delete";
 
+export type InventoryChooserState =
+    | { kind: "closed" }
+    | {
+        kind: "open";
+        query: string;
+        status: "idle" | "loading" | "ready" | "error";
+        results: ResolvedRuleCatalogItem[];
+        message?: string;
+    };
+
 export interface CharacterRoutineUiState {
     status: "idle" | "loading" | "ready" | "error";
     state: CharacterStateResponse | null;
     message?: string;
     references: Record<string, RuleReferenceState>;
+    inventoryChooser: InventoryChooserState;
     mutation: { kind: RoutineMutationKind; entryId?: string } | null;
     mutationError?: string;
 }
@@ -111,6 +122,12 @@ export type CharacterSheetAction =
     | { type: "routine-loaded"; state: CharacterStateResponse }
     | { type: "routine-load-failed"; message: string }
     | { type: "routine-reference-resolved"; occurrenceId: string; conceptKey: string; reference: RuleReferenceState }
+    | { type: "inventory-chooser-opened" }
+    | { type: "inventory-chooser-query-changed"; query: string }
+    | { type: "inventory-chooser-load-started"; query: string }
+    | { type: "inventory-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "inventory-chooser-load-failed"; query: string; message: string }
+    | { type: "inventory-chooser-closed" }
     | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
     | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
     | { type: "routine-mutation-failed"; message: string }
@@ -360,6 +377,76 @@ export function reduceAppState(
             }
             break;
         }
+        case "inventory-chooser-opened":
+            if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly) {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        kind: "open",
+                        query: "",
+                        status: "idle",
+                        results: []
+                    },
+                    mutationError: undefined
+                };
+            }
+            break;
+        case "inventory-chooser-query-changed":
+            if (routine.inventoryChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        query: action.query
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-load-started":
+            if (routine.inventoryChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        query: action.query,
+                        status: "loading",
+                        results: [],
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-loaded":
+            if (routine.inventoryChooser.kind === "open"
+                && routine.inventoryChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        status: "ready",
+                        results: action.results,
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-load-failed":
+            if (routine.inventoryChooser.kind === "open"
+                && routine.inventoryChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    inventoryChooser: {
+                        ...routine.inventoryChooser,
+                        status: "error",
+                        results: [],
+                        message: action.message
+                    }
+                };
+            }
+            break;
+        case "inventory-chooser-closed":
+            routine = { ...routine, inventoryChooser: { kind: "closed" } };
+            break;
         case "routine-mutation-started":
             if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly && routine.mutation === null) {
                 routine = {
@@ -445,6 +532,7 @@ function createInitialRoutineState(): CharacterRoutineUiState {
         status: "idle",
         state: null,
         references: {},
+        inventoryChooser: { kind: "closed" },
         mutation: null
     };
 }
@@ -461,6 +549,7 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
         status: "ready",
         state,
         references,
+        inventoryChooser: { kind: "closed" },
         mutation: null
     };
 }

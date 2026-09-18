@@ -410,3 +410,25 @@ test("routine mutation state is explicit and coherent response replacement clear
     assert.equal(state.routine.mutation, null);
     assert.equal(state.routine.mutationError, "save failed");
 });
+
+
+test("inventory chooser request state ignores stale search results", () => {
+    const routine = {
+        characterId,
+        readOnly: false,
+        inventoryItemOccurrences: [],
+        notes: []
+    };
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "routine-loaded", state: routine });
+    state = reduceAppState(state, { type: "inventory-chooser-opened" });
+    state = reduceAppState(state, { type: "inventory-chooser-load-started", query: "rope" });
+    state = reduceAppState(state, { type: "inventory-chooser-query-changed", query: "sword" });
+    state = reduceAppState(state, {
+        type: "inventory-chooser-loaded",
+        query: "rope",
+        results: [{ conceptKey: "item:rope", entityType: "item", displayName: "Rope" }]
+    });
+    assert.equal(state.routine.inventoryChooser.status, "loading");
+    assert.equal(state.routine.inventoryChooser.query, "sword");
+});

@@ -26,8 +26,10 @@ import {
 } from "./character-api.js";
 import {
     addCharacterNote,
+    addInventoryItemOccurrence,
     loadCharacterState,
     removeCharacterNote,
+    removeInventoryItemOccurrence,
     updateCharacterNote
 } from "./character-state-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
@@ -203,7 +205,12 @@ function renderWorkspace(
             routine: {
                 addNote: content => void addNote(character.characterId, content),
                 updateNote: (noteId, content) => void updateNote(character.characterId, noteId, content),
-                deleteNote: noteId => void deleteNote(character.characterId, noteId)
+                deleteNote: noteId => void deleteNote(character.characterId, noteId),
+                openInventoryChooser: () => openInventoryChooser(),
+                closeInventoryChooser: () => application.dispatch({ type: "inventory-chooser-closed" }),
+                searchInventory: query => void loadInventoryChooser(query),
+                addInventoryItem: conceptKey => void addInventoryItem(character.characterId, conceptKey),
+                removeInventoryItem: occurrenceId => void removeInventoryItem(character.characterId, occurrenceId)
             },
             selectSection: section => application.dispatch({ type: "sheet-section-selected", section }),
             enterEditMode: () => dispatchAndFocus(
@@ -313,7 +320,7 @@ async function resolveRoutineReferences(routine: Awaited<ReturnType<typeof loadC
 }
 
 async function applyRoutineMutation(
-    kind: "note-add" | "note-update" | "note-delete",
+    kind: "note-add" | "note-update" | "note-delete" | "inventory-add" | "inventory-delete",
     operation: () => ReturnType<typeof addCharacterNote>,
     entryId?: string
 ): Promise<void> {
@@ -355,6 +362,43 @@ async function deleteNote(characterId: string, noteId: string): Promise<void> {
         "note-delete",
         () => removeCharacterNote(environment, characterId, noteId),
         noteId);
+}
+
+function openInventoryChooser(): void {
+    application.dispatch({ type: "inventory-chooser-opened" });
+    void loadInventoryChooser("");
+}
+
+async function loadInventoryChooser(query: string): Promise<void> {
+    const normalizedQuery = query.trim();
+    application.dispatch({ type: "inventory-chooser-load-started", query: normalizedQuery });
+    try {
+        const catalog = await searchResolvedRules(environment, "item", normalizedQuery);
+        application.dispatch({
+            type: "inventory-chooser-loaded",
+            query: normalizedQuery,
+            results: catalog.rules.filter(rule => rule.entityType === "item")
+        });
+    } catch (error) {
+        application.dispatch({
+            type: "inventory-chooser-load-failed",
+            query: normalizedQuery,
+            message: errorMessage(error)
+        });
+    }
+}
+
+async function addInventoryItem(characterId: string, conceptKey: string): Promise<void> {
+    await applyRoutineMutation(
+        "inventory-add",
+        () => addInventoryItemOccurrence(environment, characterId, conceptKey));
+}
+
+async function removeInventoryItem(characterId: string, occurrenceId: string): Promise<void> {
+    await applyRoutineMutation(
+        "inventory-delete",
+        () => removeInventoryItemOccurrence(environment, characterId, occurrenceId),
+        occurrenceId);
 }
 
 async function bootstrapBuild(characterId: string): Promise<void> {
