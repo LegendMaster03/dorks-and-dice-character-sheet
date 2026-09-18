@@ -1,4 +1,5 @@
 import type {
+    CharacterAbilityKey,
     CharacterBuildResponse,
     CharacterBuilderChoice
 } from "./builder-api.js";
@@ -41,6 +42,11 @@ export interface CharacterBuilderUiState {
     chooser: RuleChooserState;
     saving: CharacterBuilderChoice | null;
     saveError?: string;
+    savingAbility: CharacterAbilityKey | null;
+    abilitySaveError?: {
+        abilityKey: CharacterAbilityKey;
+        message: string;
+    };
 }
 
 export interface CharacterSheetAppState {
@@ -70,6 +76,9 @@ export type CharacterSheetAction =
     | { type: "selection-save-started"; target: CharacterBuilderChoice }
     | { type: "selection-saved"; build: CharacterBuildResponse }
     | { type: "selection-save-failed"; message: string }
+    | { type: "ability-save-started"; abilityKey: CharacterAbilityKey }
+    | { type: "ability-saved"; build: CharacterBuildResponse }
+    | { type: "ability-save-failed"; abilityKey: CharacterAbilityKey; message: string }
     | { type: "sheet-section-selected"; section: SheetSection }
     | { type: "rerender" };
 
@@ -243,6 +252,25 @@ export function reduceAppState(
         case "selection-save-failed":
             builder = { ...builder, saving: null, saveError: action.message };
             break;
+        case "ability-save-started":
+            builder = {
+                ...builder,
+                savingAbility: action.abilityKey,
+                abilitySaveError: undefined
+            };
+            break;
+        case "ability-saved":
+            builder = builderStateFromBuild(
+                { ...builder, savingAbility: null, abilitySaveError: undefined },
+                action.build);
+            break;
+        case "ability-save-failed":
+            builder = {
+                ...builder,
+                savingAbility: null,
+                abilitySaveError: { abilityKey: action.abilityKey, message: action.message }
+            };
+            break;
         case "sheet-section-selected":
             activeSheetSection = action.section;
             break;
@@ -269,7 +297,8 @@ function createInitialBuilderState(): CharacterBuilderUiState {
             subclass: { status: "none" }
         },
         chooser: { kind: "closed" },
-        saving: null
+        saving: null,
+        savingAbility: null
     };
 }
 
@@ -288,7 +317,9 @@ function builderStateFromBuild(
             subclass: loadingRuleReference(build, "subclass")
         },
         saving: null,
-        saveError: undefined
+        saveError: undefined,
+        savingAbility: null,
+        abilitySaveError: undefined
     };
 }
 

@@ -24,11 +24,31 @@ export interface CharacterAdvancementEntryResponse {
     updatedAt: string;
 }
 
+export const CHARACTER_ABILITY_KEYS = [
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma"
+] as const;
+
+export type CharacterAbilityKey = typeof CHARACTER_ABILITY_KEYS[number];
+
+export interface BaseAbilityScoreInputResponse {
+    id: string;
+    abilityKey: CharacterAbilityKey;
+    score: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface CharacterBuildResponse {
     characterId: string;
     builderStatus: string;
     readOnly: boolean;
     foundationalSelections: FoundationalRuleSelectionResponse[];
+    baseAbilityScoreInputs: BaseAbilityScoreInputResponse[];
     progressionEntries: CharacterAdvancementEntryResponse[];
 }
 
@@ -56,6 +76,16 @@ export function buildCharacterBuildBackendUrl(
             `${base}/classes/${encodeURIComponent(classAdvancementEntryId)}/subclass`);
     }
     return buildCharacterSheetApiUrl(environment, base);
+}
+
+export function buildCharacterAbilityScoreBackendUrl(
+    environment: HostEnvironment,
+    characterId: string,
+    abilityKey: CharacterAbilityKey
+): string {
+    return buildCharacterSheetApiUrl(
+        environment,
+        `/api/characters/${encodeURIComponent(characterId)}/build/ability-scores/${encodeURIComponent(abilityKey)}`);
 }
 
 export async function loadCharacterBuild(
@@ -117,6 +147,51 @@ export async function clearCharacterBuildChoice(
     if (!response.ok) {
         throw new CharacterSheetApiError(
             await readApiError(response, "Unable to clear Character build choice."),
+            response.status);
+    }
+    return await response.json() as CharacterBuildResponse;
+}
+
+export async function setCharacterBaseAbilityScore(
+    environment: HostEnvironment,
+    characterId: string,
+    abilityKey: CharacterAbilityKey,
+    score: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterBuildResponse> {
+    const response = await fetcher(
+        buildCharacterAbilityScoreBackendUrl(environment, characterId, abilityKey),
+        {
+            method: "PUT",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ score })
+        });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to save base Ability Score."),
+            response.status);
+    }
+    return await response.json() as CharacterBuildResponse;
+}
+
+export async function clearCharacterBaseAbilityScore(
+    environment: HostEnvironment,
+    characterId: string,
+    abilityKey: CharacterAbilityKey,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterBuildResponse> {
+    const response = await fetcher(
+        buildCharacterAbilityScoreBackendUrl(environment, characterId, abilityKey),
+        {
+            method: "DELETE",
+            headers: { Accept: "application/json" }
+        });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to clear base Ability Score."),
             response.status);
     }
     return await response.json() as CharacterBuildResponse;

@@ -1,9 +1,12 @@
 import "./styles.css";
 import { createInitialState } from "./app-state.js";
 import {
+    clearCharacterBaseAbilityScore,
     clearCharacterBuildChoice,
     loadCharacterBuild,
+    setCharacterBaseAbilityScore,
     setCharacterBuildChoice,
+    type CharacterAbilityKey,
     type CharacterBuildResponse,
     type CharacterBuilderChoice
 } from "./builder-api.js";
@@ -181,6 +184,10 @@ function renderWorkspace(
             submitChooserSearch: (target, query) => void loadChooser(target, query),
             closeChooser: () => application.dispatch({ type: "chooser-closed" }),
             saveChoice: (target, conceptKey) => void saveChoice(character.characterId, target, conceptKey),
+            setBaseAbilityScore: (abilityKey, score) =>
+                void saveBaseAbilityScore(character.characterId, abilityKey, score),
+            clearBaseAbilityScore: abilityKey =>
+                void clearBaseAbilityScore(character.characterId, abilityKey),
             selectSection: section => application.dispatch({ type: "sheet-section-selected", section })
         });
     workspace.append(renderDevelopmentDetails(character));
@@ -305,6 +312,35 @@ async function clearChoice(characterId: string, target: CharacterBuilderChoice):
         await resolveBuildReferences(build);
     } catch (error) {
         application.dispatch({ type: "selection-save-failed", message: errorMessage(error) });
+    }
+}
+
+async function saveBaseAbilityScore(
+    characterId: string,
+    abilityKey: CharacterAbilityKey,
+    score: number
+): Promise<void> {
+    application.dispatch({ type: "ability-save-started", abilityKey });
+    try {
+        const build = await setCharacterBaseAbilityScore(environment, characterId, abilityKey, score);
+        application.dispatch({ type: "ability-saved", build });
+        await resolveBuildReferences(build);
+    } catch (error) {
+        application.dispatch({ type: "ability-save-failed", abilityKey, message: errorMessage(error) });
+    }
+}
+
+async function clearBaseAbilityScore(
+    characterId: string,
+    abilityKey: CharacterAbilityKey
+): Promise<void> {
+    application.dispatch({ type: "ability-save-started", abilityKey });
+    try {
+        const build = await clearCharacterBaseAbilityScore(environment, characterId, abilityKey);
+        application.dispatch({ type: "ability-saved", build });
+        await resolveBuildReferences(build);
+    } catch (error) {
+        application.dispatch({ type: "ability-save-failed", abilityKey, message: errorMessage(error) });
     }
 }
 

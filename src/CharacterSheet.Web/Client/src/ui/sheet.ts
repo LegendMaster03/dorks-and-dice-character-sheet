@@ -1,18 +1,27 @@
 import type { CharacterBuilderUiState } from "../app-state.js";
+import type { CharacterAbilityKey } from "../builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
 import { createButton, createElement, createPlaceholder, createSectionCard } from "./components.js";
+import { renderSkillsCard } from "./skills.js";
 import {
+    ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
+    getAbilityScoreActionPolicy,
+    getBaseAbilityScoreDisplay,
     humanizeBuilderStatus,
     MECHANIC_PLACEHOLDERS,
+    parseBaseAbilityScoreInput,
     SHEET_SECTIONS,
+    type AbilityScoreDefinition,
     type MechanicPlaceholderDefinition,
     type SheetSection
 } from "./sheet-model.js";
 
 export interface CharacterSheetHandlers extends CharacterBuilderHandlers {
+    setBaseAbilityScore(abilityKey: CharacterAbilityKey, score: number): void;
+    clearBaseAbilityScore(abilityKey: CharacterAbilityKey): void;
     selectSection(section: SheetSection): void;
 }
 
@@ -33,7 +42,7 @@ export function renderCharacterWorkspace(
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
     }
 
-    shell.append(renderCoreStats());
+    shell.append(renderCoreStats(builder, readOnly, handlers));
 
     const workspace = createElement("div", "dd-sheet__workspace");
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
@@ -46,7 +55,7 @@ export function renderCharacterWorkspace(
 
     const skills = createElement("section", "dd-sheet__skills");
     skills.setAttribute("aria-label", "Character skills");
-    skills.append(renderPlaceholderCard("Skills", placeholders("skills")));
+    skills.append(renderSkillsCard(null));
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
@@ -123,7 +132,11 @@ function renderReadOnlyBanner(archived: boolean): HTMLElement {
     return banner;
 }
 
-function renderCoreStats(): HTMLElement {
+function renderCoreStats(
+    builder: CharacterBuilderUiState,
+    readOnly: boolean,
+    handlers: CharacterSheetHandlers
+): HTMLElement {
     const section = createElement("section", "dd-core-stats");
     section.setAttribute("aria-labelledby", "dd-core-stats-heading");
     const heading = createElement("h2", "dd-visually-hidden", "Core statistics");
@@ -131,8 +144,8 @@ function renderCoreStats(): HTMLElement {
     section.append(heading);
 
     const abilityGrid = createElement("div", "dd-core-stats__abilities");
-    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "ability")) {
-        abilityGrid.append(createStatPlaceholder(placeholder));
+    for (const definition of ABILITY_SCORE_DEFINITIONS) {
+        abilityGrid.append(renderAbilityScoreCard(definition, builder, readOnly, handlers));
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
@@ -141,6 +154,74 @@ function renderCoreStats(): HTMLElement {
     }
     section.append(abilityGrid, quickGrid);
     return section;
+}
+
+function renderAbilityScoreCard(
+    definition: AbilityScoreDefinition,
+    builder: CharacterBuilderUiState,
+    readOnly: boolean,
+    handlers: CharacterSheetHandlers
+): HTMLElement {
+    const display = getBaseAbilityScoreDisplay(builder, definition.key);
+    const configured = display.status === "configured";
+    const policy = getAbilityScoreActionPolicy(builder, readOnly, configured);
+    const card = createElement("article", "dd-stat dd-stat--ability");
+    card.setAttribute("data-ability-key", definition.key);
+    card.setAttribute("data-ability-score-state", display.status);
+    card.append(
+        createElement("h3", "dd-stat__label", definition.label),
+        createElement("p", "dd-stat__value", display.value),
+        createElement("p", "dd-stat__detail", display.detail),
+        createElement("p", "dd-stat__modifier", "Modifier not available yet.")
+    );
+
+    if (!readOnly && (display.status === "configured" || display.status === "unconfigured")) {
+        const editor = createElement("div", "dd-stat__editor");
+        const input = createElement("input", "dd-stat__input");
+        input.type = "number";
+        input.step = "1";
+        input.inputMode = "numeric";
+        input.autocomplete = "off";
+        input.value = display.score === null ? "" : String(display.score);
+        input.setAttribute("aria-label", `${definition.label} Base Score`);
+        input.disabled = !policy.canSave;
+        input.addEventListener("input", () => input.setCustomValidity(""));
+
+        const actions = createElement("div", "dd-stat__actions");
+        actions.append(createButton(
+            policy.saveLabel,
+            "dd-stat__button",
+            () => {
+                const parsed = parseBaseAbilityScoreInput(input.value);
+                if (!parsed.ok) {
+                    input.setCustomValidity(parsed.message);
+                    input.reportValidity();
+                    return;
+                }
+                input.setCustomValidity("");
+                handlers.setBaseAbilityScore(definition.key, parsed.score);
+            },
+            !policy.canSave));
+
+        if (configured) {
+            actions.append(createButton(
+                "Clear",
+                "dd-stat__button dd-stat__button--secondary",
+                () => handlers.clearBaseAbilityScore(definition.key),
+                !policy.canClear));
+        }
+
+        editor.append(input, actions);
+        card.append(editor);
+    }
+
+    if (builder.abilitySaveError?.abilityKey === definition.key) {
+        const error = createElement("p", "dd-stat__error", builder.abilitySaveError.message);
+        error.setAttribute("role", "alert");
+        card.append(error);
+    }
+
+    return card;
 }
 
 function createStatPlaceholder(definition: MechanicPlaceholderDefinition): HTMLElement {

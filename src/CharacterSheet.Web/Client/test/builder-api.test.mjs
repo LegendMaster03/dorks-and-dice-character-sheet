@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildCharacterAbilityScoreBackendUrl,
     buildCharacterBuildBackendUrl,
+    clearCharacterBaseAbilityScore,
     clearCharacterBuildChoice,
     loadCharacterBuild,
+    setCharacterBaseAbilityScore,
     setCharacterBuildChoice
 } from "../.test-dist/builder-api.js";
 
@@ -22,6 +25,7 @@ const build = {
     builderStatus: "BuildInProgress",
     readOnly: false,
     foundationalSelections: [],
+    baseAbilityScoreInputs: [],
     progressionEntries: []
 };
 
@@ -106,4 +110,67 @@ test("clearing a builder choice uses DELETE without rule content", async () => {
         method: "DELETE",
         body: undefined
     }]);
+});
+
+test("ability score API uses the stable Character-owned build route", () => {
+    assert.equal(
+        buildCharacterAbilityScoreBackendUrl(environment, characterId, "strength"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/ability-scores/strength`);
+});
+
+test("base ability score set and replacement send only the integer input and return coherent build state", async () => {
+    const calls = [];
+    const firstBuild = {
+        ...build,
+        baseAbilityScoreInputs: [{
+            id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            abilityKey: "strength",
+            score: 15,
+            createdAt: "now",
+            updatedAt: "now"
+        }]
+    };
+    const replacementBuild = {
+        ...firstBuild,
+        baseAbilityScoreInputs: [{
+            ...firstBuild.baseAbilityScoreInputs[0],
+            score: 18,
+            updatedAt: "later"
+        }]
+    };
+    const responses = [firstBuild, replacementBuild];
+    const fetcher = async (input, init) => {
+        calls.push({ input: String(input), method: init?.method, body: init?.body });
+        return Response.json(responses.shift());
+    };
+
+    const first = await setCharacterBaseAbilityScore(environment, characterId, "strength", 15, fetcher);
+    const replacement = await setCharacterBaseAbilityScore(environment, characterId, "strength", 18, fetcher);
+
+    assert.deepEqual(JSON.parse(calls[0].body), { score: 15 });
+    assert.deepEqual(JSON.parse(calls[1].body), { score: 18 });
+    assert.equal(calls[0].method, "PUT");
+    assert.equal(calls[1].method, "PUT");
+    assert.equal(calls[0].input.endsWith("/build/ability-scores/strength"), true);
+    assert.equal(first.baseAbilityScoreInputs[0].score, 15);
+    assert.equal(replacement.baseAbilityScoreInputs[0].score, 18);
+    assert.equal(Object.hasOwn(replacement.baseAbilityScoreInputs[0], "effectiveScore"), false);
+});
+
+test("clearing a base ability score uses DELETE and the coherent returned build", async () => {
+    const calls = [];
+    const clearedBuild = { ...build, baseAbilityScoreInputs: [] };
+    const fetcher = async (input, init) => {
+        calls.push({ input: String(input), method: init?.method, body: init?.body });
+        return Response.json(clearedBuild);
+    };
+
+    const result = await clearCharacterBaseAbilityScore(environment, characterId, "charisma", fetcher);
+
+    assert.deepEqual(calls, [{
+        input: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/ability-scores/charisma`,
+        method: "DELETE",
+        body: undefined
+    }]);
+    assert.deepEqual(result.baseAbilityScoreInputs, []);
 });

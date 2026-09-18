@@ -3,7 +3,12 @@ import type { CharacterBuilderChoice } from "../builder-api.js";
 import { getStartingClassEntry } from "../builder-rules.js";
 import type { ResolvedRuleCatalogItem } from "../rules-core-api.js";
 import { createButton, createElement, createInlineState, createSectionCard } from "./components.js";
-import { getChoiceActionPolicy, humanizeBuilderStatus, toRuleReferenceDisplay } from "./sheet-model.js";
+import {
+    getChoiceActionPolicy,
+    hasPendingBuildMutation,
+    humanizeBuilderStatus,
+    toRuleReferenceDisplay
+} from "./sheet-model.js";
 
 export interface CharacterBuilderHandlers {
     openChooser(target: CharacterBuilderChoice): void;
@@ -21,7 +26,8 @@ export function renderCharacterBuilder(
 ): HTMLElement {
     const section = createSectionCard("Character Build", "dd-build");
     section.setAttribute("data-character-builder", characterId);
-    section.setAttribute("aria-busy", builder.status === "loading" || builder.saving !== null ? "true" : "false");
+    const mutationPending = hasPendingBuildMutation(builder);
+    section.setAttribute("aria-busy", builder.status === "loading" || mutationPending ? "true" : "false");
 
     if (builder.status === "idle" || builder.status === "loading") {
         section.append(createInlineState("Loading Character build…", "loading"));
@@ -85,7 +91,7 @@ function renderChoice(
 ): HTMLElement {
     const reference = builder.references[target];
     const display = toRuleReferenceDisplay(reference);
-    const policy = getChoiceActionPolicy(reference, readOnly, available, builder.saving);
+    const policy = getChoiceActionPolicy(reference, readOnly, available, hasPendingBuildMutation(builder));
     const card = createElement("article", "dd-build-choice");
     card.setAttribute("data-builder-choice", target);
 
@@ -182,7 +188,7 @@ function renderRuleChooser(
     } else {
         const list = createElement("ul", "dd-rule-chooser__results");
         for (const rule of chooser.results) {
-            list.append(renderRuleChooserResult(target, rule, builder.saving !== null, handlers));
+            list.append(renderRuleChooserResult(target, rule, hasPendingBuildMutation(builder), handlers));
         }
         container.append(list);
     }

@@ -33,6 +33,7 @@ const build = {
         createdAt: "now",
         updatedAt: "now"
     }],
+    baseAbilityScoreInputs: [],
     progressionEntries: [{
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         ordinal: 0,
@@ -191,4 +192,62 @@ test("archived and rich Character screens remain distinct", () => {
         character: rich
     });
     assert.equal(activeRich.screen.kind, "rich-character");
+});
+
+test("ability mutation state replaces the coherent build for set, replace, and clear", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+
+    state = reduceAppState(state, { type: "ability-save-started", abilityKey: "strength" });
+    assert.equal(state.builder.savingAbility, "strength");
+
+    const setBuild = {
+        ...build,
+        baseAbilityScoreInputs: [{
+            id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+            abilityKey: "strength",
+            score: 15,
+            createdAt: "now",
+            updatedAt: "now"
+        }]
+    };
+    state = reduceAppState(state, { type: "ability-saved", build: setBuild });
+    assert.equal(state.builder.savingAbility, null);
+    assert.equal(state.builder.build.baseAbilityScoreInputs[0].score, 15);
+
+    const replacementBuild = {
+        ...setBuild,
+        baseAbilityScoreInputs: [{
+            ...setBuild.baseAbilityScoreInputs[0],
+            score: 18,
+            updatedAt: "later"
+        }]
+    };
+    state = reduceAppState(state, { type: "ability-save-started", abilityKey: "strength" });
+    state = reduceAppState(state, { type: "ability-saved", build: replacementBuild });
+    assert.equal(state.builder.build.baseAbilityScoreInputs[0].score, 18);
+
+    const clearedBuild = { ...replacementBuild, baseAbilityScoreInputs: [] };
+    state = reduceAppState(state, { type: "ability-save-started", abilityKey: "strength" });
+    state = reduceAppState(state, { type: "ability-saved", build: clearedBuild });
+    assert.deepEqual(state.builder.build.baseAbilityScoreInputs, []);
+});
+
+test("ability mutation failure is attached to the attempted ability", () => {
+    let state = createInitialState({ kind: "character", characterId });
+    state = reduceAppState(state, { type: "character-loaded", character: rich });
+    state = reduceAppState(state, { type: "builder-loaded", build });
+    state = reduceAppState(state, { type: "ability-save-started", abilityKey: "wisdom" });
+    state = reduceAppState(state, {
+        type: "ability-save-failed",
+        abilityKey: "wisdom",
+        message: "save failed"
+    });
+
+    assert.equal(state.builder.savingAbility, null);
+    assert.deepEqual(state.builder.abilitySaveError, {
+        abilityKey: "wisdom",
+        message: "save failed"
+    });
 });
