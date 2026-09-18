@@ -164,24 +164,51 @@ public sealed class CharacterBuildModelTests
     }
 
     [Fact]
-    public void MultipleFeatOccurrencesCanShareRulesCoreIdentityWithoutSharingCharacterOwnedIdentity()
+    public void FeatOccurrencesAreCharacterOwnedCanonicalAndMayDuplicateRulesCoreIdentity()
     {
         var root = Root();
-        var first = root.AddAdvancement(
-            CharacterAdvancementKind.Feat,
-            "feat:flavor-choice",
-            null,
-            null,
+        var first = root.AddFeatOccurrence(
+            "  FEAT:Flavor-Choice  ",
             DateTimeOffset.UtcNow);
-        var second = root.AddAdvancement(
-            CharacterAdvancementKind.Feat,
+        var second = root.AddFeatOccurrence(
             "feat:flavor-choice",
-            null,
-            null,
             DateTimeOffset.UtcNow.AddMinutes(1));
 
         Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal("feat:flavor-choice", first.RuleConceptKey);
         Assert.Equal(first.RuleConceptKey, second.RuleConceptKey);
+        Assert.Equal(CharacterAdvancementKind.Feat, first.Kind);
+        Assert.Null(first.Ordinal);
+        Assert.Null(first.ParentAdvancementEntryId);
+        Assert.Equal(root.CharacterId, first.CharacterId);
+    }
+
+    [Fact]
+    public void RemovingOneDuplicateFeatOccurrencePreservesTheOther()
+    {
+        var root = Root();
+        var first = root.AddFeatOccurrence("feat:alert", DateTimeOffset.UtcNow);
+        var second = root.AddFeatOccurrence("feat:alert", DateTimeOffset.UtcNow.AddMinutes(1));
+
+        Assert.True(root.RemoveFeatOccurrence(first.Id, DateTimeOffset.UtcNow.AddMinutes(2)));
+
+        var remaining = Assert.Single(root.AdvancementEntries);
+        Assert.Equal(second.Id, remaining.Id);
+        Assert.Equal("feat:alert", remaining.RuleConceptKey);
+        Assert.False(root.RemoveFeatOccurrence(first.Id, DateTimeOffset.UtcNow.AddMinutes(3)));
+    }
+
+    [Fact]
+    public void FeatOccurrenceRemovalCanNotDeleteAnotherAdvancementKind()
+    {
+        var root = Root();
+        var startingClass = root.SetStartingClass("class:fighter", DateTimeOffset.UtcNow);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            root.RemoveFeatOccurrence(startingClass.Id, DateTimeOffset.UtcNow.AddMinutes(1)));
+
+        Assert.Contains("does not identify a Feat occurrence", exception.Message, StringComparison.Ordinal);
+        Assert.Single(root.AdvancementEntries);
     }
 
     [Fact]

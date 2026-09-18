@@ -169,6 +169,76 @@ public sealed class CharacterBuildWorkflowTests
     }
 
     [Fact]
+    public async Task OwnerCanCreateDuplicateFeatOccurrencesAndDeleteOneByOccurrenceId()
+    {
+        using var factory = new CharacterBuildWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(Character(characterId, "Feat Builder", "Active"));
+        using (var initialize = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/sheet"))
+        {
+            Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+        }
+
+        CharacterBuildView firstView;
+        using (var firstAdd = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/build/feats",
+                   new { conceptKey = "  FEAT:ALERT  " }))
+        {
+            Assert.Equal(HttpStatusCode.OK, firstAdd.StatusCode);
+            firstView = (await firstAdd.Content.ReadFromJsonAsync<CharacterBuildView>())!;
+        }
+
+        var first = Assert.Single(firstView.ProgressionEntries, value => value.Kind == "feat");
+        Assert.Equal("feat:alert", first.RuleConceptKey);
+        Assert.Null(first.Ordinal);
+        Assert.Null(first.ParentAdvancementEntryId);
+
+        using (var duplicateAdd = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/build/feats",
+                   new { conceptKey = "feat:alert" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, duplicateAdd.StatusCode);
+        }
+        using (var differentAdd = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/build/feats",
+                   new { conceptKey = "feat:tough" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, differentAdd.StatusCode);
+        }
+
+        CharacterBuildView beforeDelete;
+        using (var read = await factory.SendHostedAsync(
+                   HttpMethod.Get,
+                   $"/api/characters/{characterId:D}/build"))
+        {
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+            beforeDelete = (await read.Content.ReadFromJsonAsync<CharacterBuildView>())!;
+        }
+
+        var feats = beforeDelete.ProgressionEntries.Where(value => value.Kind == "feat").ToArray();
+        Assert.Equal(3, feats.Length);
+        var duplicateAlerts = feats.Where(value => value.RuleConceptKey == "feat:alert").ToArray();
+        Assert.Equal(2, duplicateAlerts.Length);
+        Assert.NotEqual(duplicateAlerts[0].Id, duplicateAlerts[1].Id);
+
+        using var delete = await factory.SendHostedAsync(
+            HttpMethod.Delete,
+            $"/api/characters/{characterId:D}/build/feats/{duplicateAlerts[0].Id:D}");
+        Assert.Equal(HttpStatusCode.OK, delete.StatusCode);
+        var afterDelete = await delete.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.NotNull(afterDelete);
+        var remainingFeats = afterDelete.ProgressionEntries.Where(value => value.Kind == "feat").ToArray();
+        Assert.Equal(2, remainingFeats.Length);
+        Assert.Contains(remainingFeats, value => value.Id == duplicateAlerts[1].Id);
+        Assert.Contains(remainingFeats, value => value.RuleConceptKey == "feat:tough");
+    }
+
+    [Fact]
     public async Task ArchivedCharacterCanReadBuildButCanNotMutateIt()
     {
         using var factory = new CharacterBuildWorkflowFactory();
@@ -208,6 +278,73 @@ public sealed class CharacterBuildWorkflowTests
             $"/api/characters/{characterId:D}/build/starting-class",
             new { conceptKey = "class:wizard" });
         Assert.Equal(HttpStatusCode.Conflict, mutate.StatusCode);
+    }
+
+    [Fact]
+    public async Task ArchivedCharacterCanReadFeatsButCanNotAddOrRemoveOccurrences()
+    {
+        using var factory = new CharacterBuildWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(Character(characterId, "Archived Feat Builder", "Active"));
+
+        using (var initialize = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/sheet"))
+        {
+            Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+        }
+
+        Guid featId;
+        using (var add = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/build/feats",
+                   new { conceptKey = "feat:alert" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, add.StatusCode);
+            var view = await add.Content.ReadFromJsonAsync<CharacterBuildView>();
+            Assert.NotNull(view);
+            featId = Assert.Single(view.ProgressionEntries, value => value.Kind == "feat").Id;
+        }
+
+        factory.Context = Context(Character(
+            characterId,
+            "Archived Feat Builder",
+            "Archived",
+            DateTimeOffset.UtcNow));
+
+        using (var read = await factory.SendHostedAsync(
+                   HttpMethod.Get,
+                   $"/api/characters/{characterId:D}/build"))
+        {
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+            var view = await read.Content.ReadFromJsonAsync<CharacterBuildView>();
+            Assert.NotNull(view);
+            Assert.True(view.ReadOnly);
+            Assert.Equal(featId, Assert.Single(view.ProgressionEntries, value => value.Kind == "feat").Id);
+        }
+
+        using (var add = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/build/feats",
+                   new { conceptKey = "feat:tough" }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, add.StatusCode);
+        }
+
+        using (var remove = await factory.SendHostedAsync(
+                   HttpMethod.Delete,
+                   $"/api/characters/{characterId:D}/build/feats/{featId:D}"))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, remove.StatusCode);
+        }
+
+        using var verify = await factory.SendHostedAsync(
+            HttpMethod.Get,
+            $"/api/characters/{characterId:D}/build");
+        var persisted = await verify.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
+        Assert.NotNull(persisted);
+        Assert.Equal(featId, Assert.Single(persisted.ProgressionEntries, value => value.Kind == "feat").Id);
     }
 
     [Fact]
@@ -335,6 +472,74 @@ public sealed class CharacterBuildWorkflowTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CharacterSheetDbContext>();
+        Assert.Equal(0, await db.CharacterAdvancementEntries.CountAsync());
+    }
+
+    [Fact]
+    public async Task LocalFeatStateCanNotBypassSiteOwnerAuthorization()
+    {
+        using var factory = new CharacterBuildWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context();
+
+        Guid featId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CharacterSheetDbContext>();
+            var root = new CharacterSheetRoot(characterId, DateTimeOffset.UtcNow);
+            featId = root.AddFeatOccurrence("feat:secret", DateTimeOffset.UtcNow).Id;
+            db.CharacterSheets.Add(root);
+            await db.SaveChangesAsync();
+        }
+
+        using (var read = await factory.SendHostedAsync(
+                   HttpMethod.Get,
+                   $"/api/characters/{characterId:D}/build"))
+        {
+            var body = await read.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.NotFound, read.StatusCode);
+            Assert.DoesNotContain("feat:secret", body, StringComparison.Ordinal);
+        }
+
+        using (var add = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/build/feats",
+                   new { conceptKey = "feat:other" }))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, add.StatusCode);
+        }
+
+        using var remove = await factory.SendHostedAsync(
+            HttpMethod.Delete,
+            $"/api/characters/{characterId:D}/build/feats/{featId:D}");
+        Assert.Equal(HttpStatusCode.NotFound, remove.StatusCode);
+    }
+
+    [Fact]
+    public async Task UninitializedOwnedCharacterDoesNotGainFeatStateThroughMutation()
+    {
+        using var factory = new CharacterBuildWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(Character(characterId, "Basic Feat Character", "Active"));
+
+        using (var add = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/build/feats",
+                   new { conceptKey = "feat:alert" }))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, add.StatusCode);
+        }
+
+        using (var remove = await factory.SendHostedAsync(
+                   HttpMethod.Delete,
+                   $"/api/characters/{characterId:D}/build/feats/{Guid.NewGuid():D}"))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, remove.StatusCode);
+        }
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CharacterSheetDbContext>();
+        Assert.Equal(0, await db.CharacterSheets.CountAsync());
         Assert.Equal(0, await db.CharacterAdvancementEntries.CountAsync());
     }
 
