@@ -73,7 +73,7 @@ character_sheet_roots
   UpdatedAt
 ```
 
-Builder choices are intentionally split between foundational selections and progression entries.
+Builder choices are intentionally split between foundational rule selections, Character-owned base ability-score inputs, and progression entries.
 
 ### Foundational selections
 
@@ -89,6 +89,25 @@ UpdatedAt
 ```
 
 `(CharacterId, Category)` is unique for the currently active foundational choice. The first public category is presented as `raceSpecies`, allowing the UI to use the combined `Race / Species` terminology without asserting that every source edition calls the concept the same thing. The row has its own identity rather than adding a `RaceId` column to the root, leaving room for future provenance/template/inheritance semantics to evolve independently of the root schema.
+
+### Base ability-score inputs
+
+`character_base_ability_score_inputs` stores one current directly assigned/base input per Character and ability axis:
+
+```text
+Id            Character-owned input identity
+CharacterId   Site CharacterId, FK -> root, cascade delete
+AbilityKey    normalized Character Sheet ability key
+Score         directly assigned/base input only
+CreatedAt
+UpdatedAt
+```
+
+`(CharacterId, AbilityKey)` is unique in PostgreSQL. Replacing a value updates the existing Character-owned row instead of appending another current decision; clearing a value removes only that keyed current decision. The current playable API accepts the stable keys `strength`, `dexterity`, `constitution`, `intelligence`, `wisdom`, and `charisma`. The key remains a string-backed child-row identity rather than six columns on the root, so future additional ability axes do not require a root/table redesign.
+
+The stored `Score` is explicitly a **base ability score input**. It is a persisted Character decision, not an effective/final ability score, ability modifier, saving throw, Rules Core-derived bonus, or explicit override. No racial/species, Class, Feat, ASI, temporary-effect, magic-item, proficiency, minimum/maximum, or other derived contribution is applied in this slice. No edition-specific numeric range is imposed.
+
+How the input number was generated is intentionally deferred. The schema does not currently claim rolled, point-buy, standard-array, imported, racial, ASI, DM-grant, or other provenance.
 
 ### Progression / advancement entries
 
@@ -127,6 +146,8 @@ Character build state is exposed as one coherent resource plus class/foundationa
 GET    /api/characters/{characterId}/build
 PUT    /api/characters/{characterId}/build/race-species
 DELETE /api/characters/{characterId}/build/race-species
+PUT    /api/characters/{characterId}/build/ability-scores/{abilityKey}
+DELETE /api/characters/{characterId}/build/ability-scores/{abilityKey}
 PUT    /api/characters/{characterId}/build/starting-class
 DELETE /api/characters/{characterId}/build/starting-class
 PUT    /api/characters/{characterId}/build/classes/{classAdvancementEntryId}/subclass
@@ -140,6 +161,14 @@ A rule-selection mutation body, including `POST /build/feats`, is only:
 ```json
 { "conceptKey": "<stable Rules Core ConceptKey>" }
 ```
+
+Ability-score input mutation is deliberately separate from Rules Core identity:
+
+```json
+{ "score": 15 }
+```
+
+`GET /build` and successful mutation responses expose these rows as `baseAbilityScoreInputs`; no `effectiveScore` field is synthesized from the stored input.
 
 Each Feat POST appends a new Character-owned occurrence, even when another occurrence already references the same canonical concept key. Feat deletion uses the Character-owned advancement entry ID, not the Rules Core concept key, so removing one duplicate occurrence preserves the others. Deleting an occurrence ID that is not present on the authorized Character is idempotent and returns the unchanged build; an ID that resolves to a non-Feat advancement on that Character is rejected as an invalid Feat target.
 
@@ -197,7 +226,7 @@ Prestige Classes remain distinct from ordinary Classes and Subclasses in Charact
 
 ## Durable Site lifecycle cleanup
 
-Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades to both foundational selections and the complete advancement graph in the same Character Sheet database transaction before the lifecycle event is acknowledged. A missing local root is still successful.
+Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades to foundational selections, base ability-score inputs, and the complete advancement graph in the same Character Sheet database transaction before the lifecycle event is acknowledged. A missing local root is still successful.
 
 `campaign.deleted` remains unrelated to these base/global Character selections and does not remove them. Future Campaign-scoped Character module state belongs behind the existing Campaign cleanup boundary.
 
@@ -235,4 +264,4 @@ CI and deployment smoke tests use disposable PostgreSQL 18 containers. Integrati
 
 ## Deferred systems
 
-This foundation does not implement ability score generation, skills/combined-skill UI, saving throws, hit points, armor class, attacks, equipment/inventory, spells/slots/points, Prestige Class selection/prerequisites, multiclass prerequisites, Feat UI or grants, generic level-up UI, Class/Subclass feature application, class-feature/proficiency calculations, Campaign-specific rules context, optional Campaign modules, Acquisitions Incorporated positions, Loot Tavern harvesting/crafting, Block Initiative integration, or cross-owner DM Character access.
+This foundation persists base ability-score inputs but does not implement ability score generation/provenance, effective/final ability-score calculation, ability modifiers, Rules Core-derived ability bonuses, ASIs, temporary or magic-item effects, explicit ability overrides, skills/combined-skill UI, saving throws, hit points, armor class, attacks, equipment/inventory, spells/slots/points, Prestige Class selection/prerequisites, multiclass prerequisites, Feat UI or grants, generic level-up UI, Class/Subclass feature application, class-feature/proficiency calculations, Campaign-specific rules context, optional Campaign modules, Acquisitions Incorporated positions, Loot Tavern harvesting/crafting, Block Initiative integration, or cross-owner DM Character access.

@@ -25,6 +25,19 @@ public interface ICharacterBuildStore
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> SetBaseAbilityScoreInputAsync(
+        Guid characterId,
+        string abilityKey,
+        int score,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> ClearBaseAbilityScoreInputAsync(
+        Guid characterId,
+        string abilityKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> SetStartingClassAsync(
         Guid characterId,
         string ruleConceptKey,

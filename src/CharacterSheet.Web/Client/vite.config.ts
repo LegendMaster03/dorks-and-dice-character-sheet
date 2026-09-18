@@ -5,7 +5,8 @@ export default defineConfig({
         lib: {
             entry: "src/app.ts",
             formats: ["es"],
-            fileName: () => "app.js"
+            fileName: () => "app.js",
+            cssFileName: "app"
         },
         outDir: "../wwwroot",
         emptyOutDir: true,

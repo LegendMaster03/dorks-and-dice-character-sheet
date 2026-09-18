@@ -47,6 +47,9 @@ public sealed class CharacterSheetRoot
     public ICollection<CharacterAdvancementEntry> AdvancementEntries { get; private set; } =
         new List<CharacterAdvancementEntry>();
 
+    public ICollection<CharacterBaseAbilityScoreInput> BaseAbilityScoreInputs { get; private set; } =
+        new List<CharacterBaseAbilityScoreInput>();
+
     public CharacterFoundationalRuleSelection SetFoundationalSelection(
         CharacterFoundationalSelectionCategory category,
         string ruleConceptKey,
@@ -84,6 +87,48 @@ public sealed class CharacterSheetRoot
         }
 
         FoundationalSelections.Remove(selection);
+        Touch(changedAt);
+        return true;
+    }
+
+    public CharacterBaseAbilityScoreInput SetBaseAbilityScoreInput(
+        string abilityKey,
+        int score,
+        DateTimeOffset changedAt)
+    {
+        var normalizedAbilityKey = CharacterAbilityKey.Normalize(abilityKey);
+        var input = BaseAbilityScoreInputs.SingleOrDefault(value =>
+            value.AbilityKey == normalizedAbilityKey);
+        if (input is null)
+        {
+            input = new CharacterBaseAbilityScoreInput(
+                Guid.NewGuid(),
+                CharacterId,
+                normalizedAbilityKey,
+                score,
+                changedAt);
+            BaseAbilityScoreInputs.Add(input);
+        }
+        else
+        {
+            input.ReplaceScore(score, changedAt);
+        }
+
+        Touch(changedAt);
+        return input;
+    }
+
+    public bool ClearBaseAbilityScoreInput(string abilityKey, DateTimeOffset changedAt)
+    {
+        var normalizedAbilityKey = CharacterAbilityKey.Normalize(abilityKey);
+        var input = BaseAbilityScoreInputs.SingleOrDefault(value =>
+            value.AbilityKey == normalizedAbilityKey);
+        if (input is null)
+        {
+            return false;
+        }
+
+        BaseAbilityScoreInputs.Remove(input);
         Touch(changedAt);
         return true;
     }
