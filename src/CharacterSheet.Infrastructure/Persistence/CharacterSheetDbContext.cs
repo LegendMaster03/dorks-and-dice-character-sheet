@@ -79,6 +79,10 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .IsRequired();
         advancement.HasIndex(value => new { value.CharacterId, value.Ordinal });
         advancement.HasIndex(value => new { value.ParentAdvancementEntryId, value.CharacterId });
+        advancement.HasIndex(value => new { value.CharacterId, value.ParentAdvancementEntryId })
+            .HasDatabaseName("UX_character_advancement_entries_SubclassPerClass")
+            .IsUnique()
+            .HasFilter("\"Kind\" = 'Subclass' AND \"ParentAdvancementEntryId\" IS NOT NULL");
         advancement.HasIndex(value => value.CharacterId)
             .HasDatabaseName("UX_character_advancement_entries_StartingClass")
             .IsUnique()

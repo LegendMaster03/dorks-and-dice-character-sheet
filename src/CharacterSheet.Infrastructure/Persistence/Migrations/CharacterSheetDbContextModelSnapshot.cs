@@ -58,6 +58,11 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
 
             b.HasIndex("CharacterId", "Ordinal");
 
+            b.HasIndex("CharacterId", "ParentAdvancementEntryId")
+                .IsUnique()
+                .HasDatabaseName("UX_character_advancement_entries_SubclassPerClass")
+                .HasFilter("\"Kind\" = 'Subclass' AND \"ParentAdvancementEntryId\" IS NOT NULL");
+
             b.HasIndex("ParentAdvancementEntryId", "CharacterId");
 
             b.ToTable("character_advancement_entries");

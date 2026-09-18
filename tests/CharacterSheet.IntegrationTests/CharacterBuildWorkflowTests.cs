@@ -211,6 +211,83 @@ public sealed class CharacterBuildWorkflowTests
     }
 
     [Fact]
+    public async Task ArchivedCharacterCanNotPutOrDeleteSubclassSelection()
+    {
+        using var factory = new CharacterBuildWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(Character(characterId, "Archived Subclass Builder", "Active"));
+
+        using (var initialize = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/sheet"))
+        {
+            Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+        }
+
+        using (var startingClass = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/build/starting-class",
+                   new { conceptKey = "class:wizard" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, startingClass.StatusCode);
+        }
+
+        Guid classAdvancementEntryId;
+        using (var read = await factory.SendHostedAsync(
+                   HttpMethod.Get,
+                   $"/api/characters/{characterId:D}/build"))
+        {
+            var build = await read.Content.ReadFromJsonAsync<CharacterBuildView>();
+            Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+            Assert.NotNull(build);
+            classAdvancementEntryId = Assert.Single(
+                build.ProgressionEntries,
+                value => value.Kind == "class").Id;
+        }
+
+        using (var subclass = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/build/classes/{classAdvancementEntryId:D}/subclass",
+                   new { conceptKey = "subclass.wizard.evocation" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, subclass.StatusCode);
+        }
+
+        factory.Context = Context(Character(
+            characterId,
+            "Archived Subclass Builder",
+            "Archived",
+            DateTimeOffset.UtcNow));
+
+        using (var replace = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/build/classes/{classAdvancementEntryId:D}/subclass",
+                   new { conceptKey = "subclass.wizard.abjuration" }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, replace.StatusCode);
+        }
+
+        using (var clear = await factory.SendHostedAsync(
+                   HttpMethod.Delete,
+                   $"/api/characters/{characterId:D}/build/classes/{classAdvancementEntryId:D}/subclass"))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, clear.StatusCode);
+        }
+
+        using var verify = await factory.SendHostedAsync(
+            HttpMethod.Get,
+            $"/api/characters/{characterId:D}/build");
+        var persisted = await verify.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
+        Assert.NotNull(persisted);
+        var persistedSubclass = Assert.Single(
+            persisted.ProgressionEntries,
+            value => value.Kind == "subclass");
+        Assert.Equal("subclass.wizard.evocation", persistedSubclass.RuleConceptKey);
+        Assert.Equal(classAdvancementEntryId, persistedSubclass.ParentAdvancementEntryId);
+    }
+
+    [Fact]
     public async Task LocalBuilderStateCanNotBypassSiteOwnerAuthorization()
     {
         using var factory = new CharacterBuildWorkflowFactory();
