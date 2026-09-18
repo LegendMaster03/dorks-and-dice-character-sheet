@@ -9,6 +9,11 @@ import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
 import {
+    createCompactAdvancementSummary,
+    type CharacterAdvancementView
+} from "./character-advancement.js";
+import { renderAdvancementDetails } from "./advancement.js";
+import {
     createButton,
     createElement,
     createInlineState,
@@ -78,6 +83,7 @@ export function renderCharacterWorkspace(
     forceReadOnly: boolean,
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
+    advancement: CharacterAdvancementView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
@@ -92,7 +98,10 @@ export function renderCharacterWorkspace(
     shell.setAttribute("data-sheet-mode", sheetMode);
     shell.setAttribute("data-guided-builder-open", guidedBuilder.open ? "true" : "false");
 
-    shell.append(renderCharacterHeader(character, builder, forceReadOnly));
+    shell.append(renderCharacterHeader(character, builder, forceReadOnly, advancement));
+    if (advancement !== null && advancement.occurrences.length > 0) {
+        shell.append(renderAdvancementDetails(advancement));
+    }
     if (editable) {
         shell.append(renderModeControls(sheetMode, guidedBuilder, handlers));
     }
@@ -296,7 +305,8 @@ function guidedStatusLabel(status: ReturnType<typeof getGuidedBuilderSectionStat
 export function renderCharacterHeader(
     character: CharacterSheetBootstrapResponse,
     builder: CharacterBuilderUiState,
-    forceReadOnly: boolean
+    forceReadOnly: boolean,
+    advancement: CharacterAdvancementView | null = null
 ): HTMLElement {
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
     const header = createElement("header", "dd-sheet-header");
@@ -320,15 +330,13 @@ export function renderCharacterHeader(
     text.append(name, statusLine);
     identity.append(monogram, text);
 
+    const advancementSummary = advancement === null
+        ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
+        : createCompactAdvancementSummary(advancement);
     const summary = createElement("dl", "dd-sheet-header__summary");
     summary.append(
         headerSummaryItem("Race / Species", model.raceSpecies.value, model.raceSpecies.detail),
-        headerSummaryItem("Class", model.startingClass.value, model.startingClass.detail),
-        headerSummaryItem("Subclass", model.subclass.value, model.subclass.detail),
-        headerSummaryItem(
-            "Advancement",
-            "Not yet available",
-            "Level, multiclass, and Prestige Class summaries are not implemented yet.")
+        headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
     );
     if (model.readOnly) {
         summary.append(headerSummaryItem("Sheet state", "Read-only", "Restore the Character through the Site to edit."));
@@ -916,6 +924,17 @@ function renderNotesSection(
     }
     content.append(list);
     return content;
+}
+
+function legacyAdvancementHeaderSummary(
+    startingClass: string,
+    subclass: string
+): { value: string; detail?: string } {
+    const values = [...new Set([startingClass, subclass].map(value => value.trim()).filter(Boolean))];
+    return {
+        value: values[0] ?? "Not configured",
+        detail: values.length > 1 ? values.slice(1).join(" • ") : undefined
+    };
 }
 
 function headerSummaryItem(label: string, value: string, detail?: string): HTMLElement {

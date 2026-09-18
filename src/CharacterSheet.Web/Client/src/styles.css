@@ -1398,3 +1398,112 @@
         justify-self: start;
     }
 }
+
+
+/* Generalized Character advancement presentation */
+.dd-advancement-overview {
+    margin: var(--dd-sheet-space-3) var(--dd-sheet-space-5) 0;
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius);
+}
+
+.dd-advancement-overview__toggle {
+    padding: var(--dd-sheet-space-3) var(--dd-sheet-space-4);
+    color: var(--dd-sheet-ink);
+    cursor: pointer;
+    font-size: 0.86rem;
+    font-weight: 800;
+}
+
+.dd-advancement-overview__body {
+    padding: 0 var(--dd-sheet-space-4) var(--dd-sheet-space-4);
+}
+
+.dd-advancement-list,
+.dd-advancement-grant-list {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+}
+
+.dd-advancement-entry {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-advancement-entry__heading {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dd-sheet-space-2) var(--dd-sheet-space-4);
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.dd-advancement-entry__name,
+.dd-advancement-entry__subheading {
+    margin: 0;
+    color: var(--dd-sheet-ink);
+}
+
+.dd-advancement-entry__name {
+    font-size: 1rem;
+}
+
+.dd-advancement-entry__subheading {
+    font-size: 0.82rem;
+}
+
+.dd-advancement-entry__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dd-sheet-space-2);
+    color: var(--dd-sheet-muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.dd-advancement-entry__kind + .dd-advancement-entry__progression::before {
+    content: "•";
+    margin-right: var(--dd-sheet-space-2);
+}
+
+.dd-advancement-entry__relationship {
+    margin: 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+}
+
+.dd-advancement-entry__fields {
+    display: grid;
+    gap: var(--dd-sheet-space-1);
+    margin: var(--dd-sheet-space-2) 0 0;
+}
+
+.dd-advancement-grant {
+    display: grid;
+    gap: var(--dd-sheet-space-1);
+    padding: var(--dd-sheet-space-2);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-advancement-grant__detail {
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+}
+
+@media (max-width: 720px) {
+    .dd-advancement-overview {
+        margin-right: var(--dd-sheet-space-3);
+        margin-left: var(--dd-sheet-space-3);
+    }
+
+    .dd-advancement-entry__heading {
+        display: grid;
+    }
+}
