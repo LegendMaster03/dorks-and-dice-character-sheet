@@ -583,11 +583,7 @@ function renderFeaturesSection(
                     createElement(
                         "p",
                         "dd-routine-meta",
-                        display.detail ?? occurrence.ruleConceptKey),
-                    createElement(
-                        "p",
-                        "dd-routine-meta dd-feat__occurrence",
-                        `Occurrence ${occurrence.id}`)
+                        display.detail ?? occurrence.ruleConceptKey)
                 );
                 if (editable) {
                     item.append(createButton(
@@ -740,11 +736,7 @@ function renderInventorySection(
             createElement(
                 "p",
                 "dd-routine-meta",
-                display.detail ?? occurrence.ruleConceptKey),
-            createElement(
-                "p",
-                "dd-routine-meta dd-inventory-item__occurrence",
-                `Occurrence ${occurrence.id}`)
+                display.detail ?? occurrence.ruleConceptKey)
         );
         if (editable) {
             item.append(createButton(
