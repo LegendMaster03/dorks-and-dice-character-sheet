@@ -103,6 +103,10 @@ export interface AbilityScoreActionPolicy {
     saveLabel: "Set" | "Replace";
 }
 
+export function hasPendingBuildMutation(builder: CharacterBuilderUiState): boolean {
+    return builder.saving !== null || builder.savingAbility !== null;
+}
+
 export function getBaseAbilityScoreInput(
     builder: CharacterBuilderUiState,
     abilityKey: CharacterAbilityKey
@@ -137,8 +141,7 @@ export function getAbilityScoreActionPolicy(
         && builder.build !== null
         && !builder.build.readOnly
         && !readOnly
-        && builder.saving === null
-        && builder.savingAbility === null;
+        && !hasPendingBuildMutation(builder);
     return {
         canSave: canMutate,
         canClear: canMutate && configured,
@@ -267,11 +270,11 @@ export function getChoiceActionPolicy(
     reference: RuleReferenceState,
     readOnly: boolean,
     available: boolean,
-    saving: CharacterBuilderChoice | null
+    mutationPending: boolean
 ): ChoiceActionPolicy {
     return {
-        canChoose: available && !readOnly && saving === null,
-        canClear: available && !readOnly && saving === null && reference.status !== "none",
+        canChoose: available && !readOnly && !mutationPending,
+        canClear: available && !readOnly && !mutationPending && reference.status !== "none",
         chooseLabel: reference.status === "none" ? "Choose" : "Replace"
     };
 }

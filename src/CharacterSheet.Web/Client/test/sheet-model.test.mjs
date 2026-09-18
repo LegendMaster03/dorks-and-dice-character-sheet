@@ -8,6 +8,7 @@ import {
     getAbilityScoreActionPolicy,
     getBaseAbilityScoreDisplay,
     getChoiceActionPolicy,
+    hasPendingBuildMutation,
     MECHANIC_PLACEHOLDERS,
     parseBaseAbilityScoreInput,
     SHEET_SECTIONS,
@@ -115,7 +116,7 @@ test("archived Character model is explicitly read-only", () => {
 
 test("builder mutation policy removes editing affordances in read-only state", () => {
     const selected = resolved("class:wizard", "class", "Wizard");
-    assert.deepEqual(getChoiceActionPolicy(selected, true, true, null), {
+    assert.deepEqual(getChoiceActionPolicy(selected, true, true, false), {
         canChoose: false,
         canClear: false,
         chooseLabel: "Replace"
@@ -183,6 +184,23 @@ test("missing base score remains unconfigured instead of becoming ten", () => {
     assert.equal(display.value, "Not configured");
     assert.equal(display.score, null);
     assert.notEqual(display.value, "10");
+});
+
+test("build mutation lock spans builder choices and Ability Score mutations", () => {
+    const selected = resolved("class:wizard", "class", "Wizard");
+    const abilitySaving = builder({ savingAbility: "strength" });
+
+    assert.equal(hasPendingBuildMutation(abilitySaving), true);
+    assert.deepEqual(getChoiceActionPolicy(selected, false, true, hasPendingBuildMutation(abilitySaving)), {
+        canChoose: false,
+        canClear: false,
+        chooseLabel: "Replace"
+    });
+    assert.equal(getAbilityScoreActionPolicy(abilitySaving, false, true).canSave, false);
+
+    const choiceSaving = builder({ saving: "startingClass" });
+    assert.equal(hasPendingBuildMutation(choiceSaving), true);
+    assert.equal(getAbilityScoreActionPolicy(choiceSaving, false, true).canSave, false);
 });
 
 test("active Character ability policy supports set, replace, and clear while read-only does not mutate", () => {
