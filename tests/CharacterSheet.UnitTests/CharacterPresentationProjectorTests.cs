@@ -265,6 +265,38 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void UnevaluatedSavingThrowDefinitionsRemainVisibleWithDashValues()
+    {
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(
+            Catalog(
+                SavingThrow("save.fortitude", "Fortitude Save"),
+                SavingThrow("save.reflex", "Reflex Save"),
+                SavingThrow("save.will", "Will Save")),
+            null);
+
+        Assert.Collection(
+            mechanics.SavingThrows!,
+            save =>
+            {
+                Assert.Equal("save.fortitude", save.Key);
+                Assert.Equal("Fortitude Save", save.Label);
+                Assert.Equal("-", save.EffectiveValue);
+            },
+            save =>
+            {
+                Assert.Equal("save.reflex", save.Key);
+                Assert.Equal("Reflex Save", save.Label);
+                Assert.Equal("-", save.EffectiveValue);
+            },
+            save =>
+            {
+                Assert.Equal("save.will", save.Key);
+                Assert.Equal("Will Save", save.Label);
+                Assert.Equal("-", save.EffectiveValue);
+            });
+    }
+
+    [Fact]
     public void MissingCharacterInputsAndCapabilitiesAreNeverSubmittedAsZero()
     {
         var mechanic = new RulesCoreMechanicView(
@@ -413,6 +445,36 @@ public sealed class CharacterPresentationProjectorTests
             new RulesCoreMechanicCheckView(
                 new RulesCoreCheckAbilityView("rule-resolved", null, []),
                 new RulesCoreCheckCompetencyView("rule-resolved", ["skill"], null)),
+            null,
+            [],
+            []);
+
+    private static RulesCoreMechanicView SavingThrow(string mechanicKey, string displayName) =>
+        new(
+            mechanicKey,
+            "saving-throw",
+            displayName,
+            null,
+            true,
+            new RulesCoreMechanicApplicabilityView(
+                "character-capability",
+                true,
+                [mechanicKey],
+                null),
+            "sum",
+            true,
+            [new RulesCoreMechanicInputView(
+                "baseSave",
+                "integer",
+                "derived",
+                true,
+                true,
+                null,
+                null,
+                null)],
+            [],
+            [],
+            null,
             null,
             [],
             []);
