@@ -188,7 +188,7 @@ test("persisted base score is displayed as a base input", () => {
 test("missing base score remains unconfigured instead of becoming ten", () => {
     const display = getBaseAbilityScoreDisplay(builder(), "dexterity");
     assert.equal(display.status, "unconfigured");
-    assert.equal(display.value, "Not configured");
+    assert.equal(display.value, "-");
     assert.equal(display.score, null);
     assert.notEqual(display.value, "10");
 });
