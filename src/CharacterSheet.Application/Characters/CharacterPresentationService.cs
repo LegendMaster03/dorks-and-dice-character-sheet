@@ -44,7 +44,9 @@ public sealed record SourceAttributionPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? OfficialUrl = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? LinkLabel = null);
+    string? LinkLabel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool PresentationRequired = false);
 
 public sealed record CalculatedMechanicalValuePresentationView(
     string Key,
@@ -656,6 +658,7 @@ public static class CharacterPresentationProjector
             source.WorkDisplayName ?? source.PackageDisplayName ?? source.ReferenceTitle ?? source.Provider,
             detail,
             source.ReferenceUri,
-            source.ReferenceLinkRequired ? "Official rules" : "Reference");
+            source.ReferenceLinkRequired ? "Official rules" : "Reference",
+            source.PresentationRequired);
     }
 }
