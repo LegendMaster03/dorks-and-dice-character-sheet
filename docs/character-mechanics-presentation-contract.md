@@ -113,7 +113,7 @@ Omitted or unmatched effective data never causes the frontend to calculate a val
 
 `SavingThrowView` extends the calculated-value primitive with optional `governingAbility` and `training`.
 
-The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend neither selects the save model nor computes values.
+The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend neither selects the save model nor computes values. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row.
 
 ## Defenses
 
