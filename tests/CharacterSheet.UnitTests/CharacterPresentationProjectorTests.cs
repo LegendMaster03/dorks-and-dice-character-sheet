@@ -258,7 +258,7 @@ public sealed class CharacterPresentationProjectorTests
         Assert.True(procedure.Supplemental);
         var attribution = Assert.Single(procedure.SourceAttributions!);
         Assert.Equal("Fixture Public Rules", attribution.Label);
-        Assert.Contains("Rules by Fixture Publisher", attribution.Detail);
+        Assert.Contains("Rules by Fixture Publisher", attribution.Detail ?? string.Empty);
         Assert.Equal("https://example.test/public-rules", attribution.OfficialUrl);
         Assert.Equal("Official rules", attribution.LinkLabel);
     }
