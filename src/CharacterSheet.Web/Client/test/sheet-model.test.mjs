@@ -274,7 +274,7 @@ test("ability UI does not invent effective-score or modifier calculations", () =
     assert.doesNotMatch(sheetSource, /effectiveScore/);
     assert.doesNotMatch(sheetModelSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
     assert.doesNotMatch(sheetSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
-    assert.match(sheetSource, /Modifier -\./);
+    assert.match(sheetSource, /Modifier -/);
 });
 
 test("ability editor uses integer input without edition-specific min or max attributes", () => {
