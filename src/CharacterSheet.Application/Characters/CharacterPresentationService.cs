@@ -397,13 +397,19 @@ public static class CharacterPresentationProjector
             .Where(value => evaluationByKey.ContainsKey(value.MechanicKey))
             .ToArray();
 
-        var savingThrows = evaluated
-            .Where(value => string.Equals(value.Kind, "saving-throw", StringComparison.Ordinal))
-            .Select(value => new SavingThrowPresentationView(
-                value.MechanicKey,
-                value.DisplayName,
-                evaluationByKey[value.MechanicKey].Value,
-                SourceAttributions: MapAttributions(value.SourceAttributions)))
+        var savingThrows = catalog.Mechanics
+            .Where(value =>
+                value.IsAvailableUnderRuleset
+                && string.Equals(value.Kind, "saving-throw", StringComparison.Ordinal))
+            .Select(value =>
+            {
+                evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
+                return new SavingThrowPresentationView(
+                    value.MechanicKey,
+                    value.DisplayName,
+                    evaluation is null ? Unconfigured : (object)evaluation.Value,
+                    SourceAttributions: MapAttributions(value.SourceAttributions));
+            })
             .ToArray();
 
         var defenses = evaluated
