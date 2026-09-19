@@ -161,7 +161,8 @@ test("supplemental rule checks are collapsed while required creator credit remai
         label: "Fixture Public Rules",
         detail: "Rules by Fixture Publisher · 5e · 2026-09-19",
         officialUrl: "https://example.test/public-rules",
-        linkLabel: "Official rules"
+        linkLabel: "Official rules",
+        presentationRequired: true
     };
     const rendered = renderChecksAndProceduresPresentation(
         [
