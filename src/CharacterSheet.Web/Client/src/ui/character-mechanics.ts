@@ -90,7 +90,11 @@ export interface CompetencyView extends CalculatedMechanicalValueView {
     classSkill?: boolean;
     trainedOnly?: boolean;
     armorCheckPenalty?: ArmorCheckPenaltyView;
+    family?: string;
     specialty?: string;
+    supportsRanks?: boolean;
+    supportsClassSkillState?: boolean;
+    supportsTrainingState?: boolean;
 }
 
 export interface CompetencyRelationshipView {

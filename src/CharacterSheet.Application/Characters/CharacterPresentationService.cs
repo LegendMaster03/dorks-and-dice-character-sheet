@@ -142,7 +142,15 @@ public sealed record CompetencyPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ArmorCheckPenaltyPresentationView? ArmorCheckPenalty = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Family = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Specialty = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? SupportsRanks = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? SupportsClassSkillState = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? SupportsTrainingState = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
@@ -222,8 +230,8 @@ public sealed class CharacterPresentationService(
         try
         {
             var references = build.ProgressionEntries
-                .Select(value => new RulesCoreRuleReference(value.RuleConceptKey, value.Kind))
-                .Distinct()
+                .Select(value => value.RuleConceptKey)
+                .Distinct(StringComparer.Ordinal)
                 .ToArray();
             resolvedRules = await rulesCoreGateway.ResolveGlobalRulesAsync(references, cancellationToken);
         }
@@ -298,46 +306,20 @@ public static class CharacterPresentationProjector
     public static RulesCoreMechanicsBatchEvaluationRequest BuildSafeAutomaticEvaluations(
         RulesCoreMechanicsCatalogView catalog)
     {
-        var evaluations = new List<RulesCoreMechanicBatchEvaluationItemRequest>();
-        foreach (var mechanic in catalog.Mechanics)
-        {
-            if (!mechanic.IsAvailableUnderRuleset
-                || !mechanic.CanEvaluate
-                || mechanic.Competency is not null
-                || mechanic.Applicability.RequiredCapabilityKeys.Count > 0
-                || mechanic.BooleanRequirements.Count > 0
-                || mechanic.ContributorGroups.Count > 0)
-            {
-                continue;
-            }
-
-            var integers = new Dictionary<string, int>(StringComparer.Ordinal);
-            var canEvaluate = true;
-            foreach (var input in mechanic.Inputs)
-            {
-                if (input.DefaultInteger is int defaultInteger)
-                {
-                    integers[input.Key] = defaultInteger;
-                    continue;
-                }
-
-                if (input.Required)
-                {
-                    canEvaluate = false;
-                    break;
-                }
-            }
-
-            if (!canEvaluate)
-            {
-                continue;
-            }
-
-            evaluations.Add(new RulesCoreMechanicBatchEvaluationItemRequest(
+        var evaluations = catalog.Mechanics
+            .Where(mechanic =>
+                mechanic.IsAvailableUnderRuleset
+                && mechanic.CanEvaluate
+                && mechanic.Competency is null
+                && !mechanic.Applicability.RequiresCharacterState
+                && mechanic.Applicability.RequiredCapabilityKeys.Count == 0
+                && mechanic.BooleanRequirements.Count == 0
+                && mechanic.ContributorGroups.Count == 0
+                && mechanic.Inputs.Count == 0)
+            .Select(mechanic => new RulesCoreMechanicBatchEvaluationItemRequest(
                 mechanic.MechanicKey,
-                new RulesCoreMechanicEvaluationRequest(
-                    IntegerInputs: integers.Count == 0 ? null : integers)));
-        }
+                new RulesCoreMechanicEvaluationRequest()))
+            .ToArray();
 
         return new RulesCoreMechanicsBatchEvaluationRequest(evaluations);
     }
@@ -518,19 +500,12 @@ public static class CharacterPresentationProjector
             ArmorCheckPenalty: competency.ArmorCheckPenaltyApplies is bool applies
                 ? new ArmorCheckPenaltyPresentationView(applies)
                 : null,
-            Specialty: FormatSpecialty(competency),
+            Family: competency.FamilyName,
+            Specialty: competency.Specialty,
+            SupportsRanks: competency.SupportsRanks,
+            SupportsClassSkillState: competency.SupportsClassSkillState,
+            SupportsTrainingState: competency.SupportsTrainingState,
             SourceAttributions: MapAttributions(mechanic.SourceAttributions));
-    }
-
-    private static string? FormatSpecialty(RulesCoreCompetencyDefinitionView competency)
-    {
-        if (!string.IsNullOrWhiteSpace(competency.FamilyName)
-            && !string.IsNullOrWhiteSpace(competency.Specialty))
-        {
-            return $"{competency.FamilyName} ({competency.Specialty})";
-        }
-
-        return competency.Specialty ?? competency.FamilyName;
     }
 
     private static CompetencyRelationshipPresentationView? ProjectRelationship(
@@ -625,8 +600,8 @@ public static class CharacterPresentationProjector
                 $"{source.SourceCode} revision {source.SourceRevisionNumber}"
             }.Where(value => !string.IsNullOrWhiteSpace(value)));
         return new SourceAttributionPresentationView(
-            $"source:{source.PackageKey}:{source.SourceCode}:{source.SourceRevisionNumber}",
-            source.PackageDisplayName,
+            $"source:{source.WorkKey ?? source.PackageKey}:{source.SourceCode}:{source.SourceRevisionNumber}",
+            source.WorkDisplayName ?? source.PackageDisplayName,
             detail);
     }
 
