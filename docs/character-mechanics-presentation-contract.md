@@ -13,7 +13,7 @@ Character-owned state
     -> Character Sheet presentation
 ```
 
-The browser does not consume source-native Rules Core DTOs and does not reproduce D&D formulas. A missing projection or missing optional mechanic is rendered as unavailable or omitted. It is not inferred.
+The browser does not consume source-native Rules Core DTOs and does not reproduce D&D formulas. A missing projection or missing optional mechanic is rendered without inference. Value-oriented sheet surfaces remain present where practical and use `-` for an unavailable value rather than inventing `0`, `false`, or another game value.
 
 ## Responsibility model
 
@@ -166,7 +166,7 @@ The backend decides which values apply. Base Attack Bonus and Proficiency Bonus 
 - `supportsClassSkillState`;
 - `supportsTrainingState`.
 
-The three `supports...` fields and family/specialty metadata describe the normalized Rules Core competency contract. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend may display **Not configured**; it must not substitute `0`, `false`, or another inferred value.
+The three `supports...` fields and family/specialty metadata describe the normalized Rules Core competency contract. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend displays `-`; it must not substitute `0`, `false`, or another inferred value.
 
 Ranks, final modifiers, class-skill effects, trained-only rules, and Armor Check Penalty effects are backend/Rules Core responsibilities. The frontend displays supplied facts.
 
@@ -222,7 +222,7 @@ These fields are backend-calculated/display-only. A simple carried-weight model 
 
 ## Checks
 
-`CharacterCheckView` contains required `key` and `name`, plus optional display fields for ability, competency/tool, target, a backend-calculated modifier/result, and source attribution.
+`CharacterCheckView` contains required `key` and `name`, plus optional display fields for ability, competency/tool, target, a backend-calculated modifier/result, source attribution, and the display-only `supplemental` hint. The backend derives `supplemental` from generic Rules Core applicability; the frontend does not identify publishers or rule families by name.
 
 A check is a resolved presentation description. The browser does not select governing abilities or proficiencies.
 
@@ -235,7 +235,8 @@ A check is a resolved presentation description. The browser does not select gove
 - required `components: CharacterCheckView[]`;
 - optional backend-supplied `result`;
 - optional state;
-- optional source attribution.
+- optional source attribution;
+- optional display-only `supplemental` hint.
 
 Component count is arbitrary. A combined procedure result is supplied by the backend. The frontend does not add component results together or implement a source-specific procedure formula.
 
@@ -268,6 +269,8 @@ Recipe requirements, progress rules, success criteria, and results are backend/R
 `CharacterMechanicsView.sourceAttributions` is retained for projection-wide or rules-module attribution that legitimately applies across several Character mechanics. The sheet renders it once in a restrained Character-mechanics-level **Rules modules** surface. It is not intended to be a roll-up of every child mechanic source; when attribution applies only to a particular Ability, defense, action, component, procedure, or other mechanic, it belongs on that specific projection instead. The backend/integration layer should therefore avoid repeating the same attribution at both levels without a semantic reason.
 
 Attribution text is always preserved when supplied. The frontend validates `officialUrl` before rendering a link. The current presentation policy permits absolute HTTPS URLs only. Unsupported schemes such as `javascript:`, HTTP, relative URLs, and malformed values render attribution without a clickable link.
+
+Rules Core mechanics with generic `external-public-rules` applicability are projected as supplemental. In the Actions workflow, supplemental checks and procedures are collapsed by default so optional external modules do not dominate the ordinary Character Sheet. Any supplied presentation-required source attribution remains visible outside that collapsed disclosure, including creator credit and a required official-rules link. This behavior is driven by applicability and attribution metadata, not a Loot Tavern or publisher-specific frontend branch.
 
 External-rule integrations should identify the source and official creator/site where available without redistributing protected source prose, tables, recipes, books, files, artwork, or layouts.
 
@@ -318,7 +321,7 @@ The Character Sheet backend uses the Site's source-bound Tool-to-Tool delegation
 
 Advancement always preserves Character-owned occurrence identity, concept identity, persisted parent occurrence identity, and open-ended kind. The backend resolves display/source metadata by the stable concept key itself; it does not use advancement `kind` as a Rules Core `entityType` filter. An inaccessible or unresolved reference remains present as an unavailable occurrence. Progression is omitted because the current Character-owned model does not establish Class level, Prestige Class level, Position rank, tier, standing, or another progression value.
 
-Mechanics are capability- and input-driven. The current bridge projects accessible competency definitions, family/specialty and support metadata, effective `derive-parent` relationships, generalized check metadata, source attribution, and only values Rules Core can evaluate without any unmodeled Character/runtime/source input. Rules Core defaults are not treated as proof that missing Character state is configured. A competency whose Character inputs are not modeled is shown as `Not configured`, never zero. Base Ability inputs are not relabeled as effective Abilities.
+Mechanics are capability- and input-driven. The current bridge projects accessible competency definitions, family/specialty and support metadata, effective `derive-parent` relationships, generalized check metadata, source attribution, and only values Rules Core can evaluate without any unmodeled Character/runtime/source input. Rules Core defaults are not treated as proof that missing Character state is configured. A competency whose Character inputs are not modeled is shown as `-`, never zero. Base Ability inputs are not relabeled as effective Abilities.
 
 Rules Core failure degrades mechanics independently. The Character page continues to load its build, Inventory, and Notes state, and Character-owned advancement occurrences remain present even when Rules Core display metadata is unavailable.
 
