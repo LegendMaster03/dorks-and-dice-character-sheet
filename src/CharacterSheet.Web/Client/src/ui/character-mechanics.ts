@@ -14,6 +14,7 @@ export interface SourceAttributionView {
     detail?: string;
     officialUrl?: string;
     linkLabel?: string;
+    presentationRequired?: boolean;
 }
 
 export interface MechanicalContributionView {
