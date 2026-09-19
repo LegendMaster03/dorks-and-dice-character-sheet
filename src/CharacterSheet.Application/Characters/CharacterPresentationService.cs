@@ -652,6 +652,6 @@ public static class CharacterPresentationProjector
             source.WorkDisplayName ?? source.PackageDisplayName ?? source.ReferenceTitle ?? source.Provider,
             detail,
             source.ReferenceUri,
-            source.ReferenceLinkRequired ? "Official source" : "Reference");
+            source.ReferenceLinkRequired ? "Official rules" : "Reference");
     }
 }
