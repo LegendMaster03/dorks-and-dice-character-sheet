@@ -252,7 +252,7 @@ export function formatHealthTrack(track: HealthTrackView): string {
     }
     if (track.current !== undefined) return String(track.current);
     if (track.maximum !== undefined) return `Max ${track.maximum}`;
-    return "Available";
+    return "-";
 }
 
 export function hasMechanicalDetails(value: CalculatedMechanicalValueView): boolean {
