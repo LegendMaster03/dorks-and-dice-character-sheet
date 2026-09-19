@@ -638,7 +638,11 @@ public static class CharacterPresentationProjector
             " · ",
             new[]
             {
-                string.IsNullOrWhiteSpace(source.Provider) ? null : $"Rules by {source.Provider}",
+                string.IsNullOrWhiteSpace(source.Provider)
+                    ? null
+                    : source.PresentationRequired
+                        ? $"Rules by {source.Provider}"
+                        : source.Provider,
                 source.GameEdition,
                 source.PublicationDate?.ToString("yyyy-MM-dd"),
                 source.SourceCode is null
