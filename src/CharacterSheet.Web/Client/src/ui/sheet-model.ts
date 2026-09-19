@@ -200,7 +200,7 @@ export function getBaseAbilityScoreDisplay(
     }
     const input = getBaseAbilityScoreInput(builder, abilityKey);
     if (input === null) {
-        return { status: "unconfigured", value: "Not configured", detail: "Base Score", score: null };
+        return { status: "unconfigured", value: "-", detail: "Base Score", score: null };
     }
     return { status: "configured", value: String(input.score), detail: "Base Score", score: input.score };
 }

@@ -14,6 +14,7 @@ export interface SourceAttributionView {
     detail?: string;
     officialUrl?: string;
     linkLabel?: string;
+    presentationRequired?: boolean;
 }
 
 export interface MechanicalContributionView {
@@ -154,6 +155,7 @@ export interface CharacterCheckView {
     effectiveModifierOrResult?: CalculatedMechanicalValueView;
     target?: DisplayFieldView;
     sourceAttributions?: readonly SourceAttributionView[];
+    supplemental?: boolean;
 }
 
 export interface CharacterProcedureView {
@@ -163,6 +165,7 @@ export interface CharacterProcedureView {
     result?: DisplayFieldView;
     state?: DisplayFieldView;
     sourceAttributions?: readonly SourceAttributionView[];
+    supplemental?: boolean;
 }
 
 export interface ComponentMaterialView {

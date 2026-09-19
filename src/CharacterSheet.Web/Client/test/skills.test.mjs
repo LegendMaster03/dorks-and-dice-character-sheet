@@ -44,6 +44,17 @@ const competency = (key, label, formattedValue, extra = {}) => ({
 const standalone = value => ({ kind: "standalone", competency: value });
 const composite = (parent, components) => ({ kind: "composite", parent, components });
 
+test("missing competency data keeps the Skills surface and shows a neutral dash", () => {
+    for (const items of [null, []]) {
+        const card = renderSkillsCard(items);
+        assert.equal(byClass(card, "dd-skill-row--placeholder").length, 1);
+        assert.match(visibleText(card), /-/);
+        assert.doesNotMatch(
+            visibleText(card),
+            /Resolved competencies are not available|No competencies were supplied for this Character/);
+    }
+});
+
 test("standalone competency renders as one ordinary row", () => {
     const card = renderSkillsCard([standalone(competency("navigation", "Navigation", "+7"))]);
     assert.equal(byClass(card, "dd-skill-row--standalone").length, 1);

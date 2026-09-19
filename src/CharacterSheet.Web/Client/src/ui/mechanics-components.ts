@@ -36,7 +36,7 @@ export function renderSavingThrowsCard(saves: readonly SavingThrowView[] | undef
     const card = createSectionCard("Saving Throws", "dd-support-card dd-saving-throws-card");
     card.setAttribute("data-saving-throws-state", saves === undefined ? "unavailable" : "resolved");
     if (saves === undefined || saves.length === 0) {
-        card.append(createInlineState(saves === undefined ? "Saving throw mechanics are not available." : "No saving throw mechanics were supplied for this Character.", "neutral"));
+        card.append(renderUnavailableValue());
         return card;
     }
     const list = createElement("div", "dd-mechanic-list");
@@ -59,7 +59,7 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
     section.append(heading);
     if (mechanics === null) {
         section.setAttribute("data-combat-mechanics-state", "unavailable");
-        section.append(createInlineState("Combat mechanics are not available.", "neutral"));
+        section.append(renderUnavailableValue());
         return section;
     }
     const cells: HTMLElement[] = orderedDefenses(mechanics).map(value => renderMechanicalValue(value, true));
@@ -75,7 +75,7 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
         cells.push(cell);
     }
     cells.push(...(mechanics.combatFundamentals ?? []).map(value => renderMechanicalValue(value, true)));
-    if (cells.length === 0) section.append(createInlineState("No combat mechanics were supplied for this Character.", "neutral"));
+    if (cells.length === 0) section.append(renderUnavailableValue());
     else section.append(...cells);
     return section;
 }
@@ -83,10 +83,8 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
 export function renderMovementValues(values: readonly CalculatedMechanicalValueView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-movement-values");
     root.setAttribute("data-movement-state", values === undefined ? "unavailable" : "resolved");
-    if (values === undefined) {
-        root.append(createInlineState("Movement mechanics are not available.", "neutral"));
-    } else if (values.length === 0) {
-        root.append(createInlineState("No movement values were supplied for this Character.", "neutral"));
+    if (values === undefined || values.length === 0) {
+        root.append(renderUnavailableValue());
     } else {
         root.append(...values.map(value => renderMechanicalValue(value, true)));
     }
@@ -136,6 +134,12 @@ export function renderFacts(entries: readonly (readonly [string, string | undefi
     const list = createElement("dl", "dd-display-fields__list");
     for (const entry of entries) if (entry?.[1]?.trim()) appendDefinitionRow(list, entry[0], entry[1]);
     return list.children.length === 0 ? null : list;
+}
+
+function renderUnavailableValue(): HTMLElement {
+    const root = createElement("div", "dd-mechanic-value dd-mechanic-value--compact dd-mechanic-value--placeholder");
+    root.append(createElement("strong", "dd-mechanic-value__value", "-"));
+    return root;
 }
 
 function orderedDefenses(mechanics: CharacterMechanicsView): readonly CalculatedMechanicalValueView[] {

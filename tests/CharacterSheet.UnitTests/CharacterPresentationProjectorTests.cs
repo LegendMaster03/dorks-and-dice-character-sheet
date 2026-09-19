@@ -98,7 +98,7 @@ public sealed class CharacterPresentationProjectorTests
         Assert.NotNull(mechanics.Competencies);
         var entries = mechanics.Competencies.Entries;
         var specialized = Assert.Single(entries, value => value.Key == "skill.knowledge-planes");
-        Assert.Equal("Not configured", specialized.EffectiveValue);
+        Assert.Equal("-", specialized.EffectiveValue);
         Assert.Equal("Knowledge", specialized.Family);
         Assert.Equal("the planes", specialized.Specialty);
         Assert.Equal("intelligence", specialized.GoverningAbility);
@@ -187,6 +187,113 @@ public sealed class CharacterPresentationProjectorTests
             ["check.harvesting.assessment", "check.harvesting.carving"],
             procedure.Components.Select(value => value.Key).ToArray());
         Assert.Null(procedure.Result);
+    }
+
+    [Fact]
+    public void ExternalPublicRulesAreMarkedSupplementalAndKeepRequiredCreatorCredit()
+    {
+        var source = new RulesCoreMechanicSourceAttributionView(
+            null,
+            null,
+            "Fixture Publisher",
+            null,
+            null,
+            "fixture-public-rules",
+            "Fixture Public Rules",
+            "5e",
+            "public-release",
+            new DateOnly(2026, 9, 19),
+            "fixture-public-reference",
+            "Fixture public reference",
+            "https://example.test/public-rules",
+            true,
+            true);
+        var applicability = new RulesCoreMechanicApplicabilityView(
+            "external-public-rules",
+            true,
+            [],
+            null);
+        var assessment = Check("check.external.assessment", "External Assessment") with
+        {
+            Applicability = applicability,
+            SourceAttributions = [source]
+        };
+        var carving = Check("check.external.carving", "External Carving") with
+        {
+            Applicability = applicability,
+            SourceAttributions = [source]
+        };
+        var total = new RulesCoreMechanicView(
+            "check.external.total",
+            "check",
+            "External Procedure",
+            null,
+            true,
+            applicability,
+            "sum",
+            false,
+            [],
+            [new RulesCoreMechanicRelationshipView(
+                "check-composite.external",
+                "composite-check",
+                "check.external.total",
+                ["check.external.assessment", "check.external.carving"],
+                "sum",
+                "components-to-parent",
+                null,
+                true,
+                [])],
+            [],
+            null,
+            null,
+            [],
+            [source]);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(
+            Catalog(assessment, carving, total),
+            null);
+
+        Assert.All(mechanics.Checks!, check => Assert.True(check.Supplemental));
+        var procedure = Assert.Single(mechanics.Procedures!);
+        Assert.True(procedure.Supplemental);
+        var attribution = Assert.Single(procedure.SourceAttributions!);
+        Assert.Equal("Fixture Public Rules", attribution.Label);
+        Assert.Contains("Rules by Fixture Publisher", attribution.Detail ?? string.Empty);
+        Assert.Equal("https://example.test/public-rules", attribution.OfficialUrl);
+        Assert.Equal("Official rules", attribution.LinkLabel);
+        Assert.True(attribution.PresentationRequired);
+    }
+
+    [Fact]
+    public void UnevaluatedSavingThrowDefinitionsRemainVisibleWithDashValues()
+    {
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(
+            Catalog(
+                SavingThrow("save.fortitude", "Fortitude Save"),
+                SavingThrow("save.reflex", "Reflex Save"),
+                SavingThrow("save.will", "Will Save")),
+            null);
+
+        Assert.Collection(
+            mechanics.SavingThrows!,
+            save =>
+            {
+                Assert.Equal("save.fortitude", save.Key);
+                Assert.Equal("Fortitude Save", save.Label);
+                Assert.Equal("-", save.EffectiveValue);
+            },
+            save =>
+            {
+                Assert.Equal("save.reflex", save.Key);
+                Assert.Equal("Reflex Save", save.Label);
+                Assert.Equal("-", save.EffectiveValue);
+            },
+            save =>
+            {
+                Assert.Equal("save.will", save.Key);
+                Assert.Equal("Will Save", save.Label);
+                Assert.Equal("-", save.EffectiveValue);
+            });
     }
 
     [Fact]
@@ -338,6 +445,36 @@ public sealed class CharacterPresentationProjectorTests
             new RulesCoreMechanicCheckView(
                 new RulesCoreCheckAbilityView("rule-resolved", null, []),
                 new RulesCoreCheckCompetencyView("rule-resolved", ["skill"], null)),
+            null,
+            [],
+            []);
+
+    private static RulesCoreMechanicView SavingThrow(string mechanicKey, string displayName) =>
+        new(
+            mechanicKey,
+            "saving-throw",
+            displayName,
+            null,
+            true,
+            new RulesCoreMechanicApplicabilityView(
+                "character-capability",
+                true,
+                [mechanicKey],
+                null),
+            "sum",
+            true,
+            [new RulesCoreMechanicInputView(
+                "baseSave",
+                "integer",
+                "derived",
+                true,
+                true,
+                null,
+                null,
+                null)],
+            [],
+            [],
+            null,
             null,
             [],
             []);

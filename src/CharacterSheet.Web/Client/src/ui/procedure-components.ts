@@ -4,6 +4,7 @@ import type {
     DisplayFieldView,
     InventoryMechanicsView,
     ItemOccurrenceMechanicsView,
+    SourceAttributionView,
     SpellcastingProfileView
 } from "./character-mechanics.js";
 import { createElement, createInlineState } from "./components.js";
@@ -45,24 +46,77 @@ export function renderChecksAndProceduresPresentation(
         checks === undefined && procedures === undefined ? "unavailable" : "resolved");
 
     if (checks === undefined && procedures === undefined) {
-        root.append(createInlineState("Resolved checks and procedures are not available.", "neutral"));
+        root.append(createInlineState("-", "neutral"));
         return root;
     }
 
-    if (checks?.length) {
-        const group = createElement("div", "dd-check-procedure-presentation__checks");
-        group.append(...checks.map(renderCheck));
-        root.append(group);
+    const primaryChecks = (checks ?? []).filter(value => value.supplemental !== true);
+    const primaryProcedures = (procedures ?? []).filter(value => value.supplemental !== true);
+    const supplementalChecks = (checks ?? []).filter(value => value.supplemental === true);
+    const supplementalProcedures = (procedures ?? []).filter(value => value.supplemental === true);
+
+    appendCheckProcedureGroups(root, primaryChecks, primaryProcedures);
+
+    if (supplementalChecks.length > 0 || supplementalProcedures.length > 0) {
+        const sourceCredit = renderSourceAttributions(
+            collectSourceAttributions(supplementalChecks, supplementalProcedures),
+            true);
+        if (sourceCredit !== null) {
+            const credit = createElement("div", "dd-check-procedure-presentation__supplemental-credit");
+            credit.append(sourceCredit);
+            root.append(credit);
+        }
+
+        const disclosure = createElement("details", "dd-check-procedure-presentation__supplemental");
+        disclosure.append(createElement(
+            "summary",
+            "dd-check-procedure-presentation__supplemental-toggle",
+            "Supplemental checks & procedures"));
+        const body = createElement("div", "dd-check-procedure-presentation__supplemental-body");
+        appendCheckProcedureGroups(body, supplementalChecks, supplementalProcedures);
+        disclosure.append(body);
+        root.append(disclosure);
     }
-    if (procedures?.length) {
-        const group = createElement("div", "dd-check-procedure-presentation__procedures");
-        group.append(...procedures.map(renderProcedure));
-        root.append(group);
-    }
-    if (!(checks?.length || procedures?.length)) {
-        root.append(createInlineState("No standalone checks or procedures were supplied for this Character.", "neutral"));
+
+    if (primaryChecks.length === 0
+        && primaryProcedures.length === 0
+        && supplementalChecks.length === 0
+        && supplementalProcedures.length === 0) {
+        root.append(createInlineState("-", "neutral"));
     }
     return root;
+}
+
+function appendCheckProcedureGroups(
+    target: HTMLElement,
+    checks: readonly CharacterCheckView[],
+    procedures: readonly CharacterProcedureView[]
+): void {
+    if (checks.length > 0) {
+        const group = createElement("div", "dd-check-procedure-presentation__checks");
+        group.append(...checks.map(renderCheck));
+        target.append(group);
+    }
+    if (procedures.length > 0) {
+        const group = createElement("div", "dd-check-procedure-presentation__procedures");
+        group.append(...procedures.map(renderProcedure));
+        target.append(group);
+    }
+}
+
+function collectSourceAttributions(
+    checks: readonly CharacterCheckView[],
+    procedures: readonly CharacterProcedureView[]
+): readonly SourceAttributionView[] {
+    const byKey = new Map<string, SourceAttributionView>();
+    for (const source of [
+        ...checks.flatMap(value => value.sourceAttributions ?? []),
+        ...procedures.flatMap(value => value.sourceAttributions ?? [])
+    ]) {
+        if (source.presentationRequired !== true) continue;
+        if (!byKey.has(source.key)) byKey.set(source.key, source);
+    }
+    return [...byKey.values()];
 }
 
 export function renderItemOccurrenceMechanics(mechanics: ItemOccurrenceMechanicsView | undefined): HTMLElement | null {

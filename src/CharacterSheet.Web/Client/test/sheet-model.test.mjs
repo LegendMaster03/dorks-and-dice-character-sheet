@@ -188,7 +188,7 @@ test("persisted base score is displayed as a base input", () => {
 test("missing base score remains unconfigured instead of becoming ten", () => {
     const display = getBaseAbilityScoreDisplay(builder(), "dexterity");
     assert.equal(display.status, "unconfigured");
-    assert.equal(display.value, "Not configured");
+    assert.equal(display.value, "-");
     assert.equal(display.score, null);
     assert.notEqual(display.value, "10");
 });
@@ -274,7 +274,7 @@ test("ability UI does not invent effective-score or modifier calculations", () =
     assert.doesNotMatch(sheetSource, /effectiveScore/);
     assert.doesNotMatch(sheetModelSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
     assert.doesNotMatch(sheetSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
-    assert.match(sheetSource, /Modifier not available yet\./);
+    assert.match(sheetSource, /Modifier -/);
 });
 
 test("ability editor uses integer input without edition-specific min or max attributes", () => {

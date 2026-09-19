@@ -133,7 +133,7 @@ public sealed class CharacterPresentationWorkflowTests
             .GetProperty("competencies")
             .GetProperty("entries")[0];
         Assert.Equal("skill.hide", competency.GetProperty("key").GetString());
-        Assert.Equal("Not configured", competency.GetProperty("effectiveValue").GetString());
+        Assert.Equal("-", competency.GetProperty("effectiveValue").GetString());
         Assert.True(competency.GetProperty("supportsRanks").GetBoolean());
         Assert.True(competency.GetProperty("supportsClassSkillState").GetBoolean());
         Assert.False(competency.GetProperty("supportsTrainingState").GetBoolean());

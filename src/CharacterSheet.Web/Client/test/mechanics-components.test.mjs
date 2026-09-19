@@ -6,7 +6,7 @@ import {
     renderCombatMechanicsSummary,
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
-import { renderProcedure } from "../.test-dist/ui/procedure-components.js";
+import { renderChecksAndProceduresPresentation, renderProcedure } from "../.test-dist/ui/procedure-components.js";
 import { getSafeExternalSourceUrl, renderSourceAttributions } from "../.test-dist/ui/source-attribution.js";
 
 class FakeStyle {
@@ -155,6 +155,46 @@ test("procedure renderer accepts arbitrary component counts and displays only ba
     assert.match(visibleText(procedure), /Backend result/);
 });
 
+test("supplemental rule checks are collapsed while required creator credit remains visible", () => {
+    const attribution = {
+        key: "fixture-public",
+        label: "Fixture Public Rules",
+        detail: "Rules by Fixture Publisher · 5e · 2026-09-19",
+        officialUrl: "https://example.test/public-rules",
+        linkLabel: "Official rules",
+        presentationRequired: true
+    };
+    const rendered = renderChecksAndProceduresPresentation(
+        [
+            { key: "core", name: "Core Check" },
+            { key: "external", name: "External Check", supplemental: true, sourceAttributions: [attribution] }
+        ],
+        [{
+            key: "external-procedure",
+            name: "External Procedure",
+            components: [],
+            supplemental: true,
+            sourceAttributions: [attribution]
+        }]
+    );
+
+    const disclosure = byClass(rendered, "dd-check-procedure-presentation__supplemental")[0];
+    const credit = byClass(rendered, "dd-check-procedure-presentation__supplemental-credit")[0];
+    assert.ok(disclosure);
+    assert.equal(disclosure.tagName, "DETAILS");
+    assert.ok(credit);
+    assert.equal(walk(disclosure).includes(credit), false);
+    assert.match(visibleText(disclosure), /External Check/);
+    assert.match(visibleText(disclosure), /External Procedure/);
+    assert.doesNotMatch(visibleText(disclosure), /Core Check/);
+    assert.match(visibleText(credit), /Fixture Public Rules/);
+    assert.match(visibleText(credit), /Rules by Fixture Publisher/);
+    const links = byTag(credit, "a");
+    assert.equal(links.length, 1);
+    assert.equal(links[0].href, "https://example.test/public-rules");
+    assert.equal(links[0].textContent, "Official rules");
+});
+
 test("source attribution renders the official link supplied by data and has no source-specific assumption", async () => {
     const rendered = renderSourceAttributions([{
         key: "external", label: "External rules publisher",
@@ -167,7 +207,8 @@ test("source attribution renders the official link supplied by data and has no s
 
     const genericSource = await readFile(new URL("../src/ui/source-attribution.ts", import.meta.url), "utf8");
     const mechanicsSource = await readFile(new URL("../src/ui/mechanics-components.ts", import.meta.url), "utf8");
-    assert.doesNotMatch(genericSource + mechanicsSource, /Loot Tavern|Harvest Assessment|Carving/i);
+    const procedureSource = await readFile(new URL("../src/ui/procedure-components.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(genericSource + mechanicsSource + procedureSource, /Loot Tavern|Harvest Assessment|Carving/i);
 });
 
 

@@ -3,7 +3,7 @@ import {
     type CompetencyPresentationItem,
     type CompetencyView
 } from "./character-mechanics.js";
-import { createElement, createInlineState, createSectionCard } from "./components.js";
+import { createElement, createSectionCard } from "./components.js";
 import { renderSourceAttributions } from "./source-attribution.js";
 
 export function renderSkillsCard(items: readonly CompetencyPresentationItem[] | null): HTMLElement {
@@ -11,13 +11,13 @@ export function renderSkillsCard(items: readonly CompetencyPresentationItem[] | 
 
     if (items === null) {
         card.setAttribute("data-skills-state", "unavailable");
-        card.append(createInlineState("Resolved competencies are not available.", "neutral"));
+        card.append(renderUnavailableSkillValue());
         return card;
     }
 
     card.setAttribute("data-skills-state", "resolved");
     if (items.length === 0) {
-        card.append(createInlineState("No competencies were supplied for this Character.", "neutral"));
+        card.append(renderUnavailableSkillValue());
         return card;
     }
 
@@ -31,6 +31,14 @@ export function renderSkillsCard(items: readonly CompetencyPresentationItem[] | 
     });
     card.append(list);
     return card;
+}
+
+function renderUnavailableSkillValue(): HTMLElement {
+    const list = createElement("div", "dd-skill-list");
+    const row = createElement("div", "dd-skill-row dd-skill-row--placeholder");
+    row.append(createElement("span", "dd-skill-row__value", "-"));
+    list.append(row);
+    return list;
 }
 
 function renderCompositeCompetency(
@@ -109,19 +117,19 @@ function renderCompetencyDetails(competency: CompetencyView): HTMLElement {
         facts,
         "Ranks",
         competency.ranks === undefined
-            ? competency.supportsRanks === true ? "Not configured" : undefined
+            ? competency.supportsRanks === true ? "-" : undefined
             : String(competency.ranks));
     appendOptionalFact(facts, "Ability", competency.governingAbility);
     appendOptionalFact(
         facts,
         "Training",
-        competency.training ?? (competency.supportsTrainingState === true ? "Not configured" : undefined));
+        competency.training ?? (competency.supportsTrainingState === true ? "-" : undefined));
     appendOptionalFact(facts, "Family", competency.family);
     appendOptionalFact(facts, "Specialty", competency.specialty);
     if (competency.classSkill !== undefined) {
         appendOptionalFact(facts, "Class skill", competency.classSkill ? "Yes" : "No");
     } else if (competency.supportsClassSkillState === true) {
-        appendOptionalFact(facts, "Class skill", "Not configured");
+        appendOptionalFact(facts, "Class skill", "-");
     }
     if (competency.trainedOnly !== undefined) appendOptionalFact(facts, "Trained only", competency.trainedOnly ? "Yes" : "No");
     if (competency.armorCheckPenalty !== undefined) {
