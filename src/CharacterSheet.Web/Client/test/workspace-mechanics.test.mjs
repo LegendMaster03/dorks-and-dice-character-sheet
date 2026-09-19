@@ -452,11 +452,11 @@ test("workspace renders specialized, composite, independent, and unconfigured co
 
     const specialty = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
     assert.match(visibleText(specialty), /Knowledge \(the planes\)/);
-    assert.match(visibleText(specialty), /FamilyKnowledge/);
-    assert.match(visibleText(specialty), /Specialtythe planes/);
-    assert.match(visibleText(specialty), /RanksNot configured/);
-    assert.match(visibleText(specialty), /TrainingNot configured/);
-    assert.match(visibleText(specialty), /Class skillNot configured/);
+    assert.match(visibleText(specialty), /Family\s+Knowledge/);
+    assert.match(visibleText(specialty), /Specialty\s+the planes/);
+    assert.match(visibleText(specialty), /Ranks\s+Not configured/);
+    assert.match(visibleText(specialty), /Training\s+Not configured/);
+    assert.match(visibleText(specialty), /Class skill\s+Not configured/);
     assert.doesNotMatch(visibleText(specialty), /\b0\b/);
 
     for (const key of ["skill.perception", "skill.listen", "skill.spot"]) {
