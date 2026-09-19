@@ -26,6 +26,7 @@ import {
     RichSheetInitializationError,
     type CharacterSheetBootstrapResponse
 } from "./character-api.js";
+import { loadCharacterPresentation } from "./character-presentation-api.js";
 import {
     addCharacterNote,
     addInventoryItemOccurrence,
@@ -51,6 +52,7 @@ const appRoot: HTMLElement = root;
 const environment = resolveHostEnvironment(appRoot, window.location.pathname);
 const route = parseCharacterSheetRoute(environment.toolRoute);
 const initialState = createInitialState(route);
+let presentationRequestSequence = 0;
 ensureCharacterSheetStylesheet();
 
 function ensureCharacterSheetStylesheet(): void {
@@ -192,8 +194,8 @@ function renderWorkspace(
         forceReadOnly,
         state.sheetMode,
         state.guidedBuilder,
-        null,
-        null,
+        state.presentation.status === "ready" ? state.presentation.advancement : null,
+        state.presentation.status === "ready" ? state.presentation.mechanics : null,
         {
             structural: {
                 openChooser,
@@ -281,11 +283,27 @@ async function bootstrapCharacter(): Promise<void> {
         if (character?.hasRichSheet) {
             await Promise.all([
                 bootstrapBuild(character.characterId),
-                bootstrapRoutine(character.characterId)
+                bootstrapRoutine(character.characterId),
+                bootstrapPresentation(character.characterId)
             ]);
         }
     } catch (error) {
         application.dispatch({ type: "load-failed", message: errorMessage(error) });
+    }
+}
+
+async function bootstrapPresentation(characterId: string): Promise<void> {
+    const requestId = ++presentationRequestSequence;
+    application.dispatch({ type: "presentation-load-started", requestId });
+    try {
+        const presentation = await loadCharacterPresentation(environment, characterId);
+        application.dispatch({ type: "presentation-loaded", requestId, presentation });
+    } catch (error) {
+        application.dispatch({
+            type: "presentation-load-failed",
+            requestId,
+            message: errorMessage(error)
+        });
     }
 }
 
@@ -334,13 +352,13 @@ async function applyRoutineMutation(
     kind: "note-add" | "note-update" | "note-delete" | "inventory-add" | "inventory-delete",
     operation: () => ReturnType<typeof addCharacterNote>,
     entryId?: string
-): Promise<void> {
+): Promise<boolean> {
     const routine = application.getState().routine;
     if (routine.status !== "ready"
         || routine.state === null
         || routine.state.readOnly
         || routine.mutation !== null) {
-        return;
+        return false;
     }
 
     application.dispatch({ type: "routine-mutation-started", kind, entryId });
@@ -348,8 +366,10 @@ async function applyRoutineMutation(
         const next = await operation();
         application.dispatch({ type: "routine-mutation-succeeded", state: next });
         await resolveRoutineReferences(next);
+        return true;
     } catch (error) {
         application.dispatch({ type: "routine-mutation-failed", message: errorMessage(error) });
+        return false;
     }
 }
 
@@ -400,16 +420,20 @@ async function loadInventoryChooser(query: string): Promise<void> {
 }
 
 async function addInventoryItem(characterId: string, conceptKey: string): Promise<void> {
-    await applyRoutineMutation(
+    if (await applyRoutineMutation(
         "inventory-add",
-        () => addInventoryItemOccurrence(environment, characterId, conceptKey));
+        () => addInventoryItemOccurrence(environment, characterId, conceptKey))) {
+        await bootstrapPresentation(characterId);
+    }
 }
 
 async function removeInventoryItem(characterId: string, occurrenceId: string): Promise<void> {
-    await applyRoutineMutation(
+    if (await applyRoutineMutation(
         "inventory-delete",
         () => removeInventoryItemOccurrence(environment, characterId, occurrenceId),
-        occurrenceId);
+        occurrenceId)) {
+        await bootstrapPresentation(characterId);
+    }
 }
 
 async function bootstrapBuild(characterId: string): Promise<void> {
@@ -535,6 +559,7 @@ async function addFeat(characterId: string, conceptKey: string): Promise<void> {
         const build = await addCharacterFeatOccurrence(environment, characterId, conceptKey);
         application.dispatch({ type: "feat-saved", build });
         await resolveBuildReferences(build);
+        await bootstrapPresentation(characterId);
     } catch (error) {
         application.dispatch({ type: "feat-save-failed", message: errorMessage(error) });
     }
@@ -556,6 +581,7 @@ async function removeFeat(characterId: string, occurrenceId: string): Promise<vo
         const build = await removeCharacterFeatOccurrence(environment, characterId, occurrenceId);
         application.dispatch({ type: "feat-saved", build });
         await resolveBuildReferences(build);
+        await bootstrapPresentation(characterId);
     } catch (error) {
         application.dispatch({ type: "feat-save-failed", message: errorMessage(error) });
     }
@@ -577,6 +603,7 @@ async function saveChoice(
             classAdvancementEntryId);
         application.dispatch({ type: "selection-saved", build });
         await resolveBuildReferences(build);
+        await bootstrapPresentation(characterId);
     } catch (error) {
         application.dispatch({ type: "selection-save-failed", message: errorMessage(error) });
     }
@@ -593,6 +620,7 @@ async function clearChoice(characterId: string, target: CharacterBuilderChoice):
             classAdvancementEntryId);
         application.dispatch({ type: "selection-saved", build });
         await resolveBuildReferences(build);
+        await bootstrapPresentation(characterId);
     } catch (error) {
         application.dispatch({ type: "selection-save-failed", message: errorMessage(error) });
     }
@@ -608,6 +636,7 @@ async function saveBaseAbilityScore(
         const build = await setCharacterBaseAbilityScore(environment, characterId, abilityKey, score);
         application.dispatch({ type: "ability-saved", build });
         await resolveBuildReferences(build);
+        await bootstrapPresentation(characterId);
     } catch (error) {
         application.dispatch({ type: "ability-save-failed", abilityKey, message: errorMessage(error) });
     }
@@ -622,6 +651,7 @@ async function clearBaseAbilityScore(
         const build = await clearCharacterBaseAbilityScore(environment, characterId, abilityKey);
         application.dispatch({ type: "ability-saved", build });
         await resolveBuildReferences(build);
+        await bootstrapPresentation(characterId);
     } catch (error) {
         application.dispatch({ type: "ability-save-failed", abilityKey, message: errorMessage(error) });
     }
@@ -661,7 +691,8 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
         application.dispatch({ type: "character-loaded", character: initialized });
         await Promise.all([
             bootstrapBuild(initialized.characterId),
-            bootstrapRoutine(initialized.characterId)
+            bootstrapRoutine(initialized.characterId),
+            bootstrapPresentation(initialized.characterId)
         ]);
     } catch (error) {
         application.dispatch({ type: "load-failed", message: errorMessage(error) });

@@ -2,6 +2,7 @@ using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Hosting;
 using CharacterSheet.Application.Lifecycle;
 using CharacterSheet.Application.Persistence;
+using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Infrastructure.Hosting;
 using CharacterSheet.Infrastructure.Persistence;
@@ -52,6 +53,17 @@ builder.Services
         UseCookies = false
     });
 builder.Services
+    .AddHttpClient<IRulesCoreGateway, DelegatedRulesCoreGateway>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.BaseAddress = toolHostBaseUri;
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
+builder.Services
     .AddHttpClient<IToolLifecycleIntrospectionClient, DorksAndDiceToolLifecycleIntrospectionClient>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(3);
@@ -82,6 +94,7 @@ builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAcc
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterStateService>();
+builder.Services.AddScoped<CharacterPresentationService>();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -138,6 +151,7 @@ app.MapGet("/api", () => Results.Ok(new
 
 app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
 app.MapCharacterStateEndpoints();
+app.MapCharacterPresentationEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,

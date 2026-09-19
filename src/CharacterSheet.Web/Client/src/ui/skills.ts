@@ -90,7 +90,11 @@ function hasCompetencyDetails(competency: CompetencyView): boolean {
         || competency.classSkill !== undefined
         || competency.trainedOnly !== undefined
         || competency.armorCheckPenalty !== undefined
+        || competency.family !== undefined
         || competency.specialty !== undefined
+        || competency.supportsRanks === true
+        || competency.supportsClassSkillState === true
+        || competency.supportsTrainingState === true
         || (competency.breakdown?.length ?? 0) > 0
         || (competency.relatedValues?.length ?? 0) > 0
         || (competency.sourceAttributions?.length ?? 0) > 0;
@@ -101,11 +105,24 @@ function renderCompetencyDetails(competency: CompetencyView): HTMLElement {
     details.append(createElement("summary", "dd-skill-row__details-toggle", "Details"));
     const body = createElement("div", "dd-skill-row__details-body");
     const facts = createElement("dl", "dd-skill-details");
-    appendOptionalFact(facts, "Ranks", competency.ranks === undefined ? undefined : String(competency.ranks));
+    appendOptionalFact(
+        facts,
+        "Ranks",
+        competency.ranks === undefined
+            ? competency.supportsRanks === true ? "Not configured" : undefined
+            : String(competency.ranks));
     appendOptionalFact(facts, "Ability", competency.governingAbility);
-    appendOptionalFact(facts, "Training", competency.training);
+    appendOptionalFact(
+        facts,
+        "Training",
+        competency.training ?? (competency.supportsTrainingState === true ? "Not configured" : undefined));
+    appendOptionalFact(facts, "Family", competency.family);
     appendOptionalFact(facts, "Specialty", competency.specialty);
-    if (competency.classSkill !== undefined) appendOptionalFact(facts, "Class skill", competency.classSkill ? "Yes" : "No");
+    if (competency.classSkill !== undefined) {
+        appendOptionalFact(facts, "Class skill", competency.classSkill ? "Yes" : "No");
+    } else if (competency.supportsClassSkillState === true) {
+        appendOptionalFact(facts, "Class skill", "Not configured");
+    }
     if (competency.trainedOnly !== undefined) appendOptionalFact(facts, "Trained only", competency.trainedOnly ? "Yes" : "No");
     if (competency.armorCheckPenalty !== undefined) {
         appendOptionalFact(

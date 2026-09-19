@@ -4,6 +4,7 @@ import type {
     CharacterBuilderChoice
 } from "./builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "./character-api.js";
+import type { CharacterPresentationResponse } from "./character-presentation-api.js";
 import type { CharacterStateResponse } from "./character-state-api.js";
 import {
     loadingRuleReference,
@@ -99,11 +100,20 @@ export interface CharacterRoutineUiState {
     mutationError?: string;
 }
 
+export interface CharacterPresentationUiState {
+    status: "idle" | "loading" | "ready" | "error";
+    requestId: number;
+    advancement: CharacterPresentationResponse["advancement"] | null;
+    mechanics: CharacterPresentationResponse["mechanics"];
+    message?: string;
+}
+
 export interface CharacterSheetAppState {
     route: CharacterSheetRoute;
     screen: CharacterSheetScreen;
     builder: CharacterBuilderUiState;
     routine: CharacterRoutineUiState;
+    presentation: CharacterPresentationUiState;
     activeSheetSection: SheetSection;
     sheetMode: SheetMode;
     guidedBuilder: GuidedBuilderUiState;
@@ -155,6 +165,9 @@ export type CharacterSheetAction =
     | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
     | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
     | { type: "routine-mutation-failed"; message: string }
+    | { type: "presentation-load-started"; requestId: number }
+    | { type: "presentation-loaded"; requestId: number; presentation: CharacterPresentationResponse }
+    | { type: "presentation-load-failed"; requestId: number; message: string }
     | { type: "sheet-edit-entered" }
     | { type: "sheet-edit-exited" }
     | { type: "guided-builder-opened" }
@@ -182,6 +195,7 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
         screen,
         builder: createInitialBuilderState(),
         routine: createInitialRoutineState(),
+        presentation: createInitialPresentationState(),
         activeSheetSection: "actions",
         sheetMode: "view",
         guidedBuilder: createInitialGuidedBuilderState(),
@@ -196,6 +210,7 @@ export function reduceAppState(
     let screen = state.screen;
     let builder = state.builder;
     let routine = state.routine;
+    let presentation = state.presentation;
     let activeSheetSection = state.activeSheetSection;
     let sheetMode = state.sheetMode;
     let guidedBuilder = state.guidedBuilder;
@@ -204,6 +219,7 @@ export function reduceAppState(
         case "character-loaded":
             builder = createInitialBuilderState();
             routine = createInitialRoutineState();
+            presentation = createInitialPresentationState();
             activeSheetSection = "actions";
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
@@ -221,6 +237,7 @@ export function reduceAppState(
             screen = { kind: "error", message: action.message };
             builder = createInitialBuilderState();
             routine = createInitialRoutineState();
+            presentation = createInitialPresentationState();
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
             break;
@@ -596,6 +613,35 @@ export function reduceAppState(
                 mutationError: action.message
             };
             break;
+        case "presentation-load-started":
+            presentation = {
+                ...presentation,
+                status: "loading",
+                requestId: action.requestId,
+                message: undefined
+            };
+            break;
+        case "presentation-loaded":
+            if (presentation.requestId === action.requestId) {
+                presentation = {
+                    status: "ready",
+                    requestId: action.requestId,
+                    advancement: action.presentation.advancement,
+                    mechanics: action.presentation.mechanics
+                };
+            }
+            break;
+        case "presentation-load-failed":
+            if (presentation.requestId === action.requestId) {
+                presentation = {
+                    status: "error",
+                    requestId: action.requestId,
+                    advancement: null,
+                    mechanics: null,
+                    message: action.message
+                };
+            }
+            break;
         case "sheet-edit-entered":
             if (canEditStructuralConfiguration(screen, builder)) {
                 sheetMode = "edit";
@@ -670,10 +716,20 @@ export function reduceAppState(
         screen,
         builder,
         routine,
+        presentation,
         activeSheetSection,
         sheetMode,
         guidedBuilder,
         renderRevision: state.renderRevision + 1
+    };
+}
+
+function createInitialPresentationState(): CharacterPresentationUiState {
+    return {
+        status: "idle",
+        requestId: 0,
+        advancement: null,
+        mechanics: null
     };
 }
 

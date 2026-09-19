@@ -59,7 +59,48 @@ public sealed class DorksAndDiceToolHostAuthenticationClient(HttpClient httpClie
         }
 
         ValidateContext(context);
-        return context;
+        var delegationCapability = ReadOptionalSingleHeader(
+            response,
+            ToolHostAuthenticationHeaders.DelegationCapability);
+        var delegationPath = ReadOptionalSingleHeader(
+            response,
+            ToolHostAuthenticationHeaders.DelegationPath);
+        if ((delegationCapability is null) != (delegationPath is null))
+        {
+            throw new InvalidDataException(
+                "Tool Host delegation capability and path must be supplied together.");
+        }
+
+        if (delegationPath is not null
+            && !string.Equals(
+                delegationPath,
+                "/tool-host/character-sheet/api/delegate/{targetSlug}/upstream",
+                StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("Tool Host returned an unexpected delegation path.");
+        }
+
+        return context with
+        {
+            DelegationCapability = delegationCapability,
+            DelegationPath = delegationPath
+        };
+    }
+
+    private static string? ReadOptionalSingleHeader(HttpResponseMessage response, string name)
+    {
+        if (!response.Headers.TryGetValues(name, out var values))
+        {
+            return null;
+        }
+
+        var entries = values.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray();
+        if (entries.Length != 1)
+        {
+            throw new InvalidDataException($"Tool Host returned an invalid '{name}' header.");
+        }
+
+        return entries[0].Trim();
     }
 
     private static void ValidateContext(ToolHostAuthenticationContext context)
