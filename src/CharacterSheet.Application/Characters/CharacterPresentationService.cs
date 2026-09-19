@@ -177,7 +177,9 @@ public sealed record CharacterCheckPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     DisplayFieldPresentationView? Target = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool Supplemental = false);
 
 public sealed record CharacterProcedurePresentationView(
     string Key,
@@ -188,7 +190,9 @@ public sealed record CharacterProcedurePresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     DisplayFieldPresentationView? State = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool Supplemental = false);
 
 public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -279,7 +283,7 @@ public sealed class CharacterPresentationService(
 
 public static class CharacterPresentationProjector
 {
-    private const string Unconfigured = "Not configured";
+    private const string Unconfigured = "-";
 
     public static CharacterAdvancementPresentationView ProjectAdvancement(
         CharacterBuildView build,
@@ -482,7 +486,8 @@ public static class CharacterPresentationProjector
             parent.DisplayName,
             components,
             Result: result,
-            SourceAttributions: MapAttributions(parent.SourceAttributions));
+            SourceAttributions: MapAttributions(parent.SourceAttributions),
+            Supplemental: IsSupplementalMechanic(parent));
     }
 
     private static CompetencyPresentationView ProjectCompetency(
@@ -556,8 +561,15 @@ public static class CharacterPresentationProjector
                     $"{mechanic.MechanicKey}:result",
                     "Result",
                     evaluation.Value),
-            SourceAttributions: MapAttributions(mechanic.SourceAttributions));
+            SourceAttributions: MapAttributions(mechanic.SourceAttributions),
+            Supplemental: IsSupplementalMechanic(mechanic));
     }
+
+    private static bool IsSupplementalMechanic(RulesCoreMechanicView mechanic) =>
+        string.Equals(
+            mechanic.Applicability.Kind,
+            "external-public-rules",
+            StringComparison.Ordinal);
 
     private static string DescribeAbility(RulesCoreCheckAbilityView ability) =>
         ability.ResolutionKind switch
@@ -626,7 +638,7 @@ public static class CharacterPresentationProjector
             " · ",
             new[]
             {
-                source.Provider,
+                string.IsNullOrWhiteSpace(source.Provider) ? null : $"Rules by {source.Provider}",
                 source.GameEdition,
                 source.PublicationDate?.ToString("yyyy-MM-dd"),
                 source.SourceCode is null
