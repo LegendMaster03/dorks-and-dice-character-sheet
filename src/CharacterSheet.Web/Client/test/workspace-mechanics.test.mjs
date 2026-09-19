@@ -426,7 +426,11 @@ test("workspace renders specialized, composite, independent, and unconfigured co
                 mechanical("skill.move-silently", "Move Silently", "Not configured", { kind: "skill" }),
                 mechanical("skill.knowledge-planes", "Knowledge (the planes)", "Not configured", {
                     kind: "skill",
-                    specialty: "Knowledge (the planes)",
+                    family: "Knowledge",
+                    specialty: "the planes",
+                    supportsRanks: true,
+                    supportsClassSkillState: true,
+                    supportsTrainingState: true,
                     trainedOnly: true,
                     armorCheckPenalty: { applies: false }
                 }),
@@ -448,7 +452,11 @@ test("workspace renders specialized, composite, independent, and unconfigured co
 
     const specialty = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
     assert.match(visibleText(specialty), /Knowledge \(the planes\)/);
-    assert.match(visibleText(specialty), /Not configured/);
+    assert.match(visibleText(specialty), /FamilyKnowledge/);
+    assert.match(visibleText(specialty), /Specialtythe planes/);
+    assert.match(visibleText(specialty), /RanksNot configured/);
+    assert.match(visibleText(specialty), /TrainingNot configured/);
+    assert.match(visibleText(specialty), /Class skillNot configured/);
     assert.doesNotMatch(visibleText(specialty), /\b0\b/);
 
     for (const key of ["skill.perception", "skill.listen", "skill.spot"]) {

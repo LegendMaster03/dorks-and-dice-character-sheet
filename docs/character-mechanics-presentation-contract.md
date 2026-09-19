@@ -160,13 +160,19 @@ The backend decides which values apply. Base Attack Bonus and Proficiency Bonus 
 - `classSkill`;
 - `trainedOnly`;
 - `armorCheckPenalty`;
-- `specialty`.
+- `family`;
+- `specialty`;
+- `supportsRanks`;
+- `supportsClassSkillState`;
+- `supportsTrainingState`.
+
+The three `supports...` fields and family/specialty metadata describe the normalized Rules Core competency contract. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend may display **Not configured**; it must not substitute `0`, `false`, or another inferred value.
 
 Ranks, final modifiers, class-skill effects, trained-only rules, and Armor Check Penalty effects are backend/Rules Core responsibilities. The frontend displays supplied facts.
 
 ### Specialty competencies
 
-Specialized entries such as a named Craft specialty are represented by ordinary `CompetencyView` data, including `specialty` when useful. The frontend does not identify specialties by parsing competency names.
+Specialized entries such as a named Craft specialty are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. The frontend does not identify specialties or reconstruct families by parsing competency names.
 
 ### Composite relationships
 
@@ -310,9 +316,9 @@ Production now reads `GET /api/characters/{characterId}/presentation` and passes
 
 The Character Sheet backend uses the Site's source-bound Tool-to-Tool delegation capability to call Rules Core as the same authenticated Site user. Rules Core therefore continues applying that user's source grants. The bridge uses global effective rules only. A Character's Campaign associations never select a Campaign mechanics scope implicitly.
 
-Advancement always preserves Character-owned occurrence identity, concept identity, persisted parent occurrence identity, and open-ended kind. Accessible Rules Core catalog metadata supplies the display name and attribution. An inaccessible or unresolved reference remains present as an unavailable occurrence. Progression is omitted because the current Character-owned model does not establish Class level, Prestige Class level, Position rank, tier, standing, or another progression value.
+Advancement always preserves Character-owned occurrence identity, concept identity, persisted parent occurrence identity, and open-ended kind. The backend resolves display/source metadata by the stable concept key itself; it does not use advancement `kind` as a Rules Core `entityType` filter. An inaccessible or unresolved reference remains present as an unavailable occurrence. Progression is omitted because the current Character-owned model does not establish Class level, Prestige Class level, Position rank, tier, standing, or another progression value.
 
-Mechanics are capability- and input-driven. The current bridge projects accessible competency definitions, specialized competency metadata, effective `derive-parent` relationships, generalized check metadata, source attribution, and any values Rules Core can safely evaluate without missing Character/runtime/source inputs. A competency whose Character inputs are not modeled is shown as `Not configured`, never zero. Base Ability inputs are not relabeled as effective Abilities.
+Mechanics are capability- and input-driven. The current bridge projects accessible competency definitions, family/specialty and support metadata, effective `derive-parent` relationships, generalized check metadata, source attribution, and only values Rules Core can evaluate without any unmodeled Character/runtime/source input. Rules Core defaults are not treated as proof that missing Character state is configured. A competency whose Character inputs are not modeled is shown as `Not configured`, never zero. Base Ability inputs are not relabeled as effective Abilities.
 
 Rules Core failure degrades mechanics independently. The Character page continues to load its build, Inventory, and Notes state, and Character-owned advancement occurrences remain present even when Rules Core display metadata is unavailable.
 
