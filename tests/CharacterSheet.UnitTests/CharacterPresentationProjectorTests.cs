@@ -99,8 +99,12 @@ public sealed class CharacterPresentationProjectorTests
         var entries = mechanics.Competencies.Entries;
         var specialized = Assert.Single(entries, value => value.Key == "skill.knowledge-planes");
         Assert.Equal("Not configured", specialized.EffectiveValue);
-        Assert.Equal("Knowledge (the planes)", specialized.Specialty);
+        Assert.Equal("Knowledge", specialized.Family);
+        Assert.Equal("the planes", specialized.Specialty);
         Assert.Equal("intelligence", specialized.GoverningAbility);
+        Assert.True(specialized.SupportsRanks);
+        Assert.True(specialized.SupportsClassSkillState);
+        Assert.True(specialized.SupportsTrainingState);
         Assert.True(specialized.TrainedOnly);
         Assert.True(specialized.ArmorCheckPenalty?.Applies);
         var relationship = Assert.Single(mechanics.Competencies.Relationships!);
@@ -110,6 +114,35 @@ public sealed class CharacterPresentationProjectorTests
             mechanics.Competencies.Relationships!,
             value => value.ParentKey == "skill.perception");
         Assert.Null(mechanics.AbilityValues);
+    }
+
+    [Fact]
+    public void AdvancementKindDoesNotNeedToMatchResolvedRuleEntityType()
+    {
+        var occurrenceId = Guid.NewGuid();
+        var build = Build(new CharacterAdvancementEntryView(
+            occurrenceId,
+            null,
+            "position",
+            "position.acquisitions-documancer",
+            null,
+            Now,
+            Now));
+        var resolved = new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal)
+        {
+            ["position.acquisitions-documancer"] = Rule(
+                "position.acquisitions-documancer",
+                "charoption",
+                "Documancer")
+        };
+
+        var projected = CharacterPresentationProjector.ProjectAdvancement(build, resolved);
+
+        var occurrence = Assert.Single(projected.Occurrences);
+        Assert.Equal(occurrenceId, occurrence.OccurrenceId);
+        Assert.Equal("position", occurrence.Kind);
+        Assert.Equal("position.acquisitions-documancer", occurrence.ConceptKey);
+        Assert.Equal("Documancer", occurrence.DisplayName);
     }
 
     [Fact]
@@ -196,6 +229,33 @@ public sealed class CharacterPresentationProjectorTests
             Applicability = mechanic.Applicability with { RequiredCapabilityKeys = [] }
         };
         request = CharacterPresentationProjector.BuildSafeAutomaticEvaluations(Catalog(noCapabilityButMissingInput));
+        Assert.Empty(request.Evaluations);
+
+        var defaultedCharacterState = new RulesCoreMechanicView(
+            "combat.defaulted-character-state",
+            "combat-value",
+            "Defaulted Character State",
+            null,
+            true,
+            new RulesCoreMechanicApplicabilityView("always", false, [], null),
+            "sum",
+            true,
+            [new RulesCoreMechanicInputView(
+                "otherModifier",
+                "integer",
+                "character-state",
+                false,
+                true,
+                0,
+                null,
+                null)],
+            [],
+            [],
+            null,
+            null,
+            [],
+            []);
+        request = CharacterPresentationProjector.BuildSafeAutomaticEvaluations(Catalog(defaultedCharacterState));
         Assert.Empty(request.Evaluations);
     }
 

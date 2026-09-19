@@ -134,6 +134,12 @@ public sealed class CharacterPresentationWorkflowTests
             .GetProperty("entries")[0];
         Assert.Equal("skill.hide", competency.GetProperty("key").GetString());
         Assert.Equal("Not configured", competency.GetProperty("effectiveValue").GetString());
+        Assert.True(competency.GetProperty("supportsRanks").GetBoolean());
+        Assert.True(competency.GetProperty("supportsClassSkillState").GetBoolean());
+        Assert.False(competency.GetProperty("supportsTrainingState").GetBoolean());
+        Assert.False(competency.TryGetProperty("ranks", out _));
+        Assert.False(competency.TryGetProperty("training", out _));
+        Assert.False(competency.TryGetProperty("classSkill", out _));
         Assert.False(json.RootElement.GetProperty("mechanics").TryGetProperty("abilityValues", out _));
     }
 
@@ -241,12 +247,12 @@ public sealed class CharacterPresentationWorkflowTests
             new("global", null, 1, DateTimeOffset.UtcNow, []);
 
         public Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
-            IReadOnlyCollection<RulesCoreRuleReference> references,
+            IReadOnlyCollection<string> conceptKeys,
             CancellationToken cancellationToken = default)
         {
             if (Throw) throw new RulesCoreGatewayException("test outage");
             IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView> result = ResolvedRules
-                .Where(value => references.Any(reference => reference.ConceptKey == value.Key))
+                .Where(value => conceptKeys.Contains(value.Key, StringComparer.Ordinal))
                 .ToDictionary(StringComparer.Ordinal);
             return Task.FromResult(result);
         }
