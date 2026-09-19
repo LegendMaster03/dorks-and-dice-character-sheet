@@ -1066,7 +1066,7 @@ function legacyAdvancementHeaderSummary(
 ): { value: string; detail?: string } {
     const values = [...new Set([startingClass, subclass].map(value => value.trim()).filter(Boolean))];
     return {
-        value: values[0] ?? "Not configured",
+        value: values[0] ?? "-",
         detail: values.length > 1 ? values.slice(1).join(" • ") : undefined
     };
 }
