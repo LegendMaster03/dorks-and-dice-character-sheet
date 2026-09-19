@@ -113,6 +113,7 @@ function collectSourceAttributions(
         ...checks.flatMap(value => value.sourceAttributions ?? []),
         ...procedures.flatMap(value => value.sourceAttributions ?? [])
     ]) {
+        if (source.presentationRequired !== true) continue;
         if (!byKey.has(source.key)) byKey.set(source.key, source);
     }
     return [...byKey.values()];
