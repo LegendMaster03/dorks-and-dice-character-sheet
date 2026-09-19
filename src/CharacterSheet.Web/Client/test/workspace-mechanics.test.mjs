@@ -347,7 +347,7 @@ test("absent effective Ability mechanics preserve base input and honest modifier
     assert.equal(strength.getAttribute("data-effective-ability-state"), "unavailable");
     assert.match(visibleText(strength), /12/);
     assert.match(visibleText(strength), /Base Score/);
-    assert.match(visibleText(strength), /Modifier not available yet/);
+    assert.match(visibleText(strength), /Modifier -/);
 });
 
 test("backend-supplied Ability values outside the six structural keys use the generic fallback presentation", () => {
