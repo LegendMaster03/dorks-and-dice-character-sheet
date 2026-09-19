@@ -14,59 +14,47 @@ public sealed class DelegatedRulesCoreGateway(
     : IRulesCoreGateway
 {
     private const string TargetSlug = "rules-core";
-    private const int RulePageSize = 200;
-    private const int MaximumRuleCatalogCalls = 28;
+    private const int MaximumRuleResolutionCalls = 28;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
-        IReadOnlyCollection<RulesCoreRuleReference> references,
+        IReadOnlyCollection<string> conceptKeys,
         CancellationToken cancellationToken = default)
     {
-        var unresolved = references
-            .Where(value => !string.IsNullOrWhiteSpace(value.ConceptKey)
-                && !string.IsNullOrWhiteSpace(value.EntityType))
-            .Distinct()
-            .GroupBy(value => value.EntityType, StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(value => value.ConceptKey).ToHashSet(StringComparer.Ordinal),
-                StringComparer.Ordinal);
+        var requested = conceptKeys
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(value => value, StringComparer.Ordinal)
+            .ToArray();
         var resolved = new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal);
-        var calls = 0;
 
-        foreach (var group in unresolved.OrderBy(value => value.Key, StringComparer.Ordinal))
+        foreach (var conceptKey in requested.Take(MaximumRuleResolutionCalls))
         {
-            var offset = 0;
-            while (group.Value.Count > 0 && calls < MaximumRuleCatalogCalls)
+            var rule = await SendOptionalRuleJsonAsync<RulesCoreResolvedRuleSummaryView>(
+                HttpMethod.Get,
+                $"/api/rules/{Uri.EscapeDataString(conceptKey)}",
+                cancellationToken);
+            if (rule is null)
             {
-                var path = $"/api/rules?entityType={Uri.EscapeDataString(group.Key)}&limit={RulePageSize}&offset={offset}";
-                var page = await SendJsonAsync<RulesCoreResolvedRulesCatalogView>(
-                    HttpMethod.Get,
-                    path,
-                    content: null,
-                    cancellationToken);
-                calls++;
-
-                foreach (var rule in page.Rules)
-                {
-                    if (group.Value.Remove(rule.ConceptKey))
-                    {
-                        resolved[rule.ConceptKey] = rule;
-                    }
-                }
-
-                offset += page.Rules.Count;
-                if (page.Rules.Count == 0 || offset >= page.TotalCount)
-                {
-                    break;
-                }
+                continue;
             }
+
+            if (!string.Equals(rule.ConceptKey, conceptKey, StringComparison.Ordinal))
+            {
+                logger.LogWarning(
+                    "Rules Core resolved concept {RequestedConceptKey} as a different stable concept key; the advancement reference remains unavailable.",
+                    conceptKey);
+                continue;
+            }
+
+            resolved[conceptKey] = rule;
         }
 
-        if (unresolved.Values.Any(value => value.Count > 0) && calls >= MaximumRuleCatalogCalls)
+        if (requested.Length > MaximumRuleResolutionCalls)
         {
             logger.LogWarning(
-                "Rules Core advancement reference resolution reached the delegated request budget; unresolved references remain unavailable.");
+                "Rules Core advancement resolution reached the delegated request budget; additional references remain unavailable.");
         }
 
         return resolved;
@@ -97,6 +85,36 @@ public sealed class DelegatedRulesCoreGateway(
         string targetPath,
         HttpContent? content,
         CancellationToken cancellationToken)
+        where T : class
+    {
+        var value = await SendJsonCoreAsync<T>(
+            method,
+            targetPath,
+            content,
+            allowUnavailableRule: false,
+            cancellationToken);
+        return value ?? throw new RulesCoreGatewayException("Rules Core returned an empty response.");
+    }
+
+    private Task<T?> SendOptionalRuleJsonAsync<T>(
+        HttpMethod method,
+        string targetPath,
+        CancellationToken cancellationToken)
+        where T : class =>
+        SendJsonCoreAsync<T>(
+            method,
+            targetPath,
+            content: null,
+            allowUnavailableRule: true,
+            cancellationToken);
+
+    private async Task<T?> SendJsonCoreAsync<T>(
+        HttpMethod method,
+        string targetPath,
+        HttpContent? content,
+        bool allowUnavailableRule,
+        CancellationToken cancellationToken)
+        where T : class
     {
         var (capability, delegationPrefix) = GetDelegation();
         using var request = new HttpRequestMessage(method, $"{delegationPrefix}{targetPath}")
@@ -114,14 +132,25 @@ public sealed class DelegatedRulesCoreGateway(
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        catch (HttpRequestException exception)
         {
             logger.LogWarning(exception, "Delegated Rules Core request failed before a response was received.");
+            throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
+        }
+        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Delegated Rules Core request timed out.");
             throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
         }
 
         using (response)
         {
+            if (allowUnavailableRule
+                && response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
+            {
+                return null;
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning(
@@ -135,9 +164,24 @@ public sealed class DelegatedRulesCoreGateway(
                 throw new RulesCoreGatewayException(message);
             }
 
-            var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
-            return value ?? throw new RulesCoreGatewayException(
-                "Rules Core returned an empty response.");
+            try
+            {
+                var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+                return value ?? throw new RulesCoreGatewayException(
+                    "Rules Core returned an empty response.");
+            }
+            catch (Exception exception) when (exception is JsonException
+                or NotSupportedException
+                or HttpRequestException)
+            {
+                logger.LogWarning(exception, "Rules Core returned an unreadable projection response.");
+                throw new RulesCoreGatewayException("Rules Core returned an invalid response.", exception);
+            }
+            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning(exception, "Rules Core response reading timed out.");
+                throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
+            }
         }
     }
 

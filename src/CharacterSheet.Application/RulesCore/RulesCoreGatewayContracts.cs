@@ -7,8 +7,6 @@ public sealed class RulesCoreGatewayException(string message, Exception? innerEx
 {
 }
 
-public sealed record RulesCoreRuleReference(string ConceptKey, string EntityType);
-
 public sealed record RulesCoreResolvedRuleSummaryView(
     string ConceptKey,
     string EntityType,
@@ -19,7 +17,9 @@ public sealed record RulesCoreResolvedRuleSummaryView(
     string PackageKey,
     string PackageDisplayName,
     string EditionKey,
-    string EditionDisplayName);
+    string EditionDisplayName,
+    string? WorkKey = null,
+    string? WorkDisplayName = null);
 
 public sealed record RulesCoreResolvedRulesCatalogView(
     int TotalCount,
@@ -191,7 +191,7 @@ public sealed record RulesCoreMechanicsBatchEvaluationView(
 public interface IRulesCoreGateway
 {
     Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
-        IReadOnlyCollection<RulesCoreRuleReference> references,
+        IReadOnlyCollection<string> conceptKeys,
         CancellationToken cancellationToken = default);
 
     Task<RulesCoreMechanicsCatalogView> GetGlobalMechanicsAsync(
