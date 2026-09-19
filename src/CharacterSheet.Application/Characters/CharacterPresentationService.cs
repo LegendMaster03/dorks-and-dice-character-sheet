@@ -393,10 +393,6 @@ public static class CharacterPresentationProjector
             .Cast<CharacterProcedurePresentationView>()
             .ToArray();
 
-        var evaluated = catalog.Mechanics
-            .Where(value => evaluationByKey.ContainsKey(value.MechanicKey))
-            .ToArray();
-
         var savingThrows = catalog.Mechanics
             .Where(value =>
                 value.IsAvailableUnderRuleset
@@ -412,34 +408,52 @@ public static class CharacterPresentationProjector
             })
             .ToArray();
 
-        var defenses = evaluated
-            .Where(value => string.Equals(value.Kind, "defense", StringComparison.Ordinal))
-            .Select(value => new DefensePresentationView(
-                value.MechanicKey,
-                value.DisplayName,
-                evaluationByKey[value.MechanicKey].Value,
-                SourceAttributions: MapAttributions(value.SourceAttributions)))
+        var defenses = catalog.Mechanics
+            .Where(value =>
+                value.IsAvailableUnderRuleset
+                && string.Equals(value.Kind, "defense", StringComparison.Ordinal))
+            .Select(value =>
+            {
+                evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
+                return new DefensePresentationView(
+                    value.MechanicKey,
+                    value.DisplayName,
+                    evaluation is null ? Unconfigured : (object)evaluation.Value,
+                    SourceAttributions: MapAttributions(value.SourceAttributions));
+            })
             .ToArray();
 
-        var combat = evaluated
-            .Where(value => string.Equals(value.Kind, "combat-value", StringComparison.Ordinal))
-            .Select(value => new CalculatedMechanicalValuePresentationView(
-                value.MechanicKey,
-                value.DisplayName,
-                evaluationByKey[value.MechanicKey].Value,
-                SourceAttributions: MapAttributions(value.SourceAttributions)))
+        var combat = catalog.Mechanics
+            .Where(value =>
+                value.IsAvailableUnderRuleset
+                && string.Equals(value.Kind, "combat-value", StringComparison.Ordinal))
+            .Select(value =>
+            {
+                evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
+                return new CalculatedMechanicalValuePresentationView(
+                    value.MechanicKey,
+                    value.DisplayName,
+                    evaluation is null ? Unconfigured : (object)evaluation.Value,
+                    SourceAttributions: MapAttributions(value.SourceAttributions));
+            })
             .ToArray();
 
-        var resources = evaluated
-            .Where(value => string.Equals(value.Kind, "resource", StringComparison.Ordinal))
-            .Select(value => new HealthTrackPresentationView(
-                value.MechanicKey,
-                value.DisplayName,
-                string.Equals(value.MechanicKey, "resource.nonlethal-damage", StringComparison.Ordinal)
-                    ? "nonlethal-damage"
-                    : "resource",
-                Current: evaluationByKey[value.MechanicKey].Value,
-                SourceAttributions: MapAttributions(value.SourceAttributions)))
+        var resources = catalog.Mechanics
+            .Where(value =>
+                value.IsAvailableUnderRuleset
+                && string.Equals(value.Kind, "resource", StringComparison.Ordinal))
+            .Select(value =>
+            {
+                evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
+                return new HealthTrackPresentationView(
+                    value.MechanicKey,
+                    value.DisplayName,
+                    string.Equals(value.MechanicKey, "resource.nonlethal-damage", StringComparison.Ordinal)
+                        ? "nonlethal-damage"
+                        : "resource",
+                    Current: evaluation is null ? Unconfigured : (object)evaluation.Value,
+                    SourceAttributions: MapAttributions(value.SourceAttributions));
+            })
             .ToArray();
 
         return new CharacterMechanicsPresentationView(
@@ -482,12 +496,12 @@ public static class CharacterPresentationProjector
             return null;
         }
 
-        var result = evaluationByKey.TryGetValue(parent.MechanicKey, out var evaluation)
-            ? new DisplayFieldPresentationView(
-                $"{parent.MechanicKey}:result",
-                "Result",
-                evaluation.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
-            : null;
+        var result = new DisplayFieldPresentationView(
+            $"{parent.MechanicKey}:result",
+            "Result",
+            evaluationByKey.TryGetValue(parent.MechanicKey, out var evaluation)
+                ? evaluation.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : Unconfigured);
 
         return new CharacterProcedurePresentationView(
             parent.MechanicKey,
@@ -563,12 +577,10 @@ public static class CharacterPresentationProjector
                 $"{mechanic.MechanicKey}:competency",
                 "Competency",
                 DescribeCompetency(check.Competency, competencyNameByConcept)),
-            EffectiveModifierOrResult: evaluation is null
-                ? null
-                : new CalculatedMechanicalValuePresentationView(
-                    $"{mechanic.MechanicKey}:result",
-                    "Result",
-                    evaluation.Value),
+            EffectiveModifierOrResult: new CalculatedMechanicalValuePresentationView(
+                $"{mechanic.MechanicKey}:result",
+                "Result",
+                evaluation is null ? Unconfigured : (object)evaluation.Value),
             SourceAttributions: MapAttributions(mechanic.SourceAttributions),
             Supplemental: IsSupplementalMechanic(mechanic));
     }
