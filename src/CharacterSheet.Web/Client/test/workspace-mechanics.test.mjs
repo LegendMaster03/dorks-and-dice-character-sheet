@@ -145,15 +145,13 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
 });
 
-test("null mechanics projection renders honest unavailable states rather than manufactured values", () => {
+test("null mechanics projection keeps normal surfaces and uses neutral dashes for missing values", () => {
     const rendered = render("actions", null);
     const text = visibleText(rendered);
-    assert.match(text, /Saving throw mechanics are not available/);
-    assert.match(text, /Resolved competencies are not available/);
-    assert.match(text, /Combat mechanics are not available/);
-    assert.match(text, /Movement mechanics are not available/);
+    assert.ok(byClass(rendered, "dd-mechanic-value--placeholder").length >= 2);
+    assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 1);
+    assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available/);
     assert.match(text, /Resolved actions and attacks are not available/);
-    assert.match(text, /Resolved checks and procedures are not available/);
     assert.doesNotMatch(text, /Fortitude|Armor Class 18|Base Attack Bonus \+6\/\+1/);
 });
 
@@ -421,10 +419,10 @@ test("workspace renders specialized, composite, independent, and unconfigured co
     const mechanics = {
         competencies: {
             entries: [
-                mechanical("skill.stealth", "Stealth", "Not configured", { kind: "skill" }),
-                mechanical("skill.hide", "Hide", "Not configured", { kind: "skill", governingAbility: "dexterity" }),
-                mechanical("skill.move-silently", "Move Silently", "Not configured", { kind: "skill" }),
-                mechanical("skill.knowledge-planes", "Knowledge (the planes)", "Not configured", {
+                mechanical("skill.stealth", "Stealth", "-", { kind: "skill" }),
+                mechanical("skill.hide", "Hide", "-", { kind: "skill", governingAbility: "dexterity" }),
+                mechanical("skill.move-silently", "Move Silently", "-", { kind: "skill" }),
+                mechanical("skill.knowledge-planes", "Knowledge (the planes)", "-", {
                     kind: "skill",
                     family: "Knowledge",
                     specialty: "the planes",
@@ -434,9 +432,9 @@ test("workspace renders specialized, composite, independent, and unconfigured co
                     trainedOnly: true,
                     armorCheckPenalty: { applies: false }
                 }),
-                mechanical("skill.perception", "Perception", "Not configured", { kind: "skill" }),
-                mechanical("skill.listen", "Listen", "Not configured", { kind: "skill" }),
-                mechanical("skill.spot", "Spot", "Not configured", { kind: "skill" })
+                mechanical("skill.perception", "Perception", "-", { kind: "skill" }),
+                mechanical("skill.listen", "Listen", "-", { kind: "skill" }),
+                mechanical("skill.spot", "Spot", "-", { kind: "skill" })
             ],
             relationships: [{
                 parentKey: "skill.stealth",
@@ -454,9 +452,9 @@ test("workspace renders specialized, composite, independent, and unconfigured co
     assert.match(visibleText(specialty), /Knowledge \(the planes\)/);
     assert.match(visibleText(specialty), /Family\s+Knowledge/);
     assert.match(visibleText(specialty), /Specialty\s+the planes/);
-    assert.match(visibleText(specialty), /Ranks\s+Not configured/);
-    assert.match(visibleText(specialty), /Training\s+Not configured/);
-    assert.match(visibleText(specialty), /Class skill\s+Not configured/);
+    assert.match(visibleText(specialty), /Ranks\s+-/);
+    assert.match(visibleText(specialty), /Training\s+-/);
+    assert.match(visibleText(specialty), /Class skill\s+-/);
     assert.doesNotMatch(visibleText(specialty), /\b0\b/);
 
     for (const key of ["skill.perception", "skill.listen", "skill.spot"]) {
