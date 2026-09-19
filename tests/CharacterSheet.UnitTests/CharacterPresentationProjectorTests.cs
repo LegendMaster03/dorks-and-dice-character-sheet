@@ -261,6 +261,7 @@ public sealed class CharacterPresentationProjectorTests
         Assert.Contains("Rules by Fixture Publisher", attribution.Detail ?? string.Empty);
         Assert.Equal("https://example.test/public-rules", attribution.OfficialUrl);
         Assert.Equal("Official rules", attribution.LinkLabel);
+        Assert.True(attribution.PresentationRequired);
     }
 
     [Fact]
