@@ -459,7 +459,7 @@ function renderAbilityScoreCard(
         card.append(
             createElement("p", "dd-stat__value", display.value),
             createElement("p", "dd-stat__detail", display.detail),
-            createElement("p", "dd-stat__modifier", "Modifier not available yet.")
+            createElement("p", "dd-stat__modifier", "Modifier -")
         );
     } else {
         card.setAttribute("data-effective-ability-key", effectiveValue.key);
@@ -482,7 +482,7 @@ function renderAbilityScoreCard(
             }
             card.append(related);
         } else {
-            card.append(createElement("p", "dd-stat__modifier", "Modifier not available yet."));
+            card.append(createElement("p", "dd-stat__modifier", "Modifier -"));
         }
 
         const details = renderAbilityMechanicalDetails(effectiveValue);
@@ -585,7 +585,7 @@ function createStatPlaceholder(definition: MechanicPlaceholderDefinition): HTMLE
     card.setAttribute("data-unimplemented-mechanic", definition.id);
     card.append(
         createElement("h3", "dd-stat__label", definition.label),
-        createElement("p", "dd-stat__value", "Not configured"),
+        createElement("p", "dd-stat__value", "-"),
         createElement("p", "dd-stat__detail", definition.message)
     );
     return card;
@@ -594,7 +594,7 @@ function createStatPlaceholder(definition: MechanicPlaceholderDefinition): HTMLE
 function renderPlaceholderCard(title: string, definitions: readonly MechanicPlaceholderDefinition[]): HTMLElement {
     const card = createSectionCard(title, "dd-support-card");
     for (const definition of definitions) {
-        card.append(createPlaceholder(definition.label, definition.message, true));
+        card.append(createPlaceholder(definition.label, "-", true));
     }
     return card;
 }
