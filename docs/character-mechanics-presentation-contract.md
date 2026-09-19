@@ -264,7 +264,7 @@ Recipe requirements, progress rules, success criteria, and results are backend/R
 
 ## Source attribution
 
-`SourceAttributionView` contains required `key` and `label`, plus optional detail, official URL, and link label.
+`SourceAttributionView` contains required `key` and `label`, plus optional detail, official URL, link label, and `presentationRequired`. The latter preserves Rules Core's compliance/presentation requirement rather than asking the frontend to infer importance from a publisher or work name.
 
 `CharacterMechanicsView.sourceAttributions` is retained for projection-wide or rules-module attribution that legitimately applies across several Character mechanics. The sheet renders it once in a restrained Character-mechanics-level **Rules modules** surface. It is not intended to be a roll-up of every child mechanic source; when attribution applies only to a particular Ability, defense, action, component, procedure, or other mechanic, it belongs on that specific projection instead. The backend/integration layer should therefore avoid repeating the same attribution at both levels without a semantic reason.
 
