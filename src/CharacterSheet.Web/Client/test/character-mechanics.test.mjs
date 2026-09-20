@@ -24,6 +24,7 @@ test("health tracks keep temporary hit points and nonlethal damage as independen
     assert.equal(formatHealthTrack(hp), "18 / 24");
     assert.equal(formatHealthTrack(temp), "4");
     assert.equal(formatHealthTrack(nonlethal), "7");
+    assert.equal(formatHealthTrack({ key: "unknown", label: "Unknown", role: "resource" }), "-");
     assert.notEqual(temp.role, nonlethal.role);
 });
 

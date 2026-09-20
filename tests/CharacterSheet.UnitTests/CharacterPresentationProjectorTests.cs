@@ -186,7 +186,13 @@ public sealed class CharacterPresentationProjectorTests
         Assert.Equal(
             ["check.harvesting.assessment", "check.harvesting.carving"],
             procedure.Components.Select(value => value.Key).ToArray());
-        Assert.Null(procedure.Result);
+        Assert.NotNull(procedure.Result);
+        Assert.Equal("-", procedure.Result.Value);
+        Assert.All(procedure.Components, component =>
+        {
+            Assert.NotNull(component.EffectiveModifierOrResult);
+            Assert.Equal("-", component.EffectiveModifierOrResult.EffectiveValue);
+        });
     }
 
     [Fact]
@@ -294,6 +300,36 @@ public sealed class CharacterPresentationProjectorTests
                 Assert.Equal("Will Save", save.Label);
                 Assert.Equal("-", save.EffectiveValue);
             });
+    }
+
+    [Fact]
+    public void UnevaluatedDefenseCombatAndResourceDefinitionsRemainVisibleWithDashValues()
+    {
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(
+            Catalog(
+                UnevaluatedMechanic("defense.ac.touch", "defense", "Touch Armor Class"),
+                UnevaluatedMechanic("defense.ac.flat-footed", "defense", "Flat-Footed Armor Class"),
+                UnevaluatedMechanic("defense.spell-resistance", "defense", "Spell Resistance"),
+                UnevaluatedMechanic("defense.damage-reduction", "defense", "Damage Reduction", "none", false),
+                UnevaluatedMechanic("combat.base-attack-bonus", "combat-value", "Base Attack Bonus"),
+                UnevaluatedMechanic("combat.grapple", "combat-value", "Grapple Modifier"),
+                UnevaluatedMechanic("resource.nonlethal-damage", "resource", "Nonlethal Damage")),
+            null);
+
+        Assert.Equal(
+            ["defense.ac.touch", "defense.ac.flat-footed", "defense.spell-resistance", "defense.damage-reduction"],
+            mechanics.Defenses!.Values.Select(value => value.Key).ToArray());
+        Assert.All(mechanics.Defenses.Values, value => Assert.Equal("-", value.EffectiveValue));
+
+        Assert.Equal(
+            ["combat.base-attack-bonus", "combat.grapple"],
+            mechanics.CombatFundamentals!.Select(value => value.Key).ToArray());
+        Assert.All(mechanics.CombatFundamentals, value => Assert.Equal("-", value.EffectiveValue));
+
+        var nonlethal = Assert.Single(mechanics.HealthTracks!);
+        Assert.Equal("resource.nonlethal-damage", nonlethal.Key);
+        Assert.Equal("nonlethal-damage", nonlethal.Role);
+        Assert.Equal("-", nonlethal.Current);
     }
 
     [Fact]
@@ -472,6 +508,33 @@ public sealed class CharacterPresentationProjectorTests
                 null,
                 null,
                 null)],
+            [],
+            [],
+            null,
+            null,
+            [],
+            []);
+
+    private static RulesCoreMechanicView UnevaluatedMechanic(
+        string mechanicKey,
+        string kind,
+        string displayName,
+        string evaluationKind = "sum",
+        bool canEvaluate = true) =>
+        new(
+            mechanicKey,
+            kind,
+            displayName,
+            null,
+            true,
+            new RulesCoreMechanicApplicabilityView(
+                "character-capability",
+                true,
+                [mechanicKey],
+                null),
+            evaluationKind,
+            canEvaluate,
+            [],
             [],
             [],
             null,

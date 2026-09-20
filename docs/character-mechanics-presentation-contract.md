@@ -122,7 +122,7 @@ The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six abi
 - optional `primaryKey`;
 - required `values: DefenseView[]`.
 
-`DefenseView` is a calculated value with an optional extensible presentation `role`. `primaryKey` controls visual ordering when present. The backend may supply only Armor Class, or Armor Class plus Touch, Flat-Footed, Damage Reduction, Spell Resistance, or future defenses. The frontend does not invent absent defenses.
+`DefenseView` is a calculated value with an optional extensible presentation `role`. `primaryKey` controls visual ordering when present. The backend may supply only Armor Class, or Armor Class plus Touch, Flat-Footed, Damage Reduction, Spell Resistance, or future defenses. When Rules Core supplies an applicable defense definition but Character-specific state is insufficient to evaluate it, the backend preserves the defense with `-` as its value. The frontend does not invent absent defenses.
 
 ## Health tracks
 
@@ -141,13 +141,13 @@ The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six abi
 
 Known role hints include hit points, temporary hit points, nonlethal damage, and resource. The frontend currently does not apply special calculation behavior based on these role strings, so future backend-supplied roles are permitted.
 
-Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged.
+Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged. A supplied health/resource track with no resolved current or maximum value renders as `-`; the frontend does not relabel unresolved state as `Available`.
 
 ## Combat fundamentals
 
 `CharacterMechanicsView.combatFundamentals` is an arbitrary list of calculated mechanical values. Examples include Base Attack Bonus, Grapple or another maneuver value, Initiative, Proficiency Bonus, or future rule-defined combat fundamentals.
 
-The backend decides which values apply. Base Attack Bonus and Proficiency Bonus are not equivalent and may coexist.
+The backend decides which values apply. Base Attack Bonus and Proficiency Bonus are not equivalent and may coexist. Applicable Rules Core combat-value definitions remain present with `-` until the Character backend can supply an authoritative evaluation.
 
 ## Competencies
 
@@ -224,7 +224,7 @@ These fields are backend-calculated/display-only. A simple carried-weight model 
 
 `CharacterCheckView` contains required `key` and `name`, plus optional display fields for ability, competency/tool, target, a backend-calculated modifier/result, source attribution, and the display-only `supplemental` hint. The backend derives `supplemental` from generic Rules Core applicability; the frontend does not identify publishers or rule families by name.
 
-A check is a resolved presentation description. The browser does not select governing abilities or proficiencies.
+A check is a Rules Core-backed presentation description. The browser does not select governing abilities or proficiencies. When its final modifier/result is unresolved, the backend supplies a `Result` value of `-` rather than omitting the result surface.
 
 ## Multi-part procedures
 
@@ -238,7 +238,7 @@ A check is a resolved presentation description. The browser does not select gove
 - optional source attribution;
 - optional display-only `supplemental` hint.
 
-Component count is arbitrary. A combined procedure result is supplied by the backend. The frontend does not add component results together or implement a source-specific procedure formula.
+Component count is arbitrary. A combined procedure result is supplied by the backend. When that result is unresolved, the backend supplies `Result -`. The frontend does not add component results together or implement a source-specific procedure formula.
 
 Standalone checks/procedures render in the Actions workflow area unless already nested under a more specific surface such as Inventory/Crafting.
 
