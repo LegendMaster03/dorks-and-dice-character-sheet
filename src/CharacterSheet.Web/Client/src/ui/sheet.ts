@@ -11,6 +11,7 @@ import {
     createCompactAdvancementSummary,
     type CharacterAdvancementView
 } from "./character-advancement.js";
+import { renderAdvancementDetails } from "./advancement.js";
 import {
     buildCompetencyPresentation,
     type CharacterMechanicsView
