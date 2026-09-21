@@ -479,6 +479,7 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
             ]
         },
         combatFundamentals: [
+            mechanical("combat.initiative", "Initiative", "+4"),
             mechanical("combat.base-attack-bonus", "Base Attack Bonus", "+6/+1"),
             mechanical("combat.grapple", "Grapple", "+9")
         ],
@@ -499,12 +500,16 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
         "defense.ac.flat-footed",
         "defense.spell-resistance",
         "defense.damage-reduction",
+        "combat.initiative",
         "combat.base-attack-bonus",
         "combat.grapple"
     ]) {
         assert.equal(byAttribute(rendered, "data-mechanic-key", key).length, 1, key);
     }
     assert.equal(byAttribute(rendered, "data-health-track-key", "resource.nonlethal-damage").length, 1);
+    const initiative = byAttribute(rendered, "data-mechanic-key", "combat.initiative")[0];
+    assert.ok(initiative);
+    assert.ok(byClass(rendered, "dd-stat--initiative").some(node => walk(node).includes(initiative)));
     assert.match(visibleText(rendered), /Touch Armor Class/);
     assert.match(visibleText(rendered), /Base Attack Bonus/);
     assert.match(visibleText(rendered), /Nonlethal Damage/);

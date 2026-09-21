@@ -499,10 +499,50 @@
 
 .dd-combat-summary {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--dd-sheet-space-2);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-3);
     padding: var(--dd-sheet-space-3);
     border-top: 3px solid var(--dd-sheet-accent);
+}
+
+.dd-combat-summary__group {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+}
+
+.dd-combat-summary__group--defense,
+.dd-combat-summary__group--saves {
+    grid-column: 1 / -1;
+}
+
+.dd-combat-summary__group-title {
+    margin: 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+.dd-combat-summary__grid {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+}
+
+.dd-combat-summary__grid--defense,
+.dd-combat-summary__grid--saves {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dd-combat-summary__grid--health,
+.dd-combat-summary__grid--combat {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dd-combat-summary--mechanics > .dd-mechanic-value--placeholder {
+    grid-column: 1 / -1;
 }
 
 .dd-build {
@@ -1892,8 +1932,18 @@
     .dd-action-list,
     .dd-spellcasting-profiles,
     .dd-check-procedure-presentation__checks,
-    .dd-procedure-card__checks {
+    .dd-procedure-card__checks,
+    .dd-combat-summary,
+    .dd-combat-summary__grid--defense,
+    .dd-combat-summary__grid--saves,
+    .dd-combat-summary__grid--health,
+    .dd-combat-summary__grid--combat {
         grid-template-columns: 1fr;
+    }
+
+    .dd-combat-summary__group--defense,
+    .dd-combat-summary__group--saves {
+        grid-column: auto;
     }
 
     .dd-mechanic-value__summary {
@@ -2035,8 +2085,8 @@
 
 /* Supplemental rule modules and neutral unavailable values */
 .dd-check-procedure-presentation__supplemental-credit {
-    padding-top: var(--dd-sheet-space-2);
-    border-top: 1px solid var(--dd-sheet-border);
+    padding-bottom: var(--dd-sheet-space-2);
+    border-bottom: 1px solid var(--dd-sheet-border);
 }
 
 .dd-check-procedure-presentation__supplemental-credit > .dd-source-attributions {

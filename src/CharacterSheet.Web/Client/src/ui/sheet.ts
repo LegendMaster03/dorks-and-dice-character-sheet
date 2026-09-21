@@ -23,12 +23,13 @@ import {
     type InventoryMechanicsView
 } from "./character-mechanics.js";
 import {
+    findInitiativeValue,
     renderActionsPresentation,
     renderCombatMechanicsSummary,
     renderFacts,
     renderMechanicalValue,
     renderMovementValues,
-    renderSavingThrowsCard
+    renderQuickMechanicalValue
 } from "./mechanics-components.js";
 import {
     renderChecksAndProceduresPresentation,
@@ -148,7 +149,6 @@ export function renderCharacterWorkspace(
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderSavingThrowsCard(mechanics?.savingThrows),
         renderPlaceholderCard("Passive Values", placeholders("passive-values")),
         renderPlaceholderCard("Proficiencies & Training", placeholders("training"))
     );
@@ -427,7 +427,13 @@ function renderCoreStats(
     movement.append(
         createElement("h3", "dd-stat__label", "Movement"),
         renderMovementValues(mechanics?.movement));
-    quickGrid.append(movement);
+
+    const initiative = createElement("article", "dd-stat dd-stat--initiative");
+    initiative.append(
+        createElement("h3", "dd-stat__label", "Initiative"),
+        renderQuickMechanicalValue(findInitiativeValue(mechanics?.combatFundamentals)));
+
+    quickGrid.append(movement, initiative);
     section.append(abilityGrid, quickGrid);
 
     const standardAbilityKeys = new Set(ABILITY_SCORE_DEFINITIONS.map(definition => definition.key));

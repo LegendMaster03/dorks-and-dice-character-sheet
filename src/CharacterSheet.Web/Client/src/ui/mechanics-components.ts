@@ -51,6 +51,28 @@ export function renderSavingThrowsCard(saves: readonly SavingThrowView[] | undef
     return card;
 }
 
+export function findInitiativeValue(
+    values: readonly CalculatedMechanicalValueView[] | undefined
+): CalculatedMechanicalValueView | undefined {
+    return values?.find(isInitiativeValue);
+}
+
+export function renderQuickMechanicalValue(
+    value: CalculatedMechanicalValueView | undefined
+): HTMLElement {
+    const root = createElement("div", "dd-quick-mechanic");
+    if (value === undefined) {
+        root.setAttribute("data-quick-mechanic-state", "unavailable");
+        root.append(createElement("p", "dd-stat__value", "-"));
+        return root;
+    }
+
+    root.setAttribute("data-quick-mechanic-state", "resolved");
+    root.setAttribute("data-mechanic-key", value.key);
+    root.append(createElement("p", "dd-stat__value", formatMechanicalValue(value)));
+    return root;
+}
+
 export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView | null): HTMLElement {
     const section = createElement("section", "dd-combat-summary dd-combat-summary--mechanics");
     section.setAttribute("aria-labelledby", "dd-combat-heading");
@@ -62,22 +84,97 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
         section.append(renderUnavailableValue());
         return section;
     }
-    const cells: HTMLElement[] = orderedDefenses(mechanics).map(value => renderMechanicalValue(value, true));
-    for (const track of mechanics.healthTracks ?? []) {
-        const cell = createElement("div", "dd-mechanic-value dd-mechanic-value--compact dd-health-track");
-        cell.setAttribute("data-health-track-key", track.key);
-        cell.setAttribute("data-health-track-role", track.role);
-        const head = createElement("div", "dd-mechanic-value__summary");
-        head.append(createElement("span", "dd-mechanic-value__label", track.label), createElement("strong", "dd-mechanic-value__value", formatHealthTrack(track)));
-        cell.append(head);
-        if (track.detail) cell.append(createElement("span", "dd-mechanic-value__meta", track.detail));
-        appendSources(cell, track.sourceAttributions);
-        cells.push(cell);
+
+    section.setAttribute("data-combat-mechanics-state", "resolved");
+    let groupCount = 0;
+
+    const defenses = orderedDefenses(mechanics);
+    if (defenses.length > 0) {
+        appendCombatGroup(
+            section,
+            "Defense",
+            "defense",
+            defenses.map(value => renderMechanicalValue(value, true)));
+        groupCount += 1;
     }
-    cells.push(...(mechanics.combatFundamentals ?? []).map(value => renderMechanicalValue(value, true)));
-    if (cells.length === 0) section.append(renderUnavailableValue());
-    else section.append(...cells);
+
+    if ((mechanics.savingThrows?.length ?? 0) > 0) {
+        appendCombatGroup(
+            section,
+            "Saving Throws",
+            "saves",
+            mechanics.savingThrows!.map(renderSavingThrowCell));
+        groupCount += 1;
+    }
+
+    if ((mechanics.healthTracks?.length ?? 0) > 0) {
+        appendCombatGroup(
+            section,
+            "Health",
+            "health",
+            mechanics.healthTracks!.map(renderHealthTrack));
+        groupCount += 1;
+    }
+
+    const initiative = findInitiativeValue(mechanics.combatFundamentals);
+    const combatValues = (mechanics.combatFundamentals ?? [])
+        .filter(value => value !== initiative);
+    if (combatValues.length > 0) {
+        appendCombatGroup(
+            section,
+            "Combat",
+            "combat",
+            combatValues.map(value => renderMechanicalValue(value, true)));
+        groupCount += 1;
+    }
+
+    if (groupCount === 0) section.append(renderUnavailableValue());
     return section;
+}
+
+function appendCombatGroup(
+    target: HTMLElement,
+    label: string,
+    role: "defense" | "saves" | "health" | "combat",
+    cells: readonly HTMLElement[]
+): void {
+    const group = createElement("section", `dd-combat-summary__group dd-combat-summary__group--${role}`);
+    group.setAttribute("data-combat-group", role);
+    group.append(createElement("h3", "dd-combat-summary__group-title", label));
+    const grid = createElement("div", `dd-combat-summary__grid dd-combat-summary__grid--${role}`);
+    grid.append(...cells);
+    group.append(grid);
+    target.append(group);
+}
+
+function renderSavingThrowCell(save: SavingThrowView): HTMLElement {
+    const item = createElement("div", "dd-saving-throw");
+    item.append(renderMechanicalValue(save, true));
+    const meta = renderFacts([["Ability", save.governingAbility], ["Training", save.training]]);
+    if (meta !== null) item.append(meta);
+    return item;
+}
+
+function renderHealthTrack(track: NonNullable<CharacterMechanicsView["healthTracks"]>[number]): HTMLElement {
+    const cell = createElement("div", "dd-mechanic-value dd-mechanic-value--compact dd-health-track");
+    cell.setAttribute("data-health-track-key", track.key);
+    cell.setAttribute("data-health-track-role", track.role);
+    const head = createElement("div", "dd-mechanic-value__summary");
+    head.append(
+        createElement("span", "dd-mechanic-value__label", track.label),
+        createElement("strong", "dd-mechanic-value__value", formatHealthTrack(track)));
+    cell.append(head);
+    if (track.detail) cell.append(createElement("span", "dd-mechanic-value__meta", track.detail));
+    appendSources(cell, track.sourceAttributions);
+    return cell;
+}
+
+function isInitiativeValue(value: CalculatedMechanicalValueView): boolean {
+    if (value.label.trim().toLowerCase() === "initiative") return true;
+    return value.key
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .includes("initiative");
 }
 
 export function renderMovementValues(values: readonly CalculatedMechanicalValueView[] | undefined): HTMLElement {
