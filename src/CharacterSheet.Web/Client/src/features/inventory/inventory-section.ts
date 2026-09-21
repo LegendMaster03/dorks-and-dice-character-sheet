@@ -60,8 +60,8 @@ export function renderInventorySection(
             "p",
             "dd-routine-empty",
             editable
-                ? "No item occurrences yet. Add an item from the Rules Core catalog."
-                : "No item occurrences have been recorded."));
+                ? "No items yet. Add one from the rule catalog."
+                : "No items have been added."));
     }
 
     const list = createElement("div", "dd-inventory-list");
@@ -94,7 +94,7 @@ export function renderInventorySection(
                     : "Remove",
                 "dd-button dd-button--ghost",
                 () => {
-                    if (window.confirm("Remove this item occurrence from the Character?")) {
+                    if (window.confirm("Remove this item from the Character?")) {
                         handlers.removeInventoryItem(occurrence.id);
                     }
                 },
@@ -128,8 +128,8 @@ function renderInventoryChooser(
     const input = createElement("input", "dd-rule-chooser__input");
     input.type = "search";
     input.value = chooser.query;
-    input.placeholder = "Search Rules Core items";
-    input.setAttribute("aria-label", "Search Rules Core items");
+    input.placeholder = "Search available items";
+    input.setAttribute("aria-label", "Search available items");
     const submit = createElement("button", "dd-button dd-button--secondary", "Search");
     submit.type = "submit";
     const close = createButton("Close", "dd-button dd-button--ghost", handlers.closeInventoryChooser);
@@ -141,15 +141,15 @@ function renderInventoryChooser(
     section.append(heading, search);
 
     if (chooser.status === "idle" || chooser.status === "loading") {
-        section.append(createInlineState("Loading Rules Core items…", "loading"));
+        section.append(createInlineState("Loading available items…", "loading"));
         return section;
     }
     if (chooser.status === "error") {
-        section.append(createInlineState(chooser.message ?? "Rules Core item search failed.", "error"));
+        section.append(createInlineState(chooser.message ?? "Item search failed.", "error"));
         return section;
     }
     if (chooser.results.length === 0) {
-        section.append(createElement("p", "dd-routine-empty", "No matching Rules Core items."));
+        section.append(createElement("p", "dd-routine-empty", "No matching items."));
         return section;
     }
 
