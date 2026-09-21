@@ -197,8 +197,8 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
 
     for (const label of [
         "Armor Class",
-        "Touch Armor Class",
-        "Flat-Footed Armor Class",
+        "Touch AC",
+        "Flat-Footed AC",
         "Damage Reduction",
         "Spell Resistance",
         "Fortitude Save",
@@ -588,7 +588,7 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
     const initiative = byAttribute(rendered, "data-mechanic-key", "combat.initiative")[0];
     assert.ok(initiative);
     assert.ok(byClass(rendered, "dd-stat--initiative").some(node => walk(node).includes(initiative)));
-    assert.match(visibleText(rendered), /Touch Armor Class/);
+    assert.match(visibleText(rendered), /Touch AC/);
     assert.match(visibleText(rendered), /Base Attack Bonus/);
     assert.match(visibleText(rendered), /Nonlethal Damage/);
 });
