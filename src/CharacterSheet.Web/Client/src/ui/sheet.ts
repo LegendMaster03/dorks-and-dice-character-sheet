@@ -173,9 +173,13 @@ export function renderCharacterWorkspace(
     const competencyPresentation = mechanics?.competencies === undefined
         ? null
         : buildCompetencyPresentation(mechanics.competencies);
-    mechanicsColumn.append(
+    const combatSummary = createElement("div", "dd-mechanics-summary-grid");
+    combatSummary.append(
         renderDefenseMechanicsCard(mechanics),
-        renderCombatFundamentalsCard(mechanics),
+        renderCombatFundamentalsCard(mechanics)
+    );
+    mechanicsColumn.append(
+        combatSummary,
         renderSkillsCard(competencyPresentation)
     );
 

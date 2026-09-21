@@ -243,6 +243,13 @@
 
 .dd-core-stats__quick {
     grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.35fr);
+    align-items: stretch;
+}
+
+.dd-core-stats__quick > .dd-stat:not(.dd-stat--armor-class) {
+    display: grid;
+    place-content: center;
+    min-height: 6.75rem;
 }
 
 .dd-stat {
@@ -552,6 +559,22 @@
     border-bottom: 1px solid var(--dd-sheet-border);
     font-size: 0.95rem;
     letter-spacing: 0.025em;
+}
+
+.dd-mechanics-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-3);
+    min-width: 0;
+}
+
+.dd-mechanics-summary-grid > .dd-sheet-card {
+    min-width: 0;
+}
+
+.dd-mechanics-summary-grid .dd-defense-card__grid,
+.dd-mechanics-summary-grid .dd-combat-fundamentals-card__grid {
+    grid-template-columns: 1fr;
 }
 
 .dd-support-scaffold__list {
@@ -1420,6 +1443,10 @@
     }
 
     .dd-core-stats__quick {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-mechanics-summary-grid {
         grid-template-columns: 1fr;
     }
 

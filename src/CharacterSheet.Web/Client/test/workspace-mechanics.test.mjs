@@ -196,6 +196,15 @@ test("workspace promotes Armor Class beside Movement and Initiative and removes 
     assert.match(visibleText(defense), /Spell Resistance/);
 });
 
+test("Defense and Combat share a compact summary row above Skills", () => {
+    const rendered = render("actions", null);
+    const summaries = byClass(rendered, "dd-mechanics-summary-grid");
+    assert.equal(summaries.length, 1);
+    assert.equal(byClass(summaries[0], "dd-defense-card").length, 1);
+    assert.equal(byClass(summaries[0], "dd-combat-fundamentals-card").length, 1);
+    assert.equal(byClass(rendered, "dd-skills-card").length, 1);
+});
+
 test("workspace keeps support, mechanics, and primary interaction as separate mockup columns", () => {
     const rendered = render("actions", null);
     assert.equal(byClass(rendered, "dd-sheet__support").length, 1);
