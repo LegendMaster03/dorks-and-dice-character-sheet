@@ -226,29 +226,24 @@
 
 .dd-core-stats {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(22rem, 1fr);
-    gap: var(--dd-sheet-space-3);
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-2);
     align-items: start;
-    padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) 0;
+    min-width: 0;
 }
 
 .dd-core-stats__abilities,
 .dd-core-stats__quick {
-    display: grid;
-    gap: var(--dd-sheet-space-2);
-    align-items: start;
-}
-
-.dd-core-stats__abilities {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.dd-core-stats__quick {
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr) minmax(0, 1.35fr);
-    align-items: start;
+    display: contents;
 }
 
 .dd-core-stats__quick > .dd-stat {
+    box-sizing: border-box;
+    block-size: 5.5rem;
+    min-height: 5.5rem;
+}
+
+.dd-sheet[data-sheet-mode="view"] .dd-core-stats .dd-stat {
     box-sizing: border-box;
     block-size: 5.5rem;
     min-height: 5.5rem;
@@ -300,10 +295,6 @@
     margin-top: 0;
 }
 
-.dd-movement-values--single {
-    grid-template-rows: 1fr;
-}
-
 .dd-movement-values__primary {
     display: grid;
     place-content: center;
@@ -337,7 +328,9 @@
 }
 
 .dd-movement-values__variants {
-    display: flex;
+    display: grid;
+    grid-auto-columns: minmax(2rem, 1fr);
+    grid-auto-flow: column;
     min-width: 0;
     overflow-x: auto;
     border-top: 1px solid var(--dd-sheet-border-strong);
@@ -346,11 +339,10 @@
 
 .dd-movement-values__variant {
     display: grid;
-    flex: 1 0 3.25rem;
     place-content: center;
     gap: 0.06rem;
     min-width: 0;
-    padding: 0.22rem 0.25rem;
+    padding: 0.2rem 0.15rem;
 }
 
 .dd-movement-values__variant + .dd-movement-values__variant {
@@ -359,7 +351,7 @@
 
 .dd-movement-values__variant-label {
     color: var(--dd-sheet-muted);
-    font-size: 0.48rem;
+    font-size: 0.43rem;
     font-weight: 800;
     line-height: 1;
     text-transform: uppercase;
@@ -429,27 +421,38 @@
     line-height: 1.15;
 }
 
-.dd-ability-stat__modifier {
+.dd-ability-stat__secondary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    border-top: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-ability-stat__modifier,
+.dd-ability-stat__save {
     display: grid;
     place-content: center;
     gap: 0.08rem;
     min-width: 0;
     padding: 0.28rem 0.2rem;
-    border-top: 1px solid var(--dd-sheet-border-strong);
 }
 
-.dd-ability-stat__modifier-label {
+.dd-ability-stat__save {
+    border-left: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-ability-stat__secondary-label {
     color: var(--dd-sheet-muted);
-    font-size: 0.52rem;
+    font-size: 0.5rem;
     font-weight: 800;
     letter-spacing: 0.025em;
     line-height: 1;
     text-transform: uppercase;
 }
 
-.dd-ability-stat__modifier-value {
+.dd-ability-stat__secondary-value {
     color: var(--dd-sheet-ink);
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     font-weight: 850;
     font-variant-numeric: tabular-nums;
     line-height: 1;
@@ -602,11 +605,38 @@
     line-height: 1.25;
 }
 
+.dd-sheet__dashboard {
+    display: grid;
+    grid-template-columns: minmax(21rem, 0.8fr) minmax(0, 3.2fr);
+    gap: var(--dd-sheet-space-3);
+    align-items: start;
+    padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
+}
+
+.dd-sheet__skills,
+.dd-sheet__stage {
+    min-width: 0;
+}
+
+.dd-sheet__stage {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    align-content: start;
+}
+
+.dd-sheet__top-row {
+    display: grid;
+    grid-template-columns: minmax(0, 9fr) minmax(18rem, 2.6fr);
+    gap: var(--dd-sheet-space-2);
+    align-items: stretch;
+    min-width: 0;
+}
+
 .dd-sheet__workspace {
     display: grid;
-    grid-template-columns: minmax(15rem, 0.72fr) minmax(22rem, 1.35fr) minmax(24rem, 1.45fr);
-    gap: var(--dd-sheet-space-4);
-    padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
+    grid-template-columns: minmax(14rem, 0.65fr) minmax(18rem, 0.8fr) minmax(32rem, 1.8fr);
+    gap: var(--dd-sheet-space-3);
+    min-width: 0;
 }
 
 .dd-sheet__support,
@@ -626,7 +656,7 @@
 
 .dd-skill-list {
     display: grid;
-    gap: var(--dd-sheet-space-2);
+    gap: 0.35rem;
 }
 
 .dd-skills-controls {
@@ -665,12 +695,12 @@
 
 .dd-skill-row {
     display: flex;
-    gap: var(--dd-sheet-space-2);
+    gap: 0.45rem;
     align-items: center;
     justify-content: space-between;
     min-width: 0;
-    min-height: 2.75rem;
-    padding: 0.6rem 0.7rem;
+    min-height: 2.25rem;
+    padding: 0.38rem 0.5rem;
     background: var(--dd-sheet-surface-muted);
 }
 
@@ -679,8 +709,31 @@
     border-radius: var(--dd-sheet-radius-sm);
 }
 
+.dd-skill-row__training {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 2.3rem;
+    min-width: 0;
+    min-height: 1.5rem;
+    padding: 0.12rem 0.2rem;
+    color: var(--dd-sheet-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 999px;
+    font-size: 0.52rem;
+    font-weight: 850;
+    letter-spacing: 0.025em;
+    line-height: 1;
+}
+
+.dd-skill-row__training--resolved {
+    color: var(--dd-sheet-ink);
+    border-color: var(--dd-sheet-border-strong);
+    background: var(--dd-sheet-surface);
+}
+
 .dd-skill-row__identity {
     display: grid;
+    flex: 1 1 auto;
     gap: 0.08rem;
     min-width: 0;
 }
@@ -807,6 +860,120 @@
 .dd-saving-throw .dd-mechanic-value__label {
     overflow-wrap: normal;
     word-break: normal;
+}
+
+.dd-health-quick {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    block-size: 5.5rem;
+    min-height: 5.5rem;
+    padding: 0.42rem 0.5rem 0.5rem;
+    overflow: visible;
+    text-align: left;
+}
+
+.dd-health-quick__header {
+    display: flex;
+    gap: var(--dd-sheet-space-2);
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.dd-health-quick__actions {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+.dd-health-quick .dd-health-editor {
+    margin-top: 0;
+}
+
+.dd-health-quick .dd-health-editor__summary,
+.dd-health-quick__details-toggle {
+    width: auto;
+    min-height: 1.5rem;
+    padding: 0.18rem 0.38rem;
+    color: var(--dd-sheet-accent-strong);
+    background: transparent;
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    cursor: pointer;
+    font-size: 0.58rem;
+    font-weight: 800;
+    line-height: 1;
+    list-style: none;
+}
+
+.dd-health-quick__details {
+    position: relative;
+}
+
+.dd-health-quick__details-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.dd-health-quick__details-popover {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.3rem);
+    right: 0;
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: min(20rem, calc(100vw - 3rem));
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface-raised);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    box-shadow: var(--dd-sheet-shadow);
+}
+
+.dd-health-quick__values {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    min-width: 0;
+    margin-top: 0.2rem;
+    overflow: hidden;
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-health-quick__field {
+    display: grid;
+    place-content: center;
+    gap: 0.08rem;
+    min-width: 0;
+    padding: 0.2rem 0.25rem;
+    text-align: center;
+}
+
+.dd-health-quick__field + .dd-health-quick__field {
+    border-left: 1px solid var(--dd-sheet-border);
+}
+
+.dd-health-quick__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.48rem;
+    font-weight: 800;
+    letter-spacing: 0.025em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.dd-health-quick__value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.78rem;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.dd-health-quick__field[data-health-quick-field="current"] .dd-health-quick__value,
+.dd-health-quick__field[data-health-quick-field="maximum"] .dd-health-quick__value {
+    font-size: 0.92rem;
 }
 
 .dd-health-card__primary,
@@ -973,17 +1140,18 @@
     line-height: 1;
 }
 
-.dd-health-rest-controls {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.dd-rest-controls,
+.dd-sheet-mode-bar__configuration {
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--dd-sheet-space-2);
-    margin-top: var(--dd-sheet-space-2);
+    align-items: center;
 }
 
-.dd-health-rest-button {
+.dd-rest-button {
     min-width: 0;
-    padding-inline: 0.45rem;
-    font-size: 0.7rem;
+    padding-inline: 0.65rem;
+    font-size: 0.72rem;
     white-space: nowrap;
 }
 
@@ -1462,9 +1630,10 @@
 }
 
 .dd-sheet-screen {
-    max-width: 72rem;
+    width: 100%;
+    max-width: 120rem;
     margin: 0 auto;
-    padding: var(--dd-sheet-space-5);
+    padding: clamp(0.75rem, 1.5vw, 1.5rem);
 }
 
 .dd-sheet-screen__panel,
@@ -1558,9 +1727,9 @@
 .dd-sheet-mode-bar {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--dd-sheet-space-2);
+    gap: var(--dd-sheet-space-3);
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     padding: 0.4rem var(--dd-sheet-space-5);
     background: var(--dd-sheet-surface);
     border-bottom: 1px solid var(--dd-sheet-border);
@@ -1669,6 +1838,22 @@
 }
 
 @media (max-width: 1099px) {
+    .dd-sheet__dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-sheet__skills {
+        order: 2;
+    }
+
+    .dd-sheet__stage {
+        order: 1;
+    }
+
+    .dd-sheet__top-row {
+        grid-template-columns: 1fr;
+    }
+
     .dd-sheet-header {
         grid-template-columns: 1fr;
         gap: var(--dd-sheet-space-3);
@@ -1680,14 +1865,6 @@
     }
 
     .dd-core-stats {
-        grid-template-columns: 1fr;
-    }
-
-    .dd-core-stats__abilities {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .dd-core-stats__quick {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
@@ -1777,12 +1954,8 @@
         padding: var(--dd-sheet-space-3) var(--dd-sheet-space-3) 0;
     }
 
-    .dd-core-stats__abilities {
+    .dd-core-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .dd-core-stats__quick {
-        grid-template-columns: 1fr;
     }
 
     .dd-mechanics-summary-grid {
@@ -1805,9 +1978,13 @@
         padding-left: calc(var(--dd-sheet-space-3) + 0.7rem);
     }
 
-    .dd-sheet__workspace {
+    .dd-sheet__dashboard {
         gap: var(--dd-sheet-space-3);
         padding: var(--dd-sheet-space-3);
+    }
+
+    .dd-sheet__workspace {
+        gap: var(--dd-sheet-space-3);
     }
 
     .dd-combat-summary {

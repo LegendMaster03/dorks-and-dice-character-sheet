@@ -20,7 +20,8 @@ import {
     formatMechanicalValue,
     type CalculatedMechanicalValueView,
     type CharacterMechanicsView,
-    type InventoryMechanicsView
+    type InventoryMechanicsView,
+    type SavingThrowView
 } from "./character-mechanics.js";
 import {
     findInitiativeValue,
@@ -29,11 +30,13 @@ import {
     renderCombatFundamentalsCard,
     renderDefenseMechanicsCard,
     renderFacts,
-    renderHealthMechanicsCard,
+    renderHealthQuickCard,
     renderSavingThrowsCard,
     renderMechanicalValue,
     renderMovementValues,
-    renderQuickMechanicalValue
+    renderQuickMechanicalValue,
+    renderRestControls,
+    type RestKind
 } from "./mechanics-components.js";
 import {
     renderChecksAndProceduresPresentation,
@@ -83,6 +86,7 @@ export interface RoutineCharacterHandlers {
     searchInventory(query: string): void;
     addInventoryItem(conceptKey: string): void;
     removeInventoryItem(occurrenceId: string): void;
+    rest?(kind: RestKind): void;
 }
 
 export interface FeatCharacterHandlers {
@@ -134,7 +138,11 @@ export function renderCharacterWorkspace(
         shell.append(renderAdvancementDetails(advancement));
     }
     if (editable) {
-        shell.append(renderModeControls(sheetMode, guidedBuilder, handlers));
+        shell.append(renderModeControls(
+            sheetMode,
+            guidedBuilder,
+            handlers,
+            routine.mutation?.kind === "health-update"));
     }
     if (readOnly) {
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
@@ -148,13 +156,22 @@ export function renderCharacterWorkspace(
     const mechanicsSources = renderCharacterMechanicsSources(mechanics);
     if (mechanicsSources !== null) shell.append(mechanicsSources);
 
-    shell.append(renderCoreStats(builder, structuralEditing, readOnly, mechanics, handlers.structural));
+    const competencyPresentation = mechanics?.competencies === undefined
+        ? null
+        : buildCompetencyPresentation(mechanics.competencies);
 
-    const workspace = createElement("div", "dd-sheet__workspace");
-    const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
-    support.setAttribute("aria-label", "Character supporting statistics");
-    support.append(
-        renderHealthMechanicsCard(mechanics, {
+    const dashboard = createElement("div", "dd-sheet__dashboard");
+
+    const skillsColumn = createElement("section", "dd-sheet__skills");
+    skillsColumn.setAttribute("aria-label", "Skills and competencies");
+    skillsColumn.append(renderSkillsCard(competencyPresentation));
+
+    const stage = createElement("div", "dd-sheet__stage");
+
+    const topRow = createElement("div", "dd-sheet__top-row");
+    topRow.append(
+        renderCoreStats(builder, structuralEditing, readOnly, mechanics, handlers.structural),
+        renderHealthQuickCard(mechanics, {
             currentHitPoints: routine.status === "ready"
                 && routine.state?.currentHitPoints !== null
                 ? routine.state?.currentHitPoints
@@ -162,26 +179,26 @@ export function renderCharacterWorkspace(
             readOnly: readOnly || routine.status !== "ready" || routine.state === null,
             saving: routine.mutation?.kind === "health-update",
             onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints
-        }),
+        })
+    );
+
+    const workspace = createElement("div", "dd-sheet__workspace");
+    const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
+    support.setAttribute("aria-label", "Character supporting statistics");
+    support.append(
         renderSavingThrowsCard(mechanics?.savingThrows),
         renderSupportScaffoldCard("Passive Values", []),
         renderSupportScaffoldCard("Proficiencies & Training", [])
     );
 
     const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
-    mechanicsColumn.setAttribute("aria-label", "Character mechanics and skills");
-    const competencyPresentation = mechanics?.competencies === undefined
-        ? null
-        : buildCompetencyPresentation(mechanics.competencies);
+    mechanicsColumn.setAttribute("aria-label", "Character combat mechanics");
     const combatSummary = createElement("div", "dd-mechanics-summary-grid");
     combatSummary.append(
         renderDefenseMechanicsCard(mechanics),
         renderCombatFundamentalsCard(mechanics)
     );
-    mechanicsColumn.append(
-        combatSummary,
-        renderSkillsCard(competencyPresentation)
-    );
+    mechanicsColumn.append(combatSummary);
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
@@ -202,14 +219,17 @@ export function renderCharacterWorkspace(
         handlers));
 
     workspace.append(support, mechanicsColumn, primary);
-    shell.append(workspace);
+    stage.append(topRow, workspace);
+    dashboard.append(skillsColumn, stage);
+    shell.append(dashboard);
     return shell;
 }
 
 function renderModeControls(
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    restSaving: boolean
 ): HTMLElement {
     const controls = createElement("div", "dd-sheet-mode-bar");
     controls.setAttribute("role", "group");
@@ -225,6 +245,12 @@ function renderModeControls(
         return controls;
     }
 
+    controls.append(renderRestControls(
+        false,
+        restSaving,
+        handlers.routine.rest));
+
+    const configuration = createElement("div", "dd-sheet-mode-bar__configuration");
     const editing = sheetMode === "edit";
     const editToggle = createButton(
         editing ? "Done Editing" : "Edit Character",
@@ -238,7 +264,8 @@ function renderModeControls(
         "dd-button dd-button--ghost",
         handlers.openGuidedBuilder);
     guided.setAttribute("data-sheet-mode-control", "guided");
-    controls.append(editToggle, guided);
+    configuration.append(editToggle, guided);
+    controls.append(configuration);
     return controls;
 }
 
@@ -438,7 +465,8 @@ function renderCoreStats(
             structuralEditing,
             readOnly,
             handlers,
-            findAbilityValue(mechanics?.abilityValues, definition.key)));
+            findAbilityValue(mechanics?.abilityValues, definition.key),
+            findAbilitySavingThrow(mechanics?.savingThrows, definition)));
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
@@ -473,7 +501,8 @@ function renderAbilityScoreCard(
     structuralEditing: boolean,
     readOnly: boolean,
     handlers: StructuralCharacterHandlers,
-    effectiveValue?: CalculatedMechanicalValueView
+    effectiveValue?: CalculatedMechanicalValueView,
+    savingThrow?: SavingThrowView
 ): HTMLElement {
     const display = getBaseAbilityScoreDisplay(builder, definition.key);
     const configured = display.status === "configured";
@@ -502,16 +531,30 @@ function renderAbilityScoreCard(
                 `Base input: ${display.value}`));
     }
 
+    const secondary = createElement("div", "dd-ability-stat__secondary");
+
     const modifier = findAbilityModifier(effectiveValue);
     const modifierRegion = createElement("div", "dd-ability-stat__modifier");
     modifierRegion.setAttribute("data-ability-modifier", definition.key);
     modifierRegion.append(
-        createElement("span", "dd-ability-stat__modifier-label", "Modifier"),
+        createElement("span", "dd-ability-stat__secondary-label", "Modifier"),
         createElement(
             "strong",
-            "dd-ability-stat__modifier-value",
+            "dd-ability-stat__secondary-value",
             modifier === undefined ? "-" : formatMechanicalValue(modifier)));
-    presentation.append(primary, modifierRegion);
+
+    const saveRegion = createElement("div", "dd-ability-stat__save");
+    saveRegion.setAttribute("data-ability-save", definition.key);
+    if (savingThrow !== undefined) saveRegion.setAttribute("data-saving-throw-key", savingThrow.key);
+    saveRegion.append(
+        createElement("span", "dd-ability-stat__secondary-label", "Save"),
+        createElement(
+            "strong",
+            "dd-ability-stat__secondary-value",
+            savingThrow === undefined ? "-" : formatMechanicalValue(savingThrow)));
+
+    secondary.append(modifierRegion, saveRegion);
+    presentation.append(primary, secondary);
     card.append(presentation);
 
     if (effectiveValue !== undefined) {
@@ -574,6 +617,22 @@ function findAbilityModifier(
     return value?.relatedValues?.find(related =>
         related.key.toLowerCase() === "modifier"
         || related.label.trim().toLowerCase() === "modifier");
+}
+
+function findAbilitySavingThrow(
+    saves: readonly SavingThrowView[] | undefined,
+    definition: AbilityScoreDefinition
+): SavingThrowView | undefined {
+    const abilityKey = definition.key.toLowerCase();
+    const abilityLabel = definition.label.trim().toLowerCase();
+    return saves?.find(save => {
+        const governing = save.governingAbility?.trim().toLowerCase();
+        if (governing === abilityKey || governing === abilityLabel) return true;
+
+        const key = save.key.trim().toLowerCase();
+        return key === `save.${abilityKey}`
+            || key === `saving-throw.${abilityKey}`;
+    });
 }
 
 function renderAbilityMechanicalDetails(value: CalculatedMechanicalValueView): HTMLElement | null {

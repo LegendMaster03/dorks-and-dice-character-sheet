@@ -114,6 +114,7 @@ function competencySearchText(item: CompetencyPresentationItem): string {
         .flatMap(value => [
             value.label,
             value.governingAbility,
+            value.training,
             value.family,
             value.specialty
         ])
@@ -146,6 +147,7 @@ function renderCompetencyRow(
     row.setAttribute("data-skill-role", relationship);
     if (competency.kind !== undefined) row.setAttribute("data-competency-kind", competency.kind);
 
+    const training = renderTrainingIndicator(competency);
     const identity = createElement("span", "dd-skill-row__identity");
     const name = createElement("span", "dd-skill-row__name", competency.label);
     if (labelId !== undefined) name.id = labelId;
@@ -158,8 +160,39 @@ function renderCompetencyRow(
     }
 
     const value = createElement("span", "dd-skill-row__value", formatMechanicalValue(competency));
-    row.append(identity, value);
+    row.append(training, identity, value);
     return row;
+}
+
+function renderTrainingIndicator(competency: CompetencyView): HTMLElement {
+    const training = competency.training?.trim();
+    if (training === undefined || training.length === 0) {
+        const unresolved = createElement(
+            "span",
+            "dd-skill-row__training dd-skill-row__training--unresolved",
+            "-");
+        unresolved.setAttribute("aria-label", `${competency.label} training unresolved`);
+        unresolved.title = "Training state is not resolved.";
+        unresolved.setAttribute("data-skill-training", "unresolved");
+        return unresolved;
+    }
+
+    const indicator = createElement(
+        "span",
+        "dd-skill-row__training dd-skill-row__training--resolved",
+        abbreviateTrainingState(training));
+    indicator.setAttribute("aria-label", `${competency.label} training: ${training}`);
+    indicator.title = training;
+    indicator.setAttribute("data-skill-training", training);
+    return indicator;
+}
+
+function abbreviateTrainingState(training: string): string {
+    const words = training.trim().split(/\s+/).filter(Boolean);
+    if (words.length > 1) {
+        return words.map(word => word[0] ?? "").join("").slice(0, 4).toUpperCase();
+    }
+    return training.slice(0, 4).toUpperCase();
 }
 
 function renderCompositeDetails(

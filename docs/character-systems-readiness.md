@@ -134,8 +134,8 @@ The existing general advancement primitive is therefore not exposed as a generic
 
 ### Rest actions
 
-The Character Sheet now reserves stable **Short Rest** and **Long Rest** controls on the Health card, but
-the buttons deliberately do not encode recovery rules. Rest duration, hit-point recovery, Hit Dice or
+The Character Sheet now reserves stable **Short Rest** and **Long Rest** controls in the top Character
+action bar beside the structural editing controls, but the buttons deliberately do not encode recovery rules. Rest duration, hit-point recovery, Hit Dice or
 other resource expenditure/recovery, spell-slot recovery, feature recharge, exhaustion interaction,
 and cross-edition differences all require an effective Rules Core rest/effect contract. Until that
 contract exists for the active rules context, the controls remain visible but disabled. This preserves

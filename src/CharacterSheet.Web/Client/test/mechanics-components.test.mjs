@@ -11,6 +11,7 @@ import {
     renderHealthMechanicsCard,
     renderMovementValues,
     renderQuickMechanicalValue,
+    renderRestControls,
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
 import { renderChecksAndProceduresPresentation, renderProcedure } from "../.test-dist/ui/procedure-components.js";
@@ -204,14 +205,21 @@ test("movement presentation promotes walking speed and keeps arbitrary alternate
     assert.match(visibleText(rendered), /Climb/);
 });
 
-test("movement presentation remains generic when no walking mode is supplied", () => {
+test("movement presentation keeps common modes visible without fabricating their values", () => {
     const rendered = renderMovementValues([
         mechanical("movement.burrow", "Burrow", "10 ft."),
         mechanical("movement.fly", "Fly", "40 ft.")
     ]);
-    assert.equal(byAttribute(rendered, "data-movement-primary", "movement.burrow").length, 1);
-    assert.match(visibleText(rendered), /Burrow/);
+    assert.equal(byAttribute(rendered, "data-movement-primary", "movement.walk").length, 1);
+    assert.equal(byAttribute(rendered, "data-movement-mode", "swim").length, 1);
+    assert.equal(byAttribute(rendered, "data-movement-mode", "climb").length, 1);
+    assert.equal(byAttribute(rendered, "data-movement-mode", "fly").length, 1);
+    assert.equal(byAttribute(rendered, "data-mechanic-key", "movement.burrow").length, 1);
+    assert.match(visibleText(rendered), /Walk/);
+    assert.match(visibleText(rendered), /Swim/);
+    assert.match(visibleText(rendered), /Climb/);
     assert.match(visibleText(rendered), /Fly/);
+    assert.match(visibleText(rendered), /Burrow/);
 });
 
 test("hit point adjustment reuses the combat tracker behavior without imposing a 5e zero floor", () => {
@@ -253,10 +261,8 @@ test("editable Hit Points card exposes direct and modifier controls while keepin
     assert.equal(saved.at(-1), -8);
 });
 
-test("rest controls are present without inventing rest mechanics", () => {
-    const rendered = renderHealthMechanicsCard(null, {
-        currentHitPoints: 10
-    });
+test("rest controls are independently renderable without inventing rest mechanics", () => {
+    const rendered = renderRestControls(false, false, undefined);
     const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
     const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
     assert.ok(shortRest);
@@ -268,10 +274,7 @@ test("rest controls are present without inventing rest mechanics", () => {
 
 test("rest controls emit only rest intent when a rules-backed handler is supplied", () => {
     const rests = [];
-    const rendered = renderHealthMechanicsCard(null, {
-        currentHitPoints: 10,
-        onRest: kind => rests.push(kind)
-    });
+    const rendered = renderRestControls(false, false, kind => rests.push(kind));
     const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
     const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
     assert.equal(shortRest.disabled, false);
