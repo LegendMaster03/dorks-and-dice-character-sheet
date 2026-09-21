@@ -1057,7 +1057,8 @@
 
 .dd-primary-nav__button {
     position: relative;
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-width: 6.5rem;
     min-height: 3rem;
     padding: 0.65rem 0.9rem;
     color: var(--dd-sheet-muted);
@@ -1093,6 +1094,17 @@
 
 .dd-primary-content__panel {
     padding: var(--dd-sheet-space-5);
+}
+
+.dd-action-list > .dd-inline-state,
+.dd-spellcasting-profiles > .dd-inline-state,
+.dd-check-procedure-presentation > .dd-inline-state {
+    display: grid;
+    place-content: center;
+    min-height: 2.5rem;
+    margin: 0;
+    text-align: center;
+    font-weight: 800;
 }
 
 .dd-primary-content__title {
@@ -1430,6 +1442,11 @@
 
     .dd-sheet-header__summary-item {
         padding: 0.55rem;
+    }
+
+    .dd-primary-nav__button {
+        flex: 0 0 auto;
+        min-width: 7rem;
     }
 
     .dd-readonly-banner {

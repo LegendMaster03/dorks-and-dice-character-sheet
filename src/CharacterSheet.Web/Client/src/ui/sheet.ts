@@ -639,18 +639,26 @@ function renderPrimaryContent(
     const card = createElement("section", "dd-primary-content");
     const nav = createElement("nav", "dd-primary-nav");
     nav.setAttribute("aria-label", "Character sheet sections");
+    nav.setAttribute("role", "tablist");
     for (const section of SHEET_SECTIONS) {
         const active = section.id === activeSection;
         const button = createButton(
             section.label,
             active ? "dd-primary-nav__button dd-primary-nav__button--active" : "dd-primary-nav__button",
             () => handlers.selectSection(section.id));
+        button.id = `dd-sheet-tab-${section.id}`;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        button.setAttribute("aria-controls", `dd-sheet-panel-${section.id}`);
         if (active) button.setAttribute("aria-current", "page");
         nav.append(button);
     }
 
     const definition = SHEET_SECTIONS.find(value => value.id === activeSection) ?? SHEET_SECTIONS[0];
     const panel = createElement("div", "dd-primary-content__panel");
+    panel.id = `dd-sheet-panel-${definition.id}`;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", `dd-sheet-tab-${definition.id}`);
     panel.setAttribute("data-sheet-section", definition.id);
     panel.append(createElement("h2", "dd-primary-content__title", definition.label));
     if (definition.id === "notes") {

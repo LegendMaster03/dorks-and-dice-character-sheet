@@ -121,6 +121,25 @@ function render(section, mechanics, currentRoutine = routine()) {
     );
 }
 
+test("primary sheet sections expose tab and tabpanel semantics", () => {
+    const rendered = render("actions", null);
+    const nav = byClass(rendered, "dd-primary-nav")[0];
+    assert.ok(nav);
+    assert.equal(nav.getAttribute("role"), "tablist");
+
+    const tabs = byClass(nav, "dd-primary-nav__button");
+    assert.equal(tabs.length, 5);
+    const selected = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0].id, "dd-sheet-tab-actions");
+    assert.equal(selected[0].getAttribute("role"), "tab");
+
+    const panel = byAttribute(rendered, "data-sheet-section", "actions")[0];
+    assert.ok(panel);
+    assert.equal(panel.getAttribute("role"), "tabpanel");
+    assert.equal(panel.getAttribute("aria-labelledby"), "dd-sheet-tab-actions");
+});
+
 test("workspace consumes supplied saving throws, competencies, combat, actions, movement, checks, and procedures", () => {
     const mechanics = {
         savingThrows: [mechanical("fort", "Fortitude", "+8")],
