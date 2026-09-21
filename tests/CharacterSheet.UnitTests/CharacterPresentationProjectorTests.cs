@@ -335,6 +335,23 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void MovementMechanicsProjectEveryBackendDefinedModeWithoutFrontendAssumptions()
+    {
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(
+            Catalog(
+                UnevaluatedMechanic("movement.walk", "movement", "Walk"),
+                UnevaluatedMechanic("movement.swim", "movement", "Swim"),
+                UnevaluatedMechanic("movement.climb", "movement", "Climb"),
+                UnevaluatedMechanic("movement.fly", "movement", "Fly")),
+            null);
+
+        Assert.Equal(
+            ["movement.walk", "movement.swim", "movement.climb", "movement.fly"],
+            mechanics.Movement!.Select(value => value.Key).ToArray());
+        Assert.All(mechanics.Movement, value => Assert.Equal("-", value.EffectiveValue));
+    }
+
+    [Fact]
     public void MissingCharacterInputsAndCapabilitiesAreNeverSubmittedAsZero()
     {
         var mechanic = new RulesCoreMechanicView(

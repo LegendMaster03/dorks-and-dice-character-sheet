@@ -213,7 +213,11 @@ Source attribution is provenance, not the primary mechanic. Entries with `presen
 
 ## Movement
 
-`CharacterMechanicsView.movement` is an arbitrary list of calculated values. Each entry can represent walking speed or another backend-defined movement mode. The frontend does not assume one movement mode or calculate speed.
+`CharacterMechanicsView.movement` is an arbitrary list of calculated values. Each entry can represent walking speed or another backend-defined movement mode such as swim, climb, fly, burrow, or a source-specific movement type. The frontend never calculates speed.
+
+The compact top-row Movement card promotes a supplied walking/land-speed entry when one is identifiable from its normalized key or label. If no walking mode exists, the first backend-supplied mode becomes the primary presentation value. Every remaining movement mode is retained as a subordinate compact value in the same card; the frontend does not maintain a fixed list of allowed movement modes.
+
+Character Sheet recognizes normalized Rules Core mechanics with kind `movement` and projects all such effective entries into this collection. Until Rules Core publishes movement mechanics for the active rules context, the card honestly remains unresolved with `-`.
 
 ## Item-occurrence mechanics
 
