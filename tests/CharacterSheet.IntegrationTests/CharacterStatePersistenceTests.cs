@@ -23,6 +23,10 @@ public sealed class CharacterStatePersistenceTests
             await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
             var stateStore = new PostgresCharacterStateStore(firstContext);
 
+            await stateStore.SetCurrentHitPointsAsync(
+                characterId,
+                -2,
+                DateTimeOffset.UtcNow.AddMilliseconds(500));
             await stateStore.AddInventoryItemOccurrenceAsync(
                 characterId,
                 "  ITEM:TORCH  ",
@@ -38,6 +42,7 @@ public sealed class CharacterStatePersistenceTests
 
             var state = await stateStore.GetAsync(characterId);
             Assert.NotNull(state);
+            Assert.Equal(-2, state.CurrentHitPoints);
             var items = state.InventoryItemOccurrences.ToArray();
             Assert.Equal(2, items.Length);
             Assert.All(items, value => Assert.Equal("item:torch", value.RuleConceptKey));
@@ -70,6 +75,7 @@ public sealed class CharacterStatePersistenceTests
         {
             var state = await new PostgresCharacterStateStore(thirdContext).GetAsync(characterId);
             Assert.NotNull(state);
+            Assert.Equal(-2, state.CurrentHitPoints);
             var item = Assert.Single(state.InventoryItemOccurrences);
             Assert.Equal(secondItemId, item.Id);
             var note = Assert.Single(state.Notes);

@@ -37,8 +37,20 @@ public sealed class CharacterStateWorkflowTests
             var view = await initial.Content.ReadFromJsonAsync<CharacterStateView>();
             Assert.NotNull(view);
             Assert.False(view.ReadOnly);
+            Assert.Null(view.CurrentHitPoints);
             Assert.Empty(view.InventoryItemOccurrences);
             Assert.Empty(view.Notes);
+        }
+
+        using (var setHealth = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/health",
+                   new { currentHitPoints = -4 }))
+        {
+            Assert.Equal(HttpStatusCode.OK, setHealth.StatusCode);
+            var view = await setHealth.Content.ReadFromJsonAsync<CharacterStateView>();
+            Assert.NotNull(view);
+            Assert.Equal(-4, view.CurrentHitPoints);
         }
 
         Guid firstItemId;
@@ -99,6 +111,7 @@ public sealed class CharacterStateWorkflowTests
         Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
         var persisted = await verify.Content.ReadFromJsonAsync<CharacterStateView>();
         Assert.NotNull(persisted);
+        Assert.Equal(-4, persisted.CurrentHitPoints);
         Assert.Single(persisted.InventoryItemOccurrences);
         Assert.Equal("Updated", Assert.Single(persisted.Notes).Content);
     }
@@ -157,6 +170,14 @@ public sealed class CharacterStateWorkflowTests
             Assert.True(view.ReadOnly);
             Assert.Equal(itemId, Assert.Single(view.InventoryItemOccurrences).Id);
             Assert.Equal(noteId, Assert.Single(view.Notes).Id);
+        }
+
+        using (var health = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/health",
+                   new { currentHitPoints = 10 }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, health.StatusCode);
         }
 
         using (var add = await factory.SendHostedAsync(
@@ -230,6 +251,14 @@ public sealed class CharacterStateWorkflowTests
         using var factory = new CharacterStateWorkflowFactory();
         var characterId = Guid.NewGuid();
         factory.Context = Context(Character(characterId, "Basic", "Active"));
+
+        using (var health = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/health",
+                   new { currentHitPoints = 10 }))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, health.StatusCode);
+        }
 
         using (var inventory = await factory.SendHostedAsync(
                    HttpMethod.Post,
