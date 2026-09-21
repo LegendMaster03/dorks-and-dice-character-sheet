@@ -738,6 +738,7 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
 
     const primary = createElement("div", "dd-movement-values__primary");
     primary.setAttribute("data-movement-primary", primaryValue.key);
+    primary.setAttribute("data-mechanic-key", primaryValue.key);
     primary.append(
         createElement("span", "dd-movement-values__primary-label", primaryValue.label),
         createElement("strong", "dd-movement-values__primary-value", formatMechanicalValue(primaryValue)));
