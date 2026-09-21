@@ -247,7 +247,13 @@ test("UI shell defines materially different tablet and mobile compositions", () 
     assert.match(css, /@media \(max-width: 1099px\)/);
     assert.match(css, /@media \(max-width: 720px\)/);
     assert.match(css, /\.dd-sheet__workspace\s*\{[^}]*grid-template-columns:\s*1fr;/s);
-    assert.match(css, /\.dd-core-stats__abilities\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
+    assert.match(css, /@media \(max-width: 720px\)[\s\S]*?\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
+});
+
+test("desktop sheet uses the available viewport and one equal-width top-stat grid", () => {
+    assert.match(css, /\.dd-sheet-screen\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*120rem;/s);
+    assert.match(css, /\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(9,\s*minmax\(0,\s*1fr\)\)/s);
+    assert.match(css, /\.dd-core-stats__abilities,\s*\.dd-core-stats__quick\s*\{[^}]*display:\s*contents;/s);
 });
 
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
@@ -286,8 +292,11 @@ test("ability UI does not invent effective-score or modifier calculations", () =
     assert.doesNotMatch(sheetModelSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
     assert.doesNotMatch(sheetSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
     assert.match(sheetSource, /data-ability-modifier/);
+    assert.match(sheetSource, /data-ability-save/);
     assert.match(sheetSource, /"Modifier"/);
+    assert.match(sheetSource, /"Save"/);
     assert.match(sheetSource, /modifier === undefined \? "-" : formatMechanicalValue\(modifier\)/);
+    assert.match(sheetSource, /savingThrow === undefined \? "-" : formatMechanicalValue\(savingThrow\)/);
 });
 
 test("ability editor uses integer input without edition-specific min or max attributes", () => {
