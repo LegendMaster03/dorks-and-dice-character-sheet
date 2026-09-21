@@ -6,6 +6,21 @@ namespace CharacterSheet.UnitTests;
 public sealed class CharacterStateModelTests
 {
     [Fact]
+    public void CurrentHitPointsAreCharacterOwnedAndPermitNegativeEditionSpecificState()
+    {
+        var root = Root();
+        var changedAt = DateTimeOffset.UtcNow;
+
+        root.SetCurrentHitPoints(-3, changedAt);
+
+        Assert.Equal(-3, root.CurrentHitPoints);
+        Assert.Equal(changedAt, root.UpdatedAt);
+
+        root.SetCurrentHitPoints(null, changedAt.AddMinutes(1));
+        Assert.Null(root.CurrentHitPoints);
+    }
+
+    [Fact]
     public void InventoryOccurrencesUseStableConceptKeysAndPermitDuplicates()
     {
         var root = Root();

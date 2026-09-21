@@ -283,11 +283,15 @@ export function buildCompetencyPresentation(
             .filter((entry): entry is CompetencyView => entry !== undefined);
         if (components.length === 0) continue;
 
+        const presentedParent = parent.governingAbility === undefined
+            ? withConsensusGoverningAbility(parent, components)
+            : parent;
+
         consumed.add(parent.key);
         for (const component of components) consumed.add(component.key);
         groups.set(parent.key, {
             kind: "composite",
-            parent,
+            parent: presentedParent,
             components: components as [CompetencyView, ...CompetencyView[]],
             relationship
         });
@@ -305,6 +309,21 @@ export function buildCompetencyPresentation(
         }
     }
     return result;
+}
+
+function withConsensusGoverningAbility(
+    parent: CompetencyView,
+    components: readonly CompetencyView[]
+): CompetencyView {
+    const abilities = components
+        .map(value => value.governingAbility?.trim())
+        .filter((value): value is string => value !== undefined && value.length > 0);
+    if (abilities.length !== components.length) return parent;
+
+    const normalized = [...new Set(abilities.map(value => value.toLowerCase()))];
+    return normalized.length === 1
+        ? { ...parent, governingAbility: abilities[0] }
+        : parent;
 }
 
 export function findAbilityValue(

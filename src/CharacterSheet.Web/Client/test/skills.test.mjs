@@ -25,6 +25,15 @@ class FakeElement {
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) ?? null; }
     append(...children) { this.children.push(...children); }
+    addEventListener(name, handler) {
+        this.listeners ??= new Map();
+        const handlers = this.listeners.get(name) ?? [];
+        handlers.push(handler);
+        this.listeners.set(name, handlers);
+    }
+    dispatch(name) {
+        for (const handler of this.listeners?.get(name) ?? []) handler({ target: this });
+    }
 }
 
 globalThis.document = { createElement: tagName => new FakeElement(tagName) };
@@ -64,6 +73,28 @@ test("missing competency data keeps the Skills surface and shows a neutral dash"
     }
 });
 
+test("skill card includes working search across parent and component names", () => {
+    const card = renderSkillsCard([
+        standalone(competency("arcana", "Arcana", "+4", { governingAbility: "intelligence" })),
+        composite(
+            competency("acrobatics", "Acrobatics", "+3"),
+            [
+                competency("balance", "Balance", "+2", { governingAbility: "dexterity" }),
+                competency("tumble", "Tumble", "+4", { governingAbility: "dexterity" })
+            ]
+        )
+    ]);
+    const search = byClass(card, "dd-skills-search")[0];
+    assert.ok(search);
+    search.value = "balance";
+    search.dispatch("input");
+
+    const arcana = byAttribute(card, "data-skill-id", "arcana")[0];
+    const compositeDisclosure = byAttribute(card, "data-composite-skill", "acrobatics")[0];
+    assert.equal(arcana.hidden, true);
+    assert.equal(compositeDisclosure.hidden, false);
+});
+
 test("standalone competency renders as one ordinary row", () => {
     const card = renderSkillsCard([standalone(competency("navigation", "Navigation", "+7"))]);
     assert.equal(byClass(card, "dd-skill-row--standalone").length, 1);
@@ -92,8 +123,26 @@ test("composite competency supports arbitrary component counts and preserves hie
     assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 1);
     assert.match(visibleText(card), /Calculation/);
     assert.match(visibleText(card), /Average floor/);
-    assert.match(visibleText(card), /WIS/);
+    const parent = byAttribute(card, "data-skill-role", "parent")[0];
+    assert.match(visibleText(parent), /WIS/);
     assert.doesNotMatch(visibleText(card), /\bDetails\b/);
+});
+
+test("composite skill sources are collapsed into one secondary disclosure", () => {
+    const sourceA = { key: "srd3", label: "SRD3", detail: "3e" };
+    const sourceB = { key: "srd35", label: "SRD35", detail: "3.5e" };
+    const card = renderSkillsCard([
+        composite(
+            competency("parent", "Parent", "-", { sourceAttributions: [sourceA] }),
+            [
+                competency("a", "A", "-", { supportsRanks: true, sourceAttributions: [sourceA] }),
+                competency("b", "B", "-", { supportsRanks: true, sourceAttributions: [sourceB] })
+            ]
+        )
+    ]);
+    assert.equal(byClass(card, "dd-source-attribution-disclosure").length, 1);
+    assert.equal(byClass(card, "dd-source-attribution").length, 2);
+    assert.equal(byClass(card, "dd-skill-mechanics-item").length, 2);
 });
 
 test("ranked specialty competency progressively discloses metadata", () => {

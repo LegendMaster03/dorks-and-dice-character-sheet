@@ -25,8 +25,12 @@ import {
 import {
     findInitiativeValue,
     renderActionsPresentation,
-    renderCombatMechanicsSummary,
+    renderArmorClassQuickCard,
+    renderCombatFundamentalsCard,
+    renderDefenseMechanicsCard,
     renderFacts,
+    renderHealthMechanicsCard,
+    renderSavingThrowsCard,
     renderMechanicalValue,
     renderMovementValues,
     renderQuickMechanicalValue
@@ -44,7 +48,10 @@ import {
     createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
-import { renderSourceAttributions } from "./source-attribution.js";
+import {
+    renderSourceAttributionDisclosure,
+    renderSourceAttributions
+} from "./source-attribution.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
@@ -67,6 +74,7 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
 }
 
 export interface RoutineCharacterHandlers {
+    setCurrentHitPoints(currentHitPoints: number | null): void;
     addNote(content: string): void;
     updateNote(noteId: string, content: string): void;
     deleteNote(noteId: string): void;
@@ -146,29 +154,37 @@ export function renderCharacterWorkspace(
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderSupportScaffoldCard("Passive Values", [
-            ["passive-perception", "Perception"],
-            ["passive-investigation", "Investigation"],
-            ["passive-insight", "Insight"]
-        ]),
-        renderSupportScaffoldCard("Proficiencies & Training", [
-            ["armor-training", "Armor"],
-            ["weapon-training", "Weapons"],
-            ["tool-training", "Tools"],
-            ["languages", "Languages"]
-        ])
+        renderHealthMechanicsCard(mechanics, {
+            currentHitPoints: routine.status === "ready"
+                && routine.state?.currentHitPoints !== null
+                ? routine.state?.currentHitPoints
+                : undefined,
+            readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+            saving: routine.mutation?.kind === "health-update",
+            onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints
+        }),
+        renderSavingThrowsCard(mechanics?.savingThrows),
+        renderSupportScaffoldCard("Passive Values", []),
+        renderSupportScaffoldCard("Proficiencies & Training", [])
     );
 
-    const skills = createElement("section", "dd-sheet__skills");
-    skills.setAttribute("aria-label", "Character skills");
+    const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
+    mechanicsColumn.setAttribute("aria-label", "Character mechanics and skills");
     const competencyPresentation = mechanics?.competencies === undefined
         ? null
         : buildCompetencyPresentation(mechanics.competencies);
-    skills.append(renderSkillsCard(competencyPresentation));
+    const combatSummary = createElement("div", "dd-mechanics-summary-grid");
+    combatSummary.append(
+        renderDefenseMechanicsCard(mechanics),
+        renderCombatFundamentalsCard(mechanics)
+    );
+    mechanicsColumn.append(
+        combatSummary,
+        renderSkillsCard(competencyPresentation)
+    );
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
-    primary.append(renderCombatMechanicsSummary(mechanics));
     if (structuralEditing) {
         primary.append(renderCharacterBuilder(
             character.characterId,
@@ -185,7 +201,7 @@ export function renderCharacterWorkspace(
         mechanics,
         handlers));
 
-    workspace.append(support, skills, primary);
+    workspace.append(support, mechanicsColumn, primary);
     shell.append(workspace);
     return shell;
 }
@@ -436,7 +452,11 @@ function renderCoreStats(
         createElement("h3", "dd-stat__label", "Initiative"),
         renderQuickMechanicalValue(findInitiativeValue(mechanics?.combatFundamentals)));
 
-    quickGrid.append(movement, initiative);
+    quickGrid.append(
+        movement,
+        initiative,
+        renderArmorClassQuickCard(mechanics)
+    );
     section.append(abilityGrid, quickGrid);
 
     const standardAbilityKeys = new Set(ABILITY_SCORE_DEFINITIONS.map(definition => definition.key));
@@ -578,7 +598,7 @@ function renderAdditionalAbilityValues(values: readonly CalculatedMechanicalValu
 }
 
 function renderCharacterMechanicsSources(mechanics: CharacterMechanicsView | null): HTMLElement | null {
-    const sources = renderSourceAttributions(mechanics?.sourceAttributions, true);
+    const sources = renderSourceAttributionDisclosure(mechanics?.sourceAttributions);
     if (sources === null) return null;
 
     const surface = createElement("aside", "dd-character-mechanics-sources");
@@ -595,13 +615,21 @@ function renderSupportScaffoldCard(
 ): HTMLElement {
     const card = createSectionCard(title, "dd-support-card dd-support-scaffold");
     const list = createElement("div", "dd-support-scaffold__list");
-    for (const [key, label] of values) {
-        const row = createElement("div", "dd-support-scaffold__row");
-        row.setAttribute("data-support-scaffold-key", key);
-        row.append(
-            createElement("span", "dd-support-scaffold__label", label),
-            createElement("strong", "dd-support-scaffold__value", "-"));
+    if (values.length === 0) {
+        card.setAttribute("data-support-scaffold-state", "unavailable");
+        const row = createElement("div", "dd-support-scaffold__row dd-support-scaffold__row--empty");
+        row.append(createElement("strong", "dd-support-scaffold__value", "-"));
         list.append(row);
+    } else {
+        card.setAttribute("data-support-scaffold-state", "resolved");
+        for (const [key, label] of values) {
+            const row = createElement("div", "dd-support-scaffold__row");
+            row.setAttribute("data-support-scaffold-key", key);
+            row.append(
+                createElement("span", "dd-support-scaffold__label", label),
+                createElement("strong", "dd-support-scaffold__value", "-"));
+            list.append(row);
+        }
     }
     card.append(list);
     return card;
@@ -619,18 +647,26 @@ function renderPrimaryContent(
     const card = createElement("section", "dd-primary-content");
     const nav = createElement("nav", "dd-primary-nav");
     nav.setAttribute("aria-label", "Character sheet sections");
+    nav.setAttribute("role", "tablist");
     for (const section of SHEET_SECTIONS) {
         const active = section.id === activeSection;
         const button = createButton(
             section.label,
             active ? "dd-primary-nav__button dd-primary-nav__button--active" : "dd-primary-nav__button",
             () => handlers.selectSection(section.id));
+        button.id = `dd-sheet-tab-${section.id}`;
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        button.setAttribute("aria-controls", `dd-sheet-panel-${section.id}`);
         if (active) button.setAttribute("aria-current", "page");
         nav.append(button);
     }
 
     const definition = SHEET_SECTIONS.find(value => value.id === activeSection) ?? SHEET_SECTIONS[0];
     const panel = createElement("div", "dd-primary-content__panel");
+    panel.id = `dd-sheet-panel-${definition.id}`;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", `dd-sheet-tab-${definition.id}`);
     panel.setAttribute("data-sheet-section", definition.id);
     panel.append(createElement("h2", "dd-primary-content__title", definition.label));
     if (definition.id === "notes") {

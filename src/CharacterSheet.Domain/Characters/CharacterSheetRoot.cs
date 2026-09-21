@@ -41,6 +41,8 @@ public sealed class CharacterSheetRoot
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    public int? CurrentHitPoints { get; private set; }
+
     public ICollection<CharacterFoundationalRuleSelection> FoundationalSelections { get; private set; } =
         new List<CharacterFoundationalRuleSelection>();
 
@@ -353,6 +355,12 @@ public sealed class CharacterSheetRoot
         AdvancementEntries.Add(entry);
         Touch(createdAt);
         return entry;
+    }
+
+    public void SetCurrentHitPoints(int? currentHitPoints, DateTimeOffset changedAt)
+    {
+        CurrentHitPoints = currentHitPoints;
+        Touch(changedAt);
     }
 
     public CharacterInventoryItemOccurrence AddInventoryItemOccurrence(

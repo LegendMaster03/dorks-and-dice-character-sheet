@@ -12,6 +12,12 @@ public interface ICharacterStateStore
         Guid characterId,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> SetCurrentHitPointsAsync(
+        Guid characterId,
+        int? currentHitPoints,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> AddInventoryItemOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,

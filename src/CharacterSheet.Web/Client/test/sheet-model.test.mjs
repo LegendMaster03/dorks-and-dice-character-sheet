@@ -252,7 +252,10 @@ test("UI shell defines materially different tablet and mobile compositions", () 
 
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
     assert.match(sheetSource, /renderSupportScaffoldCard/);
-    assert.match(sheetSource, /renderCombatMechanicsSummary\(mechanics\)/);
+    assert.match(sheetSource, /renderDefenseMechanicsCard\(mechanics\)/);
+    assert.match(sheetSource, /renderCombatFundamentalsCard\(mechanics\)/);
+    assert.match(sheetSource, /renderHealthMechanicsCard\(mechanics,\s*\{/);
+    assert.match(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 

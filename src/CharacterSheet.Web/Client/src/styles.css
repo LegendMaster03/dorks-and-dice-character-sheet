@@ -226,7 +226,7 @@
 
 .dd-core-stats {
     display: grid;
-    grid-template-columns: minmax(0, 4fr) minmax(12rem, 1fr);
+    grid-template-columns: minmax(0, 2fr) minmax(22rem, 1fr);
     gap: var(--dd-sheet-space-3);
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) 0;
 }
@@ -242,7 +242,14 @@
 }
 
 .dd-core-stats__quick {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.35fr);
+    align-items: stretch;
+}
+
+.dd-core-stats__quick > .dd-stat:not(.dd-stat--armor-class) {
+    display: grid;
+    place-content: center;
+    min-height: 6.75rem;
 }
 
 .dd-stat {
@@ -262,6 +269,63 @@
     font-weight: 800;
     letter-spacing: 0.045em;
     text-transform: uppercase;
+}
+
+.dd-stat--armor-class {
+    display: grid;
+    grid-template-rows: minmax(4.5rem, 3fr) minmax(2.25rem, 1fr);
+    padding: 0;
+    overflow: hidden;
+}
+
+.dd-armor-class__primary {
+    display: grid;
+    place-content: center;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 0.65rem 0.5rem;
+}
+
+.dd-armor-class__primary-value {
+    color: var(--dd-sheet-ink);
+    font-size: 1.35rem;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.dd-armor-class__variants {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-armor-class__variant {
+    display: grid;
+    place-content: center;
+    gap: 0.15rem;
+    min-width: 0;
+    padding: 0.38rem 0.25rem;
+}
+
+.dd-armor-class__variant + .dd-armor-class__variant {
+    border-left: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-armor-class__variant-label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.025em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.dd-armor-class__variant-value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.78rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
 }
 
 .dd-stat__value {
@@ -341,13 +405,13 @@
 
 .dd-sheet__workspace {
     display: grid;
-    grid-template-columns: minmax(13rem, 0.62fr) minmax(15rem, 0.72fr) minmax(0, 2fr);
+    grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.15fr) minmax(26rem, 1.65fr);
     gap: var(--dd-sheet-space-4);
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
 }
 
 .dd-sheet__support,
-.dd-sheet__skills,
+.dd-sheet__mechanics,
 .dd-sheet__main {
     display: grid;
     align-content: start;
@@ -364,6 +428,40 @@
 .dd-skill-list {
     display: grid;
     gap: var(--dd-sheet-space-2);
+}
+
+.dd-skills-controls {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--dd-sheet-space-2);
+}
+
+.dd-skills-search {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.2rem;
+    padding: 0.4rem 0.6rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-control-bg);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    font: inherit;
+    font-size: 0.76rem;
+}
+
+.dd-skills-search::placeholder {
+    color: var(--dd-sheet-muted);
+}
+
+.dd-skills-search:focus-visible {
+    outline: 2px solid var(--dd-sheet-focus);
+    outline-offset: 1px;
+}
+
+.dd-skills-no-matches {
+    margin: var(--dd-sheet-space-2) 0 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.76rem;
 }
 
 .dd-skill-row {
@@ -463,9 +561,221 @@
     letter-spacing: 0.025em;
 }
 
+.dd-mechanics-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-3);
+    min-width: 0;
+}
+
+.dd-mechanics-summary-grid > .dd-sheet-card {
+    min-width: 0;
+}
+
+.dd-mechanics-summary-grid .dd-defense-card__grid,
+.dd-mechanics-summary-grid .dd-combat-fundamentals-card__grid {
+    grid-template-columns: 1fr;
+}
+
 .dd-support-scaffold__list {
     display: grid;
-    gap: var(--dd-sheet-space-1);
+    overflow: hidden;
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-mechanic-group-card__grid,
+.dd-saving-throws-card__grid {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+}
+
+.dd-defense-card__grid,
+.dd-combat-fundamentals-card__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dd-saving-throws-card__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dd-health-card__primary,
+.dd-health-card__secondary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-2);
+}
+
+.dd-health-card__secondary {
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-health-card__secondary--single {
+    grid-template-columns: 1fr;
+}
+
+.dd-health-card__field {
+    display: grid;
+    place-content: center;
+    gap: 0.2rem;
+    min-width: 0;
+    min-height: 3.2rem;
+    padding: 0.55rem 0.6rem;
+    text-align: center;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-health-card__primary .dd-health-card__field {
+    min-height: 4rem;
+}
+
+.dd-health-card__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.64rem;
+    font-weight: 750;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+}
+
+.dd-health-card__value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.95rem;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-health-card__primary .dd-health-card__value {
+    font-size: 1.15rem;
+}
+
+.dd-health-card__extras {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-health-card {
+    position: relative;
+}
+
+.dd-health-editor {
+    position: relative;
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-health-editor__summary {
+    width: 100%;
+    padding: 0.42rem 0.6rem;
+    color: var(--dd-sheet-accent-strong);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: center;
+    list-style: none;
+}
+
+.dd-health-editor__summary::-webkit-details-marker {
+    display: none;
+}
+
+.dd-health-editor__popover {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.3rem);
+    left: 0;
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: min(19rem, calc(100vw - 3rem));
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface-raised);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    box-shadow: var(--dd-sheet-shadow);
+}
+
+.dd-health-editor__direct {
+    display: grid;
+    grid-template-columns: minmax(5rem, 1fr) minmax(4rem, 0.8fr) auto;
+    gap: var(--dd-sheet-space-2);
+    align-items: end;
+}
+
+.dd-health-editor__adjust {
+    display: grid;
+    grid-template-columns: minmax(5rem, 1fr) auto auto;
+    gap: var(--dd-sheet-space-2);
+    align-items: end;
+}
+
+.dd-health-editor__field {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.dd-health-editor__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.65rem;
+    font-weight: 750;
+}
+
+.dd-health-editor__input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.2rem;
+    padding: 0.35rem 0.45rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-control-bg);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.dd-health-editor__readonly {
+    display: grid;
+    place-content: center;
+    min-height: 2.2rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-health-editor__set {
+    min-width: 3.2rem;
+}
+
+.dd-health-editor__adjust-button {
+    width: 2.2rem;
+    min-width: 2.2rem;
+    height: 2.2rem;
+    min-height: 2.2rem;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.dd-health-rest-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-2);
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-health-rest-button {
+    min-width: 0;
+    padding-inline: 0.45rem;
+    font-size: 0.7rem;
+    white-space: nowrap;
 }
 
 .dd-support-scaffold__row {
@@ -476,8 +786,15 @@
     min-width: 0;
     padding: 0.5rem 0.6rem;
     background: var(--dd-sheet-surface-muted);
-    border: 1px solid var(--dd-sheet-border);
-    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-support-scaffold__row + .dd-support-scaffold__row {
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-support-scaffold__row--empty {
+    justify-content: center;
+    min-height: 2.4rem;
 }
 
 .dd-support-scaffold__label {
@@ -852,7 +1169,7 @@
 }
 
 .dd-primary-content {
-    min-height: 24rem;
+    min-height: 18rem;
     overflow: clip;
 }
 
@@ -866,7 +1183,8 @@
 
 .dd-primary-nav__button {
     position: relative;
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-width: 6.5rem;
     min-height: 3rem;
     padding: 0.65rem 0.9rem;
     color: var(--dd-sheet-muted);
@@ -902,6 +1220,17 @@
 
 .dd-primary-content__panel {
     padding: var(--dd-sheet-space-5);
+}
+
+.dd-action-list > .dd-inline-state,
+.dd-spellcasting-profiles > .dd-inline-state,
+.dd-check-procedure-presentation > .dd-inline-state {
+    display: grid;
+    place-content: center;
+    min-height: 2.5rem;
+    margin: 0;
+    text-align: center;
+    font-weight: 800;
 }
 
 .dd-primary-content__title {
@@ -1144,7 +1473,7 @@
     }
 
     .dd-core-stats__quick {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .dd-sheet__workspace {
@@ -1153,11 +1482,11 @@
 
     .dd-sheet__support {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        order: 2;
+        order: 3;
     }
 
-    .dd-sheet__skills {
-        order: 3;
+    .dd-sheet__mechanics {
+        order: 2;
     }
 
     .dd-sheet__main {
@@ -1218,6 +1547,11 @@
         padding: 0.55rem;
     }
 
+    .dd-primary-nav__button {
+        flex: 0 0 auto;
+        min-width: 7rem;
+    }
+
     .dd-readonly-banner {
         display: grid;
         gap: 0.25rem;
@@ -1230,6 +1564,14 @@
 
     .dd-core-stats__abilities {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dd-core-stats__quick {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-mechanics-summary-grid {
+        grid-template-columns: 1fr;
     }
 
     .dd-skill-group--composite {
@@ -1961,6 +2303,60 @@
     letter-spacing: 0.025em;
 }
 
+.dd-skill-mechanics-list {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+}
+
+.dd-skill-mechanics-item {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+    padding: var(--dd-sheet-space-2);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-skill-mechanics-item__heading {
+    display: flex;
+    gap: var(--dd-sheet-space-2);
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.dd-skill-mechanics-item__name,
+.dd-skill-mechanics-item__value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.76rem;
+}
+
+.dd-skill-mechanics-item__value {
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-skill-details--compact {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-1) var(--dd-sheet-space-2);
+}
+
+.dd-source-attribution-disclosure {
+    padding-top: var(--dd-sheet-space-2);
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-source-attribution-disclosure__summary {
+    cursor: pointer;
+    color: var(--dd-sheet-muted);
+    font-size: 0.7rem;
+    font-weight: 750;
+}
+
+.dd-source-attribution-disclosure > .dd-source-attributions {
+    margin-top: var(--dd-sheet-space-2);
+}
+
 .dd-combat-summary--mechanics > .dd-inline-state {
     grid-column: 1 / -1;
     margin-top: 0;
@@ -1971,6 +2367,10 @@
     .dd-spellcasting-profiles,
     .dd-check-procedure-presentation__checks,
     .dd-procedure-card__checks,
+    .dd-defense-card__grid,
+    .dd-combat-fundamentals-card__grid,
+    .dd-saving-throws-card__grid,
+    .dd-health-card__grid,
     .dd-combat-summary,
     .dd-combat-summary__grid--defense,
     .dd-combat-summary__grid--saves,
@@ -2100,10 +2500,16 @@
 .dd-character-mechanics-sources__label {
     color: var(--dd-sheet-ink);
     font-weight: 800;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
 }
 
-.dd-character-mechanics-sources > .dd-source-attributions {
+.dd-character-mechanics-sources > .dd-source-attribution-disclosure-group {
     flex: 1 1 18rem;
+    min-width: 0;
+}
+
+.dd-character-mechanics-sources .dd-source-attribution-disclosure {
     padding-top: 0;
     border-top: 0;
 }

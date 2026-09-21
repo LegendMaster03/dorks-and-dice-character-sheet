@@ -191,6 +191,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<DateTimeOffset>("CreatedAt")
                 .HasColumnType("timestamp with time zone");
 
+            b.Property<int?>("CurrentHitPoints")
+                .HasColumnType("integer");
+
             b.Property<int>("SchemaVersion")
                 .HasColumnType("integer");
 

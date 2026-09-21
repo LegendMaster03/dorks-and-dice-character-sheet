@@ -2,9 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+    adjustCurrentHitPoints,
     findInitiativeValue,
     renderActionsPresentation,
+    renderArmorClassQuickCard,
     renderCombatMechanicsSummary,
+    renderDefenseMechanicsCard,
+    renderHealthMechanicsCard,
     renderQuickMechanicalValue,
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
@@ -77,6 +81,48 @@ test("saving throw breakdown is progressive disclosure with arbitrary contributi
     assert.match(visibleText(card), /Resistance item/);
 });
 
+test("Armor Class quick card promotes primary AC and keeps touch and flat-footed as subordinate variants", () => {
+    const rendered = renderArmorClassQuickCard({
+        defenses: {
+            primaryKey: "defense.ac",
+            values: [
+                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic")
+            ]
+        }
+    });
+    assert.equal(rendered.getAttribute("data-armor-class-card"), "true");
+    assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac").length, 1);
+    assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac.touch").length, 1);
+    assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac.flat-footed").length, 1);
+    assert.match(visibleText(rendered), /Armor Class/);
+    assert.match(visibleText(rendered), /Touch AC/);
+    assert.match(visibleText(rendered), /Flat-Footed AC/);
+    assert.match(visibleText(rendered), /18/);
+    assert.match(visibleText(rendered), /13/);
+    assert.match(visibleText(rendered), /15/);
+});
+
+test("Defense card excludes the promoted AC trio while retaining other defensive mechanics", () => {
+    const rendered = renderDefenseMechanicsCard({
+        defenses: {
+            primaryKey: "defense.ac",
+            values: [
+                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic"),
+                mechanical("defense.spell-resistance", "Spell Resistance", "17")
+            ]
+        }
+    });
+    assert.doesNotMatch(visibleText(rendered), /Armor Class|Touch AC|Flat-Footed/);
+    assert.match(visibleText(rendered), /Damage Reduction/);
+    assert.match(visibleText(rendered), /Spell Resistance/);
+});
+
 test("combat summary preserves named defense surfaces when values are missing", () => {
     const primaryOnly = renderCombatMechanicsSummary({
         defenses: { primaryKey: "ac", values: [mechanical("ac", "Armor Class", "18")] }
@@ -134,6 +180,85 @@ test("combat summary groups defenses and saving throws using compact 3.x-style r
     assert.equal(byAttribute(rendered, "data-combat-group", "defense").length, 1);
     assert.equal(byAttribute(rendered, "data-combat-group", "saves").length, 1);
     assert.equal(byClass(rendered, "dd-saving-throw").length, 3);
+});
+
+test("hit point adjustment reuses the combat tracker behavior without imposing a 5e zero floor", () => {
+    assert.equal(adjustCurrentHitPoints(12, 30, 5, -1), 7);
+    assert.equal(adjustCurrentHitPoints(5, 30, 12, -1), -7);
+    assert.equal(adjustCurrentHitPoints(27, 30, 8, 1), 30);
+    assert.equal(adjustCurrentHitPoints(null, 30, 5, -1), null);
+});
+
+test("editable Hit Points card exposes direct and modifier controls while keeping max read-only", () => {
+    const saved = [];
+    const rendered = renderHealthMechanicsCard({
+        healthTracks: [
+            { key: "hp", label: "Hit Points", role: "hit-points", maximum: 30 }
+        ]
+    }, {
+        currentHitPoints: 12,
+        onSetCurrentHitPoints: value => saved.push(value)
+    });
+
+    assert.equal(byAttribute(rendered, "data-health-editor", "true").length, 1);
+    assert.match(visibleText(rendered), /Current\s+12/);
+    assert.match(visibleText(rendered), /Maximum\s+30/);
+    assert.match(visibleText(rendered), /Adjust HP/);
+    assert.match(visibleText(rendered), /Max HP\s+30/);
+
+    const inputs = byClass(rendered, "dd-health-editor__input");
+    const buttons = action => byAttribute(rendered, "data-health-action", action);
+    inputs[1].value = "15";
+    buttons("subtract")[0].onclick();
+    assert.equal(saved.at(-1), -3);
+
+    inputs[1].value = "50";
+    buttons("add")[0].onclick();
+    assert.equal(saved.at(-1), 30);
+
+    inputs[0].value = "-8";
+    buttons("set")[0].onclick();
+    assert.equal(saved.at(-1), -8);
+});
+
+test("rest controls are present without inventing rest mechanics", () => {
+    const rendered = renderHealthMechanicsCard(null, {
+        currentHitPoints: 10
+    });
+    const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
+    const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
+    assert.ok(shortRest);
+    assert.ok(longRest);
+    assert.equal(shortRest.disabled, true);
+    assert.equal(longRest.disabled, true);
+    assert.match(shortRest.title, /Rest resolution is not available/);
+});
+
+test("rest controls emit only rest intent when a rules-backed handler is supplied", () => {
+    const rests = [];
+    const rendered = renderHealthMechanicsCard(null, {
+        currentHitPoints: 10,
+        onRest: kind => rests.push(kind)
+    });
+    const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
+    const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
+    assert.equal(shortRest.disabled, false);
+    assert.equal(longRest.disabled, false);
+
+    shortRest.onclick();
+    longRest.onclick();
+
+    assert.deepEqual(rests, ["short", "long"]);
+});
+
+test("read-only Hit Points card omits mutation controls", () => {
+    const rendered = renderHealthMechanicsCard(null, {
+        currentHitPoints: 10,
+        readOnly: true,
+        onSetCurrentHitPoints() {}
+    });
+    assert.equal(byAttribute(rendered, "data-health-editor", "true").length, 0);
+    assert.match(visibleText(rendered), /Current\s+10/);
 });
 
 test("combat summary keeps HP, temporary HP, and nonlethal damage independent", () => {

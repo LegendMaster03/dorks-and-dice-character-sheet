@@ -9,7 +9,10 @@ import {
     type SavingThrowView
 } from "./character-mechanics.js";
 import { createElement, createInlineState, createSectionCard } from "./components.js";
-import { renderSourceAttributions } from "./source-attribution.js";
+import {
+    renderSourceAttributionDisclosure,
+    renderSourceAttributions
+} from "./source-attribution.js";
 
 export function renderMechanicalValue(value: CalculatedMechanicalValueView, compact = false): HTMLElement {
     const root = createElement("div", `dd-mechanic-value${compact ? " dd-mechanic-value--compact" : ""}`);
@@ -35,19 +38,14 @@ export function renderMechanicalValue(value: CalculatedMechanicalValueView, comp
 export function renderSavingThrowsCard(saves: readonly SavingThrowView[] | undefined): HTMLElement {
     const card = createSectionCard("Saving Throws", "dd-support-card dd-saving-throws-card");
     card.setAttribute("data-saving-throws-state", saves === undefined ? "unavailable" : "resolved");
-    if (saves === undefined || saves.length === 0) {
-        card.append(renderUnavailableValue());
-        return card;
-    }
-    const list = createElement("div", "dd-mechanic-list");
-    for (const save of saves) {
-        const item = createElement("div", "dd-saving-throw");
-        item.append(renderMechanicalValue(save, true));
-        const meta = renderFacts([["Ability", save.governingAbility], ["Training", save.training]]);
-        if (meta !== null) item.append(meta);
-        list.append(item);
-    }
-    card.append(list);
+    const values = saves ?? [];
+    const grid = createElement("div", "dd-saving-throws-card__grid");
+    grid.append(...(
+        values.length === 0 || usesThreeXSaveScaffold(values)
+            ? renderSavingThrowScaffold(values)
+            : values.map(renderSavingThrowCell)
+    ));
+    card.append(grid);
     return card;
 }
 
@@ -80,12 +78,20 @@ interface MechanicalScaffoldSlot {
     labels?: readonly string[];
 }
 
-const DEFENSE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
-    { id: "armor-class", label: "Armor Class", keys: [], labels: ["Armor Class"] },
+const ARMOR_CLASS_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
+    { id: "armor-class", label: "Armor Class", keys: ["defense.ac"], labels: ["Armor Class", "AC"] },
     { id: "touch-armor-class", label: "Touch Armor Class", keys: ["defense.ac.touch"], labels: ["Touch", "Touch AC"] },
-    { id: "flat-footed-armor-class", label: "Flat-Footed Armor Class", keys: ["defense.ac.flat-footed"], labels: ["Flat-Footed", "Flat-Footed AC"] },
+    { id: "flat-footed-armor-class", label: "Flat-Footed Armor Class", keys: ["defense.ac.flat-footed"], labels: ["Flat-Footed", "Flat-Footed AC"] }
+];
+
+const SECONDARY_DEFENSE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
     { id: "damage-reduction", label: "Damage Reduction", keys: ["defense.damage-reduction"] },
     { id: "spell-resistance", label: "Spell Resistance", keys: ["defense.spell-resistance"] }
+];
+
+const DEFENSE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
+    ...ARMOR_CLASS_SCAFFOLD,
+    ...SECONDARY_DEFENSE_SCAFFOLD
 ];
 
 const SAVE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
@@ -139,6 +145,353 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
     return section;
 }
 
+export function renderArmorClassQuickCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    const values = orderedDefenses(mechanics);
+    const usedKeys = new Set<string>();
+    const primary = findPrimaryArmorClassValue(mechanics, values, usedKeys);
+    if (primary !== undefined) usedKeys.add(primary.key);
+
+    const touch = findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[1], usedKeys);
+    if (touch !== undefined) usedKeys.add(touch.key);
+    const flatFooted = findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[2], usedKeys);
+
+    const card = createElement("article", "dd-stat dd-stat--armor-class");
+    card.setAttribute("data-armor-class-card", "true");
+
+    const primaryRegion = createElement("div", "dd-armor-class__primary");
+    primaryRegion.append(
+        createElement("h3", "dd-stat__label", "Armor Class"),
+        renderArmorClassValue(primary, ARMOR_CLASS_SCAFFOLD[0], "dd-armor-class__primary-value")
+    );
+
+    const variants = createElement("div", "dd-armor-class__variants");
+    variants.append(
+        renderArmorClassVariant("Touch AC", touch, ARMOR_CLASS_SCAFFOLD[1]),
+        renderArmorClassVariant("Flat-Footed AC", flatFooted, ARMOR_CLASS_SCAFFOLD[2])
+    );
+
+    card.append(primaryRegion, variants);
+    return card;
+}
+
+export function renderDefenseMechanicsCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    const values = orderedDefenses(mechanics);
+    const armorClassKeys = new Set(
+        resolveArmorClassValues(mechanics, values)
+            .filter((value): value is CalculatedMechanicalValueView => value !== undefined)
+            .map(value => value.key));
+    const secondaryValues = values.filter(value => !armorClassKeys.has(value.key));
+
+    const card = createSectionCard("Defense", "dd-mechanic-group-card dd-defense-card");
+    const grid = createElement("div", "dd-mechanic-group-card__grid dd-defense-card__grid");
+    grid.append(...renderMechanicalScaffold(secondaryValues, SECONDARY_DEFENSE_SCAFFOLD));
+    card.append(grid);
+    return card;
+}
+
+export function renderCombatFundamentalsCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    const card = createSectionCard("Combat", "dd-mechanic-group-card dd-combat-fundamentals-card");
+    const initiative = findInitiativeValue(mechanics?.combatFundamentals);
+    const values = (mechanics?.combatFundamentals ?? []).filter(value => value !== initiative);
+    const grid = createElement("div", "dd-mechanic-group-card__grid dd-combat-fundamentals-card__grid");
+    grid.append(...renderMechanicalScaffold(values, COMBAT_SCAFFOLD));
+    card.append(grid);
+    return card;
+}
+
+export type RestKind = "short" | "long";
+
+export interface HealthControlOptions {
+    currentHitPoints?: number | null;
+    readOnly?: boolean;
+    saving?: boolean;
+    onSetCurrentHitPoints?: (currentHitPoints: number | null) => void;
+    onRest?: (kind: RestKind) => void;
+}
+
+export function adjustCurrentHitPoints(
+    current: number | null,
+    maximum: unknown,
+    amount: number,
+    direction: -1 | 1
+): number | null {
+    if (current === null || !Number.isFinite(amount) || amount < 0) return null;
+    const delta = Math.trunc(amount) * direction;
+    let next = current + delta;
+    const numericMaximum = toFiniteInteger(maximum);
+    if (direction > 0 && numericMaximum !== null) {
+        next = Math.min(next, numericMaximum);
+    }
+    return next;
+}
+
+export function renderHealthMechanicsCard(
+    mechanics: CharacterMechanicsView | null,
+    control: HealthControlOptions = {}
+): HTMLElement {
+    const card = createSectionCard("Hit Points", "dd-support-card dd-health-card");
+    const tracks = mechanics?.healthTracks ?? [];
+
+    const hitPoints = tracks.find(track =>
+        track.role === "hit-points" || normalizeMechanicalLabel(track.label) === "hitpoints");
+    const temporaryHitPoints = tracks.find(track =>
+        track.role === "temporary-hit-points"
+        || normalizeMechanicalLabel(track.label) === "temporaryhitpoints"
+        || normalizeMechanicalLabel(track.label) === "temphp");
+    const nonlethal = tracks.find(track =>
+        track.role === "nonlethal-damage"
+        || track.key === "resource.nonlethal-damage"
+        || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
+
+    const currentValue = control.currentHitPoints === undefined
+        ? hitPoints?.current
+        : control.currentHitPoints;
+
+    const primary = createElement("div", "dd-health-card__primary");
+    primary.append(
+        renderHealthSummaryField("Current", currentValue, "dd-health-card__field--current", hitPoints),
+        renderHealthSummaryField("Maximum", hitPoints?.maximum, "dd-health-card__field--maximum", hitPoints)
+    );
+    card.append(primary);
+
+    if (control.readOnly !== true && control.onSetCurrentHitPoints !== undefined) {
+        card.append(renderHitPointEditor(
+            toFiniteInteger(currentValue),
+            hitPoints?.maximum,
+            control.saving === true,
+            control.onSetCurrentHitPoints));
+    }
+
+    card.append(renderRestControls(
+        control.readOnly === true,
+        control.saving === true,
+        control.onRest));
+
+    const secondary = createElement(
+        "div",
+        temporaryHitPoints === undefined
+            ? "dd-health-card__secondary dd-health-card__secondary--single"
+            : "dd-health-card__secondary");
+    if (temporaryHitPoints !== undefined) {
+        secondary.append(renderHealthSummaryField(
+            "Temporary HP",
+            temporaryHitPoints.formattedValue ?? temporaryHitPoints.current,
+            "dd-health-card__field--temporary",
+            temporaryHitPoints));
+    }
+    secondary.append(renderHealthSummaryField(
+        "Nonlethal Damage",
+        nonlethal?.formattedValue ?? nonlethal?.current,
+        "dd-health-card__field--nonlethal",
+        nonlethal,
+        "nonlethal-damage"));
+    card.append(secondary);
+
+    const promoted = new Set(
+        [hitPoints, temporaryHitPoints, nonlethal]
+            .filter((track): track is NonNullable<typeof track> => track !== undefined)
+            .map(track => track.key));
+    const extraTracks = tracks.filter(track => !promoted.has(track.key));
+    if (extraTracks.length > 0) {
+        const extras = createElement("div", "dd-health-card__extras");
+        extras.append(...extraTracks.map(renderHealthTrack));
+        card.append(extras);
+    }
+
+    const sources = renderSourceAttributionDisclosure(
+        collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]));
+    if (sources !== null) card.append(sources);
+    return card;
+}
+
+function renderRestControls(
+    readOnly: boolean,
+    saving: boolean,
+    onRest: ((kind: RestKind) => void) | undefined
+): HTMLElement {
+    const controls = createElement("div", "dd-health-rest-controls");
+    controls.setAttribute("role", "group");
+    controls.setAttribute("aria-label", "Rest actions");
+
+    const available = onRest !== undefined;
+    const disabled = readOnly || saving || !available;
+    const unavailableTitle = readOnly
+        ? "Rest actions are unavailable while this Character is read-only."
+        : saving
+            ? "Wait for the current Character state change to finish."
+            : "Rest resolution is not available from the current rules projection.";
+
+    const createRestButton = (kind: RestKind, label: string): HTMLButtonElement => {
+        const button = createElement(
+            "button",
+            "dd-button dd-button--ghost dd-health-rest-button",
+            label) as HTMLButtonElement;
+        button.type = "button";
+        button.disabled = disabled;
+        button.setAttribute("data-rest-action", kind);
+        if (disabled) button.title = unavailableTitle;
+        if (!disabled) {
+            button.onclick = () => onRest?.(kind);
+        }
+        return button;
+    };
+
+    controls.append(
+        createRestButton("short", "Short Rest"),
+        createRestButton("long", "Long Rest"));
+    return controls;
+}
+
+function renderHitPointEditor(
+    current: number | null,
+    maximum: unknown,
+    saving: boolean,
+    onSetCurrentHitPoints: (currentHitPoints: number | null) => void
+): HTMLElement {
+    const details = createElement("details", "dd-health-editor");
+    details.setAttribute("data-health-editor", "true");
+    const summary = createElement(
+        "summary",
+        "dd-health-editor__summary",
+        saving ? "Saving HP…" : "Adjust HP");
+    details.append(summary);
+
+    const body = createElement("div", "dd-health-editor__popover");
+    body.setAttribute("role", "group");
+    body.setAttribute("aria-label", "Adjust hit points");
+
+    const direct = createElement("div", "dd-health-editor__direct");
+    const currentField = createElement("label", "dd-health-editor__field");
+    currentField.append(createElement("span", "dd-health-editor__label", "Current HP"));
+    const currentInput = createElement("input", "dd-health-editor__input") as HTMLInputElement;
+    currentInput.type = "number";
+    currentInput.step = "1";
+    currentInput.inputMode = "numeric";
+    currentInput.value = current === null ? "" : String(current);
+    currentInput.placeholder = "-";
+    currentInput.disabled = saving;
+    currentField.append(currentInput);
+
+    const maximumField = createElement("div", "dd-health-editor__field");
+    maximumField.append(
+        createElement("span", "dd-health-editor__label", "Max HP"),
+        createElement(
+            "strong",
+            "dd-health-editor__readonly",
+            formatOptionalHealthNumber(maximum)));
+
+    const set = createElement("button", "dd-button dd-button--secondary dd-health-editor__set", "Set") as HTMLButtonElement;
+    set.type = "button";
+    set.disabled = saving;
+    set.setAttribute("data-health-action", "set");
+    set.onclick = () => {
+        const value = parseOptionalInteger(currentInput.value);
+        if (value.valid) onSetCurrentHitPoints(value.value);
+    };
+    direct.append(currentField, maximumField, set);
+
+    const adjust = createElement("div", "dd-health-editor__adjust");
+    const amountField = createElement("label", "dd-health-editor__field");
+    amountField.append(createElement("span", "dd-health-editor__label", "Modify by"));
+    const amountInput = createElement("input", "dd-health-editor__input") as HTMLInputElement;
+    amountInput.type = "number";
+    amountInput.min = "0";
+    amountInput.step = "1";
+    amountInput.inputMode = "numeric";
+    amountInput.placeholder = "0";
+    amountInput.disabled = saving;
+    amountField.append(amountInput);
+
+    const subtract = createElement("button", "dd-button dd-button--ghost dd-health-editor__adjust-button", "−") as HTMLButtonElement;
+    subtract.type = "button";
+    subtract.disabled = saving || current === null;
+    subtract.setAttribute("aria-label", "Subtract hit points");
+    subtract.setAttribute("data-health-action", "subtract");
+
+    const add = createElement("button", "dd-button dd-button--ghost dd-health-editor__adjust-button", "+") as HTMLButtonElement;
+    add.type = "button";
+    add.disabled = saving || current === null;
+    add.setAttribute("aria-label", "Add hit points");
+    add.setAttribute("data-health-action", "add");
+
+    const apply = (direction: -1 | 1): void => {
+        const amount = parseOptionalInteger(amountInput.value);
+        if (!amount.valid || amount.value === null || amount.value < 0) return;
+        const next = adjustCurrentHitPoints(current, maximum, amount.value, direction);
+        if (next !== null) onSetCurrentHitPoints(next);
+    };
+    subtract.onclick = () => apply(-1);
+    add.onclick = () => apply(1);
+
+    adjust.append(amountField, subtract, add);
+    body.append(direct, adjust);
+    details.append(body);
+    return details;
+}
+
+function parseOptionalInteger(value: string): { valid: boolean; value: number | null } {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return { valid: true, value: null };
+    const parsed = Number(trimmed);
+    return Number.isInteger(parsed)
+        && parsed >= -2147483648
+        && parsed <= 2147483647
+        ? { valid: true, value: parsed }
+        : { valid: false, value: null };
+}
+
+function toFiniteInteger(value: unknown): number | null {
+    if (typeof value === "number") {
+        return Number.isInteger(value) && Number.isFinite(value) ? value : null;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatOptionalHealthNumber(value: unknown): string {
+    const parsed = toFiniteInteger(value);
+    return parsed === null ? "-" : String(parsed);
+}
+
+function renderHealthSummaryField(
+    label: string,
+    value: unknown,
+    className: string,
+    track?: NonNullable<CharacterMechanicsView["healthTracks"]>[number],
+    scaffoldKey?: string
+): HTMLElement {
+    const field = createElement("div", `dd-health-card__field ${className}`);
+    if (track !== undefined) {
+        field.setAttribute("data-health-track-key", track.key);
+        field.setAttribute("data-health-track-role", track.role);
+    } else if (scaffoldKey !== undefined) {
+        field.setAttribute("data-sheet-scaffold-key", scaffoldKey);
+    }
+    field.append(
+        createElement("span", "dd-health-card__label", label),
+        createElement(
+            "strong",
+            "dd-health-card__value",
+            value === undefined || value === null || String(value).trim().length === 0
+                ? "-"
+                : String(value))
+    );
+    return field;
+}
+
+function collectHealthTrackSources(
+    tracks: readonly (NonNullable<CharacterMechanicsView["healthTracks"]>[number] | undefined)[]
+): NonNullable<CharacterMechanicsView["sourceAttributions"]> {
+    const byKey = new Map<string, NonNullable<CharacterMechanicsView["sourceAttributions"]>[number]>();
+    for (const track of tracks) {
+        for (const source of track?.sourceAttributions ?? []) {
+            if (!byKey.has(source.key)) byKey.set(source.key, source);
+        }
+    }
+    return [...byKey.values()];
+}
+
 function appendCombatGroup(
     target: HTMLElement,
     label: string,
@@ -152,6 +505,69 @@ function appendCombatGroup(
     grid.append(...cells);
     group.append(grid);
     target.append(group);
+}
+
+function resolveArmorClassValues(
+    mechanics: CharacterMechanicsView | null,
+    values: readonly CalculatedMechanicalValueView[]
+): readonly (CalculatedMechanicalValueView | undefined)[] {
+    const usedKeys = new Set<string>();
+    const primary = findPrimaryArmorClassValue(mechanics, values, usedKeys);
+    if (primary !== undefined) usedKeys.add(primary.key);
+    const touch = findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[1], usedKeys);
+    if (touch !== undefined) usedKeys.add(touch.key);
+    const flatFooted = findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[2], usedKeys);
+    return [primary, touch, flatFooted];
+}
+
+function findPrimaryArmorClassValue(
+    mechanics: CharacterMechanicsView | null,
+    values: readonly CalculatedMechanicalValueView[],
+    usedKeys: ReadonlySet<string>
+): CalculatedMechanicalValueView | undefined {
+    const primaryKey = mechanics?.defenses?.primaryKey;
+    if (primaryKey !== undefined) {
+        const primary = values.find(value =>
+            !usedKeys.has(value.key)
+            && value.key === primaryKey);
+        if (primary !== undefined) return primary;
+    }
+    return findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[0], usedKeys);
+}
+
+function renderArmorClassValue(
+    value: CalculatedMechanicalValueView | undefined,
+    scaffold: MechanicalScaffoldSlot,
+    className: string
+): HTMLElement {
+    const rendered = createElement("strong", className, value === undefined ? "-" : formatMechanicalValue(value));
+    if (value === undefined) {
+        rendered.setAttribute("data-sheet-scaffold-key", scaffold.id);
+    } else {
+        rendered.setAttribute("data-mechanic-key", value.key);
+    }
+    return rendered;
+}
+
+function renderArmorClassVariant(
+    label: string,
+    value: CalculatedMechanicalValueView | undefined,
+    scaffold: MechanicalScaffoldSlot
+): HTMLElement {
+    const cell = createElement("div", "dd-armor-class__variant");
+    if (value === undefined) {
+        cell.setAttribute("data-sheet-scaffold-key", scaffold.id);
+    } else {
+        cell.setAttribute("data-mechanic-key", value.key);
+    }
+    cell.append(
+        createElement("span", "dd-armor-class__variant-label", label),
+        createElement(
+            "strong",
+            "dd-armor-class__variant-value",
+            value === undefined ? "-" : formatMechanicalValue(value))
+    );
+    return cell;
 }
 
 function renderMechanicalScaffold(
@@ -172,6 +588,11 @@ function renderMechanicalScaffold(
         if (!usedKeys.has(value.key)) cells.push(renderMechanicalValue(value, true));
     }
     return cells;
+}
+
+function usesThreeXSaveScaffold(saves: readonly SavingThrowView[]): boolean {
+    return SAVE_SCAFFOLD.some(slot =>
+        findScaffoldValue(saves, slot, new Set<string>()) !== undefined);
 }
 
 function renderSavingThrowScaffold(saves: readonly SavingThrowView[]): HTMLElement[] {
@@ -312,8 +733,9 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
 
 export function renderActionsPresentation(actions: readonly ActionAttackView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-action-list");
+    root.setAttribute("data-action-state", actions === undefined ? "unavailable" : "resolved");
     if (actions === undefined || actions.length === 0) {
-        root.append(createInlineState(actions === undefined ? "Resolved actions and attacks are not available." : "No actions or attacks were supplied for this Character.", "neutral"));
+        root.append(createInlineState("-", "neutral"));
         return root;
     }
     for (const action of actions) {

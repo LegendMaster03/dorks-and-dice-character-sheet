@@ -74,6 +74,7 @@ export interface GuidedBuilderUiState {
 }
 
 export type RoutineMutationKind =
+    | "health-update"
     | "note-add"
     | "note-update"
     | "note-delete"

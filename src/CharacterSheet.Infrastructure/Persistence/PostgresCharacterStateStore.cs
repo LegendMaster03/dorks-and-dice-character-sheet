@@ -13,6 +13,23 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         BuildQuery(tracking: false)
             .SingleOrDefaultAsync(value => value.CharacterId == characterId, cancellationToken);
 
+    public async Task<CharacterSheetRoot?> SetCurrentHitPointsAsync(
+        Guid characterId,
+        int? currentHitPoints,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.SetCurrentHitPoints(currentHitPoints, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> AddInventoryItemOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,

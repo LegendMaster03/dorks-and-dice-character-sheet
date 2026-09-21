@@ -82,15 +82,16 @@ const handlers = {
     },
     feats: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
     routine: {
+        setCurrentHitPoints() {},
         addNote() {}, updateNote() {}, deleteNote() {}, openInventoryChooser() {}, closeInventoryChooser() {},
         searchInventory() {}, addInventoryItem() {}, removeInventoryItem() {}
     },
     selectSection() {}, enterEditMode() {}, leaveEditMode() {}, openGuidedBuilder() {},
     closeGuidedBuilder() {}, selectGuidedBuilderSection() {}
 };
-const routine = (occurrences = [], references = {}, readOnly = true) => ({
+const routine = (occurrences = [], references = {}, readOnly = true, currentHitPoints = null) => ({
     status: "ready",
-    state: { characterId, readOnly, inventoryItemOccurrences: occurrences, notes: [] },
+    state: { characterId, readOnly, currentHitPoints, inventoryItemOccurrences: occurrences, notes: [] },
     references,
     inventoryChooser: { kind: "closed" },
     mutation: null
@@ -121,6 +122,25 @@ function render(section, mechanics, currentRoutine = routine()) {
     );
 }
 
+test("primary sheet sections expose tab and tabpanel semantics", () => {
+    const rendered = render("actions", null);
+    const nav = byClass(rendered, "dd-primary-nav")[0];
+    assert.ok(nav);
+    assert.equal(nav.getAttribute("role"), "tablist");
+
+    const tabs = byClass(nav, "dd-primary-nav__button");
+    assert.equal(tabs.length, 5);
+    const selected = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0].id, "dd-sheet-tab-actions");
+    assert.equal(selected[0].getAttribute("role"), "tab");
+
+    const panel = byAttribute(rendered, "data-sheet-section", "actions")[0];
+    assert.ok(panel);
+    assert.equal(panel.getAttribute("role"), "tabpanel");
+    assert.equal(panel.getAttribute("aria-labelledby"), "dd-sheet-tab-actions");
+});
+
 test("workspace consumes supplied saving throws, competencies, combat, actions, movement, checks, and procedures", () => {
     const mechanics = {
         savingThrows: [mechanical("fort", "Fortitude", "+8")],
@@ -137,7 +157,8 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-mechanic-key", "fort").length, 1);
     assert.equal(byAttribute(rendered, "data-skill-id", "listen").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "ac").length, 1);
-    assert.equal(byAttribute(rendered, "data-health-track-key", "hp").length, 1);
+    assert.match(visibleText(rendered), /Current\s+20/);
+    assert.match(visibleText(rendered), /Maximum\s+30/);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "bab").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "walk").length, 1);
     assert.equal(byAttribute(rendered, "data-action-key", "sword").length, 1);
@@ -145,17 +166,119 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
 });
 
+test("Character-owned current HP overrides mechanics presentation and is editable for active Characters", () => {
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        routine([], {}, false, -2),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        {
+            healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", current: 99, maximum: 30 }]
+        },
+        handlers
+    );
+
+    const card = byClass(rendered, "dd-health-card")[0];
+    assert.ok(card);
+    assert.match(visibleText(card), /Current\s+-2/);
+    assert.doesNotMatch(visibleText(card), /Current\s+99/);
+    assert.equal(byAttribute(card, "data-health-editor", "true").length, 1);
+});
+
+test("Hit Points card emphasizes current and maximum while keeping temporary and nonlethal tracks distinct", () => {
+    const rendered = render("actions", {
+        healthTracks: [
+            { key: "hp", label: "Hit Points", role: "hit-points", current: 21, maximum: 30 },
+            { key: "temp", label: "Temporary HP", role: "temporary-hit-points", current: 5 },
+            { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 3 }
+        ]
+    });
+    const card = byClass(rendered, "dd-health-card")[0];
+    assert.ok(card);
+    assert.match(visibleText(card), /Current\s+21/);
+    assert.match(visibleText(card), /Maximum\s+30/);
+    assert.match(visibleText(card), /Temporary HP\s+5/);
+    assert.match(visibleText(card), /Nonlethal Damage\s+3/);
+    assert.equal(byAttribute(card, "data-health-track-key", "hp").length, 2);
+    assert.equal(byAttribute(card, "data-health-track-key", "temp").length, 1);
+    assert.equal(byAttribute(card, "data-health-track-key", "nonlethal").length, 1);
+});
+
+test("workspace promotes Armor Class beside Movement and Initiative and removes the AC trio from Defense", () => {
+    const rendered = render("actions", {
+        defenses: {
+            primaryKey: "defense.ac",
+            values: [
+                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic"),
+                mechanical("defense.spell-resistance", "Spell Resistance", "17")
+            ]
+        },
+        combatFundamentals: [mechanical("combat.initiative", "Initiative", "+4")]
+    });
+
+    const acCard = byAttribute(rendered, "data-armor-class-card", "true")[0];
+    assert.ok(acCard);
+    assert.match(visibleText(acCard), /Armor Class/);
+    assert.match(visibleText(acCard), /Touch AC/);
+    assert.match(visibleText(acCard), /Flat-Footed AC/);
+    assert.match(visibleText(acCard), /18/);
+    assert.match(visibleText(acCard), /13/);
+    assert.match(visibleText(acCard), /15/);
+
+    const defense = byClass(rendered, "dd-defense-card")[0];
+    assert.ok(defense);
+    assert.doesNotMatch(visibleText(defense), /Armor Class|Touch AC|Flat-Footed/);
+    assert.match(visibleText(defense), /Damage Reduction/);
+    assert.match(visibleText(defense), /Spell Resistance/);
+});
+
+test("Defense and Combat share a compact summary row above Skills", () => {
+    const rendered = render("actions", null);
+    const summaries = byClass(rendered, "dd-mechanics-summary-grid");
+    assert.equal(summaries.length, 1);
+    assert.equal(byClass(summaries[0], "dd-defense-card").length, 1);
+    assert.equal(byClass(summaries[0], "dd-combat-fundamentals-card").length, 1);
+    assert.equal(byClass(rendered, "dd-skills-card").length, 1);
+});
+
+test("workspace keeps support, mechanics, and primary interaction as separate mockup columns", () => {
+    const rendered = render("actions", null);
+    assert.equal(byClass(rendered, "dd-sheet__support").length, 1);
+    assert.equal(byClass(rendered, "dd-sheet__mechanics").length, 1);
+    assert.equal(byClass(rendered, "dd-sheet__main").length, 1);
+    assert.equal(byClass(rendered, "dd-health-card").length, 1);
+    assert.equal(byClass(rendered, "dd-saving-throws-card").length, 1);
+    assert.equal(byClass(rendered, "dd-defense-card").length, 1);
+    assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
+});
+
+test("support scaffolds do not invent edition-specific passive values or training categories", () => {
+    const rendered = render("actions", null);
+    const text = visibleText(rendered);
+    assert.match(text, /Passive Values/);
+    assert.match(text, /Proficiencies & Training/);
+    assert.doesNotMatch(text, /Passive Values\s+Perception|Passive Values\s+Investigation|Proficiencies & Training\s+Armor/);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 2);
+});
+
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
     const rendered = render("actions", null);
     const text = visibleText(rendered);
     assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 1);
-    assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available/);
-    assert.match(text, /Resolved actions and attacks are not available/);
+    assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available|Resolved actions and attacks are not available/);
+    assert.equal(byAttribute(rendered, "data-action-state", "unavailable").length, 1);
 
     for (const label of [
         "Armor Class",
-        "Touch Armor Class",
-        "Flat-Footed Armor Class",
+        "Touch AC",
+        "Flat-Footed AC",
         "Damage Reduction",
         "Spell Resistance",
         "Fortitude Save",
@@ -164,22 +287,16 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
         "Hit Points",
         "Nonlethal Damage",
         "Base Attack Bonus",
-        "Grapple Modifier",
-        "Perception",
-        "Investigation",
-        "Insight",
-        "Armor",
-        "Weapons",
-        "Tools",
-        "Languages"
+        "Grapple Modifier"
     ]) {
         assert.ok(text.includes(label), label);
     }
 
-    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 1);
-    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 1);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 2);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 0);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 0);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);
-    assert.equal(byAttribute(rendered, "data-health-track-role", "hit-points").length, 1);
+    assert.ok(byClass(rendered, "dd-health-card").length >= 1);
 });
 
 test("Inventory joins mechanics by stable occurrence identity and keeps duplicate concepts independent", () => {
@@ -245,7 +362,8 @@ test("spellcasting profiles render only when supplied", () => {
     assert.match(visibleText(supplied), /Wizard Spellcasting/);
 
     const unavailable = render("spells", null);
-    assert.match(visibleText(unavailable), /Resolved spellcasting profiles are not available/);
+    assert.equal(byAttribute(unavailable, "data-spellcasting-state", "unavailable").length, 1);
+    assert.doesNotMatch(visibleText(unavailable), /Resolved spellcasting profiles are not available/);
     assert.equal(byClass(unavailable, "dd-spellcasting-profile").length, 0);
 });
 
@@ -402,7 +520,9 @@ test("top-level Character mechanics attribution renders once as a projection-wid
     const surfaces = byClass(rendered, "dd-character-mechanics-sources");
     assert.equal(surfaces.length, 1);
     assert.match(visibleText(surfaces[0]), /Rules modules/);
+    assert.match(visibleText(surfaces[0]), /Sources \(1\)/);
     assert.match(visibleText(surfaces[0]), /External rules module/);
+    assert.equal(byTag(surfaces[0], "details").length, 1);
     assert.equal(byTag(surfaces[0], "a").length, 1);
 });
 
@@ -416,10 +536,13 @@ test("production Ability presentation contains no D&D Ability modifier formula",
     assert.doesNotMatch(production, /score\s*-\s*10|Math\.floor\s*\([^\n]*-\s*10|calculateAbilityModifier/i);
 });
 
-test("legacy combat placeholder renderer is removed in favor of the generalized combat path", async () => {
+test("legacy combat placeholder renderer is removed in favor of generalized mechanic cards", async () => {
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
-    assert.match(source, /renderCombatMechanicsSummary\(mechanics\)/);
+    assert.match(source, /renderDefenseMechanicsCard\(mechanics\)/);
+    assert.match(source, /renderCombatFundamentalsCard\(mechanics\)/);
+    assert.match(source, /renderHealthMechanicsCard\(mechanics,\s*\{/);
+    assert.match(source, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
 });
 
 
@@ -535,11 +658,14 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
     ]) {
         assert.equal(byAttribute(rendered, "data-mechanic-key", key).length, 1, key);
     }
-    assert.equal(byAttribute(rendered, "data-health-track-key", "resource.nonlethal-damage").length, 1);
+    const nonlethal = byClass(rendered, "dd-health-card__field--nonlethal");
+    assert.equal(nonlethal.length, 1);
+    assert.match(visibleText(nonlethal[0]), /Nonlethal Damage/);
+    assert.match(visibleText(nonlethal[0]), /4/);
     const initiative = byAttribute(rendered, "data-mechanic-key", "combat.initiative")[0];
     assert.ok(initiative);
     assert.ok(byClass(rendered, "dd-stat--initiative").some(node => walk(node).includes(initiative)));
-    assert.match(visibleText(rendered), /Touch Armor Class/);
+    assert.match(visibleText(rendered), /Touch AC/);
     assert.match(visibleText(rendered), /Base Attack Bonus/);
     assert.match(visibleText(rendered), /Nonlethal Damage/);
 });

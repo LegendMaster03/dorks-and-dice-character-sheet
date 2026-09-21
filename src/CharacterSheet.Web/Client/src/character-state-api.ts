@@ -21,6 +21,7 @@ export interface CharacterNoteResponse {
 export interface CharacterStateResponse {
     characterId: string;
     readOnly: boolean;
+    currentHitPoints: number | null;
     inventoryItemOccurrences: CharacterInventoryItemOccurrenceResponse[];
     notes: CharacterNoteResponse[];
 }
@@ -28,7 +29,7 @@ export interface CharacterStateResponse {
 export function buildCharacterStateBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    resource?: "inventory" | "notes",
+    resource?: "health" | "inventory" | "notes",
     entryId?: string
 ): string {
     let path = `/api/characters/${encodeURIComponent(characterId)}/state`;
@@ -52,6 +53,20 @@ export async function loadCharacterState(
         "GET",
         undefined,
         "Unable to load Character routine state.");
+}
+
+export async function setCharacterCurrentHitPoints(
+    environment: HostEnvironment,
+    characterId: string,
+    currentHitPoints: number | null,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "health"),
+        "PUT",
+        { currentHitPoints },
+        "Unable to update Character hit points.");
 }
 
 export async function addInventoryItemOccurrence(
