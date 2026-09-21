@@ -176,9 +176,9 @@ Specialized entries such as a named Craft specialty are represented by ordinary 
 
 ### Composite relationships
 
-`CompetencyRelationshipView` contains required `parentKey` and `componentKeys[]`. `buildCompetencyPresentation()` groups entries only from these supplied relationships.
+`CompetencyRelationshipView` contains required `parentKey` and `componentKeys[]`, plus optional backend-supplied `composition` and `resolutionKind` presentation metadata. `buildCompetencyPresentation()` groups entries only from these supplied relationships.
 
-The frontend never decides that one named skill contains another named skill. Relationships can have arbitrary component counts.
+The frontend never decides that one named skill contains another named skill. Relationships can have arbitrary component counts. The collapsed Character Sheet keeps the existing parent-left/components-right composite layout. The whole composite block is one progressive-disclosure unit: expanding it may show component calculation details and the backend-supplied composition/resolution metadata, but the browser does not calculate the parent competency itself.
 
 ## Actions and attacks
 

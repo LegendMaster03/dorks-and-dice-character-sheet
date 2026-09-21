@@ -382,6 +382,12 @@
     border-radius: var(--dd-sheet-radius-sm);
 }
 
+.dd-skill-row__identity {
+    display: grid;
+    gap: 0.08rem;
+    min-width: 0;
+}
+
 .dd-skill-row__name {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -389,6 +395,14 @@
     font-size: 0.79rem;
     font-weight: 750;
     line-height: 1.25;
+}
+
+.dd-skill-row__ability {
+    color: var(--dd-sheet-muted);
+    font-size: 0.61rem;
+    font-weight: 750;
+    letter-spacing: 0.075em;
+    line-height: 1.1;
 }
 
 .dd-skill-row__value {
@@ -1814,22 +1828,59 @@
     grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.dd-skill-row__details {
-    grid-column: 1 / -1;
+.dd-skill-disclosure {
     min-width: 0;
 }
 
-.dd-skill-row__details-toggle {
+.dd-skill-disclosure__summary {
+    display: block;
+    min-width: 0;
     cursor: pointer;
-    color: var(--dd-sheet-accent-strong);
-    font-size: 0.72rem;
-    font-weight: 750;
+    list-style: none;
 }
 
-.dd-skill-row__details-body {
+.dd-skill-disclosure__summary::-webkit-details-marker {
+    display: none;
+}
+
+.dd-skill-disclosure__summary::marker {
+    content: "";
+}
+
+.dd-skill-disclosure__body {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    min-width: 0;
+    margin-top: var(--dd-sheet-space-1);
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-skill-detail-content,
+.dd-skill-composite-details__competencies {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    min-width: 0;
+}
+
+.dd-skill-composite-details__competencies {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.dd-skill-detail-section {
     display: grid;
     gap: var(--dd-sheet-space-2);
-    margin-top: var(--dd-sheet-space-2);
+    min-width: 0;
+}
+
+.dd-skill-detail-section__title {
+    margin: 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.025em;
 }
 
 .dd-combat-summary--mechanics > .dd-inline-state {

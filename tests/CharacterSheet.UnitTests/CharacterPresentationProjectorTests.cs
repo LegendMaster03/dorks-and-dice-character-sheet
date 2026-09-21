@@ -110,6 +110,8 @@ public sealed class CharacterPresentationProjectorTests
         var relationship = Assert.Single(mechanics.Competencies.Relationships!);
         Assert.Equal("skill.stealth", relationship.ParentKey);
         Assert.Equal(["skill.hide", "skill.move-silently"], relationship.ComponentKeys);
+        Assert.Equal("average-floor", relationship.Composition);
+        Assert.Equal("derive-parent", relationship.ResolutionKind);
         Assert.DoesNotContain(
             mechanics.Competencies.Relationships!,
             value => value.ParentKey == "skill.perception");

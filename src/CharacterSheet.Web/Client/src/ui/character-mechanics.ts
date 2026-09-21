@@ -101,6 +101,8 @@ export interface CompetencyView extends CalculatedMechanicalValueView {
 export interface CompetencyRelationshipView {
     parentKey: string;
     componentKeys: readonly string[];
+    composition?: string;
+    resolutionKind?: string;
 }
 
 export type CompetencyPresentationItem =
@@ -109,6 +111,7 @@ export type CompetencyPresentationItem =
         kind: "composite";
         parent: CompetencyView;
         components: readonly [CompetencyView, ...CompetencyView[]];
+        relationship: CompetencyRelationshipView;
     };
 
 export interface CompetencyCollectionView {
@@ -285,7 +288,8 @@ export function buildCompetencyPresentation(
         groups.set(parent.key, {
             kind: "composite",
             parent,
-            components: components as [CompetencyView, ...CompetencyView[]]
+            components: components as [CompetencyView, ...CompetencyView[]],
+            relationship
         });
     }
 
