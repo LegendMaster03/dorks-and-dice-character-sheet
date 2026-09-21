@@ -242,6 +242,14 @@ const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url
 const sheetModelSource = await readFile(new URL("../src/ui/sheet-model.ts", import.meta.url), "utf8");
 const builderApiSource = await readFile(new URL("../src/builder-api.ts", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
+const abilitySource = await readFile(new URL("../src/features/abilities/ability-stats.ts", import.meta.url), "utf8");
+const sheetContractsSource = await readFile(new URL("../src/ui/sheet-contracts.ts", import.meta.url), "utf8");
+const primaryContentSource = await readFile(new URL("../src/ui/primary-content.ts", import.meta.url), "utf8");
+const notesSource = await readFile(new URL("../src/features/notes/notes-section.ts", import.meta.url), "utf8");
+const inventorySource = await readFile(new URL("../src/features/inventory/inventory-section.ts", import.meta.url), "utf8");
+const inventoryWorkflowSource = await readFile(new URL("../src/features/inventory/inventory-workflow.ts", import.meta.url), "utf8");
+const featuresSource = await readFile(new URL("../src/features/features/features-section.ts", import.meta.url), "utf8");
+const featWorkflowSource = await readFile(new URL("../src/features/features/feat-workflow.ts", import.meta.url), "utf8");
 
 test("UI shell defines materially different tablet and mobile compositions", () => {
     assert.match(css, /@media \(max-width: 1099px\)/);
@@ -296,22 +304,22 @@ test("Character workspace does not create a nested document-level main landmark"
 test("ability UI does not invent effective-score or modifier calculations", () => {
     assert.doesNotMatch(builderApiSource, /effectiveScore/);
     assert.doesNotMatch(sheetModelSource, /effectiveScore/);
-    assert.doesNotMatch(sheetSource, /effectiveScore/);
+    assert.doesNotMatch(abilitySource, /effectiveScore/);
     assert.doesNotMatch(sheetModelSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
-    assert.doesNotMatch(sheetSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
-    assert.match(sheetSource, /data-ability-modifier/);
-    assert.match(sheetSource, /data-ability-save/);
-    assert.match(sheetSource, /"Modifier"/);
-    assert.match(sheetSource, /"Save"/);
-    assert.match(sheetSource, /modifier === undefined \? "-" : formatMechanicalValue\(modifier\)/);
-    assert.match(sheetSource, /savingThrow === undefined \? "-" : formatMechanicalValue\(savingThrow\)/);
+    assert.doesNotMatch(abilitySource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
+    assert.match(abilitySource, /data-ability-modifier/);
+    assert.match(abilitySource, /data-ability-save/);
+    assert.match(abilitySource, /"Modifier"/);
+    assert.match(abilitySource, /"Save"/);
+    assert.match(abilitySource, /modifier === undefined \? "-" : formatMechanicalValue\(modifier\)/);
+    assert.match(abilitySource, /savingThrow === undefined \? "-" : formatMechanicalValue\(savingThrow\)/);
 });
 
 test("ability editor uses integer input without edition-specific min or max attributes", () => {
-    assert.match(sheetSource, /input\.type = "number"/);
-    assert.match(sheetSource, /input\.step = "1"/);
-    assert.doesNotMatch(sheetSource, /input\.(?:min|max)\s*=/);
-    assert.doesNotMatch(sheetSource, /setAttribute\("(?:min|max)"/);
+    assert.match(abilitySource, /input\.type = "number"/);
+    assert.match(abilitySource, /input\.step = "1"/);
+    assert.doesNotMatch(abilitySource, /input\.(?:min|max)\s*=/);
+    assert.doesNotMatch(abilitySource, /setAttribute\("(?:min|max)"/);
 });
 
 
@@ -409,7 +417,7 @@ test("normal View rendering keeps structural editors out of the sheet until Edit
     assert.match(sheetSource, /const structuralEditing = editable && sheetMode === "edit"/);
     assert.match(sheetSource, /if \(structuralEditing\) \{[\s\S]*renderCharacterBuilder/);
     assert.match(
-        sheetSource,
+        abilitySource,
         /if \(structuralEditing && !readOnly && \(display\.status === "configured" \|\| display\.status === "unconfigured"\)\)/
     );
 });
@@ -422,8 +430,8 @@ test("Guided Builder remains optional and supports direct section navigation", (
 });
 
 test("structural mutation handlers are namespaced separately from ordinary sheet interaction", () => {
-    assert.match(sheetSource, /interface CharacterSheetHandlers \{[\s\S]*structural: StructuralCharacterHandlers;/);
-    assert.match(sheetSource, /selectSection\(section: SheetSection\): void;/);
+    assert.match(sheetContractsSource, /interface CharacterSheetHandlers \{[\s\S]*structural: StructuralCharacterHandlers;/);
+    assert.match(sheetContractsSource, /selectSection\(section: SheetSection\): void;/);
     assert.doesNotMatch(sheetSource, /if \(sheetMode === "edit"\)[\s\S]*renderPrimaryContent/);
 });
 
@@ -445,32 +453,32 @@ test("Character Sheet implementation does not copy D&D Beyond source identifiers
 
 
 test("Notes are rendered from routine Character state and remain routine View-mode interactions", () => {
-    assert.match(sheetSource, /renderNotesSection\(routine, readOnly, handlers\.routine\)/);
-    assert.match(sheetSource, /handlers\.addNote\(input\.value\)/);
-    assert.match(sheetSource, /handlers\.updateNote\(note\.id, editor\.value\)/);
-    assert.match(sheetSource, /handlers\.deleteNote\(note\.id\)/);
+    assert.match(primaryContentSource, /renderNotesSection\(routine, readOnly, handlers\.routine\)/);
+    assert.match(notesSource, /handlers\.addNote\(input\.value\)/);
+    assert.match(notesSource, /handlers\.updateNote\(note\.id, editor\.value\)/);
+    assert.match(notesSource, /handlers\.deleteNote\(note\.id\)/);
     assert.doesNotMatch(sheetModelSource, /future Campaign-scoped modules/);
 });
 
 
 test("Inventory keeps distinct occurrence identity without exposing raw UUIDs to players", () => {
-    assert.match(sheetSource, /data-inventory-occurrence-id/);
-    assert.doesNotMatch(sheetSource, /\`Occurrence \${occurrence\.id}\`/);
-    assert.match(sheetSource, /handlers\.addInventoryItem\(rule\.conceptKey\)/);
-    assert.match(sheetSource, /handlers\.removeInventoryItem\(occurrence\.id\)/);
-    assert.match(appSource, /searchResolvedRules\(environment, "item", normalizedQuery\)/);
+    assert.match(inventorySource, /data-inventory-occurrence-id/);
+    assert.doesNotMatch(inventorySource, /\`Occurrence \${occurrence\.id}\`/);
+    assert.match(inventorySource, /handlers\.addInventoryItem\(rule\.conceptKey\)/);
+    assert.match(inventorySource, /handlers\.removeInventoryItem\(occurrence\.id\)/);
+    assert.match(inventoryWorkflowSource, /searchResolvedRules\([\s\S]*"item"[\s\S]*normalizedQuery/);
     assert.doesNotMatch(sheetModelSource, /Equipment, carried items, currency/);
 });
 
 
 test("Features and Traits keeps Feat occurrence identity internal while mutations remain structural", () => {
-    assert.match(sheetSource, /renderFeaturesSection\(builder, structuralEditing, readOnly, handlers\.feats\)/);
-    assert.match(sheetSource, /data-feat-occurrence-id/);
-    assert.doesNotMatch(sheetSource, /\`Occurrence \${occurrence\.id}\`/);
-    assert.match(sheetSource, /if \(editable\) \{[\s\S]*"Add Feat"/);
-    assert.match(sheetSource, /handlers\.remove\(occurrence\.id\)/);
-    assert.match(appSource, /searchResolvedRules\(environment, "feat", normalizedQuery\)/);
-    assert.match(sheetSource, /Other Features & Traits/);
+    assert.match(primaryContentSource, /renderFeaturesSection\([\s\S]*builder,[\s\S]*structuralEditing,[\s\S]*readOnly,[\s\S]*handlers\.feats/);
+    assert.match(featuresSource, /data-feat-occurrence-id/);
+    assert.doesNotMatch(featuresSource, /\`Occurrence \${occurrence\.id}\`/);
+    assert.match(featuresSource, /if \(editable\) \{[\s\S]*"Add Feat"/);
+    assert.match(featuresSource, /handlers\.remove\(occurrence\.id\)/);
+    assert.match(featWorkflowSource, /searchResolvedRules\([\s\S]*"feat"[\s\S]*normalizedQuery/);
+    assert.match(featuresSource, /Other Features & Traits/);
     assert.doesNotMatch(sheetModelSource, /Features and traits are not available yet/);
 });
 

@@ -445,17 +445,21 @@ test("production consumes backend advancement and mechanics projections instead 
 });
 
 test("production refreshes presentation after structural, Ability, Feat, and Inventory mutations", async () => {
-    const source = await readFile(new URL("../src/app.ts", import.meta.url), "utf8");
-    assert.match(source, /async function bootstrapPresentation/);
-    assert.match(source, /addInventoryItem[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.match(source, /removeInventoryItem[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.match(source, /addFeat[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.match(source, /removeFeat[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.match(source, /saveChoice[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.match(source, /clearChoice[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.match(source, /saveBaseAbilityScore[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.match(source, /clearBaseAbilityScore[\s\S]*bootstrapPresentation\(characterId\)/);
-    assert.doesNotMatch(source, /calculateAbilityModifier|score\s*-\s*10/i);
+    const sources = await Promise.all([
+        "../src/core/application/presentation-workflow.ts",
+        "../src/features/inventory/inventory-workflow.ts",
+        "../src/features/features/feat-workflow.ts",
+        "../src/features/advancement/advancement-workflow.ts",
+        "../src/features/abilities/ability-workflow.ts"
+    ].map(path => readFile(new URL(path, import.meta.url), "utf8")));
+    const [presentation, inventory, feats, advancement, abilities] = sources;
+    assert.match(presentation, /loadCharacterPresentation/);
+    assert.match(inventory, /async add[\s\S]*presentation\.load\(characterId\)/);
+    assert.match(inventory, /async remove[\s\S]*presentation\.load\(characterId\)/);
+    assert.match(feats, /async function mutate[\s\S]*presentation\.load\(characterId\)/);
+    assert.match(advancement, /async function mutate[\s\S]*presentation\.load\(characterId\)/);
+    assert.match(abilities, /async function persist[\s\S]*presentation\.load\(characterId\)/);
+    assert.doesNotMatch(sources.join("\n"), /calculateAbilityModifier|score\s*-\s*10/i);
 });
 
 test("generalized presentation contains no source-specific Loot Tavern formula or prose", async () => {
