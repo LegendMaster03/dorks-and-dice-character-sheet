@@ -471,7 +471,14 @@ test("generalized presentation contains no source-specific Loot Tavern formula o
 });
 
 test("generalized mechanics styles use host semantic tokens and include mobile layout rules", async () => {
-    const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+    const css = (await Promise.all([
+    "../src/styles/foundation.css",
+    "../src/styles/builder.css",
+    "../src/styles/advancement.css",
+    "../src/styles/mechanics.css",
+    "../src/styles/abilities.css",
+    "../src/styles/supplemental.css"
+].map(path => readFile(new URL(path, import.meta.url), "utf8")))).join("\n");
     assert.match(css, /\.dd-mechanic-value/);
     assert.match(css, /\.dd-source-attribution/);
     assert.match(css, /\.dd-procedure-card/);

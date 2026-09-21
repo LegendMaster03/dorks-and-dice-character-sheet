@@ -1,0 +1,118 @@
+/* Effective Ability values and Character-level mechanics attribution */
+.dd-stat__base-context {
+    margin: var(--dd-sheet-space-1) 0 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.64rem;
+    line-height: 1.3;
+}
+
+.dd-stat__related-values {
+    display: grid;
+    gap: var(--dd-sheet-space-1);
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-stat__related-value {
+    display: block;
+    padding: 0.2rem 0.3rem;
+    overflow-wrap: anywhere;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-muted);
+    border-radius: var(--dd-sheet-radius-sm);
+    font-size: 0.66rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-stat__mechanics-details {
+    margin-top: var(--dd-sheet-space-2);
+    color: var(--dd-sheet-muted);
+    font-size: 0.68rem;
+    text-align: left;
+}
+
+.dd-stat__mechanics-details-toggle {
+    cursor: pointer;
+    color: var(--dd-sheet-accent-strong);
+    font-weight: 750;
+    text-align: center;
+}
+
+.dd-stat__mechanics-details-body {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-core-stats__additional-abilities {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius);
+}
+
+.dd-core-stats__additional-title {
+    margin: 0;
+    color: var(--dd-sheet-ink);
+    font-size: 0.85rem;
+}
+
+.dd-core-stats__additional-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+}
+
+.dd-additional-ability {
+    min-width: 0;
+}
+
+.dd-character-mechanics-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dd-sheet-space-2) var(--dd-sheet-space-3);
+    align-items: baseline;
+    margin: var(--dd-sheet-space-3) var(--dd-sheet-space-5) 0;
+    padding: var(--dd-sheet-space-2) var(--dd-sheet-space-3);
+    color: var(--dd-sheet-muted);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+    font-size: 0.72rem;
+}
+
+.dd-character-mechanics-sources__label {
+    color: var(--dd-sheet-ink);
+    font-weight: 800;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+}
+
+.dd-character-mechanics-sources > .dd-source-attribution-disclosure-group {
+    flex: 1 1 18rem;
+    min-width: 0;
+}
+
+.dd-character-mechanics-sources .dd-source-attribution-disclosure {
+    padding-top: 0;
+    border-top: 0;
+}
+
+@media (max-width: 720px) {
+    .dd-character-mechanics-sources {
+        display: grid;
+        margin-right: var(--dd-sheet-space-3);
+        margin-left: var(--dd-sheet-space-3);
+    }
+
+    .dd-core-stats__additional-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+

@@ -237,7 +237,14 @@ test("base score parsing enforces only backend integer representation, not D&D s
     assert.equal(parseBaseAbilityScoreInput("").ok, false);
 });
 
-const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const css = (await Promise.all([
+    "../src/styles/foundation.css",
+    "../src/styles/builder.css",
+    "../src/styles/advancement.css",
+    "../src/styles/mechanics.css",
+    "../src/styles/abilities.css",
+    "../src/styles/supplemental.css"
+].map(path => readFile(new URL(path, import.meta.url), "utf8")))).join("\n");
 const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
 const sheetModelSource = await readFile(new URL("../src/ui/sheet-model.ts", import.meta.url), "utf8");
 const builderApiSource = await readFile(new URL("../src/builder-api.ts", import.meta.url), "utf8");
