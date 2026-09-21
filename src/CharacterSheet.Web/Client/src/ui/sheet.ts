@@ -589,17 +589,6 @@ function renderCharacterMechanicsSources(mechanics: CharacterMechanicsView | nul
     return surface;
 }
 
-function createStatPlaceholder(definition: MechanicPlaceholderDefinition): HTMLElement {
-    const card = createElement("article", "dd-stat");
-    card.setAttribute("data-unimplemented-mechanic", definition.id);
-    card.append(
-        createElement("h3", "dd-stat__label", definition.label),
-        createElement("p", "dd-stat__value", "-"),
-        createElement("p", "dd-stat__detail", definition.message)
-    );
-    return card;
-}
-
 function renderSupportScaffoldCard(
     title: string,
     values: readonly (readonly [string, string])[]
