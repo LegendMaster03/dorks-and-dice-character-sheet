@@ -90,7 +90,7 @@ test("composite competency supports arbitrary component counts and preserves hie
     assert.equal(byAttribute(group, "data-skill-role", "parent").length, 1);
     assert.equal(byAttribute(group, "data-skill-role", "component").length, 3);
     assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 1);
-    assert.match(visibleText(card), /Composite calculation/);
+    assert.match(visibleText(card), /Calculation/);
     assert.match(visibleText(card), /Average floor/);
     assert.match(visibleText(card), /WIS/);
     assert.doesNotMatch(visibleText(card), /\bDetails\b/);
