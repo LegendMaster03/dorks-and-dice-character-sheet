@@ -1,5 +1,8 @@
 import "./styles.css";
-import { createInitialState } from "./app-state.js";
+import {
+    createInitialState,
+    type RoutineMutationKind
+} from "./app-state.js";
 import {
     addCharacterFeatOccurrence,
     clearCharacterBaseAbilityScore,
@@ -352,7 +355,7 @@ async function resolveRoutineReferences(routine: Awaited<ReturnType<typeof loadC
 }
 
 async function applyRoutineMutation(
-    kind: "note-add" | "note-update" | "note-delete" | "inventory-add" | "inventory-delete",
+    kind: RoutineMutationKind,
     operation: () => ReturnType<typeof addCharacterNote>,
     entryId?: string
 ): Promise<boolean> {
