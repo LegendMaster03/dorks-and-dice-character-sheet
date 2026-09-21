@@ -20,7 +20,8 @@ import {
     formatMechanicalValue,
     type CalculatedMechanicalValueView,
     type CharacterMechanicsView,
-    type InventoryMechanicsView
+    type InventoryMechanicsView,
+    type SavingThrowView
 } from "./character-mechanics.js";
 import {
     findInitiativeValue,
@@ -453,7 +454,8 @@ function renderCoreStats(
             structuralEditing,
             readOnly,
             handlers,
-            findAbilityValue(mechanics?.abilityValues, definition.key)));
+            findAbilityValue(mechanics?.abilityValues, definition.key),
+            findAbilitySavingThrow(mechanics?.savingThrows, definition)));
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
@@ -488,7 +490,8 @@ function renderAbilityScoreCard(
     structuralEditing: boolean,
     readOnly: boolean,
     handlers: StructuralCharacterHandlers,
-    effectiveValue?: CalculatedMechanicalValueView
+    effectiveValue?: CalculatedMechanicalValueView,
+    savingThrow?: SavingThrowView
 ): HTMLElement {
     const display = getBaseAbilityScoreDisplay(builder, definition.key);
     const configured = display.status === "configured";
@@ -517,16 +520,30 @@ function renderAbilityScoreCard(
                 `Base input: ${display.value}`));
     }
 
+    const secondary = createElement("div", "dd-ability-stat__secondary");
+
     const modifier = findAbilityModifier(effectiveValue);
     const modifierRegion = createElement("div", "dd-ability-stat__modifier");
     modifierRegion.setAttribute("data-ability-modifier", definition.key);
     modifierRegion.append(
-        createElement("span", "dd-ability-stat__modifier-label", "Modifier"),
+        createElement("span", "dd-ability-stat__secondary-label", "Modifier"),
         createElement(
             "strong",
-            "dd-ability-stat__modifier-value",
+            "dd-ability-stat__secondary-value",
             modifier === undefined ? "-" : formatMechanicalValue(modifier)));
-    presentation.append(primary, modifierRegion);
+
+    const saveRegion = createElement("div", "dd-ability-stat__save");
+    saveRegion.setAttribute("data-ability-save", definition.key);
+    if (savingThrow !== undefined) saveRegion.setAttribute("data-saving-throw-key", savingThrow.key);
+    saveRegion.append(
+        createElement("span", "dd-ability-stat__secondary-label", "Save"),
+        createElement(
+            "strong",
+            "dd-ability-stat__secondary-value",
+            savingThrow === undefined ? "-" : formatMechanicalValue(savingThrow)));
+
+    secondary.append(modifierRegion, saveRegion);
+    presentation.append(primary, secondary);
     card.append(presentation);
 
     if (effectiveValue !== undefined) {
@@ -589,6 +606,25 @@ function findAbilityModifier(
     return value?.relatedValues?.find(related =>
         related.key.toLowerCase() === "modifier"
         || related.label.trim().toLowerCase() === "modifier");
+}
+
+function findAbilitySavingThrow(
+    saves: readonly SavingThrowView[] | undefined,
+    definition: AbilityScoreDefinition
+): SavingThrowView | undefined {
+    const abilityKey = definition.key.toLowerCase();
+    const abilityLabel = definition.label.trim().toLowerCase();
+    return saves?.find(save => {
+        const governing = save.governingAbility?.trim().toLowerCase();
+        if (governing === abilityKey || governing === abilityLabel) return true;
+
+        const key = save.key.trim().toLowerCase();
+        const label = save.label.trim().toLowerCase();
+        return key === `save.${abilityKey}`
+            || key === `saving-throw.${abilityKey}`
+            || label === `${abilityLabel} save`
+            || label === `${abilityLabel} saving throw`;
+    });
 }
 
 function renderAbilityMechanicalDetails(value: CalculatedMechanicalValueView): HTMLElement | null {
