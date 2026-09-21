@@ -206,7 +206,6 @@ export interface HealthControlOptions {
     readOnly?: boolean;
     saving?: boolean;
     onSetCurrentHitPoints?: (currentHitPoints: number | null) => void;
-    onRest?: (kind: RestKind) => void;
 }
 
 export function adjustCurrentHitPoints(
@@ -262,11 +261,6 @@ export function renderHealthMechanicsCard(
             control.onSetCurrentHitPoints));
     }
 
-    card.append(renderRestControls(
-        control.readOnly === true,
-        control.saving === true,
-        control.onRest));
-
     const secondary = createElement(
         "div",
         temporaryHitPoints === undefined
@@ -304,12 +298,12 @@ export function renderHealthMechanicsCard(
     return card;
 }
 
-function renderRestControls(
+export function renderRestControls(
     readOnly: boolean,
     saving: boolean,
     onRest: ((kind: RestKind) => void) | undefined
 ): HTMLElement {
-    const controls = createElement("div", "dd-health-rest-controls");
+    const controls = createElement("div", "dd-rest-controls");
     controls.setAttribute("role", "group");
     controls.setAttribute("aria-label", "Rest actions");
 
@@ -324,7 +318,7 @@ function renderRestControls(
     const createRestButton = (kind: RestKind, label: string): HTMLButtonElement => {
         const button = createElement(
             "button",
-            "dd-button dd-button--ghost dd-health-rest-button",
+            "dd-button dd-button--ghost dd-rest-button",
             label) as HTMLButtonElement;
         button.type = "button";
         button.disabled = disabled;
@@ -720,60 +714,81 @@ function normalizeMechanicalLabel(value: string): string {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
+const MOVEMENT_PRESENTATION_MODES = [
+    { id: "walk", label: "Walk", aliases: ["walk", "walking", "land", "land speed", "speed"] },
+    { id: "swim", label: "Swim", aliases: ["swim", "swimming"] },
+    { id: "climb", label: "Climb", aliases: ["climb", "climbing"] },
+    { id: "fly", label: "Fly", aliases: ["fly", "flying"] }
+] as const;
+
 export function renderMovementValues(values: readonly CalculatedMechanicalValueView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-movement-values");
     root.setAttribute("data-movement-state", values === undefined ? "unavailable" : "resolved");
 
-    if (values === undefined || values.length === 0) {
-        root.className += " dd-movement-values--single";
-        const primary = createElement("div", "dd-movement-values__primary");
-        primary.append(createElement("strong", "dd-movement-values__primary-value", "-"));
-        root.append(primary);
-        return root;
-    }
-
-    const primaryValue = findPrimaryMovementValue(values);
-    const secondaryValues = values.filter(value => value !== primaryValue);
-    if (secondaryValues.length === 0) root.className += " dd-movement-values--single";
+    const supplied = values ?? [];
+    const claimed = new Set<CalculatedMechanicalValueView>();
+    const walk = findMovementMode(supplied, MOVEMENT_PRESENTATION_MODES[0]);
+    if (walk !== undefined) claimed.add(walk);
 
     const primary = createElement("div", "dd-movement-values__primary");
-    primary.setAttribute("data-movement-primary", primaryValue.key);
-    primary.setAttribute("data-mechanic-key", primaryValue.key);
+    primary.setAttribute("data-movement-primary", walk?.key ?? "movement.walk");
+    primary.setAttribute("data-mechanic-key", walk?.key ?? "movement.walk");
+    primary.setAttribute("data-movement-mode", "walk");
     primary.append(
-        createElement("span", "dd-movement-values__primary-label", primaryValue.label),
-        createElement("strong", "dd-movement-values__primary-value", formatMechanicalValue(primaryValue)));
+        createElement("span", "dd-movement-values__primary-label", "Walk"),
+        createElement(
+            "strong",
+            "dd-movement-values__primary-value",
+            walk === undefined ? "-" : formatMechanicalValue(walk)));
     root.append(primary);
 
-    if (secondaryValues.length > 0) {
-        const variants = createElement("div", "dd-movement-values__variants");
-        variants.setAttribute("aria-label", "Additional movement speeds");
-        for (const value of secondaryValues) {
-            const variant = createElement("div", "dd-movement-values__variant");
-            variant.setAttribute("data-mechanic-key", value.key);
-            variant.append(
-                createElement("span", "dd-movement-values__variant-label", value.label),
-                createElement("strong", "dd-movement-values__variant-value", formatMechanicalValue(value)));
-            variants.append(variant);
-        }
-        root.append(variants);
+    const variants = createElement("div", "dd-movement-values__variants");
+    variants.setAttribute("aria-label", "Additional movement speeds");
+
+    for (const mode of MOVEMENT_PRESENTATION_MODES.slice(1)) {
+        const value = findMovementMode(supplied, mode);
+        if (value !== undefined) claimed.add(value);
+        variants.append(renderMovementVariant(mode.id, mode.label, value));
     }
 
+    for (const value of supplied.filter(value => !claimed.has(value))) {
+        variants.append(renderMovementVariant(value.key, value.label, value));
+    }
+
+    root.append(variants);
     return root;
 }
 
-function findPrimaryMovementValue(
-    values: readonly CalculatedMechanicalValueView[]
-): CalculatedMechanicalValueView {
+function renderMovementVariant(
+    modeKey: string,
+    label: string,
+    value: CalculatedMechanicalValueView | undefined
+): HTMLElement {
+    const variant = createElement("div", "dd-movement-values__variant");
+    variant.setAttribute("data-movement-mode", modeKey);
+    variant.setAttribute("data-mechanic-key", value?.key ?? `movement.${modeKey}`);
+    variant.append(
+        createElement("span", "dd-movement-values__variant-label", label),
+        createElement(
+            "strong",
+            "dd-movement-values__variant-value",
+            value === undefined ? "-" : formatMechanicalValue(value)));
+    return variant;
+}
+
+function findMovementMode(
+    values: readonly CalculatedMechanicalValueView[],
+    mode: { readonly id: string; readonly label: string; readonly aliases: readonly string[] }
+): CalculatedMechanicalValueView | undefined {
     return values.find(value => {
         const normalizedKey = normalizeMechanicalLabel(value.key);
         const normalizedLabel = normalizeMechanicalLabel(value.label);
-        return normalizedLabel === "walk"
-            || normalizedLabel === "walking"
-            || normalizedLabel === "speed"
-            || normalizedLabel === "landspeed"
-            || normalizedKey.includes("walk")
-            || normalizedKey.includes("landspeed");
-    }) ?? values[0];
+        const candidates = [mode.id, mode.label, ...mode.aliases].map(normalizeMechanicalLabel);
+        return candidates.some(candidate =>
+            normalizedLabel === candidate
+            || normalizedKey === candidate
+            || normalizedKey.endsWith(candidate));
+    });
 }
 
 export function renderActionsPresentation(actions: readonly ActionAttackView[] | undefined): HTMLElement {
