@@ -52,8 +52,8 @@ export function renderFeaturesSection(
                 "p",
                 "dd-routine-empty",
                 editable
-                    ? "No Feat occurrences yet. Add one from the Rules Core catalog."
-                    : "No Character-owned Feat occurrences have been recorded."));
+                    ? "No feats yet. Add one from the rule catalog."
+                    : "No feats have been added."));
         } else {
             const list = createElement("div", "dd-feat-list");
             for (const occurrence of occurrences) {
@@ -79,7 +79,7 @@ export function renderFeaturesSection(
                         builder.savingFeat === occurrence.id ? "Removing…" : "Remove",
                         "dd-button dd-button--ghost",
                         () => {
-                            if (window.confirm("Remove this Feat occurrence from the Character?")) {
+                            if (window.confirm("Remove this feat from the Character?")) {
                                 handlers.remove(occurrence.id);
                             }
                         },
@@ -95,7 +95,7 @@ export function renderFeaturesSection(
     other.append(
         createElement("h3", "dd-feature-subsection__title", "Other Features & Traits"),
         createInlineState(
-            "Class, Subclass, Species, and other granted features are not available yet because Rules Core does not expose the normalized ordinary-Character feature/effect consumer contract.",
+            "Additional Class, Subclass, Species, and other granted features are not available in Character Sheet yet.",
             "neutral"));
     content.append(feats, other);
     return content;
@@ -114,8 +114,8 @@ function renderFeatChooser(
     const input = createElement("input", "dd-rule-chooser__input");
     input.type = "search";
     input.value = chooser.query;
-    input.placeholder = "Search Rules Core Feats";
-    input.setAttribute("aria-label", "Search Rules Core Feats");
+    input.placeholder = "Search available feats";
+    input.setAttribute("aria-label", "Search available feats");
     const submit = createElement("button", "dd-button dd-button--secondary", "Search");
     submit.type = "submit";
     const close = createButton("Close", "dd-button dd-button--ghost", handlers.closeChooser);
@@ -127,15 +127,15 @@ function renderFeatChooser(
     section.append(heading, search);
 
     if (chooser.status === "idle" || chooser.status === "loading") {
-        section.append(createInlineState("Loading Rules Core Feats…", "loading"));
+        section.append(createInlineState("Loading available feats…", "loading"));
         return section;
     }
     if (chooser.status === "error") {
-        section.append(createInlineState(chooser.message ?? "Rules Core Feat search failed.", "error"));
+        section.append(createInlineState(chooser.message ?? "Feat search failed.", "error"));
         return section;
     }
     if (chooser.results.length === 0) {
-        section.append(createElement("p", "dd-routine-empty", "No matching Rules Core Feats."));
+        section.append(createElement("p", "dd-routine-empty", "No matching feats."));
         return section;
     }
 
