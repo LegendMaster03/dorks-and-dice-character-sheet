@@ -300,6 +300,10 @@
     margin-top: 0;
 }
 
+.dd-movement-values--single {
+    grid-template-rows: 1fr;
+}
+
 .dd-movement-values__primary {
     display: grid;
     place-content: center;
