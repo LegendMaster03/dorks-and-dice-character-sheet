@@ -428,10 +428,13 @@ test("production Ability presentation contains no D&D Ability modifier formula",
     assert.doesNotMatch(production, /score\s*-\s*10|Math\.floor\s*\([^\n]*-\s*10|calculateAbilityModifier/i);
 });
 
-test("legacy combat placeholder renderer is removed in favor of the generalized combat path", async () => {
+test("legacy combat placeholder renderer is removed in favor of generalized mechanic cards", async () => {
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
-    assert.match(source, /renderCombatMechanicsSummary\(mechanics\)/);
+    assert.match(source, /renderDefenseMechanicsCard\(mechanics\)/);
+    assert.match(source, /renderCombatFundamentalsCard\(mechanics\)/);
+    assert.match(source, /renderHealthMechanicsCard\(mechanics\)/);
+    assert.match(source, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
 });
 
 
@@ -547,7 +550,10 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
     ]) {
         assert.equal(byAttribute(rendered, "data-mechanic-key", key).length, 1, key);
     }
-    assert.equal(byAttribute(rendered, "data-health-track-key", "resource.nonlethal-damage").length, 1);
+    const nonlethal = byClass(rendered, "dd-health-card__field--nonlethal");
+    assert.equal(nonlethal.length, 1);
+    assert.match(visibleText(nonlethal[0]), /Nonlethal Damage/);
+    assert.match(visibleText(nonlethal[0]), /4/);
     const initiative = byAttribute(rendered, "data-mechanic-key", "combat.initiative")[0];
     assert.ok(initiative);
     assert.ok(byClass(rendered, "dd-stat--initiative").some(node => walk(node).includes(initiative)));
