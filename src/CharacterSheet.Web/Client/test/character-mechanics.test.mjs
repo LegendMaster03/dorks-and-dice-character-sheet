@@ -125,3 +125,23 @@ test("effective Ability values join standard Ability cards only by the supplied 
     assert.equal(findAbilityValue(values, "dexterity"), undefined);
     assert.equal(findAbilityValue(values, "honor").label, "Honor");
 });
+
+
+test("composite presentation inherits a unanimous component governing ability for display", () => {
+    const items = buildCompetencyPresentation({
+        entries: [
+            value("parent", "Parent", "-", { kind: "skill" }),
+            value("a", "A", "-", { kind: "skill", governingAbility: "dexterity" }),
+            value("b", "B", "-", { kind: "skill", governingAbility: "dexterity" })
+        ],
+        relationships: [{
+            parentKey: "parent",
+            componentKeys: ["a", "b"],
+            composition: "average-floor",
+            resolutionKind: "derive-parent"
+        }]
+    });
+    assert.equal(items.length, 1);
+    assert.equal(items[0].kind, "composite");
+    assert.equal(items[0].parent.governingAbility, "dexterity");
+});

@@ -76,7 +76,7 @@ test("standalone competency renders as one ordinary row", () => {
 test("composite competency supports arbitrary component counts and preserves hierarchy", () => {
     const card = renderSkillsCard([
         composite(
-            competency("fieldcraft", "Fieldcraft", "+5"),
+            competency("fieldcraft", "Fieldcraft", "+5", { governingAbility: "wisdom" }),
             [
                 competency("tracking", "Tracking", "+6", { governingAbility: "wisdom" }),
                 competency("foraging", "Foraging", "+4", { governingAbility: "wisdom" }),
