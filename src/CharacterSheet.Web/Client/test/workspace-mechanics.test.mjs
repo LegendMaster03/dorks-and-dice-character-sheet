@@ -448,8 +448,10 @@ test("workspace renders specialized, composite, independent, and unconfigured co
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.hide")[0].getAttribute("data-skill-role"), "component");
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.move-silently")[0].getAttribute("data-skill-role"), "component");
 
-    const specialty = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
-    assert.match(visibleText(specialty), /Knowledge \(the planes\)/);
+    const specialtyRow = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
+    const specialty = byAttribute(rendered, "data-skill-disclosure", "skill.knowledge-planes")[0];
+    assert.ok(specialty);
+    assert.match(visibleText(specialtyRow), /Knowledge \(the planes\)/);
     assert.match(visibleText(specialty), /Family\s+Knowledge/);
     assert.match(visibleText(specialty), /Specialty\s+the planes/);
     assert.match(visibleText(specialty), /Ranks\s+-/);
@@ -479,6 +481,7 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
             ]
         },
         combatFundamentals: [
+            mechanical("combat.initiative", "Initiative", "+4"),
             mechanical("combat.base-attack-bonus", "Base Attack Bonus", "+6/+1"),
             mechanical("combat.grapple", "Grapple", "+9")
         ],
@@ -499,12 +502,16 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
         "defense.ac.flat-footed",
         "defense.spell-resistance",
         "defense.damage-reduction",
+        "combat.initiative",
         "combat.base-attack-bonus",
         "combat.grapple"
     ]) {
         assert.equal(byAttribute(rendered, "data-mechanic-key", key).length, 1, key);
     }
     assert.equal(byAttribute(rendered, "data-health-track-key", "resource.nonlethal-damage").length, 1);
+    const initiative = byAttribute(rendered, "data-mechanic-key", "combat.initiative")[0];
+    assert.ok(initiative);
+    assert.ok(byClass(rendered, "dd-stat--initiative").some(node => walk(node).includes(initiative)));
     assert.match(visibleText(rendered), /Touch Armor Class/);
     assert.match(visibleText(rendered), /Base Attack Bonus/);
     assert.match(visibleText(rendered), /Nonlethal Damage/);

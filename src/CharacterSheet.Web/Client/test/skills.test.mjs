@@ -42,7 +42,16 @@ const competency = (key, label, formattedValue, extra = {}) => ({
     key, label, effectiveValue: formattedValue, formattedValue, ...extra
 });
 const standalone = value => ({ kind: "standalone", competency: value });
-const composite = (parent, components) => ({ kind: "composite", parent, components });
+const composite = (parent, components, relationship = {}) => ({
+    kind: "composite",
+    parent,
+    components,
+    relationship: {
+        parentKey: parent.key,
+        componentKeys: components.map(value => value.key),
+        ...relationship
+    }
+});
 
 test("missing competency data keeps the Skills surface and shows a neutral dash", () => {
     for (const items of [null, []]) {
@@ -67,14 +76,24 @@ test("standalone competency renders as one ordinary row", () => {
 test("composite competency supports arbitrary component counts and preserves hierarchy", () => {
     const card = renderSkillsCard([
         composite(
-            competency("fieldcraft", "Fieldcraft", "+5"),
-            [competency("tracking", "Tracking", "+6"), competency("foraging", "Foraging", "+4"), competency("weather", "Weather Sense", "+3")]
+            competency("fieldcraft", "Fieldcraft", "+5", { governingAbility: "wisdom" }),
+            [
+                competency("tracking", "Tracking", "+6", { governingAbility: "wisdom" }),
+                competency("foraging", "Foraging", "+4", { governingAbility: "wisdom" }),
+                competency("weather", "Weather Sense", "+3", { governingAbility: "wisdom" })
+            ],
+            { composition: "average-floor", resolutionKind: "derive-parent" }
         )
     ]);
     const group = byClass(card, "dd-skill-group--composite")[0];
     assert.equal(group.style.getPropertyValue("--dd-skill-component-count"), "3");
     assert.equal(byAttribute(group, "data-skill-role", "parent").length, 1);
     assert.equal(byAttribute(group, "data-skill-role", "component").length, 3);
+    assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 1);
+    assert.match(visibleText(card), /Calculation/);
+    assert.match(visibleText(card), /Average floor/);
+    assert.match(visibleText(card), /WIS/);
+    assert.doesNotMatch(visibleText(card), /\bDetails\b/);
 });
 
 test("ranked specialty competency progressively discloses metadata", () => {
@@ -87,7 +106,9 @@ test("ranked specialty competency progressively discloses metadata", () => {
         armorCheckPenalty: { applies: true, formattedEffect: "-2 applied" },
         specialty: "Fine work"
     }))]);
-    assert.equal(byClass(card, "dd-skill-row__details").length, 1);
+    assert.equal(byClass(card, "dd-skill-disclosure--standalone").length, 1);
+    assert.equal(byClass(card, "dd-skill-row__details").length, 0);
+    assert.doesNotMatch(visibleText(card), /\bDetails\b/);
     assert.match(visibleText(card), /Ranks/);
     assert.match(visibleText(card), /Class skill/);
     assert.match(visibleText(card), /Armor Check Penalty/);

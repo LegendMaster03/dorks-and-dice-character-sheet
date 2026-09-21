@@ -58,21 +58,22 @@ export function renderChecksAndProceduresPresentation(
     appendCheckProcedureGroups(root, primaryChecks, primaryProcedures);
 
     if (supplementalChecks.length > 0 || supplementalProcedures.length > 0) {
-        const sourceCredit = renderSourceAttributions(
-            collectSourceAttributions(supplementalChecks, supplementalProcedures),
-            true);
-        if (sourceCredit !== null) {
-            const credit = createElement("div", "dd-check-procedure-presentation__supplemental-credit");
-            credit.append(sourceCredit);
-            root.append(credit);
-        }
-
         const disclosure = createElement("details", "dd-check-procedure-presentation__supplemental");
         disclosure.append(createElement(
             "summary",
             "dd-check-procedure-presentation__supplemental-toggle",
             "Supplemental checks & procedures"));
         const body = createElement("div", "dd-check-procedure-presentation__supplemental-body");
+
+        const sourceCredit = renderSourceAttributions(
+            collectSourceAttributions(supplementalChecks, supplementalProcedures),
+            true);
+        if (sourceCredit !== null) {
+            const credit = createElement("div", "dd-check-procedure-presentation__supplemental-credit");
+            credit.append(sourceCredit);
+            body.append(credit);
+        }
+
         appendCheckProcedureGroups(body, supplementalChecks, supplementalProcedures);
         disclosure.append(body);
         root.append(disclosure);

@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+    findInitiativeValue,
     renderActionsPresentation,
     renderCombatMechanicsSummary,
+    renderQuickMechanicalValue,
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
 import { renderChecksAndProceduresPresentation, renderProcedure } from "../.test-dist/ui/procedure-components.js";
@@ -101,6 +103,29 @@ test("combat summary renders only supplied defenses and supports optional DR and
     assert.match(visibleText(rich), /Spell Resistance/);
 });
 
+test("combat summary groups defenses and saving throws using compact 3.x-style relationships", () => {
+    const rendered = renderCombatMechanicsSummary({
+        defenses: {
+            primaryKey: "ac",
+            values: [
+                mechanical("ac", "Armor Class", "18"),
+                mechanical("touch", "Touch Armor Class", "13"),
+                mechanical("flat", "Flat-Footed Armor Class", "15"),
+                mechanical("dr", "Damage Reduction", "5 / magic"),
+                mechanical("sr", "Spell Resistance", "17")
+            ]
+        },
+        savingThrows: [
+            mechanical("fort", "Fortitude", "+8"),
+            mechanical("ref", "Reflex", "+5"),
+            mechanical("will", "Will", "+7")
+        ]
+    });
+    assert.equal(byAttribute(rendered, "data-combat-group", "defense").length, 1);
+    assert.equal(byAttribute(rendered, "data-combat-group", "saves").length, 1);
+    assert.equal(byClass(rendered, "dd-saving-throw").length, 3);
+});
+
 test("combat summary keeps HP, temporary HP, and nonlethal damage independent", () => {
     const rendered = renderCombatMechanicsSummary({
         healthTracks: [
@@ -124,6 +149,24 @@ test("BAB, maneuver value, and Proficiency Bonus can coexist without equivalence
     assert.match(visibleText(rendered), /Base Attack Bonus/);
     assert.match(visibleText(rendered), /Grapple/);
     assert.match(visibleText(rendered), /Proficiency Bonus/);
+});
+
+test("Initiative is promoted to the quick-stat surface and omitted from the lower combat group", () => {
+    const values = [
+        mechanical("combat.base-attack-bonus", "Base Attack Bonus", "+6/+1"),
+        mechanical("combat.initiative", "Initiative", "+4")
+    ];
+    const initiative = findInitiativeValue(values);
+    assert.ok(initiative);
+    assert.equal(initiative.key, "combat.initiative");
+
+    const quick = renderQuickMechanicalValue(initiative);
+    assert.equal(byAttribute(quick, "data-mechanic-key", "combat.initiative").length, 1);
+    assert.match(visibleText(quick), /\+4/);
+
+    const summary = renderCombatMechanicsSummary({ combatFundamentals: values });
+    assert.match(visibleText(summary), /Base Attack Bonus/);
+    assert.doesNotMatch(visibleText(summary), /Initiative/);
 });
 
 test("minimal attacks stay sparse while rich attacks expose optional critical, range, and ammunition fields", () => {
@@ -155,7 +198,7 @@ test("procedure renderer accepts arbitrary component counts and displays only ba
     assert.match(visibleText(procedure), /Backend result/);
 });
 
-test("supplemental rule checks are collapsed while required creator credit remains visible", () => {
+test("supplemental rule checks and required creator credit share the same disclosure", () => {
     const attribution = {
         key: "fixture-public",
         label: "Fixture Public Rules",
@@ -183,7 +226,7 @@ test("supplemental rule checks are collapsed while required creator credit remai
     assert.ok(disclosure);
     assert.equal(disclosure.tagName, "DETAILS");
     assert.ok(credit);
-    assert.equal(walk(disclosure).includes(credit), false);
+    assert.equal(walk(disclosure).includes(credit), true);
     assert.match(visibleText(disclosure), /External Check/);
     assert.match(visibleText(disclosure), /External Procedure/);
     assert.doesNotMatch(visibleText(disclosure), /Core Check/);

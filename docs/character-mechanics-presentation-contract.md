@@ -113,7 +113,7 @@ Omitted or unmatched effective data never causes the frontend to calculate a val
 
 `SavingThrowView` extends the calculated-value primitive with optional `governingAbility` and `training`.
 
-The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend neither selects the save model nor computes values. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row.
+The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend neither selects the save model nor computes values. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row. The Character Sheet groups supplied saves with the other combat fundamentals rather than giving them a separate tall support-column card.
 
 ## Defenses
 
@@ -147,7 +147,7 @@ Hit points, temporary hit points, and nonlethal damage are distinct tracks and m
 
 `CharacterMechanicsView.combatFundamentals` is an arbitrary list of calculated mechanical values. Examples include Base Attack Bonus, Grapple or another maneuver value, Initiative, Proficiency Bonus, or future rule-defined combat fundamentals.
 
-The backend decides which values apply. Base Attack Bonus and Proficiency Bonus are not equivalent and may coexist. Applicable Rules Core combat-value definitions remain present with `-` until the Character backend can supply an authoritative evaluation.
+The backend decides which values apply. Base Attack Bonus and Proficiency Bonus are not equivalent and may coexist. Applicable Rules Core combat-value definitions remain present with `-` until the Character backend can supply an authoritative evaluation. A supplied Initiative value is promoted to the compact quick-stat region beside Movement and is not duplicated in the lower combat group; this is presentation placement only and does not alter its calculation.
 
 ## Competencies
 
@@ -176,9 +176,9 @@ Specialized entries such as a named Craft specialty are represented by ordinary 
 
 ### Composite relationships
 
-`CompetencyRelationshipView` contains required `parentKey` and `componentKeys[]`. `buildCompetencyPresentation()` groups entries only from these supplied relationships.
+`CompetencyRelationshipView` contains required `parentKey` and `componentKeys[]`, plus optional backend-supplied `composition` and `resolutionKind` presentation metadata. `buildCompetencyPresentation()` groups entries only from these supplied relationships.
 
-The frontend never decides that one named skill contains another named skill. Relationships can have arbitrary component counts.
+The frontend never decides that one named skill contains another named skill. Relationships can have arbitrary component counts. The collapsed Character Sheet keeps the existing parent-left/components-right composite layout. The whole composite block is one progressive-disclosure unit: expanding it may show component calculation details and the backend-supplied composition/resolution metadata, but the browser does not calculate the parent competency itself.
 
 ## Actions and attacks
 

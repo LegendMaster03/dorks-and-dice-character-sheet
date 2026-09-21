@@ -38,11 +38,18 @@ test("competency relationships are driven only by keys and support arbitrary com
     ];
     const items = buildCompetencyPresentation({
         entries,
-        relationships: [{ parentKey: "parent", componentKeys: ["a", "b", "c"] }]
+        relationships: [{
+            parentKey: "parent",
+            componentKeys: ["a", "b", "c"],
+            composition: "average-floor",
+            resolutionKind: "derive-parent"
+        }]
     });
     assert.equal(items.length, 2);
     assert.equal(items[0].kind, "composite");
     assert.equal(items[0].components.length, 3);
+    assert.equal(items[0].relationship.composition, "average-floor");
+    assert.equal(items[0].relationship.resolutionKind, "derive-parent");
     assert.equal(items[1].kind, "standalone");
     assert.equal(items[1].competency.key, "standalone");
 });

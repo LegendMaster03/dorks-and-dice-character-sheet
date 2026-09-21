@@ -158,7 +158,11 @@ public sealed record CompetencyPresentationView(
 
 public sealed record CompetencyRelationshipPresentationView(
     string ParentKey,
-    IReadOnlyList<string> ComponentKeys);
+    IReadOnlyList<string> ComponentKeys,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Composition = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ResolutionKind = null);
 
 public sealed record CompetencyCollectionPresentationView(
     IReadOnlyList<CompetencyPresentationView> Entries,
@@ -557,7 +561,11 @@ public static class CharacterPresentationProjector
 
         return components.Count == 0
             ? null
-            : new CompetencyRelationshipPresentationView(parentKey, components);
+            : new CompetencyRelationshipPresentationView(
+                parentKey,
+                components,
+                relationship.Composition,
+                relationship.EffectiveResolutionKind);
     }
 
     private static CharacterCheckPresentationView ProjectCheck(
