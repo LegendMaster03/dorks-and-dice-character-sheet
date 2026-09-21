@@ -269,10 +269,12 @@ test("health track uses the standard mechanic value label and value classes", ()
     const rendered = renderCombatMechanicsSummary({
         healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", current: 7, maximum: 12 }]
     });
-    assert.equal(byClass(rendered, "dd-mechanic-value__label").length, 1);
-    assert.equal(byClass(rendered, "dd-mechanic-value__value").length, 1);
-    assert.equal(byClass(rendered, "dd-mechanic-value-_label").length, 0);
-    assert.equal(byClass(rendered, "dd-mechanic-value-_value").length, 0);
+    const hp = byAttribute(rendered, "data-health-track-key", "hp")[0];
+    assert.ok(hp);
+    assert.equal(byClass(hp, "dd-mechanic-value__label").length, 1);
+    assert.equal(byClass(hp, "dd-mechanic-value__value").length, 1);
+    assert.equal(byClass(hp, "dd-mechanic-value-_label").length, 0);
+    assert.equal(byClass(hp, "dd-mechanic-value-_value").length, 0);
 });
 
 test("source attribution only links valid HTTPS external URLs and retains invalid attribution text", () => {
