@@ -29,6 +29,7 @@ public sealed record CharacterNoteView(
 public sealed record CharacterStateView(
     Guid CharacterId,
     bool ReadOnly,
+    int? CurrentHitPoints,
     IReadOnlyList<CharacterInventoryItemOccurrenceView> InventoryItemOccurrences,
     IReadOnlyList<CharacterNoteView> Notes);
 
@@ -64,6 +65,19 @@ public sealed class CharacterStateService(
 
         return Ready(root, access.Character!);
     }
+
+    public Task<CharacterStateResult> SetCurrentHitPointsAsync(
+        Guid characterId,
+        int? currentHitPoints,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.SetCurrentHitPointsAsync(
+                characterId,
+                currentHitPoints,
+                changedAt,
+                token),
+            cancellationToken);
 
     public Task<CharacterStateResult> AddInventoryItemOccurrenceAsync(
         Guid characterId,
@@ -191,6 +205,7 @@ public sealed class CharacterStateService(
         new(
             root.CharacterId,
             readOnly,
+            root.CurrentHitPoints,
             root.InventoryItemOccurrences
                 .OrderBy(value => value.CreatedAt)
                 .ThenBy(value => value.Id)

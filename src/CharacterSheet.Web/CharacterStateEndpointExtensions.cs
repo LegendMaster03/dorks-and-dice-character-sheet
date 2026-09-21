@@ -14,6 +14,18 @@ public static class CharacterStateEndpointExtensions
                 await service.GetAsync(characterId, cancellationToken),
                 mutating: false));
 
+        app.MapPut("/api/characters/{characterId:guid}/state/health", async (
+            Guid characterId,
+            CharacterHealthRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+            ToApiResult(
+                await service.SetCurrentHitPointsAsync(
+                    characterId,
+                    request.CurrentHitPoints,
+                    cancellationToken),
+                mutating: true));
+
         app.MapPost("/api/characters/{characterId:guid}/state/inventory", async (
             Guid characterId,
             CharacterInventoryItemOccurrenceRequest request,
@@ -153,3 +165,5 @@ public static class CharacterStateEndpointExtensions
 public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
 
 public sealed record CharacterNoteRequest(string Content);
+
+public sealed record CharacterHealthRequest(int? CurrentHitPoints);

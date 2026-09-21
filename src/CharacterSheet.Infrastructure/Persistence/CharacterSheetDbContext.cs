@@ -31,6 +31,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .IsRequired();
         root.Property(character => character.UpdatedAt)
             .IsRequired();
+        root.Property(character => character.CurrentHitPoints);
 
         var foundationalSelection = modelBuilder.Entity<CharacterFoundationalRuleSelection>();
         foundationalSelection.ToTable("character_foundational_rule_selections");
