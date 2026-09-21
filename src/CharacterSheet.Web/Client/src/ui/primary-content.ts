@@ -28,6 +28,8 @@ export function renderPrimaryContent(
     const nav = createElement("nav", "dd-primary-nav");
     nav.setAttribute("aria-label", "Character sheet sections");
     nav.setAttribute("role", "tablist");
+    nav.setAttribute("aria-orientation", "horizontal");
+    const tabs: Array<{ section: SheetSection; button: HTMLButtonElement }> = [];
 
     for (const section of SHEET_SECTIONS) {
         const active = section.id === activeSection;
@@ -38,12 +40,32 @@ export function renderPrimaryContent(
                 : "dd-primary-nav__button",
             () => handlers.selectSection(section.id));
         button.id = `dd-sheet-tab-${section.id}`;
+        button.tabIndex = active ? 0 : -1;
         button.setAttribute("role", "tab");
         button.setAttribute("aria-selected", active ? "true" : "false");
         button.setAttribute("aria-controls", `dd-sheet-panel-${section.id}`);
+        button.setAttribute("data-sheet-section-tab", section.id);
         if (active) button.setAttribute("aria-current", "page");
+        tabs.push({ section: section.id, button });
         nav.append(button);
     }
+    nav.addEventListener("keydown", event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        const currentIndex = tabs.findIndex(tab => tab.button === event.target);
+        if (currentIndex < 0) return;
+
+        event.preventDefault();
+        let nextIndex: number;
+        if (event.key === "Home") {
+            nextIndex = 0;
+        } else if (event.key === "End") {
+            nextIndex = tabs.length - 1;
+        } else {
+            const direction = event.key === "ArrowRight" ? 1 : -1;
+            nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+        }
+        handlers.selectSection(tabs[nextIndex].section);
+    });
 
     const definition = SHEET_SECTIONS.find(value => value.id === activeSection)
         ?? SHEET_SECTIONS[0];
