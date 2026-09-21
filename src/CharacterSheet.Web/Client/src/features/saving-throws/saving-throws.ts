@@ -1,0 +1,74 @@
+import type { SavingThrowView } from "../../ui/character-mechanics.js";
+import { createElement, createSectionCard } from "../../ui/components.js";
+import {
+    findScaffoldValue,
+    renderFacts,
+    renderMechanicalValue,
+    renderScaffoldMechanicalValue,
+    type MechanicalScaffoldSlot
+} from "../../core/mechanics/mechanic-value.js";
+
+export const SAVE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
+    { id: "fortitude", label: "Fortitude Save", keys: ["save.fortitude"], labels: ["Fortitude"] },
+    { id: "reflex", label: "Reflex Save", keys: ["save.reflex"], labels: ["Reflex"] },
+    { id: "will", label: "Will Save", keys: ["save.will"], labels: ["Will"] }
+];
+
+export function renderSavingThrowsCard(
+    saves: readonly SavingThrowView[] | undefined
+): HTMLElement {
+    const card = createSectionCard("Saving Throws", "dd-support-card dd-saving-throws-card");
+    card.setAttribute(
+        "data-saving-throws-state",
+        saves === undefined ? "unavailable" : "resolved");
+    const values = saves ?? [];
+    const grid = createElement("div", "dd-saving-throws-card__grid");
+    grid.append(...(
+        values.length === 0 || usesThreeXSaveScaffold(values)
+            ? renderSavingThrowScaffold(values)
+            : values.map(renderSavingThrowCell)
+    ));
+    card.append(grid);
+    return card;
+}
+
+export function renderSavingThrowScaffold(
+    saves: readonly SavingThrowView[]
+): HTMLElement[] {
+    const usedKeys = new Set<string>();
+    const cells = SAVE_SCAFFOLD.map(slot => {
+        const save = findScaffoldValue(
+            saves,
+            slot,
+            usedKeys) as SavingThrowView | undefined;
+        if (save !== undefined) {
+            usedKeys.add(save.key);
+            return renderSavingThrowCell(save);
+        }
+
+        const item = createElement("div", "dd-saving-throw");
+        item.append(renderScaffoldMechanicalValue(slot));
+        return item;
+    });
+
+    for (const save of saves) {
+        if (!usedKeys.has(save.key)) cells.push(renderSavingThrowCell(save));
+    }
+    return cells;
+}
+
+function usesThreeXSaveScaffold(saves: readonly SavingThrowView[]): boolean {
+    return SAVE_SCAFFOLD.some(slot =>
+        findScaffoldValue(saves, slot, new Set<string>()) !== undefined);
+}
+
+function renderSavingThrowCell(save: SavingThrowView): HTMLElement {
+    const item = createElement("div", "dd-saving-throw");
+    item.append(renderMechanicalValue(save, true));
+    const meta = renderFacts([
+        ["Ability", save.governingAbility],
+        ["Training", save.training]
+    ]);
+    if (meta !== null) item.append(meta);
+    return item;
+}
