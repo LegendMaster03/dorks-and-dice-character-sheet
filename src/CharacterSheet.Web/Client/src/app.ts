@@ -87,10 +87,10 @@ function render(): void {
             break;
         case "submitting":
             content = renderStateScreen(
-                state.screen.operation === "new-character" ? "Creating Character" : "Starting digital Character Sheet",
+                state.screen.operation === "new-character" ? "Creating Character" : "Setting up Character Sheet",
                 state.screen.operation === "new-character"
-                    ? "Creating the canonical Site Character and initializing its digital sheet…"
-                    : "Initializing the digital Character Sheet…",
+                    ? "Creating your Character and setting up its Character Sheet…"
+                    : "Setting up the Character Sheet…",
                 "loading");
             break;
         case "basic-character":
@@ -125,11 +125,11 @@ function renderNewCharacter(message?: string, recoveryCharacterId?: string): HTM
         createElement(
             "p",
             "dd-sheet-screen__copy",
-            "Create the Site-owned Character first. Character Sheet will then attach its digital build state to that canonical Character identity."));
+            "Create a Character in Dorks & Dice, then set up the Character Sheet that is saved with it."));
 
     if (!environment.embedded) {
         panel.append(createInlineState(
-            "Standalone development does not invent Site Character ownership. Open this route through Dorks & Dice to create a canonical Character.",
+            "Character creation is available through the Dorks & Dice Site. Open this page there to create and save a Character.",
             "warning"));
         screen.append(panel);
         return screen;
@@ -173,12 +173,12 @@ function renderBasicCharacter(character: CharacterSheetBootstrapResponse): HTMLE
     const body = createElement("div", "dd-sheet-screen");
     const panel = createElement("section", "dd-character-init");
     panel.append(
-        createElement("h2", "dd-character-init__name", "Digital sheet not initialized"),
+        createElement("h2", "dd-character-init__name", "Character Sheet not set up"),
         createElement(
             "p",
             "dd-character-init__copy",
-            "This Site Character exists, but Character Sheet does not yet have rich Character-owned build state for it."),
-        createButton("Build Digital Sheet", "dd-button dd-button--primary", () => void initializeExistingCharacter(character)));
+            "This Character is saved, but its Character Sheet has not been set up yet."),
+        createButton("Set Up Character Sheet", "dd-button dd-button--primary", () => void initializeExistingCharacter(character)));
     body.append(panel);
     shell.append(body);
     return shell;
@@ -231,7 +231,9 @@ function renderWorkspace(
                 addInventoryItem: conceptKey => void addInventoryItem(character.characterId, conceptKey),
                 removeInventoryItem: occurrenceId => void removeInventoryItem(character.characterId, occurrenceId)
             },
-            selectSection: section => application.dispatch({ type: "sheet-section-selected", section }),
+            selectSection: section => dispatchAndFocus(
+                { type: "sheet-section-selected", section },
+                `[data-sheet-section-tab="${section}"]`),
             enterEditMode: () => dispatchAndFocus(
                 { type: "sheet-edit-entered" },
                 '[data-sheet-mode-control="view"]'),

@@ -330,7 +330,7 @@ function renderGuidedBuilder(
             abilities.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "These are the persisted base-score inputs currently supported by the Character backend."));
+                "Enter the base Ability Scores used for this Character. These values are saved with the sheet."));
             const grid = createElement("div", "dd-core-stats__abilities dd-guided-builder__ability-grid");
             for (const definition of ABILITY_SCORE_DEFINITIONS) {
                 grid.append(renderAbilityScoreCard(
@@ -349,7 +349,7 @@ function renderGuidedBuilder(
             review.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "This list reports only configuration the current backend can determine. It does not invent edition-specific completion requirements."));
+                "This review shows the Character setup the sheet can currently verify. Edition-specific requirements that are not represented here are not marked complete."));
             const list = createElement("ul", "dd-guided-builder__review-list");
             for (const section of sectionStates.filter(value => value.id !== "review")) {
                 const item = createElement("li", "dd-guided-builder__review-item");
@@ -720,6 +720,8 @@ function renderPrimaryContent(
     const nav = createElement("nav", "dd-primary-nav");
     nav.setAttribute("aria-label", "Character sheet sections");
     nav.setAttribute("role", "tablist");
+    nav.setAttribute("aria-orientation", "horizontal");
+    const tabs: Array<{ section: SheetSection; button: HTMLButtonElement }> = [];
     for (const section of SHEET_SECTIONS) {
         const active = section.id === activeSection;
         const button = createButton(
@@ -727,12 +729,32 @@ function renderPrimaryContent(
             active ? "dd-primary-nav__button dd-primary-nav__button--active" : "dd-primary-nav__button",
             () => handlers.selectSection(section.id));
         button.id = `dd-sheet-tab-${section.id}`;
+        button.tabIndex = active ? 0 : -1;
         button.setAttribute("role", "tab");
         button.setAttribute("aria-selected", active ? "true" : "false");
         button.setAttribute("aria-controls", `dd-sheet-panel-${section.id}`);
+        button.setAttribute("data-sheet-section-tab", section.id);
         if (active) button.setAttribute("aria-current", "page");
+        tabs.push({ section: section.id, button });
         nav.append(button);
     }
+    nav.addEventListener("keydown", event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        const currentIndex = tabs.findIndex(tab => tab.button === event.target);
+        if (currentIndex < 0) return;
+
+        event.preventDefault();
+        let nextIndex: number;
+        if (event.key === "Home") {
+            nextIndex = 0;
+        } else if (event.key === "End") {
+            nextIndex = tabs.length - 1;
+        } else {
+            const direction = event.key === "ArrowRight" ? 1 : -1;
+            nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+        }
+        handlers.selectSection(tabs[nextIndex].section);
+    });
 
     const definition = SHEET_SECTIONS.find(value => value.id === activeSection) ?? SHEET_SECTIONS[0];
     const panel = createElement("div", "dd-primary-content__panel");
@@ -807,8 +829,8 @@ function renderFeaturesSection(
                 "p",
                 "dd-routine-empty",
                 editable
-                    ? "No Feat occurrences yet. Add one from the Rules Core catalog."
-                    : "No Character-owned Feat occurrences have been recorded."));
+                    ? "No feats yet. Add one from the rule catalog."
+                    : "No feats have been added."));
         } else {
             const list = createElement("div", "dd-feat-list");
             for (const occurrence of occurrences) {
@@ -834,7 +856,7 @@ function renderFeaturesSection(
                         builder.savingFeat === occurrence.id ? "Removing…" : "Remove",
                         "dd-button dd-button--ghost",
                         () => {
-                            if (window.confirm("Remove this Feat occurrence from the Character?")) {
+                            if (window.confirm("Remove this feat from the Character?")) {
                                 handlers.remove(occurrence.id);
                             }
                         },
@@ -850,7 +872,7 @@ function renderFeaturesSection(
     other.append(
         createElement("h3", "dd-feature-subsection__title", "Other Features & Traits"),
         createInlineState(
-            "Class, Subclass, Species, and other granted features are not available yet because Rules Core does not expose the normalized ordinary-Character feature/effect consumer contract.",
+            "Additional Class, Subclass, Species, and other granted features are not available in Character Sheet yet.",
             "neutral"));
     content.append(feats, other);
     return content;
@@ -869,7 +891,7 @@ function renderFeatChooser(
     const input = createElement("input", "dd-rule-chooser__input");
     input.type = "search";
     input.value = chooser.query;
-    input.placeholder = "Search Rules Core Feats";
+    input.placeholder = "Search available feats";
     input.setAttribute("aria-label", "Search Rules Core Feats");
     const submit = createElement("button", "dd-button dd-button--secondary", "Search");
     submit.type = "submit";
@@ -882,15 +904,15 @@ function renderFeatChooser(
     section.append(heading, search);
 
     if (chooser.status === "idle" || chooser.status === "loading") {
-        section.append(createInlineState("Loading Rules Core Feats…", "loading"));
+        section.append(createInlineState("Loading available feats…", "loading"));
         return section;
     }
     if (chooser.status === "error") {
-        section.append(createInlineState(chooser.message ?? "Rules Core Feat search failed.", "error"));
+        section.append(createInlineState(chooser.message ?? "Feat search failed.", "error"));
         return section;
     }
     if (chooser.results.length === 0) {
-        section.append(createElement("p", "dd-routine-empty", "No matching Rules Core Feats."));
+        section.append(createElement("p", "dd-routine-empty", "No matching feats."));
         return section;
     }
 
@@ -961,8 +983,8 @@ function renderInventorySection(
             "p",
             "dd-routine-empty",
             editable
-                ? "No item occurrences yet. Add an item from the Rules Core catalog."
-                : "No item occurrences have been recorded."));
+                ? "No items yet. Add one from the rule catalog."
+                : "No items have been added."));
     }
 
     const list = createElement("div", "dd-inventory-list");
@@ -995,7 +1017,7 @@ function renderInventorySection(
                     : "Remove",
                 "dd-button dd-button--ghost",
                 () => {
-                    if (window.confirm("Remove this item occurrence from the Character?")) {
+                    if (window.confirm("Remove this item from the Character?")) {
                         handlers.removeInventoryItem(occurrence.id);
                     }
                 },
@@ -1029,7 +1051,7 @@ function renderInventoryChooser(
     const input = createElement("input", "dd-rule-chooser__input");
     input.type = "search";
     input.value = chooser.query;
-    input.placeholder = "Search Rules Core items";
+    input.placeholder = "Search available items";
     input.setAttribute("aria-label", "Search Rules Core items");
     const submit = createElement("button", "dd-button dd-button--secondary", "Search");
     submit.type = "submit";
@@ -1042,15 +1064,15 @@ function renderInventoryChooser(
     section.append(heading, search);
 
     if (chooser.status === "idle" || chooser.status === "loading") {
-        section.append(createInlineState("Loading Rules Core items…", "loading"));
+        section.append(createInlineState("Loading available items…", "loading"));
         return section;
     }
     if (chooser.status === "error") {
-        section.append(createInlineState(chooser.message ?? "Rules Core item search failed.", "error"));
+        section.append(createInlineState(chooser.message ?? "Item search failed.", "error"));
         return section;
     }
     if (chooser.results.length === 0) {
-        section.append(createElement("p", "dd-routine-empty", "No matching Rules Core items."));
+        section.append(createElement("p", "dd-routine-empty", "No matching items."));
         return section;
     }
 
@@ -1123,8 +1145,8 @@ function renderNotesSection(
             "p",
             "dd-routine-empty",
             editable
-                ? "No notes yet. Add a Character-owned note above."
-                : "No Character-owned notes have been recorded."));
+                ? "No notes yet. Add a note above."
+                : "No notes have been added."));
         return content;
     }
 

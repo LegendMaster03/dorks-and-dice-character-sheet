@@ -35,19 +35,19 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
         id: "inventory",
         label: "Inventory",
         emptyTitle: "No items yet",
-        emptyMessage: "Inventory currently tracks distinct Character-owned item occurrences."
+        emptyMessage: "Items added to this Character appear here as separate inventory entries."
     },
     {
         id: "features",
         label: "Features & Traits",
-        emptyTitle: "No Feat occurrences yet",
-        emptyMessage: "Character-owned Feat occurrences appear here; other granted features remain contract-dependent."
+        emptyTitle: "No feats yet",
+        emptyMessage: "Added feats appear here. Other granted features are not available in the sheet yet."
     },
     {
         id: "notes",
         label: "Notes",
         emptyTitle: "No notes yet",
-        emptyMessage: "Character-owned notes are stored with the Character."
+        emptyMessage: "Notes you add here are saved with this Character."
     }
 ];
 
@@ -79,7 +79,7 @@ export function getGuidedBuilderSectionStates(
         return GUIDED_BUILDER_SECTIONS.map(section => ({
             ...section,
             status: "unavailable",
-            detail: "Character build state is not available."
+            detail: "Character setup is not available."
         }));
     }
 
@@ -111,14 +111,14 @@ export function getGuidedBuilderSectionStates(
             label: "Abilities",
             status: allBaseAbilitiesConfigured ? "resolved" : "incomplete",
             detail: allBaseAbilitiesConfigured
-                ? "All backend-supported base Ability Score inputs are configured."
+                ? "All base Ability Scores available in the sheet are configured."
                 : `${configuredAbilities} of ${CHARACTER_ABILITY_KEYS.length} base Ability Score inputs are configured.`
         },
         {
             id: "review",
             label: "Review",
             status: "available",
-            detail: "Review only the structural configuration the current backend exposes."
+            detail: "Review the Character setup currently available in the sheet."
         }
     ];
 }
@@ -276,7 +276,7 @@ export function toRuleReferenceDisplay(reference: RuleReferenceState): RuleRefer
             };
         case "error":
             return {
-                value: "Rules Core resolution failed",
+                value: "Saved selection could not be loaded",
                 detail: `${reference.conceptKey} • ${reference.message}`,
                 tone: "error"
             };
@@ -319,14 +319,14 @@ function headerReferenceDisplay(
     target: CharacterBuilderChoice
 ): RuleReferenceDisplay {
     if (builder.status === "idle" && builder.build === null) {
-        return { value: "Digital sheet not initialized", tone: "empty" };
+        return { value: "Character Sheet not set up", tone: "empty" };
     }
     if (builder.status === "loading") {
-        return { value: "Loading build state", tone: "loading" };
+        return { value: "Loading Character setup", tone: "loading" };
     }
     if (builder.status === "error") {
         return {
-            value: "Build state unavailable",
+            value: "Character setup unavailable",
             detail: builder.message,
             tone: "error"
         };

@@ -1553,26 +1553,35 @@
 .dd-primary-nav {
     display: flex;
     gap: 0;
+    min-width: 0;
     overflow-x: auto;
     border-bottom: 1px solid var(--dd-sheet-border);
     background: var(--dd-sheet-surface-muted);
+    scrollbar-width: thin;
+    scroll-padding-inline: var(--dd-sheet-space-2);
+    overscroll-behavior-inline: contain;
 }
 
 .dd-primary-nav__button {
     position: relative;
-    flex: 1 1 auto;
-    min-width: 0;
+    flex: 1 0 auto;
+    min-width: max-content;
     min-height: 3rem;
     padding: 0.65rem;
     color: var(--dd-sheet-muted);
     background: transparent;
     border: 0;
+    border-inline-end: 1px solid var(--dd-sheet-border);
     cursor: pointer;
     font-size: 0.77rem;
     font-weight: 850;
     letter-spacing: 0.035em;
     text-transform: uppercase;
     white-space: nowrap;
+}
+
+.dd-primary-nav__button:last-child {
+    border-inline-end: 0;
 }
 
 .dd-primary-nav__button:hover {
