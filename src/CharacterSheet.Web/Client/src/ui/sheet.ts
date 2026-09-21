@@ -619,11 +619,8 @@ function findAbilitySavingThrow(
         if (governing === abilityKey || governing === abilityLabel) return true;
 
         const key = save.key.trim().toLowerCase();
-        const label = save.label.trim().toLowerCase();
         return key === `save.${abilityKey}`
-            || key === `saving-throw.${abilityKey}`
-            || label === `${abilityLabel} save`
-            || label === `${abilityLabel} saving throw`;
+            || key === `saving-throw.${abilityKey}`;
     });
 }
 
