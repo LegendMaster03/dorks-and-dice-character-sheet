@@ -25,6 +25,7 @@ import {
 import {
     findInitiativeValue,
     renderActionsPresentation,
+    renderArmorClassQuickCard,
     renderCombatFundamentalsCard,
     renderDefenseMechanicsCard,
     renderFacts,
@@ -444,7 +445,11 @@ function renderCoreStats(
         createElement("h3", "dd-stat__label", "Initiative"),
         renderQuickMechanicalValue(findInitiativeValue(mechanics?.combatFundamentals)));
 
-    quickGrid.append(movement, initiative);
+    quickGrid.append(
+        movement,
+        initiative,
+        renderArmorClassQuickCard(mechanics)
+    );
     section.append(abilityGrid, quickGrid);
 
     const standardAbilityKeys = new Set(ABILITY_SCORE_DEFINITIONS.map(definition => definition.key));

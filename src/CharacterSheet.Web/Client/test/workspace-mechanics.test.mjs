@@ -146,6 +146,37 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
 });
 
+test("workspace promotes Armor Class beside Movement and Initiative and removes the AC trio from Defense", () => {
+    const rendered = render("actions", {
+        defenses: {
+            primaryKey: "defense.ac",
+            values: [
+                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic"),
+                mechanical("defense.spell-resistance", "Spell Resistance", "17")
+            ]
+        },
+        combatFundamentals: [mechanical("combat.initiative", "Initiative", "+4")]
+    });
+
+    const acCard = byAttribute(rendered, "data-armor-class-card", "true")[0];
+    assert.ok(acCard);
+    assert.match(visibleText(acCard), /Armor Class/);
+    assert.match(visibleText(acCard), /Touch AC/);
+    assert.match(visibleText(acCard), /Flat-Footed AC/);
+    assert.match(visibleText(acCard), /18/);
+    assert.match(visibleText(acCard), /13/);
+    assert.match(visibleText(acCard), /15/);
+
+    const defense = byClass(rendered, "dd-defense-card")[0];
+    assert.ok(defense);
+    assert.doesNotMatch(visibleText(defense), /Armor Class|Touch AC|Flat-Footed/);
+    assert.match(visibleText(defense), /Damage Reduction/);
+    assert.match(visibleText(defense), /Spell Resistance/);
+});
+
 test("workspace keeps support, mechanics, and primary interaction as separate mockup columns", () => {
     const rendered = render("actions", null);
     assert.equal(byClass(rendered, "dd-sheet__support").length, 1);

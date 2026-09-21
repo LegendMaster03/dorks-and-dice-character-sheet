@@ -4,7 +4,9 @@ import { readFile } from "node:fs/promises";
 import {
     findInitiativeValue,
     renderActionsPresentation,
+    renderArmorClassQuickCard,
     renderCombatMechanicsSummary,
+    renderDefenseMechanicsCard,
     renderQuickMechanicalValue,
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
@@ -75,6 +77,48 @@ test("saving throw breakdown is progressive disclosure with arbitrary contributi
     assert.equal(byTag(card, "details").length, 1);
     assert.match(visibleText(card), /Progression/);
     assert.match(visibleText(card), /Resistance item/);
+});
+
+test("Armor Class quick card promotes primary AC and keeps touch and flat-footed as subordinate variants", () => {
+    const rendered = renderArmorClassQuickCard({
+        defenses: {
+            primaryKey: "defense.ac",
+            values: [
+                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic")
+            ]
+        }
+    });
+    assert.equal(rendered.getAttribute("data-armor-class-card"), "true");
+    assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac").length, 1);
+    assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac.touch").length, 1);
+    assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac.flat-footed").length, 1);
+    assert.match(visibleText(rendered), /Armor Class/);
+    assert.match(visibleText(rendered), /Touch AC/);
+    assert.match(visibleText(rendered), /Flat-Footed AC/);
+    assert.match(visibleText(rendered), /18/);
+    assert.match(visibleText(rendered), /13/);
+    assert.match(visibleText(rendered), /15/);
+});
+
+test("Defense card excludes the promoted AC trio while retaining other defensive mechanics", () => {
+    const rendered = renderDefenseMechanicsCard({
+        defenses: {
+            primaryKey: "defense.ac",
+            values: [
+                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic"),
+                mechanical("defense.spell-resistance", "Spell Resistance", "17")
+            ]
+        }
+    });
+    assert.doesNotMatch(visibleText(rendered), /Armor Class|Touch AC|Flat-Footed/);
+    assert.match(visibleText(rendered), /Damage Reduction/);
+    assert.match(visibleText(rendered), /Spell Resistance/);
 });
 
 test("combat summary preserves named defense surfaces when values are missing", () => {

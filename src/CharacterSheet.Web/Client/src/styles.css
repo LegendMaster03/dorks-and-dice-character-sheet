@@ -226,7 +226,7 @@
 
 .dd-core-stats {
     display: grid;
-    grid-template-columns: minmax(0, 4fr) minmax(12rem, 1fr);
+    grid-template-columns: minmax(0, 2fr) minmax(22rem, 1fr);
     gap: var(--dd-sheet-space-3);
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) 0;
 }
@@ -242,7 +242,7 @@
 }
 
 .dd-core-stats__quick {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.35fr);
 }
 
 .dd-stat {
@@ -262,6 +262,63 @@
     font-weight: 800;
     letter-spacing: 0.045em;
     text-transform: uppercase;
+}
+
+.dd-stat--armor-class {
+    display: grid;
+    grid-template-rows: minmax(4.5rem, 3fr) minmax(2.25rem, 1fr);
+    padding: 0;
+    overflow: hidden;
+}
+
+.dd-armor-class__primary {
+    display: grid;
+    place-content: center;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 0.65rem 0.5rem;
+}
+
+.dd-armor-class__primary-value {
+    color: var(--dd-sheet-ink);
+    font-size: 1.35rem;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.dd-armor-class__variants {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-armor-class__variant {
+    display: grid;
+    place-content: center;
+    gap: 0.15rem;
+    min-width: 0;
+    padding: 0.38rem 0.25rem;
+}
+
+.dd-armor-class__variant + .dd-armor-class__variant {
+    border-left: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-armor-class__variant-label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.025em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.dd-armor-class__variant-value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.78rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
 }
 
 .dd-stat__value {
@@ -511,7 +568,7 @@
 }
 
 .dd-defense-card__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .dd-combat-fundamentals-card__grid,
@@ -1232,7 +1289,7 @@
     }
 
     .dd-core-stats__quick {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .dd-sheet__workspace {
@@ -1318,6 +1375,10 @@
 
     .dd-core-stats__abilities {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dd-core-stats__quick {
+        grid-template-columns: 1fr;
     }
 
     .dd-skill-group--composite {
