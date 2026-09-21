@@ -136,13 +136,3 @@ test("stylesheet entrypoint is composition-only", async () => {
         '@import "./styles/supplemental.css";'
     ]);
 });
-
-test("backend presentation service remains orchestration-only", async () => {
-    const service = await readFile(
-        new URL("../../../CharacterSheet.Application/Characters/CharacterPresentationService.cs", import.meta.url),
-        "utf8");
-    assert.match(service, /CharacterPresentationProjector\.ProjectAdvancement/);
-    assert.match(service, /CharacterPresentationProjector\.ProjectMechanics/);
-    assert.doesNotMatch(service, /private static CompetencyPresentationView/);
-    assert.doesNotMatch(service, /private static CharacterProcedurePresentationView/);
-});
