@@ -30,7 +30,6 @@ import {
     renderCombatFundamentalsCard,
     renderDefenseMechanicsCard,
     renderFacts,
-    renderHealthMechanicsCard,
     renderHealthQuickCard,
     renderSavingThrowsCard,
     renderMechanicalValue,
