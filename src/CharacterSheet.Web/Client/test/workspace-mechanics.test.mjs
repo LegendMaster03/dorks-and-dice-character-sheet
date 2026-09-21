@@ -448,8 +448,10 @@ test("workspace renders specialized, composite, independent, and unconfigured co
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.hide")[0].getAttribute("data-skill-role"), "component");
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.move-silently")[0].getAttribute("data-skill-role"), "component");
 
-    const specialty = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
-    assert.match(visibleText(specialty), /Knowledge \(the planes\)/);
+    const specialtyRow = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
+    const specialty = byAttribute(rendered, "data-skill-disclosure", "skill.knowledge-planes")[0];
+    assert.ok(specialty);
+    assert.match(visibleText(specialtyRow), /Knowledge \(the planes\)/);
     assert.match(visibleText(specialty), /Family\s+Knowledge/);
     assert.match(visibleText(specialty), /Specialty\s+the planes/);
     assert.match(visibleText(specialty), /Ranks\s+-/);
