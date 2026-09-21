@@ -77,30 +77,40 @@ test("saving throw breakdown is progressive disclosure with arbitrary contributi
     assert.match(visibleText(card), /Resistance item/);
 });
 
-test("combat summary renders only supplied defenses and supports optional DR and spell resistance", () => {
+test("combat summary preserves named defense surfaces when values are missing", () => {
     const primaryOnly = renderCombatMechanicsSummary({
         defenses: { primaryKey: "ac", values: [mechanical("ac", "Armor Class", "18")] }
     });
-    assert.match(visibleText(primaryOnly), /Armor Class/);
-    assert.doesNotMatch(visibleText(primaryOnly), /Touch|Flat-Footed/);
+    const text = visibleText(primaryOnly);
+    assert.match(text, /Armor Class/);
+    assert.match(text, /Touch Armor Class/);
+    assert.match(text, /Flat-Footed Armor Class/);
+    assert.match(text, /Damage Reduction/);
+    assert.match(text, /Spell Resistance/);
+    assert.equal(byAttribute(primaryOnly, "data-sheet-scaffold-key", "touch-armor-class").length, 1);
+});
 
-    const rich = renderCombatMechanicsSummary({
-        defenses: {
-            primaryKey: "ac",
-            values: [
-                mechanical("touch", "Touch", "13"),
-                mechanical("ac", "Armor Class", "18"),
-                mechanical("flat", "Flat-Footed", "15"),
-                mechanical("dr", "Damage Reduction", "5 / magic"),
-                mechanical("sr", "Spell Resistance", "17")
-            ]
-        }
-    });
-    assert.match(visibleText(rich), /Armor Class/);
-    assert.match(visibleText(rich), /Touch/);
-    assert.match(visibleText(rich), /Flat-Footed/);
-    assert.match(visibleText(rich), /Damage Reduction/);
-    assert.match(visibleText(rich), /Spell Resistance/);
+test("null mechanics projection retains the full named combat scaffold with neutral dashes", () => {
+    const rendered = renderCombatMechanicsSummary(null);
+    const text = visibleText(rendered);
+    assert.equal(rendered.getAttribute("data-combat-mechanics-state"), "unavailable");
+    for (const label of [
+        "Armor Class",
+        "Touch Armor Class",
+        "Flat-Footed Armor Class",
+        "Damage Reduction",
+        "Spell Resistance",
+        "Fortitude Save",
+        "Reflex Save",
+        "Will Save",
+        "Hit Points",
+        "Nonlethal Damage",
+        "Base Attack Bonus",
+        "Grapple Modifier"
+    ]) {
+        assert.ok(text.includes(label), label);
+    }
+    assert.ok(byClass(rendered, "dd-mechanic-value--scaffold").length >= 12);
 });
 
 test("combat summary groups defenses and saving throws using compact 3.x-style relationships", () => {
@@ -109,16 +119,16 @@ test("combat summary groups defenses and saving throws using compact 3.x-style r
             primaryKey: "ac",
             values: [
                 mechanical("ac", "Armor Class", "18"),
-                mechanical("touch", "Touch Armor Class", "13"),
-                mechanical("flat", "Flat-Footed Armor Class", "15"),
-                mechanical("dr", "Damage Reduction", "5 / magic"),
-                mechanical("sr", "Spell Resistance", "17")
+                mechanical("defense.ac.touch", "Touch Armor Class", "13"),
+                mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic"),
+                mechanical("defense.spell-resistance", "Spell Resistance", "17")
             ]
         },
         savingThrows: [
-            mechanical("fort", "Fortitude", "+8"),
-            mechanical("ref", "Reflex", "+5"),
-            mechanical("will", "Will", "+7")
+            mechanical("save.fortitude", "Fortitude Save", "+8"),
+            mechanical("save.reflex", "Reflex Save", "+5"),
+            mechanical("save.will", "Will Save", "+7")
         ]
     });
     assert.equal(byAttribute(rendered, "data-combat-group", "defense").length, 1);
@@ -259,10 +269,12 @@ test("health track uses the standard mechanic value label and value classes", ()
     const rendered = renderCombatMechanicsSummary({
         healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", current: 7, maximum: 12 }]
     });
-    assert.equal(byClass(rendered, "dd-mechanic-value__label").length, 1);
-    assert.equal(byClass(rendered, "dd-mechanic-value__value").length, 1);
-    assert.equal(byClass(rendered, "dd-mechanic-value-_label").length, 0);
-    assert.equal(byClass(rendered, "dd-mechanic-value-_value").length, 0);
+    const hp = byAttribute(rendered, "data-health-track-key", "hp")[0];
+    assert.ok(hp);
+    assert.equal(byClass(hp, "dd-mechanic-value__label").length, 1);
+    assert.equal(byClass(hp, "dd-mechanic-value__value").length, 1);
+    assert.equal(byClass(hp, "dd-mechanic-value-_label").length, 0);
+    assert.equal(byClass(hp, "dd-mechanic-value-_value").length, 0);
 });
 
 test("source attribution only links valid HTTPS external URLs and retains invalid attribution text", () => {

@@ -113,7 +113,7 @@ Omitted or unmatched effective data never causes the frontend to calculate a val
 
 `SavingThrowView` extends the calculated-value primitive with optional `governingAbility` and `training`.
 
-The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend neither selects the save model nor computes values. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row. The Character Sheet groups supplied saves with the other combat fundamentals rather than giving them a separate tall support-column card.
+The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend never computes a save value. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row. Separately, the Character Sheet keeps its agreed Fortitude/Reflex/Will presentation slots visible with `-` when the mechanics projection is absent or incomplete. Those slots are presentation scaffolds, not fabricated Rules Core definitions; backend-supplied saves replace matching scaffold slots and additional supplied save models remain renderable.
 
 ## Defenses
 
@@ -122,7 +122,7 @@ The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six abi
 - optional `primaryKey`;
 - required `values: DefenseView[]`.
 
-`DefenseView` is a calculated value with an optional extensible presentation `role`. `primaryKey` controls visual ordering when present. The backend may supply only Armor Class, or Armor Class plus Touch, Flat-Footed, Damage Reduction, Spell Resistance, or future defenses. When Rules Core supplies an applicable defense definition but Character-specific state is insufficient to evaluate it, the backend preserves the defense with `-` as its value. The frontend does not invent absent defenses.
+`DefenseView` is a calculated value with an optional extensible presentation `role`. `primaryKey` controls visual ordering when present. The backend may supply only Armor Class, or Armor Class plus Touch, Flat-Footed, Damage Reduction, Spell Resistance, or future defenses. When Rules Core supplies an applicable defense definition but Character-specific state is insufficient to evaluate it, the backend preserves the defense with `-` as its value. The frontend does not fabricate a defense value or claim that a scaffold is an authoritative rule definition. The agreed Character Sheet defense slots remain visible with `-` when a matching backend value is absent, and backend-supplied defenses replace matching slots or append as additional values.
 
 ## Health tracks
 
@@ -141,13 +141,13 @@ The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six abi
 
 Known role hints include hit points, temporary hit points, nonlethal damage, and resource. The frontend currently does not apply special calculation behavior based on these role strings, so future backend-supplied roles are permitted.
 
-Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged. A supplied health/resource track with no resolved current or maximum value renders as `-`; the frontend does not relabel unresolved state as `Available`.
+Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged. A supplied health/resource track with no resolved current or maximum value renders as `-`; the frontend does not relabel unresolved state as `Available`. The Character Sheet also keeps Hit Points and Nonlethal Damage presentation slots visible with `-` when those tracks are not yet projected.
 
 ## Combat fundamentals
 
 `CharacterMechanicsView.combatFundamentals` is an arbitrary list of calculated mechanical values. Examples include Base Attack Bonus, Grapple or another maneuver value, Initiative, Proficiency Bonus, or future rule-defined combat fundamentals.
 
-The backend decides which values apply. Base Attack Bonus and Proficiency Bonus are not equivalent and may coexist. Applicable Rules Core combat-value definitions remain present with `-` until the Character backend can supply an authoritative evaluation. A supplied Initiative value is promoted to the compact quick-stat region beside Movement and is not duplicated in the lower combat group; this is presentation placement only and does not alter its calculation.
+The backend remains authoritative for combat values and their calculations. Base Attack Bonus and Proficiency Bonus are not equivalent and may coexist. Applicable Rules Core combat-value definitions remain present with `-` until the Character backend can supply an authoritative evaluation. The agreed Character Sheet Base Attack Bonus and Grapple Modifier slots remain visible with `-` when no matching projection is available. A supplied Initiative value is promoted to the compact quick-stat region beside Movement and is not duplicated in the lower combat group; this is presentation placement only and does not alter its calculation.
 
 ## Competencies
 

@@ -145,14 +145,41 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
 });
 
-test("null mechanics projection keeps normal surfaces and uses neutral dashes for missing values", () => {
+test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
     const rendered = render("actions", null);
     const text = visibleText(rendered);
-    assert.ok(byClass(rendered, "dd-mechanic-value--placeholder").length >= 2);
     assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 1);
     assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available/);
     assert.match(text, /Resolved actions and attacks are not available/);
-    assert.doesNotMatch(text, /Fortitude|Armor Class 18|Base Attack Bonus \+6\/\+1/);
+
+    for (const label of [
+        "Armor Class",
+        "Touch Armor Class",
+        "Flat-Footed Armor Class",
+        "Damage Reduction",
+        "Spell Resistance",
+        "Fortitude Save",
+        "Reflex Save",
+        "Will Save",
+        "Hit Points",
+        "Nonlethal Damage",
+        "Base Attack Bonus",
+        "Grapple Modifier",
+        "Perception",
+        "Investigation",
+        "Insight",
+        "Armor",
+        "Weapons",
+        "Tools",
+        "Languages"
+    ]) {
+        assert.ok(text.includes(label), label);
+    }
+
+    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 1);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 1);
+    assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);
+    assert.equal(byAttribute(rendered, "data-health-track-role", "hit-points").length, 1);
 });
 
 test("Inventory joins mechanics by stable occurrence identity and keeps duplicate concepts independent", () => {

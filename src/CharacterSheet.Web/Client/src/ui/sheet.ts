@@ -41,7 +41,6 @@ import {
     createButton,
     createElement,
     createInlineState,
-    createPlaceholder,
     createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
@@ -54,13 +53,11 @@ import {
     getGuidedBuilderSectionStates,
     hasPendingBuildMutation,
     humanizeBuilderStatus,
-    MECHANIC_PLACEHOLDERS,
     parseBaseAbilityScoreInput,
     SHEET_SECTIONS,
     toRuleReferenceDisplay,
     type AbilityScoreDefinition,
     type GuidedBuilderSection,
-    type MechanicPlaceholderDefinition,
     type SheetSection
 } from "./sheet-model.js";
 
@@ -149,8 +146,17 @@ export function renderCharacterWorkspace(
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderPlaceholderCard("Passive Values", placeholders("passive-values")),
-        renderPlaceholderCard("Proficiencies & Training", placeholders("training"))
+        renderSupportScaffoldCard("Passive Values", [
+            ["passive-perception", "Perception"],
+            ["passive-investigation", "Investigation"],
+            ["passive-insight", "Insight"]
+        ]),
+        renderSupportScaffoldCard("Proficiencies & Training", [
+            ["armor-training", "Armor"],
+            ["weapon-training", "Weapons"],
+            ["tool-training", "Tools"],
+            ["languages", "Languages"]
+        ])
     );
 
     const skills = createElement("section", "dd-sheet__skills");
@@ -420,9 +426,6 @@ function renderCoreStats(
     }
 
     const quickGrid = createElement("div", "dd-core-stats__quick");
-    for (const placeholder of MECHANIC_PLACEHOLDERS.filter(value => value.group === "quick" && value.id !== "movement")) {
-        quickGrid.append(createStatPlaceholder(placeholder));
-    }
     const movement = createElement("article", "dd-stat dd-stat--movement");
     movement.append(
         createElement("h3", "dd-stat__label", "Movement"),
@@ -586,22 +589,21 @@ function renderCharacterMechanicsSources(mechanics: CharacterMechanicsView | nul
     return surface;
 }
 
-function createStatPlaceholder(definition: MechanicPlaceholderDefinition): HTMLElement {
-    const card = createElement("article", "dd-stat");
-    card.setAttribute("data-unimplemented-mechanic", definition.id);
-    card.append(
-        createElement("h3", "dd-stat__label", definition.label),
-        createElement("p", "dd-stat__value", "-"),
-        createElement("p", "dd-stat__detail", definition.message)
-    );
-    return card;
-}
-
-function renderPlaceholderCard(title: string, definitions: readonly MechanicPlaceholderDefinition[]): HTMLElement {
-    const card = createSectionCard(title, "dd-support-card");
-    for (const definition of definitions) {
-        card.append(createPlaceholder(definition.label, "-", true));
+function renderSupportScaffoldCard(
+    title: string,
+    values: readonly (readonly [string, string])[]
+): HTMLElement {
+    const card = createSectionCard(title, "dd-support-card dd-support-scaffold");
+    const list = createElement("div", "dd-support-scaffold__list");
+    for (const [key, label] of values) {
+        const row = createElement("div", "dd-support-scaffold__row");
+        row.setAttribute("data-support-scaffold-key", key);
+        row.append(
+            createElement("span", "dd-support-scaffold__label", label),
+            createElement("strong", "dd-support-scaffold__value", "-"));
+        list.append(row);
     }
+    card.append(list);
     return card;
 }
 
@@ -1087,10 +1089,6 @@ function headerSummaryItem(label: string, value: string, detail?: string): HTMLE
         item.append(meta);
     }
     return item;
-}
-
-function placeholders(id: string): MechanicPlaceholderDefinition[] {
-    return MECHANIC_PLACEHOLDERS.filter(value => value.id === id);
 }
 
 function characterInitials(name: string): string {
