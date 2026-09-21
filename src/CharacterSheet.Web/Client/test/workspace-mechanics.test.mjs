@@ -28,11 +28,22 @@ class FakeElement {
         this.href = "";
         this.target = "";
         this.rel = "";
+        this.tabIndex = 0;
+        this.listeners = new Map();
     }
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) ?? null; }
     append(...children) { this.children.push(...children); }
-    addEventListener() {}
+    addEventListener(type, listener) {
+        const listeners = this.listeners.get(type) ?? [];
+        listeners.push(listener);
+        this.listeners.set(type, listeners);
+    }
+    dispatchEvent(event) {
+        for (const listener of this.listeners.get(event.type) ?? []) listener(event);
+        return true;
+    }
+    focus() { this.focused = true; }
     setCustomValidity() {}
     reportValidity() { return true; }
 }
@@ -139,6 +150,83 @@ test("primary sheet sections expose tab and tabpanel semantics", () => {
     assert.ok(panel);
     assert.equal(panel.getAttribute("role"), "tabpanel");
     assert.equal(panel.getAttribute("aria-labelledby"), "dd-sheet-tab-actions");
+});
+
+test("primary sheet tabs use roving tabindex and horizontal arrow-key selection", () => {
+    let selectedSection = null;
+    const keyboardHandlers = {
+        ...handlers,
+        selectSection(section) { selectedSection = section; }
+    };
+    const rendered = renderCharacterWorkspace(
+        character, builder, routine(), "actions", true, "view", guidedBuilder,
+        null, null, keyboardHandlers
+    );
+    const nav = byClass(rendered, "dd-primary-nav")[0];
+    const tabs = byClass(nav, "dd-primary-nav__button");
+
+    assert.equal(nav.getAttribute("aria-orientation"), "horizontal");
+    assert.equal(tabs[0].tabIndex, 0);
+    assert.deepEqual(tabs.slice(1).map(tab => tab.tabIndex), [-1, -1, -1, -1]);
+    assert.equal(tabs[3].textContent, "Features & Traits");
+    assert.equal(tabs[3].getAttribute("data-sheet-section-tab"), "features");
+
+    let prevented = false;
+    nav.dispatchEvent({
+        type: "keydown",
+        key: "ArrowRight",
+        target: tabs[0],
+        preventDefault() { prevented = true; }
+    });
+    assert.equal(prevented, true);
+    assert.equal(selectedSection, "spells");
+
+    nav.dispatchEvent({
+        type: "keydown",
+        key: "End",
+        target: tabs[0],
+        preventDefault() {}
+    });
+    assert.equal(selectedSection, "notes");
+});
+
+test("section-tab CSS preserves long labels and delegates narrow overflow to the strip", async () => {
+    const css = (await Promise.all([
+        "../src/styles/foundation.css",
+        "../src/styles/builder.css",
+        "../src/styles/advancement.css",
+        "../src/styles/mechanics.css",
+        "../src/styles/abilities.css",
+        "../src/styles/supplemental.css"
+    ].map(path => readFile(new URL(path, import.meta.url), "utf8")))).join("\n");
+    const navBlock = css.match(/\.dd-primary-nav\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+    const buttonBlock = css.match(/\.dd-primary-nav__button\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+
+    assert.match(navBlock, /overflow-x:\s*auto/);
+    assert.match(navBlock, /scrollbar-width:\s*thin/);
+    assert.match(buttonBlock, /flex:\s*1 0 auto/);
+    assert.match(buttonBlock, /min-width:\s*max-content/);
+    assert.doesNotMatch(buttonBlock, /min-width:\s*0/);
+    assert.match(buttonBlock, /border-inline-end:/);
+});
+
+test("player-facing setup copy avoids architecture-first terminology", async () => {
+    const sources = await Promise.all([
+        "../src/app.ts",
+        "../src/ui/sheet.ts",
+        "../src/ui/builder.ts",
+        "../src/ui/sheet-model.ts",
+        "../src/ui/primary-content.ts",
+        "../src/features/features/features-section.ts",
+        "../src/features/inventory/inventory-section.ts",
+        "../src/features/notes/notes-section.ts"
+    ].map(path => readFile(new URL(path, import.meta.url), "utf8")));
+    const copy = sources.join("\n");
+
+    assert.doesNotMatch(copy, /Site-owned Character|digital build state|canonical Character identity/i);
+    assert.doesNotMatch(copy, /backend-supported base Ability Score|current backend can determine/i);
+    assert.doesNotMatch(copy, /normalized ordinary-Character feature\/effect consumer contract/i);
+    assert.doesNotMatch(copy, /Character-owned|Rules Core (?:catalog|Feat|item)|No (?:Feat|item) occurrences/i);
 });
 
 test("Ability cards pair effective score, modifier, and matching Ability save", () => {
@@ -367,6 +455,48 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 0);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);
     assert.equal(byClass(rendered, "dd-health-quick").length, 1);
+});
+
+test("Inventory and Notes empty states remain visible and task-oriented", () => {
+    const inventory = render("inventory", null);
+    assert.match(visibleText(inventory), /No items have been added/);
+    assert.equal(byClass(inventory, "dd-inventory-item").length, 0);
+
+    const notes = render("notes", null);
+    assert.match(visibleText(notes), /No notes have been added/);
+    assert.equal(byClass(notes, "dd-note").length, 0);
+});
+
+test("active Character exposes edit and guided setup entry points", () => {
+    const editableBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        editableBuilder,
+        routine([], {}, false),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        handlers
+    );
+
+    assert.match(visibleText(rendered), /Edit Character/);
+    assert.match(visibleText(rendered), /Guided Setup/);
+    assert.equal(byAttribute(rendered, "data-sheet-mode-control", "edit").length, 1);
+    assert.equal(byAttribute(rendered, "data-sheet-mode-control", "guided").length, 1);
 });
 
 test("Inventory joins mechanics by stable occurrence identity and keeps duplicate concepts independent", () => {
