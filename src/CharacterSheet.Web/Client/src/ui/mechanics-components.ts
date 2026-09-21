@@ -73,62 +73,69 @@ export function renderQuickMechanicalValue(
     return root;
 }
 
+interface MechanicalScaffoldSlot {
+    id: string;
+    label: string;
+    keys: readonly string[];
+    labels?: readonly string[];
+}
+
+const DEFENSE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
+    { id: "armor-class", label: "Armor Class", keys: [], labels: ["Armor Class"] },
+    { id: "touch-armor-class", label: "Touch Armor Class", keys: ["defense.ac.touch"], labels: ["Touch", "Touch AC"] },
+    { id: "flat-footed-armor-class", label: "Flat-Footed Armor Class", keys: ["defense.ac.flat-footed"], labels: ["Flat-Footed", "Flat-Footed AC"] },
+    { id: "damage-reduction", label: "Damage Reduction", keys: ["defense.damage-reduction"] },
+    { id: "spell-resistance", label: "Spell Resistance", keys: ["defense.spell-resistance"] }
+];
+
+const SAVE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
+    { id: "fortitude", label: "Fortitude Save", keys: ["save.fortitude"], labels: ["Fortitude"] },
+    { id: "reflex", label: "Reflex Save", keys: ["save.reflex"], labels: ["Reflex"] },
+    { id: "will", label: "Will Save", keys: ["save.will"], labels: ["Will"] }
+];
+
+const COMBAT_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
+    { id: "base-attack-bonus", label: "Base Attack Bonus", keys: ["combat.base-attack-bonus"] },
+    { id: "grapple-modifier", label: "Grapple Modifier", keys: ["combat.grapple"], labels: ["Grapple"] }
+];
+
 export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView | null): HTMLElement {
     const section = createElement("section", "dd-combat-summary dd-combat-summary--mechanics");
     section.setAttribute("aria-labelledby", "dd-combat-heading");
+    section.setAttribute("data-combat-mechanics-state", mechanics === null ? "unavailable" : "resolved");
     const heading = createElement("h2", "dd-visually-hidden", "Combat summary");
     heading.id = "dd-combat-heading";
     section.append(heading);
-    if (mechanics === null) {
-        section.setAttribute("data-combat-mechanics-state", "unavailable");
-        section.append(renderUnavailableValue());
-        return section;
-    }
 
-    section.setAttribute("data-combat-mechanics-state", "resolved");
-    let groupCount = 0;
+    appendCombatGroup(
+        section,
+        "Defense",
+        "defense",
+        renderMechanicalScaffold(
+            orderedDefenses(mechanics),
+            DEFENSE_SCAFFOLD));
 
-    const defenses = orderedDefenses(mechanics);
-    if (defenses.length > 0) {
-        appendCombatGroup(
-            section,
-            "Defense",
-            "defense",
-            defenses.map(value => renderMechanicalValue(value, true)));
-        groupCount += 1;
-    }
+    appendCombatGroup(
+        section,
+        "Saving Throws",
+        "saves",
+        renderSavingThrowScaffold(mechanics?.savingThrows ?? []));
 
-    if ((mechanics.savingThrows?.length ?? 0) > 0) {
-        appendCombatGroup(
-            section,
-            "Saving Throws",
-            "saves",
-            mechanics.savingThrows!.map(renderSavingThrowCell));
-        groupCount += 1;
-    }
+    appendCombatGroup(
+        section,
+        "Health",
+        "health",
+        renderHealthScaffold(mechanics));
 
-    if ((mechanics.healthTracks?.length ?? 0) > 0) {
-        appendCombatGroup(
-            section,
-            "Health",
-            "health",
-            mechanics.healthTracks!.map(renderHealthTrack));
-        groupCount += 1;
-    }
-
-    const initiative = findInitiativeValue(mechanics.combatFundamentals);
-    const combatValues = (mechanics.combatFundamentals ?? [])
+    const initiative = findInitiativeValue(mechanics?.combatFundamentals);
+    const combatValues = (mechanics?.combatFundamentals ?? [])
         .filter(value => value !== initiative);
-    if (combatValues.length > 0) {
-        appendCombatGroup(
-            section,
-            "Combat",
-            "combat",
-            combatValues.map(value => renderMechanicalValue(value, true)));
-        groupCount += 1;
-    }
+    appendCombatGroup(
+        section,
+        "Combat",
+        "combat",
+        renderMechanicalScaffold(combatValues, COMBAT_SCAFFOLD));
 
-    if (groupCount === 0) section.append(renderUnavailableValue());
     return section;
 }
 
@@ -145,6 +152,103 @@ function appendCombatGroup(
     grid.append(...cells);
     group.append(grid);
     target.append(group);
+}
+
+function renderMechanicalScaffold(
+    values: readonly CalculatedMechanicalValueView[],
+    slots: readonly MechanicalScaffoldSlot[]
+): HTMLElement[] {
+    const usedKeys = new Set<string>();
+    const cells = slots.map(slot => {
+        const value = findScaffoldValue(values, slot, usedKeys);
+        if (value !== undefined) {
+            usedKeys.add(value.key);
+            return renderMechanicalValue(value, true);
+        }
+        return renderScaffoldMechanicalValue(slot);
+    });
+
+    for (const value of values) {
+        if (!usedKeys.has(value.key)) cells.push(renderMechanicalValue(value, true));
+    }
+    return cells;
+}
+
+function renderSavingThrowScaffold(saves: readonly SavingThrowView[]): HTMLElement[] {
+    const usedKeys = new Set<string>();
+    const cells = SAVE_SCAFFOLD.map(slot => {
+        const save = findScaffoldValue(saves, slot, usedKeys) as SavingThrowView | undefined;
+        if (save !== undefined) {
+            usedKeys.add(save.key);
+            return renderSavingThrowCell(save);
+        }
+        const item = createElement("div", "dd-saving-throw");
+        item.append(renderScaffoldMechanicalValue(slot));
+        return item;
+    });
+
+    for (const save of saves) {
+        if (!usedKeys.has(save.key)) cells.push(renderSavingThrowCell(save));
+    }
+    return cells;
+}
+
+function renderHealthScaffold(mechanics: CharacterMechanicsView | null): HTMLElement[] {
+    const tracks = mechanics?.healthTracks ?? [];
+    const usedKeys = new Set<string>();
+
+    const hitPoints = tracks.find(track =>
+        track.role === "hit-points" || normalizeMechanicalLabel(track.label) === "hitpoints");
+    if (hitPoints !== undefined) usedKeys.add(hitPoints.key);
+
+    const nonlethal = tracks.find(track =>
+        track.role === "nonlethal-damage"
+        || track.key === "resource.nonlethal-damage"
+        || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
+    if (nonlethal !== undefined) usedKeys.add(nonlethal.key);
+
+    const cells = [
+        hitPoints === undefined
+            ? renderScaffoldHealthTrack("hit-points", "Hit Points")
+            : renderHealthTrack(hitPoints),
+        nonlethal === undefined
+            ? renderScaffoldHealthTrack("nonlethal-damage", "Nonlethal Damage")
+            : renderHealthTrack(nonlethal)
+    ];
+
+    for (const track of tracks) {
+        if (!usedKeys.has(track.key)) cells.push(renderHealthTrack(track));
+    }
+    return cells;
+}
+
+function findScaffoldValue<T extends CalculatedMechanicalValueView>(
+    values: readonly T[],
+    slot: MechanicalScaffoldSlot,
+    usedKeys: ReadonlySet<string>
+): T | undefined {
+    const keyMatch = values.find(value =>
+        !usedKeys.has(value.key)
+        && slot.keys.includes(value.key));
+    if (keyMatch !== undefined) return keyMatch;
+
+    const labels = new Set([slot.label, ...(slot.labels ?? [])].map(normalizeMechanicalLabel));
+    return values.find(value =>
+        !usedKeys.has(value.key)
+        && labels.has(normalizeMechanicalLabel(value.label)));
+}
+
+function renderScaffoldMechanicalValue(slot: MechanicalScaffoldSlot): HTMLElement {
+    const root = createElement(
+        "div",
+        "dd-mechanic-value dd-mechanic-value--compact dd-mechanic-value--scaffold");
+    root.setAttribute("data-sheet-scaffold-key", slot.id);
+    const head = createElement("div", "dd-mechanic-value__summary");
+    head.append(
+        createElement("span", "dd-mechanic-value__label", slot.label),
+        createElement("strong", "dd-mechanic-value__value", "-"));
+    root.append(head);
+    return root;
 }
 
 function renderSavingThrowCell(save: SavingThrowView): HTMLElement {
@@ -169,6 +273,20 @@ function renderHealthTrack(track: NonNullable<CharacterMechanicsView["healthTrac
     return cell;
 }
 
+function renderScaffoldHealthTrack(role: "hit-points" | "nonlethal-damage", label: string): HTMLElement {
+    const cell = createElement(
+        "div",
+        "dd-mechanic-value dd-mechanic-value--compact dd-health-track dd-mechanic-value--scaffold");
+    cell.setAttribute("data-health-track-role", role);
+    cell.setAttribute("data-sheet-scaffold-key", role);
+    const head = createElement("div", "dd-mechanic-value__summary");
+    head.append(
+        createElement("span", "dd-mechanic-value__label", label),
+        createElement("strong", "dd-mechanic-value__value", "-"));
+    cell.append(head);
+    return cell;
+}
+
 function isInitiativeValue(value: CalculatedMechanicalValueView): boolean {
     if (value.label.trim().toLowerCase() === "initiative") return true;
     return value.key
@@ -177,11 +295,15 @@ function isInitiativeValue(value: CalculatedMechanicalValueView): boolean {
         .includes("initiative");
 }
 
+function normalizeMechanicalLabel(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 export function renderMovementValues(values: readonly CalculatedMechanicalValueView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-movement-values");
     root.setAttribute("data-movement-state", values === undefined ? "unavailable" : "resolved");
     if (values === undefined || values.length === 0) {
-        root.append(renderUnavailableValue());
+        root.append(createElement("p", "dd-stat__value", "-"));
     } else {
         root.append(...values.map(value => renderMechanicalValue(value, true)));
     }
@@ -239,9 +361,9 @@ function renderUnavailableValue(): HTMLElement {
     return root;
 }
 
-function orderedDefenses(mechanics: CharacterMechanicsView): readonly CalculatedMechanicalValueView[] {
-    const values = mechanics.defenses?.values ?? [];
-    const key = mechanics.defenses?.primaryKey;
+function orderedDefenses(mechanics: CharacterMechanicsView | null): readonly CalculatedMechanicalValueView[] {
+    const values = mechanics?.defenses?.values ?? [];
+    const key = mechanics?.defenses?.primaryKey;
     const primary = key === undefined ? undefined : values.find(value => value.key === key);
     return primary === undefined ? values : [primary, ...values.filter(value => value.key !== key)];
 }
