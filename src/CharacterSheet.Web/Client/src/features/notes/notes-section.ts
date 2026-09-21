@@ -53,8 +53,8 @@ export function renderNotesSection(
             "p",
             "dd-routine-empty",
             editable
-                ? "No notes yet. Add a Character-owned note above."
-                : "No Character-owned notes have been recorded."));
+                ? "No notes yet. Add a note above."
+                : "No notes have been added."));
         return content;
     }
 
