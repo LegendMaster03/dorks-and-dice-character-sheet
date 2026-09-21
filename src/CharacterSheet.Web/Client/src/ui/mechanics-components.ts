@@ -35,19 +35,9 @@ export function renderMechanicalValue(value: CalculatedMechanicalValueView, comp
 export function renderSavingThrowsCard(saves: readonly SavingThrowView[] | undefined): HTMLElement {
     const card = createSectionCard("Saving Throws", "dd-support-card dd-saving-throws-card");
     card.setAttribute("data-saving-throws-state", saves === undefined ? "unavailable" : "resolved");
-    if (saves === undefined || saves.length === 0) {
-        card.append(renderUnavailableValue());
-        return card;
-    }
-    const list = createElement("div", "dd-mechanic-list");
-    for (const save of saves) {
-        const item = createElement("div", "dd-saving-throw");
-        item.append(renderMechanicalValue(save, true));
-        const meta = renderFacts([["Ability", save.governingAbility], ["Training", save.training]]);
-        if (meta !== null) item.append(meta);
-        list.append(item);
-    }
-    card.append(list);
+    const grid = createElement("div", "dd-saving-throws-card__grid");
+    grid.append(...renderSavingThrowScaffold(saves ?? []));
+    card.append(grid);
     return card;
 }
 
@@ -137,6 +127,77 @@ export function renderCombatMechanicsSummary(mechanics: CharacterMechanicsView |
         renderMechanicalScaffold(combatValues, COMBAT_SCAFFOLD));
 
     return section;
+}
+
+export function renderDefenseMechanicsCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    const card = createSectionCard("Defense", "dd-mechanic-group-card dd-defense-card");
+    const grid = createElement("div", "dd-mechanic-group-card__grid dd-defense-card__grid");
+    grid.append(...renderMechanicalScaffold(orderedDefenses(mechanics), DEFENSE_SCAFFOLD));
+    card.append(grid);
+    return card;
+}
+
+export function renderCombatFundamentalsCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    const card = createSectionCard("Combat", "dd-mechanic-group-card dd-combat-fundamentals-card");
+    const initiative = findInitiativeValue(mechanics?.combatFundamentals);
+    const values = (mechanics?.combatFundamentals ?? []).filter(value => value !== initiative);
+    const grid = createElement("div", "dd-mechanic-group-card__grid dd-combat-fundamentals-card__grid");
+    grid.append(...renderMechanicalScaffold(values, COMBAT_SCAFFOLD));
+    card.append(grid);
+    return card;
+}
+
+export function renderHealthMechanicsCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    const card = createSectionCard("Hit Points", "dd-support-card dd-health-card");
+    const tracks = mechanics?.healthTracks ?? [];
+    const hitPoints = tracks.find(track =>
+        track.role === "hit-points" || normalizeMechanicalLabel(track.label) === "hitpoints");
+    const nonlethal = tracks.find(track =>
+        track.role === "nonlethal-damage"
+        || track.key === "resource.nonlethal-damage"
+        || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
+
+    const grid = createElement("div", "dd-health-card__grid");
+    grid.append(
+        renderHealthSummaryField("Current", hitPoints?.current),
+        renderHealthSummaryField("Maximum", hitPoints?.maximum),
+        renderHealthSummaryField(
+            "Nonlethal Damage",
+            nonlethal?.formattedValue ?? nonlethal?.current,
+            "dd-health-card__field--nonlethal")
+    );
+    card.append(grid);
+
+    const extraTracks = tracks.filter(track => track !== hitPoints && track !== nonlethal);
+    if (extraTracks.length > 0) {
+        const extras = createElement("div", "dd-health-card__extras");
+        extras.append(...extraTracks.map(renderHealthTrack));
+        card.append(extras);
+    }
+
+    if (hitPoints !== undefined) appendSources(card, hitPoints.sourceAttributions);
+    if (nonlethal !== undefined) appendSources(card, nonlethal.sourceAttributions);
+    return card;
+}
+
+function renderHealthSummaryField(
+    label: string,
+    value: unknown,
+    className?: string
+): HTMLElement {
+    const field = createElement(
+        "div",
+        `dd-health-card__field${className === undefined ? "" : " " + className}`);
+    field.append(
+        createElement("span", "dd-health-card__label", label),
+        createElement(
+            "strong",
+            "dd-health-card__value",
+            value === undefined || value === null || String(value).trim().length === 0
+                ? "-"
+                : String(value))
+    );
+    return field;
 }
 
 function appendCombatGroup(

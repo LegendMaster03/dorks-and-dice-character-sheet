@@ -25,8 +25,11 @@ import {
 import {
     findInitiativeValue,
     renderActionsPresentation,
-    renderCombatMechanicsSummary,
+    renderCombatFundamentalsCard,
+    renderDefenseMechanicsCard,
     renderFacts,
+    renderHealthMechanicsCard,
+    renderSavingThrowsCard,
     renderMechanicalValue,
     renderMovementValues,
     renderQuickMechanicalValue
@@ -146,6 +149,8 @@ export function renderCharacterWorkspace(
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
+        renderHealthMechanicsCard(mechanics),
+        renderSavingThrowsCard(mechanics?.savingThrows),
         renderSupportScaffoldCard("Passive Values", [
             ["passive-perception", "Perception"],
             ["passive-investigation", "Investigation"],
@@ -159,16 +164,19 @@ export function renderCharacterWorkspace(
         ])
     );
 
-    const skills = createElement("section", "dd-sheet__skills");
-    skills.setAttribute("aria-label", "Character skills");
+    const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
+    mechanicsColumn.setAttribute("aria-label", "Character mechanics and skills");
     const competencyPresentation = mechanics?.competencies === undefined
         ? null
         : buildCompetencyPresentation(mechanics.competencies);
-    skills.append(renderSkillsCard(competencyPresentation));
+    mechanicsColumn.append(
+        renderDefenseMechanicsCard(mechanics),
+        renderCombatFundamentalsCard(mechanics),
+        renderSkillsCard(competencyPresentation)
+    );
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
-    primary.append(renderCombatMechanicsSummary(mechanics));
     if (structuralEditing) {
         primary.append(renderCharacterBuilder(
             character.characterId,
@@ -185,7 +193,7 @@ export function renderCharacterWorkspace(
         mechanics,
         handlers));
 
-    workspace.append(support, skills, primary);
+    workspace.append(support, mechanicsColumn, primary);
     shell.append(workspace);
     return shell;
 }

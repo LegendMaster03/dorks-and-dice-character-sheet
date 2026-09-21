@@ -341,13 +341,13 @@
 
 .dd-sheet__workspace {
     display: grid;
-    grid-template-columns: minmax(13rem, 0.62fr) minmax(15rem, 0.72fr) minmax(0, 2fr);
+    grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.15fr) minmax(26rem, 1.65fr);
     gap: var(--dd-sheet-space-4);
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
 }
 
 .dd-sheet__support,
-.dd-sheet__skills,
+.dd-sheet__mechanics,
 .dd-sheet__main {
     display: grid;
     align-content: start;
@@ -466,6 +466,60 @@
 .dd-support-scaffold__list {
     display: grid;
     gap: var(--dd-sheet-space-1);
+}
+
+.dd-mechanic-group-card__grid,
+.dd-saving-throws-card__grid,
+.dd-health-card__grid {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+}
+
+.dd-defense-card__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dd-combat-fundamentals-card__grid,
+.dd-health-card__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dd-saving-throws-card__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dd-health-card__field {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+    padding: 0.55rem 0.6rem;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-health-card__field--nonlethal {
+    grid-column: 1 / -1;
+}
+
+.dd-health-card__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.66rem;
+    font-weight: 750;
+    text-transform: uppercase;
+}
+
+.dd-health-card__value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-health-card__extras {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    margin-top: var(--dd-sheet-space-2);
 }
 
 .dd-support-scaffold__row {
@@ -1153,11 +1207,11 @@
 
     .dd-sheet__support {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        order: 2;
+        order: 3;
     }
 
-    .dd-sheet__skills {
-        order: 3;
+    .dd-sheet__mechanics {
+        order: 2;
     }
 
     .dd-sheet__main {
@@ -1971,6 +2025,10 @@
     .dd-spellcasting-profiles,
     .dd-check-procedure-presentation__checks,
     .dd-procedure-card__checks,
+    .dd-defense-card__grid,
+    .dd-combat-fundamentals-card__grid,
+    .dd-saving-throws-card__grid,
+    .dd-health-card__grid,
     .dd-combat-summary,
     .dd-combat-summary__grid--defense,
     .dd-combat-summary__grid--saves,

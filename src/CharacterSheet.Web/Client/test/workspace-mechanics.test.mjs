@@ -137,12 +137,24 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-mechanic-key", "fort").length, 1);
     assert.equal(byAttribute(rendered, "data-skill-id", "listen").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "ac").length, 1);
-    assert.equal(byAttribute(rendered, "data-health-track-key", "hp").length, 1);
+    assert.match(visibleText(rendered), /Current\s+20/);
+    assert.match(visibleText(rendered), /Maximum\s+30/);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "bab").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "walk").length, 1);
     assert.equal(byAttribute(rendered, "data-action-key", "sword").length, 1);
     assert.equal(byAttribute(rendered, "data-check-key", "assessment").length, 1);
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
+});
+
+test("workspace keeps support, mechanics, and primary interaction as separate mockup columns", () => {
+    const rendered = render("actions", null);
+    assert.equal(byClass(rendered, "dd-sheet__support").length, 1);
+    assert.equal(byClass(rendered, "dd-sheet__mechanics").length, 1);
+    assert.equal(byClass(rendered, "dd-sheet__main").length, 1);
+    assert.equal(byClass(rendered, "dd-health-card").length, 1);
+    assert.equal(byClass(rendered, "dd-saving-throws-card").length, 1);
+    assert.equal(byClass(rendered, "dd-defense-card").length, 1);
+    assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
 });
 
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
@@ -179,7 +191,7 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 1);
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 1);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);
-    assert.equal(byAttribute(rendered, "data-health-track-role", "hit-points").length, 1);
+    assert.ok(byClass(rendered, "dd-health-card").length >= 1);
 });
 
 test("Inventory joins mechanics by stable occurrence identity and keeps duplicate concepts independent", () => {
