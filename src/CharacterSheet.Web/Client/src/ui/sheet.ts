@@ -892,7 +892,7 @@ function renderFeatChooser(
     input.type = "search";
     input.value = chooser.query;
     input.placeholder = "Search available feats";
-    input.setAttribute("aria-label", "Search Rules Core Feats");
+    input.setAttribute("aria-label", "Search available feats");
     const submit = createElement("button", "dd-button dd-button--secondary", "Search");
     submit.type = "submit";
     const close = createButton("Close", "dd-button dd-button--ghost", handlers.closeChooser);
@@ -1052,7 +1052,7 @@ function renderInventoryChooser(
     input.type = "search";
     input.value = chooser.query;
     input.placeholder = "Search available items";
-    input.setAttribute("aria-label", "Search Rules Core items");
+    input.setAttribute("aria-label", "Search available items");
     const submit = createElement("button", "dd-button dd-button--secondary", "Search");
     submit.type = "submit";
     const close = createButton("Close", "dd-button dd-button--ghost", handlers.closeInventoryChooser);
