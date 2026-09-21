@@ -99,9 +99,9 @@ test("header does not present an uninitialized builder as real empty selections"
         { ...character, hasRichSheet: false, sheet: null },
         idleBuilder,
         false);
-    assert.equal(model.raceSpecies.value, "Digital sheet not initialized");
-    assert.equal(model.startingClass.value, "Digital sheet not initialized");
-    assert.equal(model.subclass.value, "Digital sheet not initialized");
+    assert.equal(model.raceSpecies.value, "Character Sheet not set up");
+    assert.equal(model.startingClass.value, "Character Sheet not set up");
+    assert.equal(model.subclass.value, "Character Sheet not set up");
 });
 
 test("unavailable persisted rule references remain visible instead of disappearing", () => {
