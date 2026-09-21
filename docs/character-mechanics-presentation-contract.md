@@ -109,6 +109,8 @@ If an effective Ability entry uses a key that is not one of the six current stru
 
 Omitted or unmatched effective data never causes the frontend to calculate a value or modifier. The browser does not implement an Ability modifier formula and does not assume a relationship such as `(score - 10) / 2`.
 
+The six structural Ability cards use the same dense primary/subordinate pattern as Armor Class. The effective score occupies the primary region. The subordinate row contains the supplied **Modifier** and the matching **Save**. Saving throws are associated by normalized `governingAbility` when supplied, with stable Ability-save mechanic keys as a compatibility fallback. Missing modifiers or saves render as `-`; the frontend never derives either value.
+
 ## Unresolved support surfaces
 
 The Character Sheet keeps **Passive Values** and **Proficiencies & Training** visible as stable support regions even before a normalized backend contract exists for those collections. Those regions use a neutral `-` unavailable state. The frontend must not fill them with edition-specific assumptions such as a fixed Perception/Investigation/Insight passive trio or a fixed Armor/Weapons/Tools/Languages training taxonomy. Named rows should appear only when a backend presentation contract supplies the applicable concepts.
@@ -215,9 +217,9 @@ Source attribution is provenance, not the primary mechanic. Entries with `presen
 
 `CharacterMechanicsView.movement` is an arbitrary list of calculated values. Each entry can represent walking speed or another backend-defined movement mode such as swim, climb, fly, burrow, or a source-specific movement type. The frontend never calculates speed.
 
-The compact top-row Movement card promotes a supplied walking/land-speed entry when one is identifiable from its normalized key or label. If no walking mode exists, the first backend-supplied mode becomes the primary presentation value. Every remaining movement mode is retained as a subordinate compact value in the same card; the frontend does not maintain a fixed list of allowed movement modes.
+The compact top-row Movement card keeps agreed presentation slots for **Walk**, **Swim**, **Climb**, and **Fly** so common movement information has a stable dense location even when some values are unresolved. These are presentation scaffolds rather than a closed mechanical schema: missing values render as `-`, and arbitrary additional backend-defined modes such as Burrow or source-specific movement types append without being discarded.
 
-Character Sheet recognizes normalized Rules Core mechanics with kind `movement` and projects all such effective entries into this collection. Until Rules Core publishes movement mechanics for the active rules context, the card honestly remains unresolved with `-`.
+Character Sheet recognizes normalized Rules Core mechanics with kind `movement` and projects all such effective entries into this collection. The frontend never calculates a speed or invents a movement capability.
 
 ## Item-occurrence mechanics
 
