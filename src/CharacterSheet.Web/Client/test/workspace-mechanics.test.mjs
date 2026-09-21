@@ -268,8 +268,8 @@ test("top-row Hit Points card keeps current, max, temporary, and nonlethal value
     assert.ok(card);
     assert.match(visibleText(card), /Current\s+21/);
     assert.match(visibleText(card), /Max\s+30/);
-    assert.match(visibleText(card), /Temp\s+5/);
-    assert.match(visibleText(card), /Nonlethal\s+3/);
+    assert.match(visibleText(card), /Temporary HP\s+5/);
+    assert.match(visibleText(card), /Nonlethal Damage\s+3/);
     assert.equal(byAttribute(card, "data-health-track-key", "hp").length, 2);
     assert.equal(byAttribute(card, "data-health-track-key", "temp").length, 1);
     assert.equal(byAttribute(card, "data-health-track-key", "nonlethal").length, 1);
@@ -617,7 +617,7 @@ test("legacy combat placeholder renderer is removed in favor of generalized mech
     assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
     assert.match(source, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(source, /renderCombatFundamentalsCard\(mechanics\)/);
-    assert.match(source, /renderHealthMechanicsCard\(mechanics,\s*\{/);
+    assert.match(source, /renderHealthQuickCard\(mechanics,\s*\{/);
     assert.match(source, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
 });
 
@@ -734,7 +734,7 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
     ]) {
         assert.equal(byAttribute(rendered, "data-mechanic-key", key).length, 1, key);
     }
-    const nonlethal = byClass(rendered, "dd-health-card__field--nonlethal");
+    const nonlethal = byAttribute(rendered, "data-health-quick-field", "nonlethal");
     assert.equal(nonlethal.length, 1);
     assert.match(visibleText(nonlethal[0]), /Nonlethal Damage/);
     assert.match(visibleText(nonlethal[0]), /4/);
