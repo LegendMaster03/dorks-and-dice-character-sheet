@@ -579,7 +579,9 @@
 
 .dd-support-scaffold__list {
     display: grid;
-    gap: var(--dd-sheet-space-1);
+    overflow: hidden;
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
 }
 
 .dd-mechanic-group-card__grid,
@@ -663,8 +665,10 @@
     min-width: 0;
     padding: 0.5rem 0.6rem;
     background: var(--dd-sheet-surface-muted);
-    border: 1px solid var(--dd-sheet-border);
-    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-support-scaffold__row + .dd-support-scaffold__row {
+    border-top: 1px solid var(--dd-sheet-border);
 }
 
 .dd-support-scaffold__label {

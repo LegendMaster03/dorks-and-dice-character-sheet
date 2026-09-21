@@ -113,7 +113,7 @@ Omitted or unmatched effective data never causes the frontend to calculate a val
 
 `SavingThrowView` extends the calculated-value primitive with optional `governingAbility` and `training`.
 
-The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend never computes a save value. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row. Separately, the Character Sheet keeps its agreed Fortitude/Reflex/Will presentation slots visible with `-` when the mechanics projection is absent or incomplete. Those slots are presentation scaffolds, not fabricated Rules Core definitions; backend-supplied saves replace matching scaffold slots and additional supplied save models remain renderable.
+The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend never computes a save value. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row. Separately, the Character Sheet keeps its agreed Fortitude/Reflex/Will presentation slots visible with `-` when the mechanics projection is absent or incomplete. Those slots are presentation scaffolds, not fabricated Rules Core definitions; backend-supplied saves replace matching scaffold slots and additional supplied save models remain renderable. If the supplied save model is not Fortitude/Reflex/Will, the arbitrary backend collection renders without forcing the three-save scaffold onto it.
 
 ## Defenses
 
@@ -122,7 +122,9 @@ The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six abi
 - optional `primaryKey`;
 - required `values: DefenseView[]`.
 
-`DefenseView` is a calculated value with an optional extensible presentation `role`. `primaryKey` controls visual ordering when present. The backend may supply only Armor Class, or Armor Class plus Touch, Flat-Footed, Damage Reduction, Spell Resistance, or future defenses. When Rules Core supplies an applicable defense definition but Character-specific state is insufficient to evaluate it, the backend preserves the defense with `-` as its value. The frontend does not fabricate a defense value or claim that a scaffold is an authoritative rule definition. The agreed Character Sheet defense slots remain visible with `-` when a matching backend value is absent, and backend-supplied defenses replace matching slots or append as additional values.
+`DefenseView` is a calculated value with an optional extensible presentation `role`. `primaryKey` identifies the primary defense when present. The backend may supply only Armor Class, or Armor Class plus Touch, Flat-Footed, Damage Reduction, Spell Resistance, or future defenses. When Rules Core supplies an applicable defense definition but Character-specific state is insufficient to evaluate it, the backend preserves the defense with `-` as its value.
+
+The Character Sheet promotes the Armor Class family to the core-stat region. Primary Armor Class occupies the dominant portion of one card beside Movement and Initiative; Touch AC and Flat-Footed AC are subordinate variants in that same card. The frontend does not calculate any of the three. Their agreed presentation slots remain visible with `-` when unresolved. Damage Reduction and Spell Resistance remain in the lower **Defense** group, and additional backend-supplied defensive mechanics append there rather than being discarded.
 
 ## Health tracks
 
@@ -139,9 +141,9 @@ The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six abi
 | `detail` | no | display-only |
 | `sourceAttributions` | no | Rules Core-derived/display-only |
 
-Known role hints include hit points, temporary hit points, nonlethal damage, and resource. The frontend currently does not apply special calculation behavior based on these role strings, so future backend-supplied roles are permitted.
+Known role hints include hit points, temporary hit points, nonlethal damage, and resource. The frontend may use these role hints for placement only; it does not apply calculation behavior based on them, so future backend-supplied roles remain permitted.
 
-Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged. A supplied health/resource track with no resolved current or maximum value renders as `-`; the frontend does not relabel unresolved state as `Available`. The Character Sheet also keeps Hit Points and Nonlethal Damage presentation slots visible with `-` when those tracks are not yet projected.
+Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged. The Hit Points card gives Current and Maximum the primary visual emphasis. Temporary HP, when supplied, and Nonlethal Damage occupy secondary fields beneath them. Nonlethal Damage retains a persistent `-` presentation slot when unresolved; Temporary HP is shown when the backend supplies that track. Additional health/resource roles render generically below the primary presentation. A supplied track with no resolved value renders as `-`; the frontend does not relabel unresolved state as `Available`.
 
 ## Combat fundamentals
 
@@ -196,6 +198,12 @@ The frontend never decides that one named skill contains another named skill. Re
 - source attribution.
 
 The backend supplies attack sequences, bonuses, damage, critical information, and other mechanics. The frontend does not derive iterative attacks or edition-specific formulas.
+
+When an Actions or Spellcasting collection is absent or empty, the section remains present and uses the same neutral `-` convention as other unresolved sheet surfaces instead of a large explanatory unavailable-state message.
+
+## Source attribution presentation
+
+Source attribution is provenance, not the primary mechanic. Entries with `presentationRequired: true` remain directly visible wherever the attribution contract requires them. Optional source metadata may be consolidated behind a secondary **Sources (N)** disclosure so edition/source provenance does not overwhelm the normal Character Sheet. Collapsing optional provenance never changes the underlying mechanic or removes access to the supplied attribution.
 
 ## Movement
 
