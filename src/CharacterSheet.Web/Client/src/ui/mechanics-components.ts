@@ -284,16 +284,18 @@ export function renderHealthQuickCard(
 
     const values = createElement("div", "dd-health-quick__values");
     values.append(
-        renderHealthQuickField("Current", currentValue, "current"),
-        renderHealthQuickField("Max", hitPoints?.maximum, "maximum"),
+        renderHealthQuickField("Current", currentValue, "current", hitPoints),
+        renderHealthQuickField("Max", hitPoints?.maximum, "maximum", hitPoints),
         renderHealthQuickField(
             "Temp",
             temporaryHitPoints?.formattedValue ?? temporaryHitPoints?.current,
-            "temporary"),
+            "temporary",
+            temporaryHitPoints),
         renderHealthQuickField(
             "Nonlethal",
             nonlethal?.formattedValue ?? nonlethal?.current,
-            "nonlethal"));
+            "nonlethal",
+            nonlethal));
 
     card.append(header, values);
     return card;
@@ -302,10 +304,12 @@ export function renderHealthQuickCard(
 function renderHealthQuickField(
     label: string,
     value: unknown,
-    role: string
+    role: string,
+    track?: HealthTrackView
 ): HTMLElement {
     const field = createElement("div", "dd-health-quick__field");
     field.setAttribute("data-health-quick-field", role);
+    if (track !== undefined) field.setAttribute("data-health-track-key", track.key);
     field.append(
         createElement("span", "dd-health-quick__label", label),
         createElement("strong", "dd-health-quick__value", formatOptionalHealthNumber(value)));
