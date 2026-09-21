@@ -254,6 +254,49 @@
     min-height: 5.5rem;
 }
 
+.dd-stat--movement,
+.dd-stat--initiative {
+    padding: 0.55rem 0.45rem;
+}
+
+.dd-stat--movement .dd-stat__label,
+.dd-stat--initiative .dd-stat__label {
+    margin-bottom: 0.25rem;
+}
+
+.dd-stat--movement .dd-stat__value,
+.dd-stat--initiative .dd-stat__value {
+    margin-top: 0;
+    font-size: 1.1rem;
+    font-weight: 850;
+}
+
+.dd-stat--movement .dd-movement-values {
+    gap: 0.25rem;
+    margin-top: 0;
+}
+
+.dd-stat--movement .dd-mechanic-value {
+    padding: 0;
+    background: transparent;
+    border: 0;
+}
+
+.dd-stat--movement .dd-mechanic-value__summary {
+    display: grid;
+    gap: 0.08rem;
+    justify-items: center;
+}
+
+.dd-stat--movement .dd-mechanic-value__label {
+    font-size: 0.58rem;
+}
+
+.dd-stat--movement .dd-mechanic-value__value {
+    font-size: 1rem;
+    text-align: center;
+}
+
 .dd-stat {
     min-width: 0;
     padding: 0.7rem 0.55rem;
@@ -484,7 +527,7 @@
 
 .dd-sheet__workspace {
     display: grid;
-    grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.15fr) minmax(26rem, 1.65fr);
+    grid-template-columns: minmax(15rem, 0.72fr) minmax(22rem, 1.35fr) minmax(24rem, 1.45fr);
     gap: var(--dd-sheet-space-4);
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
 }
@@ -676,7 +719,17 @@
 }
 
 .dd-saving-throws-card__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+}
+
+.dd-saving-throw .dd-mechanic-value--compact {
+    padding: 0.45rem 0.55rem;
+}
+
+.dd-saving-throw .dd-mechanic-value__label {
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 .dd-health-card__primary,
@@ -1262,10 +1315,10 @@
 
 .dd-primary-nav__button {
     position: relative;
-    flex: 1 1 0;
-    min-width: 6.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
     min-height: 3rem;
-    padding: 0.65rem 0.9rem;
+    padding: 0.65rem;
     color: var(--dd-sheet-muted);
     background: transparent;
     border: 0;
@@ -1274,6 +1327,7 @@
     font-weight: 850;
     letter-spacing: 0.035em;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .dd-primary-nav__button:hover {
@@ -1430,9 +1484,14 @@
     gap: var(--dd-sheet-space-2);
     align-items: center;
     justify-content: flex-end;
-    padding: var(--dd-sheet-space-3) var(--dd-sheet-space-5);
+    padding: 0.4rem var(--dd-sheet-space-5);
     background: var(--dd-sheet-surface);
     border-bottom: 1px solid var(--dd-sheet-border);
+}
+
+.dd-sheet-mode-bar .dd-button {
+    min-height: 2rem;
+    padding: 0.3rem 0.65rem;
 }
 
 .dd-guided-builder {

@@ -259,6 +259,13 @@ test("responsive shell uses persistent presentation scaffolds without fabricatin
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 
+test("deployed-density polish keeps saves readable and primary tabs on one line", () => {
+    assert.match(css, /\.dd-saving-throws-card__grid\s*\{[^}]*grid-template-columns:\s*1fr;/s);
+    assert.match(css, /\.dd-saving-throw \.dd-mechanic-value__label\s*\{[^}]*overflow-wrap:\s*normal;/s);
+    assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*white-space:\s*nowrap;/s);
+    assert.match(css, /\.dd-sheet-mode-bar\s*\{[^}]*padding:\s*0\.4rem/s);
+});
+
 test("embedded module loads its stylesheet from the same Tool Module asset subtree", () => {
     assert.match(appSource, /new URL\("\.\/app\.css", import\.meta\.url\)/);
     assert.match(appSource, /data-character-sheet-stylesheet/);
@@ -278,7 +285,9 @@ test("ability UI does not invent effective-score or modifier calculations", () =
     assert.doesNotMatch(sheetSource, /effectiveScore/);
     assert.doesNotMatch(sheetModelSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
     assert.doesNotMatch(sheetSource, /\(\s*score\s*-\s*10\s*\)\s*\/\s*2/);
-    assert.match(sheetSource, /Modifier -/);
+    assert.match(sheetSource, /data-ability-modifier/);
+    assert.match(sheetSource, /"Modifier"/);
+    assert.match(sheetSource, /modifier === undefined \? "-" : formatMechanicalValue\(modifier\)/);
 });
 
 test("ability editor uses integer input without edition-specific min or max attributes", () => {
