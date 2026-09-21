@@ -166,20 +166,24 @@ function renderCompetencyRow(
 
 function renderTrainingIndicator(competency: CompetencyView): HTMLElement {
     const training = competency.training?.trim();
-    const resolved = training !== undefined && training.length > 0;
+    if (training === undefined || training.length === 0) {
+        const unresolved = createElement(
+            "span",
+            "dd-skill-row__training dd-skill-row__training--unresolved",
+            "-");
+        unresolved.setAttribute("aria-label", `${competency.label} training unresolved`);
+        unresolved.title = "Training state is not resolved.";
+        unresolved.setAttribute("data-skill-training", "unresolved");
+        return unresolved;
+    }
+
     const indicator = createElement(
         "span",
-        resolved
-            ? "dd-skill-row__training dd-skill-row__training--resolved"
-            : "dd-skill-row__training dd-skill-row__training--unresolved",
-        resolved ? abbreviateTrainingState(training) : "-");
-    indicator.setAttribute(
-        "aria-label",
-        resolved
-            ? `${competency.label} training: ${training}`
-            : `${competency.label} training unresolved`);
-    indicator.title = resolved ? training : "Training state is not resolved.";
-    indicator.setAttribute("data-skill-training", resolved ? training : "unresolved");
+        "dd-skill-row__training dd-skill-row__training--resolved",
+        abbreviateTrainingState(training));
+    indicator.setAttribute("aria-label", `${competency.label} training: ${training}`);
+    indicator.title = training;
+    indicator.setAttribute("data-skill-training", training);
     return indicator;
 }
 
