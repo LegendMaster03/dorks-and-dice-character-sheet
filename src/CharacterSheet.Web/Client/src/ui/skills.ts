@@ -124,7 +124,7 @@ function renderCompositeDetails(
     const body = createElement("div", "dd-skill-disclosure__body dd-skill-composite-details");
 
     const resolution = createElement("section", "dd-skill-detail-section dd-skill-detail-section--resolution");
-    resolution.append(createElement("h4", "dd-skill-detail-section__title", "Composite calculation"));
+    resolution.append(createElement("h4", "dd-skill-detail-section__title", "Calculation"));
     const resolutionFacts = createElement("dl", "dd-skill-details");
     for (const component of item.components) {
         appendOptionalFact(resolutionFacts, component.label, formatMechanicalValue(component));
