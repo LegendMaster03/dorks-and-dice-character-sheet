@@ -263,7 +263,7 @@ function renderGuidedBuilder(
             abilities.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "These are the persisted base-score inputs currently supported by the Character backend."));
+                "Enter the base Ability Scores used for this Character. These values are saved with the sheet."));
             const grid = createElement("div", "dd-core-stats__abilities dd-guided-builder__ability-grid");
             for (const definition of ABILITY_SCORE_DEFINITIONS) {
                 grid.append(renderAbilityScoreCard(
@@ -282,7 +282,7 @@ function renderGuidedBuilder(
             review.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "This list reports only configuration the current backend can determine. It does not invent edition-specific completion requirements."));
+                "This review shows the Character setup the sheet can currently verify. Edition-specific requirements that are not represented here are not marked complete."));
             const list = createElement("ul", "dd-guided-builder__review-list");
             for (const section of sectionStates.filter(value => value.id !== "review")) {
                 const item = createElement("li", "dd-guided-builder__review-item");
