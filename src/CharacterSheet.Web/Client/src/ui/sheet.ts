@@ -31,6 +31,7 @@ import {
     renderDefenseMechanicsCard,
     renderFacts,
     renderHealthMechanicsCard,
+    renderHealthQuickCard,
     renderSavingThrowsCard,
     renderMechanicalValue,
     renderMovementValues,
@@ -156,13 +157,22 @@ export function renderCharacterWorkspace(
     const mechanicsSources = renderCharacterMechanicsSources(mechanics);
     if (mechanicsSources !== null) shell.append(mechanicsSources);
 
-    shell.append(renderCoreStats(builder, structuralEditing, readOnly, mechanics, handlers.structural));
+    const competencyPresentation = mechanics?.competencies === undefined
+        ? null
+        : buildCompetencyPresentation(mechanics.competencies);
 
-    const workspace = createElement("div", "dd-sheet__workspace");
-    const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
-    support.setAttribute("aria-label", "Character supporting statistics");
-    support.append(
-        renderHealthMechanicsCard(mechanics, {
+    const dashboard = createElement("div", "dd-sheet__dashboard");
+
+    const skillsColumn = createElement("section", "dd-sheet__skills");
+    skillsColumn.setAttribute("aria-label", "Skills and competencies");
+    skillsColumn.append(renderSkillsCard(competencyPresentation));
+
+    const stage = createElement("div", "dd-sheet__stage");
+
+    const topRow = createElement("div", "dd-sheet__top-row");
+    topRow.append(
+        renderCoreStats(builder, structuralEditing, readOnly, mechanics, handlers.structural),
+        renderHealthQuickCard(mechanics, {
             currentHitPoints: routine.status === "ready"
                 && routine.state?.currentHitPoints !== null
                 ? routine.state?.currentHitPoints
@@ -170,26 +180,26 @@ export function renderCharacterWorkspace(
             readOnly: readOnly || routine.status !== "ready" || routine.state === null,
             saving: routine.mutation?.kind === "health-update",
             onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints
-        }),
+        })
+    );
+
+    const workspace = createElement("div", "dd-sheet__workspace");
+    const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
+    support.setAttribute("aria-label", "Character supporting statistics");
+    support.append(
         renderSavingThrowsCard(mechanics?.savingThrows),
         renderSupportScaffoldCard("Passive Values", []),
         renderSupportScaffoldCard("Proficiencies & Training", [])
     );
 
     const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
-    mechanicsColumn.setAttribute("aria-label", "Character mechanics and skills");
-    const competencyPresentation = mechanics?.competencies === undefined
-        ? null
-        : buildCompetencyPresentation(mechanics.competencies);
+    mechanicsColumn.setAttribute("aria-label", "Character combat mechanics");
     const combatSummary = createElement("div", "dd-mechanics-summary-grid");
     combatSummary.append(
         renderDefenseMechanicsCard(mechanics),
         renderCombatFundamentalsCard(mechanics)
     );
-    mechanicsColumn.append(
-        combatSummary,
-        renderSkillsCard(competencyPresentation)
-    );
+    mechanicsColumn.append(combatSummary);
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
@@ -210,7 +220,9 @@ export function renderCharacterWorkspace(
         handlers));
 
     workspace.append(support, mechanicsColumn, primary);
-    shell.append(workspace);
+    stage.append(topRow, workspace);
+    dashboard.append(skillsColumn, stage);
+    shell.append(dashboard);
     return shell;
 }
 
