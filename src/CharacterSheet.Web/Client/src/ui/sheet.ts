@@ -33,7 +33,9 @@ import {
     renderSavingThrowsCard,
     renderMechanicalValue,
     renderMovementValues,
-    renderQuickMechanicalValue
+    renderQuickMechanicalValue,
+    renderRestControls,
+    type RestKind
 } from "./mechanics-components.js";
 import {
     renderChecksAndProceduresPresentation,
@@ -83,6 +85,7 @@ export interface RoutineCharacterHandlers {
     searchInventory(query: string): void;
     addInventoryItem(conceptKey: string): void;
     removeInventoryItem(occurrenceId: string): void;
+    rest?(kind: RestKind): void;
 }
 
 export interface FeatCharacterHandlers {
@@ -134,7 +137,11 @@ export function renderCharacterWorkspace(
         shell.append(renderAdvancementDetails(advancement));
     }
     if (editable) {
-        shell.append(renderModeControls(sheetMode, guidedBuilder, handlers));
+        shell.append(renderModeControls(
+            sheetMode,
+            guidedBuilder,
+            handlers,
+            routine.mutation?.kind === "health-update"));
     }
     if (readOnly) {
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
@@ -209,7 +216,8 @@ export function renderCharacterWorkspace(
 function renderModeControls(
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    restSaving: boolean
 ): HTMLElement {
     const controls = createElement("div", "dd-sheet-mode-bar");
     controls.setAttribute("role", "group");
@@ -225,6 +233,12 @@ function renderModeControls(
         return controls;
     }
 
+    controls.append(renderRestControls(
+        false,
+        restSaving,
+        handlers.routine.rest));
+
+    const configuration = createElement("div", "dd-sheet-mode-bar__configuration");
     const editing = sheetMode === "edit";
     const editToggle = createButton(
         editing ? "Done Editing" : "Edit Character",
@@ -238,7 +252,8 @@ function renderModeControls(
         "dd-button dd-button--ghost",
         handlers.openGuidedBuilder);
     guided.setAttribute("data-sheet-mode-control", "guided");
-    controls.append(editToggle, guided);
+    configuration.append(editToggle, guided);
+    controls.append(configuration);
     return controls;
 }
 
