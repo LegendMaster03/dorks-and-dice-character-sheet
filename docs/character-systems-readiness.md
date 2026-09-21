@@ -132,6 +132,15 @@ following remain unresolved:
 
 The existing general advancement primitive is therefore not exposed as a generic leveling API.
 
+### Rest actions
+
+The Character Sheet now reserves stable **Short Rest** and **Long Rest** controls on the Health card, but
+the buttons deliberately do not encode recovery rules. Rest duration, hit-point recovery, Hit Dice or
+other resource expenditure/recovery, spell-slot recovery, feature recharge, exhaustion interaction,
+and cross-edition differences all require an effective Rules Core rest/effect contract. Until that
+contract exists for the active rules context, the controls remain visible but disabled. This preserves
+the desired Character Sheet workflow without moving edition-specific rest semantics into the browser.
+
 ### Spell state
 
 Known/prepared semantics, slot-based versus point-based casting, multiclass spell progression, and

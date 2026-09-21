@@ -221,6 +221,36 @@ test("editable Hit Points card exposes direct and modifier controls while keepin
     assert.equal(saved.at(-1), -8);
 });
 
+test("rest controls are present without inventing rest mechanics", () => {
+    const rendered = renderHealthMechanicsCard(null, {
+        currentHitPoints: 10
+    });
+    const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
+    const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
+    assert.ok(shortRest);
+    assert.ok(longRest);
+    assert.equal(shortRest.disabled, true);
+    assert.equal(longRest.disabled, true);
+    assert.match(shortRest.title, /Rest resolution is not available/);
+});
+
+test("rest controls emit only rest intent when a rules-backed handler is supplied", () => {
+    const rests = [];
+    const rendered = renderHealthMechanicsCard(null, {
+        currentHitPoints: 10,
+        onRest: kind => rests.push(kind)
+    });
+    const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
+    const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
+    assert.equal(shortRest.disabled, false);
+    assert.equal(longRest.disabled, false);
+
+    shortRest.onclick();
+    longRest.onclick();
+
+    assert.deepEqual(rests, ["short", "long"]);
+});
+
 test("read-only Hit Points card omits mutation controls", () => {
     const rendered = renderHealthMechanicsCard(null, {
         currentHitPoints: 10,

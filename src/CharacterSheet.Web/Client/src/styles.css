@@ -764,6 +764,20 @@
     line-height: 1;
 }
 
+.dd-health-rest-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-2);
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-health-rest-button {
+    min-width: 0;
+    padding-inline: 0.45rem;
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
 .dd-support-scaffold__row {
     display: flex;
     gap: var(--dd-sheet-space-2);

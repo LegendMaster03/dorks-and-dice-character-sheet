@@ -199,11 +199,14 @@ export function renderCombatFundamentalsCard(mechanics: CharacterMechanicsView |
     return card;
 }
 
+export type RestKind = "short" | "long";
+
 export interface HealthControlOptions {
     currentHitPoints?: number | null;
     readOnly?: boolean;
     saving?: boolean;
     onSetCurrentHitPoints?: (currentHitPoints: number | null) => void;
+    onRest?: (kind: RestKind) => void;
 }
 
 export function adjustCurrentHitPoints(
@@ -259,6 +262,11 @@ export function renderHealthMechanicsCard(
             control.onSetCurrentHitPoints));
     }
 
+    card.append(renderRestControls(
+        control.readOnly === true,
+        control.saving === true,
+        control.onRest));
+
     const secondary = createElement(
         "div",
         temporaryHitPoints === undefined
@@ -294,6 +302,44 @@ export function renderHealthMechanicsCard(
         collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]));
     if (sources !== null) card.append(sources);
     return card;
+}
+
+function renderRestControls(
+    readOnly: boolean,
+    saving: boolean,
+    onRest: ((kind: RestKind) => void) | undefined
+): HTMLElement {
+    const controls = createElement("div", "dd-health-rest-controls");
+    controls.setAttribute("role", "group");
+    controls.setAttribute("aria-label", "Rest actions");
+
+    const available = onRest !== undefined;
+    const disabled = readOnly || saving || !available;
+    const unavailableTitle = readOnly
+        ? "Rest actions are unavailable while this Character is read-only."
+        : saving
+            ? "Wait for the current Character state change to finish."
+            : "Rest resolution is not available from the current rules projection.";
+
+    const createRestButton = (kind: RestKind, label: string): HTMLButtonElement => {
+        const button = createElement(
+            "button",
+            "dd-button dd-button--ghost dd-health-rest-button",
+            label) as HTMLButtonElement;
+        button.type = "button";
+        button.disabled = disabled;
+        button.setAttribute("data-rest-action", kind);
+        if (disabled) button.title = unavailableTitle;
+        if (!disabled) {
+            button.onclick = () => onRest?.(kind);
+        }
+        return button;
+    };
+
+    controls.append(
+        createRestButton("short", "Short Rest"),
+        createRestButton("long", "Long Rest"));
+    return controls;
 }
 
 function renderHitPointEditor(
