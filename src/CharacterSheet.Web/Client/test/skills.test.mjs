@@ -163,6 +163,30 @@ test("ranked specialty competency progressively discloses metadata", () => {
     assert.match(visibleText(card), /Armor Check Penalty/);
 });
 
+test("skill rows expose compact training indicators without guessing unresolved proficiency", () => {
+    const card = renderSkillsCard([
+        standalone(competency("arcana", "Arcana", "+7", {
+            governingAbility: "Intelligence",
+            training: "Proficient"
+        })),
+        standalone(competency("history", "History", "+5", {
+            governingAbility: "Intelligence"
+        }))
+    ]);
+
+    const arcana = byAttribute(card, "data-skill-id", "arcana")[0];
+    const history = byAttribute(card, "data-skill-id", "history")[0];
+    const arcanaTraining = byAttribute(arcana, "data-skill-training", "Proficient")[0];
+    const historyTraining = byAttribute(history, "data-skill-training", "unresolved")[0];
+
+    assert.ok(arcanaTraining);
+    assert.ok(historyTraining);
+    assert.equal(arcanaTraining.textContent, "PROF");
+    assert.equal(historyTraining.textContent, "-");
+    assert.match(arcanaTraining.getAttribute("aria-label"), /Arcana training: Proficient/);
+    assert.match(historyTraining.getAttribute("aria-label"), /History training unresolved/);
+});
+
 test("specialty Skill and tool proficiency remain separate rows", () => {
     const card = renderSkillsCard([
         standalone(competency("specialty", "Specialty Work", "+11", { kind: "skill", specialty: "Fine work" })),
