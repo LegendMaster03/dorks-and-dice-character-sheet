@@ -228,6 +228,7 @@
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(22rem, 1fr);
     gap: var(--dd-sheet-space-3);
+    align-items: start;
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) 0;
 }
 
@@ -235,6 +236,7 @@
 .dd-core-stats__quick {
     display: grid;
     gap: var(--dd-sheet-space-2);
+    align-items: start;
 }
 
 .dd-core-stats__abilities {
@@ -249,7 +251,7 @@
 .dd-core-stats__quick > .dd-stat:not(.dd-stat--armor-class) {
     display: grid;
     place-content: center;
-    min-height: 6.75rem;
+    min-height: 5.5rem;
 }
 
 .dd-stat {
@@ -271,9 +273,86 @@
     text-transform: uppercase;
 }
 
+.dd-stat--ability {
+    padding: 0;
+    overflow: hidden;
+}
+
+.dd-ability-stat__presentation {
+    display: grid;
+    grid-template-rows: minmax(3.75rem, 3fr) minmax(1.75rem, 1fr);
+    min-height: 5.5rem;
+}
+
+.dd-ability-stat__primary {
+    display: grid;
+    place-content: center;
+    gap: 0.16rem;
+    min-width: 0;
+    padding: 0.45rem 0.35rem;
+}
+
+.dd-ability-stat__primary .dd-stat__value,
+.dd-ability-stat__primary .dd-stat__detail,
+.dd-ability-stat__primary .dd-stat__base-context {
+    margin: 0;
+}
+
+.dd-ability-stat__primary .dd-stat__value {
+    font-size: 1.08rem;
+    font-weight: 850;
+    line-height: 1;
+}
+
+.dd-ability-stat__primary .dd-stat__detail,
+.dd-ability-stat__primary .dd-stat__base-context {
+    font-size: 0.58rem;
+    line-height: 1.15;
+}
+
+.dd-ability-stat__modifier {
+    display: grid;
+    place-content: center;
+    gap: 0.08rem;
+    min-width: 0;
+    padding: 0.28rem 0.2rem;
+    border-top: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-ability-stat__modifier-label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.52rem;
+    font-weight: 800;
+    letter-spacing: 0.025em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.dd-ability-stat__modifier-value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.78rem;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.dd-stat--ability > .dd-stat__editor,
+.dd-stat--ability > .dd-stat__mechanics-details,
+.dd-stat--ability > .dd-stat__error {
+    margin-inline: var(--dd-sheet-space-2);
+}
+
+.dd-stat--ability > .dd-stat__editor {
+    margin-bottom: var(--dd-sheet-space-2);
+}
+
+.dd-stat--ability > .dd-stat__mechanics-details {
+    margin-block: var(--dd-sheet-space-2);
+}
+
 .dd-stat--armor-class {
     display: grid;
-    grid-template-rows: minmax(4.5rem, 3fr) minmax(2.25rem, 1fr);
+    grid-template-rows: minmax(3.75rem, 3fr) minmax(1.75rem, 1fr);
     padding: 0;
     overflow: hidden;
 }
