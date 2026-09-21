@@ -250,8 +250,9 @@ test("UI shell defines materially different tablet and mobile compositions", () 
     assert.match(css, /\.dd-core-stats__abilities\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
 });
 
-test("responsive shell is driven by intentional placeholders rather than fabricated Character mechanics", () => {
-    assert.match(sheetSource, /MECHANIC_PLACEHOLDERS/);
+test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
+    assert.match(sheetSource, /renderSupportScaffoldCard/);
+    assert.match(sheetSource, /renderCombatMechanicsSummary\(mechanics\)/);
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 
