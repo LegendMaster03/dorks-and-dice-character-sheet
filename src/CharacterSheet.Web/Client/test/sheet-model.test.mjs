@@ -256,11 +256,19 @@ test("desktop sheet uses the available viewport and one equal-width top-stat gri
     assert.match(css, /\.dd-core-stats__abilities,\s*\.dd-core-stats__quick\s*\{[^}]*display:\s*contents;/s);
 });
 
+test("wide dashboard gives Skills a full-height column and keeps Health beside the top statistics", () => {
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*grid-template-columns:\s*minmax\(21rem,\s*0\.8fr\)\s+minmax\(0,\s*3\.2fr\)/s);
+    assert.match(css, /\.dd-sheet__top-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*9fr\)\s+minmax\(18rem,\s*2\.6fr\)/s);
+    assert.match(sheetSource, /createElement\("section", "dd-sheet__skills"\)/);
+    assert.match(sheetSource, /renderSkillsCard\(competencyPresentation\)/);
+    assert.match(sheetSource, /renderHealthQuickCard\(mechanics,/);
+});
+
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
     assert.match(sheetSource, /renderSupportScaffoldCard/);
     assert.match(sheetSource, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(sheetSource, /renderCombatFundamentalsCard\(mechanics\)/);
-    assert.match(sheetSource, /renderHealthMechanicsCard\(mechanics,\s*\{/);
+    assert.match(sheetSource, /renderHealthQuickCard\(mechanics,\s*\{/);
     assert.match(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
