@@ -6,6 +6,7 @@ import {
     type CalculatedMechanicalValueView,
     type CharacterMechanicsView,
     type DisplayFieldView,
+    type HealthTrackView,
     type SavingThrowView
 } from "./character-mechanics.js";
 import { createElement, createInlineState, createSectionCard } from "./components.js";
