@@ -309,6 +309,47 @@ The reducer models sheet loading, basic/rich/archived screens, builder loading/f
 
 Nested `/characters/{characterId}` routes and `/new` continue to use the host-provided Tool route/base path.
 
+## Implementation module boundaries
+
+The application keeps the existing Domain / Application / Infrastructure / Web layering, but large presentation and browser files are further divided by ownership so a human can locate one feature without editing unrelated features.
+
+Backend Character presentation uses a small orchestration service plus focused projectors under `Characters/Presentation`. `CharacterPresentationService` coordinates Character-owned build state, Rules Core reads, diagnostics, and projection order. Advancement, automatic-evaluation planning, competencies, checks/procedures, mechanical collections, and source attribution remain separate projectors. `CharacterPresentationProjector` is a compatibility facade rather than a second implementation.
+
+The browser follows these ownership rules:
+
+```text
+src/
+  core/
+    application/     shared workflow boundaries and request handling
+    mechanics/       generic mechanic rendering/helpers with no feature dependency
+  features/
+    abilities/
+    advancement/
+    actions/
+    combat/
+    defense/
+    features/
+    health/
+    initiative/
+    inventory/
+    movement/
+    notes/
+    saving-throws/
+  state/             deterministic Builder, Routine, and Presentation slice reducers
+  ui/                shell/composition, shared primitives, and generic presentation surfaces
+  styles/            ordered stylesheet modules composed by styles.css
+```
+
+Leaf features may depend on generic core/UI contracts but should not reach into unrelated leaf features. Cross-feature layout belongs in an explicit composition boundary such as `ui/core-stats.ts`; the Combat presentation is the intentional feature-level composition of Defense, Saves, Health, Initiative, and generic combat values. Shared core code must not import feature modules.
+
+`ui/mechanics-components.ts` remains as a compatibility re-export surface for older callers. It contains no mechanic implementation. `ui/sheet.ts` owns the Character Sheet shell, header, dashboard layout, guided setup, and composition only; Notes, Inventory, Feats, Ability cards, primary tab content, and generalized mechanic families live with their owners.
+
+`app.ts` is the browser composition root. Loading and mutation behavior is implemented by core/feature workflows and wired there. `app-state.ts` remains the visible root reducer for screen lifecycle and cross-slice Edit/Guided coordination while delegating Builder, Routine, and Presentation transitions to `state/` reducers. This keeps state transitions deterministic without creating one switch that every feature must edit.
+
+The stylesheet entrypoint is composition-only. The ordered files `foundation.css`, `builder.css`, `advancement.css`, `mechanics.css`, `abilities.css`, and `supplemental.css` preserve cascade order while making feature-oriented styling discoverable. New styling should be added to the owning module rather than rebuilding a monolithic `styles.css`.
+
+These boundaries are architectural, not line-count targets. A cohesive feature file may remain moderately large when splitting it would obscure behavior. New files are preferred when a change introduces a different ownership concern, state workflow, or reusable abstraction.
+
 ## PostgreSQL deployment
 
 Character Sheet uses its own external PostgreSQL database, following the persistent-tool deployment pattern used by Rules Core. `CharacterSheetDbContext` remains the EF Core persistence model, and EF Core migrations are applied to PostgreSQL at application startup.

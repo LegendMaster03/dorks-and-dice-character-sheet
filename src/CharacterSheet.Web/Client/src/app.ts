@@ -1,26 +1,5 @@
 import "./styles.css";
-import {
-    createInitialState,
-    type RoutineMutationKind
-} from "./app-state.js";
-import {
-    addCharacterFeatOccurrence,
-    clearCharacterBaseAbilityScore,
-    clearCharacterBuildChoice,
-    loadCharacterBuild,
-    removeCharacterFeatOccurrence,
-    setCharacterBaseAbilityScore,
-    setCharacterBuildChoice,
-    type CharacterAbilityKey,
-    type CharacterBuildResponse,
-    type CharacterBuilderChoice
-} from "./builder-api.js";
-import {
-    filterSubclassesForClass,
-    getStartingClassEntry,
-    getStoredChoiceConceptKey,
-    resolveStoredChoice
-} from "./builder-rules.js";
+import { createInitialState } from "./app-state.js";
 import {
     buildCharacterRouteUrl,
     createNewCharacterAndSheet,
@@ -29,23 +8,22 @@ import {
     RichSheetInitializationError,
     type CharacterSheetBootstrapResponse
 } from "./character-api.js";
-import { loadCharacterPresentation } from "./character-presentation-api.js";
-import {
-    addCharacterNote,
-    addInventoryItemOccurrence,
-    loadCharacterState,
-    removeCharacterNote,
-    removeInventoryItemOccurrence,
-    setCharacterCurrentHitPoints,
-    updateCharacterNote
-} from "./character-state-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
 import { createApplication } from "./render-lifecycle.js";
-import { resolveRuleConcept, searchResolvedRules } from "./rules-core-api.js";
 import { parseCharacterSheetRoute } from "./routes.js";
 import { createButton, createElement, createInlineState, createStateCard } from "./ui/components.js";
 import { renderCharacterHeader, renderCharacterWorkspace } from "./ui/sheet.js";
 import type { SheetSection } from "./ui/sheet-model.js";
+import { createPresentationWorkflow } from "./core/application/presentation-workflow.js";
+import { createRoutineStateWorkflow } from "./core/application/routine-state-workflow.js";
+import { createBuildStateWorkflow } from "./core/application/build-state-workflow.js";
+import { requestErrorMessage } from "./core/application/request-error.js";
+import { createAdvancementWorkflow } from "./features/advancement/advancement-workflow.js";
+import { createAbilityWorkflow } from "./features/abilities/ability-workflow.js";
+import { createFeatWorkflow } from "./features/features/feat-workflow.js";
+import { createHealthWorkflow } from "./features/health/health-workflow.js";
+import { createInventoryWorkflow } from "./features/inventory/inventory-workflow.js";
+import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -56,7 +34,6 @@ const appRoot: HTMLElement = root;
 const environment = resolveHostEnvironment(appRoot, window.location.pathname);
 const route = parseCharacterSheetRoute(environment.toolRoute);
 const initialState = createInitialState(route);
-let presentationRequestSequence = 0;
 ensureCharacterSheetStylesheet();
 
 function ensureCharacterSheetStylesheet(): void {
@@ -87,10 +64,10 @@ function render(): void {
             break;
         case "submitting":
             content = renderStateScreen(
-                state.screen.operation === "new-character" ? "Creating Character" : "Starting digital Character Sheet",
+                state.screen.operation === "new-character" ? "Creating Character" : "Setting up Character Sheet",
                 state.screen.operation === "new-character"
-                    ? "Creating the canonical Site Character and initializing its digital sheet…"
-                    : "Initializing the digital Character Sheet…",
+                    ? "Creating your Character and setting up its Character Sheet…"
+                    : "Setting up the Character Sheet…",
                 "loading");
             break;
         case "basic-character":
@@ -125,11 +102,11 @@ function renderNewCharacter(message?: string, recoveryCharacterId?: string): HTM
         createElement(
             "p",
             "dd-sheet-screen__copy",
-            "Create the Site-owned Character first. Character Sheet will then attach its digital build state to that canonical Character identity."));
+            "Create a Character in Dorks & Dice, then set up the Character Sheet that is saved with it."));
 
     if (!environment.embedded) {
         panel.append(createInlineState(
-            "Standalone development does not invent Site Character ownership. Open this route through Dorks & Dice to create a canonical Character.",
+            "Character creation is available through the Dorks & Dice Site. Open this page there to create and save a Character.",
             "warning"));
         screen.append(panel);
         return screen;
@@ -173,12 +150,12 @@ function renderBasicCharacter(character: CharacterSheetBootstrapResponse): HTMLE
     const body = createElement("div", "dd-sheet-screen");
     const panel = createElement("section", "dd-character-init");
     panel.append(
-        createElement("h2", "dd-character-init__name", "Digital sheet not initialized"),
+        createElement("h2", "dd-character-init__name", "Character Sheet not set up"),
         createElement(
             "p",
             "dd-character-init__copy",
-            "This Site Character exists, but Character Sheet does not yet have rich Character-owned build state for it."),
-        createButton("Build Digital Sheet", "dd-button dd-button--primary", () => void initializeExistingCharacter(character)));
+            "This Character is saved, but its Character Sheet has not been set up yet."),
+        createButton("Set Up Character Sheet", "dd-button dd-button--primary", () => void initializeExistingCharacter(character)));
     body.append(panel);
     shell.append(body);
     return shell;
@@ -202,36 +179,38 @@ function renderWorkspace(
         state.presentation.status === "ready" ? state.presentation.mechanics : null,
         {
             structural: {
-                openChooser,
-                clearChoice: target => void clearChoice(character.characterId, target),
-                submitChooserSearch: (target, query) => void loadChooser(target, query),
-                closeChooser: () => application.dispatch({ type: "chooser-closed" }),
-                saveChoice: (target, conceptKey) => void saveChoice(character.characterId, target, conceptKey),
+                openChooser: target => advancementWorkflow.openChooser(target),
+                clearChoice: target => void advancementWorkflow.clear(character.characterId, target),
+                submitChooserSearch: (target, query) => void advancementWorkflow.search(target, query),
+                closeChooser: () => advancementWorkflow.closeChooser(),
+                saveChoice: (target, conceptKey) => void advancementWorkflow.save(character.characterId, target, conceptKey),
                 setBaseAbilityScore: (abilityKey, score) =>
-                    void saveBaseAbilityScore(character.characterId, abilityKey, score),
+                    void abilityWorkflow.save(character.characterId, abilityKey, score),
                 clearBaseAbilityScore: abilityKey =>
-                    void clearBaseAbilityScore(character.characterId, abilityKey)
+                    void abilityWorkflow.clear(character.characterId, abilityKey)
             },
             feats: {
-                openChooser: () => openFeatChooser(),
-                closeChooser: () => application.dispatch({ type: "feat-chooser-closed" }),
-                search: query => void loadFeatChooser(query),
-                add: conceptKey => void addFeat(character.characterId, conceptKey),
-                remove: occurrenceId => void removeFeat(character.characterId, occurrenceId)
+                openChooser: () => featWorkflow.openChooser(),
+                closeChooser: () => featWorkflow.closeChooser(),
+                search: query => void featWorkflow.search(query),
+                add: conceptKey => void featWorkflow.add(character.characterId, conceptKey),
+                remove: occurrenceId => void featWorkflow.remove(character.characterId, occurrenceId)
             },
             routine: {
                 setCurrentHitPoints: currentHitPoints =>
-                    void setCurrentHitPoints(character.characterId, currentHitPoints),
-                addNote: content => void addNote(character.characterId, content),
-                updateNote: (noteId, content) => void updateNote(character.characterId, noteId, content),
-                deleteNote: noteId => void deleteNote(character.characterId, noteId),
-                openInventoryChooser: () => openInventoryChooser(),
-                closeInventoryChooser: () => application.dispatch({ type: "inventory-chooser-closed" }),
-                searchInventory: query => void loadInventoryChooser(query),
-                addInventoryItem: conceptKey => void addInventoryItem(character.characterId, conceptKey),
-                removeInventoryItem: occurrenceId => void removeInventoryItem(character.characterId, occurrenceId)
+                    void healthWorkflow.setCurrentHitPoints(character.characterId, currentHitPoints),
+                addNote: content => void notesWorkflow.add(character.characterId, content),
+                updateNote: (noteId, content) => void notesWorkflow.update(character.characterId, noteId, content),
+                deleteNote: noteId => void notesWorkflow.remove(character.characterId, noteId),
+                openInventoryChooser: () => inventoryWorkflow.openChooser(),
+                closeInventoryChooser: () => inventoryWorkflow.closeChooser(),
+                searchInventory: query => void inventoryWorkflow.search(query),
+                addInventoryItem: conceptKey => void inventoryWorkflow.add(character.characterId, conceptKey),
+                removeInventoryItem: occurrenceId => void inventoryWorkflow.remove(character.characterId, occurrenceId)
             },
-            selectSection: section => application.dispatch({ type: "sheet-section-selected", section }),
+            selectSection: section => dispatchAndFocus(
+                { type: "sheet-section-selected", section },
+                `[data-sheet-section-tab="${section}"]`),
             enterEditMode: () => dispatchAndFocus(
                 { type: "sheet-edit-entered" },
                 '[data-sheet-mode-control="view"]'),
@@ -288,397 +267,14 @@ async function bootstrapCharacter(): Promise<void> {
         application.dispatch({ type: "character-loaded", character });
         if (character?.hasRichSheet) {
             await Promise.all([
-                bootstrapBuild(character.characterId),
-                bootstrapRoutine(character.characterId),
-                bootstrapPresentation(character.characterId)
+                buildStateWorkflow.load(character.characterId),
+                routineStateWorkflow.load(character.characterId),
+                presentationWorkflow.load(character.characterId)
             ]);
         }
     } catch (error) {
-        application.dispatch({ type: "load-failed", message: errorMessage(error) });
+        application.dispatch({ type: "load-failed", message: requestErrorMessage(error) });
     }
-}
-
-async function bootstrapPresentation(characterId: string): Promise<void> {
-    const requestId = ++presentationRequestSequence;
-    application.dispatch({ type: "presentation-load-started", requestId });
-    try {
-        const presentation = await loadCharacterPresentation(environment, characterId);
-        application.dispatch({ type: "presentation-loaded", requestId, presentation });
-    } catch (error) {
-        application.dispatch({
-            type: "presentation-load-failed",
-            requestId,
-            message: errorMessage(error)
-        });
-    }
-}
-
-async function bootstrapRoutine(characterId: string): Promise<void> {
-    application.dispatch({ type: "routine-load-started" });
-    try {
-        const routine = await loadCharacterState(environment, characterId);
-        application.dispatch({ type: "routine-loaded", state: routine });
-        await resolveRoutineReferences(routine);
-    } catch (error) {
-        application.dispatch({ type: "routine-load-failed", message: errorMessage(error) });
-    }
-}
-
-async function resolveRoutineReferences(routine: Awaited<ReturnType<typeof loadCharacterState>>): Promise<void> {
-    await Promise.all(routine.inventoryItemOccurrences.map(async occurrence => {
-        try {
-            const rule = await resolveRuleConcept(environment, occurrence.ruleConceptKey);
-            const reference = rule !== null
-                && rule.entityType === "item"
-                && rule.conceptKey === occurrence.ruleConceptKey
-                ? { status: "resolved" as const, conceptKey: occurrence.ruleConceptKey, rule }
-                : { status: "unavailable" as const, conceptKey: occurrence.ruleConceptKey };
-            application.dispatch({
-                type: "routine-reference-resolved",
-                occurrenceId: occurrence.id,
-                conceptKey: occurrence.ruleConceptKey,
-                reference
-            });
-        } catch (error) {
-            application.dispatch({
-                type: "routine-reference-resolved",
-                occurrenceId: occurrence.id,
-                conceptKey: occurrence.ruleConceptKey,
-                reference: {
-                    status: "error",
-                    conceptKey: occurrence.ruleConceptKey,
-                    message: errorMessage(error)
-                }
-            });
-        }
-    }));
-}
-
-async function applyRoutineMutation(
-    kind: RoutineMutationKind,
-    operation: () => ReturnType<typeof addCharacterNote>,
-    entryId?: string
-): Promise<boolean> {
-    const routine = application.getState().routine;
-    if (routine.status !== "ready"
-        || routine.state === null
-        || routine.state.readOnly
-        || routine.mutation !== null) {
-        return false;
-    }
-
-    application.dispatch({ type: "routine-mutation-started", kind, entryId });
-    try {
-        const next = await operation();
-        application.dispatch({ type: "routine-mutation-succeeded", state: next });
-        await resolveRoutineReferences(next);
-        return true;
-    } catch (error) {
-        application.dispatch({ type: "routine-mutation-failed", message: errorMessage(error) });
-        return false;
-    }
-}
-
-async function setCurrentHitPoints(
-    characterId: string,
-    currentHitPoints: number | null
-): Promise<void> {
-    await applyRoutineMutation(
-        "health-update",
-        () => setCharacterCurrentHitPoints(environment, characterId, currentHitPoints));
-}
-
-async function addNote(characterId: string, content: string): Promise<void> {
-    if (content.trim().length === 0) return;
-    await applyRoutineMutation(
-        "note-add",
-        () => addCharacterNote(environment, characterId, content));
-}
-
-async function updateNote(characterId: string, noteId: string, content: string): Promise<void> {
-    if (content.trim().length === 0) return;
-    await applyRoutineMutation(
-        "note-update",
-        () => updateCharacterNote(environment, characterId, noteId, content),
-        noteId);
-}
-
-async function deleteNote(characterId: string, noteId: string): Promise<void> {
-    await applyRoutineMutation(
-        "note-delete",
-        () => removeCharacterNote(environment, characterId, noteId),
-        noteId);
-}
-
-function openInventoryChooser(): void {
-    application.dispatch({ type: "inventory-chooser-opened" });
-    void loadInventoryChooser("");
-}
-
-async function loadInventoryChooser(query: string): Promise<void> {
-    const normalizedQuery = query.trim();
-    application.dispatch({ type: "inventory-chooser-load-started", query: normalizedQuery });
-    try {
-        const catalog = await searchResolvedRules(environment, "item", normalizedQuery);
-        application.dispatch({
-            type: "inventory-chooser-loaded",
-            query: normalizedQuery,
-            results: catalog.rules.filter(rule => rule.entityType === "item")
-        });
-    } catch (error) {
-        application.dispatch({
-            type: "inventory-chooser-load-failed",
-            query: normalizedQuery,
-            message: errorMessage(error)
-        });
-    }
-}
-
-async function addInventoryItem(characterId: string, conceptKey: string): Promise<void> {
-    if (await applyRoutineMutation(
-        "inventory-add",
-        () => addInventoryItemOccurrence(environment, characterId, conceptKey))) {
-        await bootstrapPresentation(characterId);
-    }
-}
-
-async function removeInventoryItem(characterId: string, occurrenceId: string): Promise<void> {
-    if (await applyRoutineMutation(
-        "inventory-delete",
-        () => removeInventoryItemOccurrence(environment, characterId, occurrenceId),
-        occurrenceId)) {
-        await bootstrapPresentation(characterId);
-    }
-}
-
-async function bootstrapBuild(characterId: string): Promise<void> {
-    application.dispatch({ type: "builder-load-started" });
-    try {
-        const build = await loadCharacterBuild(environment, characterId);
-        application.dispatch({ type: "builder-loaded", build });
-        await resolveBuildReferences(build);
-    } catch (error) {
-        application.dispatch({ type: "builder-load-failed", message: errorMessage(error) });
-    }
-}
-
-async function resolveBuildReferences(build: CharacterBuildResponse): Promise<void> {
-    const structural = (["raceSpecies", "startingClass", "subclass"] as const).map(async target => {
-        const conceptKey = getStoredChoiceConceptKey(build, target);
-        if (conceptKey === null) return;
-        const reference = await resolveStoredChoice(environment, build, target);
-        application.dispatch({ type: "rule-reference-resolved", target, conceptKey, reference });
-    });
-    const feats = build.progressionEntries
-        .filter(value => value.kind === "feat")
-        .map(async occurrence => {
-            try {
-                const rule = await resolveRuleConcept(environment, occurrence.ruleConceptKey);
-                const reference = rule !== null
-                    && rule.entityType === "feat"
-                    && rule.conceptKey === occurrence.ruleConceptKey
-                    ? { status: "resolved" as const, conceptKey: occurrence.ruleConceptKey, rule }
-                    : { status: "unavailable" as const, conceptKey: occurrence.ruleConceptKey };
-                application.dispatch({
-                    type: "feat-reference-resolved",
-                    occurrenceId: occurrence.id,
-                    conceptKey: occurrence.ruleConceptKey,
-                    reference
-                });
-            } catch (error) {
-                application.dispatch({
-                    type: "feat-reference-resolved",
-                    occurrenceId: occurrence.id,
-                    conceptKey: occurrence.ruleConceptKey,
-                    reference: {
-                        status: "error",
-                        conceptKey: occurrence.ruleConceptKey,
-                        message: errorMessage(error)
-                    }
-                });
-            }
-        });
-    await Promise.all([...structural, ...feats]);
-}
-
-function openChooser(target: CharacterBuilderChoice): void {
-    application.dispatch({ type: "chooser-opened", target });
-    void loadChooser(target, "");
-}
-
-async function loadChooser(target: CharacterBuilderChoice, query: string): Promise<void> {
-    const normalizedQuery = query.trim();
-    application.dispatch({ type: "chooser-load-started", target, query: normalizedQuery });
-    try {
-        const entityType = target === "raceSpecies"
-            ? "race"
-            : target === "startingClass" ? "class" : "subclass";
-        const catalog = await searchResolvedRules(environment, entityType, normalizedQuery);
-        let results = catalog.rules.filter(rule => rule.entityType === entityType);
-        if (target === "subclass") {
-            const build = application.getState().builder.build;
-            const startingClass = build === null ? null : getStartingClassEntry(build);
-            if (startingClass === null) {
-                throw new Error("Choose a Class before selecting a Subclass.");
-            }
-            results = filterSubclassesForClass(results, startingClass.ruleConceptKey);
-        }
-        application.dispatch({ type: "chooser-loaded", target, query: normalizedQuery, results });
-    } catch (error) {
-        application.dispatch({
-            type: "chooser-load-failed",
-            target,
-            query: normalizedQuery,
-            message: errorMessage(error)
-        });
-    }
-}
-
-function openFeatChooser(): void {
-    application.dispatch({ type: "feat-chooser-opened" });
-    void loadFeatChooser("");
-}
-
-async function loadFeatChooser(query: string): Promise<void> {
-    const normalizedQuery = query.trim();
-    application.dispatch({ type: "feat-chooser-load-started", query: normalizedQuery });
-    try {
-        const catalog = await searchResolvedRules(environment, "feat", normalizedQuery);
-        application.dispatch({
-            type: "feat-chooser-loaded",
-            query: normalizedQuery,
-            results: catalog.rules.filter(rule => rule.entityType === "feat")
-        });
-    } catch (error) {
-        application.dispatch({
-            type: "feat-chooser-load-failed",
-            query: normalizedQuery,
-            message: errorMessage(error)
-        });
-    }
-}
-
-async function addFeat(characterId: string, conceptKey: string): Promise<void> {
-    const builder = application.getState().builder;
-    if (builder.status !== "ready"
-        || builder.build === null
-        || builder.build.readOnly
-        || builder.saving !== null
-        || builder.savingAbility !== null
-        || builder.savingFeat !== null) {
-        return;
-    }
-
-    application.dispatch({ type: "feat-save-started" });
-    try {
-        const build = await addCharacterFeatOccurrence(environment, characterId, conceptKey);
-        application.dispatch({ type: "feat-saved", build });
-        await resolveBuildReferences(build);
-        await bootstrapPresentation(characterId);
-    } catch (error) {
-        application.dispatch({ type: "feat-save-failed", message: errorMessage(error) });
-    }
-}
-
-async function removeFeat(characterId: string, occurrenceId: string): Promise<void> {
-    const builder = application.getState().builder;
-    if (builder.status !== "ready"
-        || builder.build === null
-        || builder.build.readOnly
-        || builder.saving !== null
-        || builder.savingAbility !== null
-        || builder.savingFeat !== null) {
-        return;
-    }
-
-    application.dispatch({ type: "feat-save-started", occurrenceId });
-    try {
-        const build = await removeCharacterFeatOccurrence(environment, characterId, occurrenceId);
-        application.dispatch({ type: "feat-saved", build });
-        await resolveBuildReferences(build);
-        await bootstrapPresentation(characterId);
-    } catch (error) {
-        application.dispatch({ type: "feat-save-failed", message: errorMessage(error) });
-    }
-}
-
-async function saveChoice(
-    characterId: string,
-    target: CharacterBuilderChoice,
-    conceptKey: string
-): Promise<void> {
-    application.dispatch({ type: "selection-save-started", target });
-    try {
-        const classAdvancementEntryId = target === "subclass" ? currentStartingClassId() : undefined;
-        const build = await setCharacterBuildChoice(
-            environment,
-            characterId,
-            target,
-            conceptKey,
-            classAdvancementEntryId);
-        application.dispatch({ type: "selection-saved", build });
-        await resolveBuildReferences(build);
-        await bootstrapPresentation(characterId);
-    } catch (error) {
-        application.dispatch({ type: "selection-save-failed", message: errorMessage(error) });
-    }
-}
-
-async function clearChoice(characterId: string, target: CharacterBuilderChoice): Promise<void> {
-    application.dispatch({ type: "selection-save-started", target });
-    try {
-        const classAdvancementEntryId = target === "subclass" ? currentStartingClassId() : undefined;
-        const build = await clearCharacterBuildChoice(
-            environment,
-            characterId,
-            target,
-            classAdvancementEntryId);
-        application.dispatch({ type: "selection-saved", build });
-        await resolveBuildReferences(build);
-        await bootstrapPresentation(characterId);
-    } catch (error) {
-        application.dispatch({ type: "selection-save-failed", message: errorMessage(error) });
-    }
-}
-
-async function saveBaseAbilityScore(
-    characterId: string,
-    abilityKey: CharacterAbilityKey,
-    score: number
-): Promise<void> {
-    application.dispatch({ type: "ability-save-started", abilityKey });
-    try {
-        const build = await setCharacterBaseAbilityScore(environment, characterId, abilityKey, score);
-        application.dispatch({ type: "ability-saved", build });
-        await resolveBuildReferences(build);
-        await bootstrapPresentation(characterId);
-    } catch (error) {
-        application.dispatch({ type: "ability-save-failed", abilityKey, message: errorMessage(error) });
-    }
-}
-
-async function clearBaseAbilityScore(
-    characterId: string,
-    abilityKey: CharacterAbilityKey
-): Promise<void> {
-    application.dispatch({ type: "ability-save-started", abilityKey });
-    try {
-        const build = await clearCharacterBaseAbilityScore(environment, characterId, abilityKey);
-        application.dispatch({ type: "ability-saved", build });
-        await resolveBuildReferences(build);
-        await bootstrapPresentation(characterId);
-    } catch (error) {
-        application.dispatch({ type: "ability-save-failed", abilityKey, message: errorMessage(error) });
-    }
-}
-
-function currentStartingClassId(): string {
-    const build = application.getState().builder.build;
-    const startingClass = build === null ? null : getStartingClassEntry(build);
-    if (startingClass === null) {
-        throw new Error("Choose a Class before selecting a Subclass.");
-    }
-    return startingClass.id;
 }
 
 async function submitNewCharacter(name: string): Promise<void> {
@@ -695,7 +291,7 @@ async function submitNewCharacter(name: string): Promise<void> {
             });
             return;
         }
-        application.dispatch({ type: "new-submit-failed", message: errorMessage(error) });
+        application.dispatch({ type: "new-submit-failed", message: requestErrorMessage(error) });
     }
 }
 
@@ -705,19 +301,41 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
         const initialized = await initializeCharacterSheet(environment, character.characterId);
         application.dispatch({ type: "character-loaded", character: initialized });
         await Promise.all([
-            bootstrapBuild(initialized.characterId),
-            bootstrapRoutine(initialized.characterId),
-            bootstrapPresentation(initialized.characterId)
+            buildStateWorkflow.load(initialized.characterId),
+            routineStateWorkflow.load(initialized.characterId),
+            presentationWorkflow.load(initialized.characterId)
         ]);
     } catch (error) {
-        application.dispatch({ type: "load-failed", message: errorMessage(error) });
+        application.dispatch({ type: "load-failed", message: requestErrorMessage(error) });
     }
 }
 
-function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : "Character Sheet request failed.";
-}
-
 const application = createApplication(initialState, render);
+const presentationWorkflow = createPresentationWorkflow(application, environment);
+const routineStateWorkflow = createRoutineStateWorkflow(application, environment);
+const buildStateWorkflow = createBuildStateWorkflow(application, environment);
+const advancementWorkflow = createAdvancementWorkflow(
+    application,
+    buildStateWorkflow,
+    presentationWorkflow,
+    environment);
+const abilityWorkflow = createAbilityWorkflow(
+    application,
+    buildStateWorkflow,
+    presentationWorkflow,
+    environment);
+const featWorkflow = createFeatWorkflow(
+    application,
+    buildStateWorkflow,
+    presentationWorkflow,
+    environment);
+const healthWorkflow = createHealthWorkflow(routineStateWorkflow, environment);
+const inventoryWorkflow = createInventoryWorkflow(
+    application,
+    routineStateWorkflow,
+    presentationWorkflow,
+    environment);
+const notesWorkflow = createNotesWorkflow(routineStateWorkflow, environment);
+
 application.render();
 void bootstrapCharacter();

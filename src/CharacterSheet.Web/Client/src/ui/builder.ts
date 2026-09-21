@@ -37,21 +37,21 @@ export function renderCharacterBuilder(
     options: CharacterBuilderRenderOptions = {}
 ): HTMLElement {
     const choices = options.choices ?? ALL_CHARACTER_BUILDER_CHOICES;
-    const section = createSectionCard(options.title ?? "Character Build", "dd-build");
+    const section = createSectionCard(options.title ?? "Character Setup", "dd-build");
     section.setAttribute("data-character-builder", characterId);
     const mutationPending = hasPendingBuildMutation(builder);
     section.setAttribute("aria-busy", builder.status === "loading" || mutationPending ? "true" : "false");
 
     if (builder.status === "idle" || builder.status === "loading") {
-        section.append(createInlineState("Loading Character build…", "loading"));
+        section.append(createInlineState("Loading Character setup…", "loading"));
         return section;
     }
     if (builder.status === "error") {
-        section.append(createInlineState(builder.message ?? "Unable to load Character build state.", "error"));
+        section.append(createInlineState(builder.message ?? "Unable to load Character setup.", "error"));
         return section;
     }
     if (builder.build === null) {
-        section.append(createInlineState("Character build state is unavailable.", "warning"));
+        section.append(createInlineState("Character setup is unavailable.", "warning"));
         return section;
     }
 
@@ -197,9 +197,9 @@ function renderRuleChooser(
     container.append(form);
 
     if (chooser.status === "idle" || chooser.status === "loading") {
-        container.append(createInlineState("Loading Rules Core catalog…", "loading"));
+        container.append(createInlineState("Loading rule catalog…", "loading"));
     } else if (chooser.status === "error") {
-        container.append(createInlineState(chooser.message ?? "Rules Core catalog is unavailable.", "error"));
+        container.append(createInlineState(chooser.message ?? "Rule catalog is unavailable.", "error"));
     } else if (chooser.results.length === 0) {
         container.append(createInlineState("No matching rules are available.", "neutral"));
     } else {

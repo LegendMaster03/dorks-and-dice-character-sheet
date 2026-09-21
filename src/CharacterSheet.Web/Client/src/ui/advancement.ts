@@ -15,12 +15,12 @@ export function renderAdvancementDetails(advancement: CharacterAdvancementView |
     const body = createElement("div", "dd-advancement-overview__body");
 
     if (advancement === null) {
-        body.append(createInlineState("Resolved advancement occurrences are not available yet.", "neutral"));
+        body.append(createInlineState("Advancement details are not available yet.", "neutral"));
         details.append(body);
         return details;
     }
     if (advancement.occurrences.length === 0) {
-        body.append(createInlineState("No advancement occurrences were supplied for this Character.", "neutral"));
+        body.append(createInlineState("No advancement details are available for this Character.", "neutral"));
         details.append(body);
         return details;
     }
