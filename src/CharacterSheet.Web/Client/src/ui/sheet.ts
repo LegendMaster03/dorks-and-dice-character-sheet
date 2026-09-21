@@ -156,7 +156,8 @@ export function renderCharacterWorkspace(
     support.append(
         renderHealthMechanicsCard(mechanics, {
             currentHitPoints: routine.status === "ready"
-                ? routine.state?.currentHitPoints ?? null
+                && routine.state?.currentHitPoints !== null
+                ? routine.state?.currentHitPoints
                 : undefined,
             readOnly: readOnly || routine.status !== "ready" || routine.state === null,
             saving: routine.mutation?.kind === "health-update",

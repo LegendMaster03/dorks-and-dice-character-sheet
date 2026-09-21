@@ -254,7 +254,7 @@ test("responsive shell uses persistent presentation scaffolds without fabricatin
     assert.match(sheetSource, /renderSupportScaffoldCard/);
     assert.match(sheetSource, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(sheetSource, /renderCombatFundamentalsCard\(mechanics\)/);
-    assert.match(sheetSource, /renderHealthMechanicsCard\(mechanics\)/);
+    assert.match(sheetSource, /renderHealthMechanicsCard\(mechanics,\s*\{/);
     assert.match(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
