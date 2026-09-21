@@ -226,29 +226,24 @@
 
 .dd-core-stats {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(22rem, 1fr);
-    gap: var(--dd-sheet-space-3);
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-2);
     align-items: start;
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) 0;
 }
 
 .dd-core-stats__abilities,
 .dd-core-stats__quick {
-    display: grid;
-    gap: var(--dd-sheet-space-2);
-    align-items: start;
-}
-
-.dd-core-stats__abilities {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.dd-core-stats__quick {
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr) minmax(0, 1.35fr);
-    align-items: start;
+    display: contents;
 }
 
 .dd-core-stats__quick > .dd-stat {
+    box-sizing: border-box;
+    block-size: 5.5rem;
+    min-height: 5.5rem;
+}
+
+.dd-sheet[data-sheet-mode="view"] .dd-core-stats .dd-stat {
     box-sizing: border-box;
     block-size: 5.5rem;
     min-height: 5.5rem;
@@ -298,10 +293,6 @@
     min-width: 0;
     block-size: 100%;
     margin-top: 0;
-}
-
-.dd-movement-values--single {
-    grid-template-rows: 1fr;
 }
 
 .dd-movement-values__primary {
@@ -604,8 +595,8 @@
 
 .dd-sheet__workspace {
     display: grid;
-    grid-template-columns: minmax(15rem, 0.72fr) minmax(22rem, 1.35fr) minmax(24rem, 1.45fr);
-    gap: var(--dd-sheet-space-4);
+    grid-template-columns: minmax(15rem, 0.75fr) minmax(26rem, 1.25fr) minmax(34rem, 1.65fr);
+    gap: var(--dd-sheet-space-3);
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
 }
 
@@ -973,17 +964,18 @@
     line-height: 1;
 }
 
-.dd-health-rest-controls {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.dd-rest-controls,
+.dd-sheet-mode-bar__configuration {
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--dd-sheet-space-2);
-    margin-top: var(--dd-sheet-space-2);
+    align-items: center;
 }
 
-.dd-health-rest-button {
+.dd-rest-button {
     min-width: 0;
-    padding-inline: 0.45rem;
-    font-size: 0.7rem;
+    padding-inline: 0.65rem;
+    font-size: 0.72rem;
     white-space: nowrap;
 }
 
@@ -1462,9 +1454,10 @@
 }
 
 .dd-sheet-screen {
-    max-width: 72rem;
+    width: 100%;
+    max-width: 120rem;
     margin: 0 auto;
-    padding: var(--dd-sheet-space-5);
+    padding: clamp(0.75rem, 1.5vw, 1.5rem);
 }
 
 .dd-sheet-screen__panel,
@@ -1558,9 +1551,9 @@
 .dd-sheet-mode-bar {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--dd-sheet-space-2);
+    gap: var(--dd-sheet-space-3);
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     padding: 0.4rem var(--dd-sheet-space-5);
     background: var(--dd-sheet-surface);
     border-bottom: 1px solid var(--dd-sheet-border);
@@ -1680,14 +1673,6 @@
     }
 
     .dd-core-stats {
-        grid-template-columns: 1fr;
-    }
-
-    .dd-core-stats__abilities {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .dd-core-stats__quick {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
@@ -1777,12 +1762,8 @@
         padding: var(--dd-sheet-space-3) var(--dd-sheet-space-3) 0;
     }
 
-    .dd-core-stats__abilities {
+    .dd-core-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .dd-core-stats__quick {
-        grid-template-columns: 1fr;
     }
 
     .dd-mechanics-summary-grid {
