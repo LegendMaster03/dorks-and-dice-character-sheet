@@ -482,38 +482,39 @@ function renderAbilityScoreCard(
     card.setAttribute("data-ability-key", definition.key);
     card.setAttribute("data-ability-score-state", display.status);
     card.setAttribute("data-effective-ability-state", effectiveValue === undefined ? "unavailable" : "resolved");
-    card.append(createElement("h3", "dd-stat__label", definition.label));
+
+    const presentation = createElement("div", "dd-ability-stat__presentation");
+    const primary = createElement("div", "dd-ability-stat__primary");
+    primary.append(createElement("h3", "dd-stat__label", definition.label));
 
     if (effectiveValue === undefined) {
-        card.append(
+        primary.append(
             createElement("p", "dd-stat__value", display.value),
-            createElement("p", "dd-stat__detail", display.detail),
-            createElement("p", "dd-stat__modifier", "Modifier -")
-        );
+            createElement("p", "dd-stat__detail", display.detail));
     } else {
         card.setAttribute("data-effective-ability-key", effectiveValue.key);
-        card.append(
+        primary.append(
             createElement("p", "dd-stat__value", formatMechanicalValue(effectiveValue)),
             createElement("p", "dd-stat__detail", "Effective value"),
             createElement(
                 "p",
                 "dd-stat__base-context",
-                `Base input: ${display.value}`)
-        );
+                `Base input: ${display.value}`));
+    }
 
-        if (effectiveValue.relatedValues?.length) {
-            const related = createElement("div", "dd-stat__related-values");
-            for (const value of effectiveValue.relatedValues) {
-                related.append(createElement(
-                    "span",
-                    "dd-stat__related-value",
-                    `${value.label} ${formatMechanicalValue(value)}`));
-            }
-            card.append(related);
-        } else {
-            card.append(createElement("p", "dd-stat__modifier", "Modifier -"));
-        }
+    const modifier = findAbilityModifier(effectiveValue);
+    const modifierRegion = createElement("div", "dd-ability-stat__modifier");
+    modifierRegion.setAttribute("data-ability-modifier", definition.key);
+    modifierRegion.append(
+        createElement("span", "dd-ability-stat__modifier-label", "Modifier"),
+        createElement(
+            "strong",
+            "dd-ability-stat__modifier-value",
+            modifier === undefined ? "-" : formatMechanicalValue(modifier)));
+    presentation.append(primary, modifierRegion);
+    card.append(presentation);
 
+    if (effectiveValue !== undefined) {
         const details = renderAbilityMechanicalDetails(effectiveValue);
         if (details !== null) card.append(details);
     }
@@ -567,12 +568,24 @@ function renderAbilityScoreCard(
     return card;
 }
 
+function findAbilityModifier(
+    value: CalculatedMechanicalValueView | undefined
+): NonNullable<CalculatedMechanicalValueView["relatedValues"]>[number] | undefined {
+    return value?.relatedValues?.find(related =>
+        related.key.toLowerCase() === "modifier"
+        || related.label.trim().toLowerCase() === "modifier");
+}
+
 function renderAbilityMechanicalDetails(value: CalculatedMechanicalValueView): HTMLElement | null {
-    if (!(value.breakdown?.length || value.sourceAttributions?.length)) return null;
+    const related = (value.relatedValues ?? []).filter(entry => entry !== findAbilityModifier(value));
+    if (!(related.length || value.breakdown?.length || value.sourceAttributions?.length)) return null;
 
     const details = createElement("details", "dd-stat__mechanics-details");
     details.append(createElement("summary", "dd-stat__mechanics-details-toggle", "Details"));
     const body = createElement("div", "dd-stat__mechanics-details-body");
+    const relatedFacts = renderFacts(related.map(entry =>
+        [entry.label, formatMechanicalValue(entry)] as const));
+    if (relatedFacts !== null) body.append(relatedFacts);
     const breakdown = renderFacts((value.breakdown ?? []).map(entry =>
         [entry.label, formatMechanicalValue(entry)] as const));
     if (breakdown !== null) body.append(breakdown);

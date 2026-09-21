@@ -454,6 +454,9 @@ test("effective Ability projection is separate from Character-owned base Ability
     assert.match(visibleText(strength), /18/);
     assert.match(visibleText(strength), /Base input: 12/);
     assert.match(visibleText(strength), /Modifier \+4/);
+    const modifier = byAttribute(strength, "data-ability-modifier", "strength");
+    assert.equal(modifier.length, 1);
+    assert.match(visibleText(modifier[0]), /Modifier \+4/);
     assert.match(visibleText(strength), /Enhancement \+6/);
     assert.match(visibleText(strength), /Rules module/);
 
@@ -493,6 +496,9 @@ test("absent effective Ability mechanics preserve base input and honest modifier
     assert.match(visibleText(strength), /12/);
     assert.match(visibleText(strength), /Base Score/);
     assert.match(visibleText(strength), /Modifier -/);
+    const modifier = byAttribute(strength, "data-ability-modifier", "strength");
+    assert.equal(modifier.length, 1);
+    assert.match(visibleText(modifier[0]), /Modifier -/);
 });
 
 test("backend-supplied Ability values outside the six structural keys use the generic fallback presentation", () => {
