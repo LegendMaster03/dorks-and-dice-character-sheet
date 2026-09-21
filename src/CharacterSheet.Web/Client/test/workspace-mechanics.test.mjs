@@ -541,7 +541,7 @@ test("legacy combat placeholder renderer is removed in favor of generalized mech
     assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
     assert.match(source, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(source, /renderCombatFundamentalsCard\(mechanics\)/);
-    assert.match(source, /renderHealthMechanicsCard\(mechanics\)/);
+    assert.match(source, /renderHealthMechanicsCard\(mechanics,\s*\{/);
     assert.match(source, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
 });
 
