@@ -25,6 +25,15 @@ class FakeElement {
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) ?? null; }
     append(...children) { this.children.push(...children); }
+    addEventListener(name, handler) {
+        this.listeners ??= new Map();
+        const handlers = this.listeners.get(name) ?? [];
+        handlers.push(handler);
+        this.listeners.set(name, handlers);
+    }
+    dispatch(name) {
+        for (const handler of this.listeners?.get(name) ?? []) handler({ target: this });
+    }
 }
 
 globalThis.document = { createElement: tagName => new FakeElement(tagName) };
@@ -62,6 +71,28 @@ test("missing competency data keeps the Skills surface and shows a neutral dash"
             visibleText(card),
             /Resolved competencies are not available|No competencies were supplied for this Character/);
     }
+});
+
+test("skill card includes working search across parent and component names", () => {
+    const card = renderSkillsCard([
+        standalone(competency("arcana", "Arcana", "+4", { governingAbility: "intelligence" })),
+        composite(
+            competency("acrobatics", "Acrobatics", "+3"),
+            [
+                competency("balance", "Balance", "+2", { governingAbility: "dexterity" }),
+                competency("tumble", "Tumble", "+4", { governingAbility: "dexterity" })
+            ]
+        )
+    ]);
+    const search = byClass(card, "dd-skills-search")[0];
+    assert.ok(search);
+    search.value = "balance";
+    search.dispatch("input");
+
+    const arcana = byAttribute(card, "data-skill-id", "arcana")[0];
+    const compositeDisclosure = byAttribute(card, "data-composite-skill", "acrobatics")[0];
+    assert.equal(arcana.hidden, true);
+    assert.equal(compositeDisclosure.hidden, false);
 });
 
 test("standalone competency renders as one ordinary row", () => {

@@ -21,15 +21,43 @@ export function renderSkillsCard(items: readonly CompetencyPresentationItem[] | 
         return card;
     }
 
+    const controls = createElement("div", "dd-skills-controls");
+    const search = createElement("input", "dd-skills-search");
+    search.type = "search";
+    search.placeholder = "Search skills";
+    search.setAttribute("aria-label", "Search skills and competencies");
+    controls.append(search);
+
     const list = createElement("div", "dd-skill-list");
-    items.forEach((item, index) => {
-        if (item.kind === "standalone") {
-            list.append(renderStandaloneCompetency(item.competency));
-            return;
-        }
-        list.append(renderCompositeCompetency(item, index));
+    const renderedItems = items.map((item, index) => {
+        const element = item.kind === "standalone"
+            ? renderStandaloneCompetency(item.competency)
+            : renderCompositeCompetency(item, index);
+        list.append(element);
+        return {
+            element,
+            searchText: competencySearchText(item)
+        };
     });
-    card.append(list);
+
+    const noMatches = createElement(
+        "p",
+        "dd-skills-no-matches",
+        "No skills match this search.");
+    noMatches.hidden = true;
+
+    search.addEventListener("input", () => {
+        const query = search.value.trim().toLowerCase();
+        let visible = 0;
+        for (const item of renderedItems) {
+            const matches = query.length === 0 || item.searchText.includes(query);
+            item.element.hidden = !matches;
+            if (matches) visible++;
+        }
+        noMatches.hidden = visible !== 0;
+    });
+
+    card.append(controls, list, noMatches);
     return card;
 }
 
@@ -76,6 +104,22 @@ function renderCompositeCompetency(
 
     disclosure.append(summary, renderCompositeDetails(item));
     return disclosure;
+}
+
+function competencySearchText(item: CompetencyPresentationItem): string {
+    const competencies = item.kind === "standalone"
+        ? [item.competency]
+        : [item.parent, ...item.components];
+    return competencies
+        .flatMap(value => [
+            value.label,
+            value.governingAbility,
+            value.family,
+            value.specialty
+        ])
+        .filter((value): value is string => value !== undefined && value.trim().length > 0)
+        .join(" ")
+        .toLowerCase();
 }
 
 type CompetencyRelationshipRole = "standalone" | "parent" | "component";

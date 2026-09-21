@@ -366,6 +366,40 @@
     gap: var(--dd-sheet-space-2);
 }
 
+.dd-skills-controls {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--dd-sheet-space-2);
+}
+
+.dd-skills-search {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.2rem;
+    padding: 0.4rem 0.6rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-control-bg);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    font: inherit;
+    font-size: 0.76rem;
+}
+
+.dd-skills-search::placeholder {
+    color: var(--dd-sheet-muted);
+}
+
+.dd-skills-search:focus-visible {
+    outline: 2px solid var(--dd-sheet-focus);
+    outline-offset: 1px;
+}
+
+.dd-skills-no-matches {
+    margin: var(--dd-sheet-space-2) 0 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.76rem;
+}
+
 .dd-skill-row {
     display: flex;
     gap: var(--dd-sheet-space-2);
