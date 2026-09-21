@@ -235,6 +235,15 @@ test("workspace keeps support, mechanics, and primary interaction as separate mo
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
 });
 
+test("support scaffolds do not invent edition-specific passive values or training categories", () => {
+    const rendered = render("actions", null);
+    const text = visibleText(rendered);
+    assert.match(text, /Passive Values/);
+    assert.match(text, /Proficiencies & Training/);
+    assert.doesNotMatch(text, /Passive Values\s+Perception|Passive Values\s+Investigation|Proficiencies & Training\s+Armor/);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 2);
+});
+
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
     const rendered = render("actions", null);
     const text = visibleText(rendered);
@@ -254,20 +263,14 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
         "Hit Points",
         "Nonlethal Damage",
         "Base Attack Bonus",
-        "Grapple Modifier",
-        "Perception",
-        "Investigation",
-        "Insight",
-        "Armor",
-        "Weapons",
-        "Tools",
-        "Languages"
+        "Grapple Modifier"
     ]) {
         assert.ok(text.includes(label), label);
     }
 
-    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 1);
-    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 1);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 2);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 0);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 0);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);
     assert.ok(byClass(rendered, "dd-health-card").length >= 1);
 });

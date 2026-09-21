@@ -109,6 +109,10 @@ If an effective Ability entry uses a key that is not one of the six current stru
 
 Omitted or unmatched effective data never causes the frontend to calculate a value or modifier. The browser does not implement an Ability modifier formula and does not assume a relationship such as `(score - 10) / 2`.
 
+## Unresolved support surfaces
+
+The Character Sheet keeps **Passive Values** and **Proficiencies & Training** visible as stable support regions even before a normalized backend contract exists for those collections. Those regions use a neutral `-` unavailable state. The frontend must not fill them with edition-specific assumptions such as a fixed Perception/Investigation/Insight passive trio or a fixed Armor/Weapons/Tools/Languages training taxonomy. Named rows should appear only when a backend presentation contract supplies the applicable concepts.
+
 ## Saving throws
 
 `SavingThrowView` extends the calculated-value primitive with optional `governingAbility` and `training`.

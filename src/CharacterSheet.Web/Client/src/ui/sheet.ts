@@ -155,17 +155,8 @@ export function renderCharacterWorkspace(
     support.append(
         renderHealthMechanicsCard(mechanics),
         renderSavingThrowsCard(mechanics?.savingThrows),
-        renderSupportScaffoldCard("Passive Values", [
-            ["passive-perception", "Perception"],
-            ["passive-investigation", "Investigation"],
-            ["passive-insight", "Insight"]
-        ]),
-        renderSupportScaffoldCard("Proficiencies & Training", [
-            ["armor-training", "Armor"],
-            ["weapon-training", "Weapons"],
-            ["tool-training", "Tools"],
-            ["languages", "Languages"]
-        ])
+        renderSupportScaffoldCard("Passive Values", []),
+        renderSupportScaffoldCard("Proficiencies & Training", [])
     );
 
     const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
@@ -615,13 +606,21 @@ function renderSupportScaffoldCard(
 ): HTMLElement {
     const card = createSectionCard(title, "dd-support-card dd-support-scaffold");
     const list = createElement("div", "dd-support-scaffold__list");
-    for (const [key, label] of values) {
-        const row = createElement("div", "dd-support-scaffold__row");
-        row.setAttribute("data-support-scaffold-key", key);
-        row.append(
-            createElement("span", "dd-support-scaffold__label", label),
-            createElement("strong", "dd-support-scaffold__value", "-"));
+    if (values.length === 0) {
+        card.setAttribute("data-support-scaffold-state", "unavailable");
+        const row = createElement("div", "dd-support-scaffold__row dd-support-scaffold__row--empty");
+        row.append(createElement("strong", "dd-support-scaffold__value", "-"));
         list.append(row);
+    } else {
+        card.setAttribute("data-support-scaffold-state", "resolved");
+        for (const [key, label] of values) {
+            const row = createElement("div", "dd-support-scaffold__row");
+            row.setAttribute("data-support-scaffold-key", key);
+            row.append(
+                createElement("span", "dd-support-scaffold__label", label),
+                createElement("strong", "dd-support-scaffold__value", "-"));
+            list.append(row);
+        }
     }
     card.append(list);
     return card;

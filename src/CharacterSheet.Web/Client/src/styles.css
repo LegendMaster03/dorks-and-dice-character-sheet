@@ -671,6 +671,11 @@
     border-top: 1px solid var(--dd-sheet-border);
 }
 
+.dd-support-scaffold__row--empty {
+    justify-content: center;
+    min-height: 2.4rem;
+}
+
 .dd-support-scaffold__label {
     min-width: 0;
     color: var(--dd-sheet-ink);
