@@ -2015,6 +2015,60 @@
     letter-spacing: 0.025em;
 }
 
+.dd-skill-mechanics-list {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+}
+
+.dd-skill-mechanics-item {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: 0;
+    padding: var(--dd-sheet-space-2);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-skill-mechanics-item__heading {
+    display: flex;
+    gap: var(--dd-sheet-space-2);
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.dd-skill-mechanics-item__name,
+.dd-skill-mechanics-item__value {
+    color: var(--dd-sheet-ink);
+    font-size: 0.76rem;
+}
+
+.dd-skill-mechanics-item__value {
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-skill-details--compact {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-1) var(--dd-sheet-space-2);
+}
+
+.dd-source-attribution-disclosure {
+    padding-top: var(--dd-sheet-space-2);
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-source-attribution-disclosure__summary {
+    cursor: pointer;
+    color: var(--dd-sheet-muted);
+    font-size: 0.7rem;
+    font-weight: 750;
+}
+
+.dd-source-attribution-disclosure > .dd-source-attributions {
+    margin-top: var(--dd-sheet-space-2);
+}
+
 .dd-combat-summary--mechanics > .dd-inline-state {
     grid-column: 1 / -1;
     margin-top: 0;

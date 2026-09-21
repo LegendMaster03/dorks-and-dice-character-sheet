@@ -42,3 +42,31 @@ export function renderSourceAttributions(
     }
     return group;
 }
+
+
+export function renderSourceAttributionDisclosure(
+    attributions: readonly SourceAttributionView[] | undefined
+): HTMLElement | null {
+    if (attributions === undefined || attributions.length === 0) return null;
+
+    const unique = [...new Map(attributions.map(value => [value.key, value] as const)).values()];
+    const required = unique.filter(value => value.presentationRequired === true);
+    const optional = unique.filter(value => value.presentationRequired !== true);
+    const group = createElement("div", "dd-source-attribution-disclosure-group");
+
+    const requiredSources = renderSourceAttributions(required, true);
+    if (requiredSources !== null) group.append(requiredSources);
+
+    if (optional.length > 0) {
+        const disclosure = createElement("details", "dd-source-attribution-disclosure");
+        disclosure.append(createElement(
+            "summary",
+            "dd-source-attribution-disclosure__summary",
+            `Sources (${optional.length})`));
+        const sources = renderSourceAttributions(optional, true);
+        if (sources !== null) disclosure.append(sources);
+        group.append(disclosure);
+    }
+
+    return group.children.length === 0 ? null : group;
+}

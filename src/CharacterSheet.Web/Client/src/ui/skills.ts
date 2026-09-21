@@ -4,7 +4,7 @@ import {
     type CompetencyView
 } from "./character-mechanics.js";
 import { createElement, createSectionCard } from "./components.js";
-import { renderSourceAttributions } from "./source-attribution.js";
+import { renderSourceAttributionDisclosure } from "./source-attribution.js";
 
 export function renderSkillsCard(items: readonly CompetencyPresentationItem[] | null): HTMLElement {
     const card = createSectionCard("Skills & Competencies", "dd-support-card dd-skills-card");
@@ -145,22 +145,88 @@ function renderCompositeDetails(
     resolution.append(resolutionFacts);
     body.append(resolution);
 
-    const competencies = [item.parent, ...item.components].filter(hasCompetencyDetails);
-    if (competencies.length > 0) {
-        const grid = createElement("div", "dd-skill-composite-details__competencies");
-        for (const competency of competencies) {
-            const section = createElement("section", "dd-skill-detail-section");
-            section.append(createElement(
-                "h4",
-                "dd-skill-detail-section__title",
-                `${competency.label} ${formatMechanicalValue(competency)}`));
-            section.append(renderCompetencyDetailContent(competency));
-            grid.append(section);
+    const competencies = [item.parent, ...item.components];
+    const mechanical = competencies.filter(hasCompetencyMechanicalDetails);
+    if (mechanical.length > 0) {
+        const section = createElement("section", "dd-skill-detail-section");
+        section.append(createElement("h4", "dd-skill-detail-section__title", "Skill mechanics"));
+        const list = createElement("div", "dd-skill-mechanics-list");
+        for (const competency of mechanical) {
+            list.append(renderCompactCompetencyMechanics(competency));
         }
-        body.append(grid);
+        section.append(list);
+        body.append(section);
     }
 
+    const sources = renderSourceAttributionDisclosure(collectCompetencySources(competencies));
+    if (sources !== null) body.append(sources);
     return body;
+}
+
+function renderCompactCompetencyMechanics(competency: CompetencyView): HTMLElement {
+    const item = createElement("article", "dd-skill-mechanics-item");
+    const heading = createElement("div", "dd-skill-mechanics-item__heading");
+    heading.append(
+        createElement("strong", "dd-skill-mechanics-item__name", competency.label),
+        createElement("span", "dd-skill-mechanics-item__value", formatMechanicalValue(competency))
+    );
+    item.append(heading);
+
+    const facts = createElement("dl", "dd-skill-details dd-skill-details--compact");
+    appendOptionalFact(
+        facts,
+        "Ability",
+        competency.governingAbility === undefined
+            ? undefined
+            : abbreviateAbility(competency.governingAbility));
+    appendOptionalFact(
+        facts,
+        "Ranks",
+        competency.ranks === undefined
+            ? competency.supportsRanks === true ? "-" : undefined
+            : String(competency.ranks));
+    appendOptionalFact(
+        facts,
+        "Training",
+        competency.training ?? (competency.supportsTrainingState === true ? "-" : undefined));
+    if (competency.classSkill !== undefined) {
+        appendOptionalFact(facts, "Class skill", competency.classSkill ? "Yes" : "No");
+    } else if (competency.supportsClassSkillState === true) {
+        appendOptionalFact(facts, "Class skill", "-");
+    }
+    if (competency.trainedOnly !== undefined) {
+        appendOptionalFact(facts, "Trained only", competency.trainedOnly ? "Yes" : "No");
+    }
+    if (competency.armorCheckPenalty !== undefined) {
+        appendOptionalFact(
+            facts,
+            "Armor Check Penalty",
+            competency.armorCheckPenalty.applies
+                ? competency.armorCheckPenalty.formattedEffect ?? "Applies"
+                : "Does not apply");
+    }
+    appendOptionalFact(facts, "Family", competency.family);
+    appendOptionalFact(facts, "Specialty", competency.specialty);
+    for (const contribution of competency.breakdown ?? []) {
+        appendOptionalFact(facts, contribution.label, formatMechanicalValue(contribution));
+    }
+    for (const related of competency.relatedValues ?? []) {
+        appendOptionalFact(facts, related.label, formatMechanicalValue(related));
+    }
+    if (facts.children.length > 0) item.append(facts);
+    return item;
+}
+
+function collectCompetencySources(
+    competencies: readonly CompetencyView[]
+): NonNullable<CompetencyView["sourceAttributions"]> {
+    const byKey = new Map<string, NonNullable<CompetencyView["sourceAttributions"]>[number]>();
+    for (const competency of competencies) {
+        for (const source of competency.sourceAttributions ?? []) {
+            if (!byKey.has(source.key)) byKey.set(source.key, source);
+        }
+    }
+    return [...byKey.values()];
 }
 
 function renderCompetencyDetailsBody(competency: CompetencyView): HTMLElement {
@@ -222,9 +288,24 @@ function renderCompetencyDetailContent(competency: CompetencyView): HTMLElement 
         content.append(rules);
     }
 
-    const sources = renderSourceAttributions(competency.sourceAttributions, true);
+    const sources = renderSourceAttributionDisclosure(competency.sourceAttributions);
     if (sources !== null) content.append(sources);
     return content;
+}
+
+function hasCompetencyMechanicalDetails(competency: CompetencyView): boolean {
+    return competency.ranks !== undefined
+        || competency.training !== undefined
+        || competency.classSkill !== undefined
+        || competency.trainedOnly !== undefined
+        || competency.armorCheckPenalty !== undefined
+        || competency.family !== undefined
+        || competency.specialty !== undefined
+        || competency.supportsRanks === true
+        || competency.supportsClassSkillState === true
+        || competency.supportsTrainingState === true
+        || (competency.breakdown?.length ?? 0) > 0
+        || (competency.relatedValues?.length ?? 0) > 0;
 }
 
 function hasCompetencyDetails(competency: CompetencyView): boolean {

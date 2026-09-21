@@ -76,7 +76,7 @@ test("standalone competency renders as one ordinary row", () => {
 test("composite competency supports arbitrary component counts and preserves hierarchy", () => {
     const card = renderSkillsCard([
         composite(
-            competency("fieldcraft", "Fieldcraft", "+5", { governingAbility: "wisdom" }),
+            competency("fieldcraft", "Fieldcraft", "+5"),
             [
                 competency("tracking", "Tracking", "+6", { governingAbility: "wisdom" }),
                 competency("foraging", "Foraging", "+4", { governingAbility: "wisdom" }),
@@ -92,8 +92,26 @@ test("composite competency supports arbitrary component counts and preserves hie
     assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 1);
     assert.match(visibleText(card), /Calculation/);
     assert.match(visibleText(card), /Average floor/);
-    assert.match(visibleText(card), /WIS/);
+    const parent = byAttribute(card, "data-skill-role", "parent")[0];
+    assert.match(visibleText(parent), /WIS/);
     assert.doesNotMatch(visibleText(card), /\bDetails\b/);
+});
+
+test("composite skill sources are collapsed into one secondary disclosure", () => {
+    const sourceA = { key: "srd3", label: "SRD3", detail: "3e" };
+    const sourceB = { key: "srd35", label: "SRD35", detail: "3.5e" };
+    const card = renderSkillsCard([
+        composite(
+            competency("parent", "Parent", "-", { sourceAttributions: [sourceA] }),
+            [
+                competency("a", "A", "-", { supportsRanks: true, sourceAttributions: [sourceA] }),
+                competency("b", "B", "-", { supportsRanks: true, sourceAttributions: [sourceB] })
+            ]
+        )
+    ]);
+    assert.equal(byClass(card, "dd-source-attribution-disclosure").length, 1);
+    assert.equal(byClass(card, "dd-source-attribution").length, 2);
+    assert.equal(byClass(card, "dd-skill-mechanics-item").length, 2);
 });
 
 test("ranked specialty competency progressively discloses metadata", () => {
