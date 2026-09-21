@@ -224,6 +224,94 @@ export function adjustCurrentHitPoints(
     return next;
 }
 
+export function renderHealthQuickCard(
+    mechanics: CharacterMechanicsView | null,
+    control: HealthControlOptions = {}
+): HTMLElement {
+    const card = createElement("article", "dd-stat dd-stat--health dd-health-quick");
+    card.setAttribute("data-health-quick-card", "true");
+
+    const tracks = mechanics?.healthTracks ?? [];
+    const hitPoints = tracks.find(track =>
+        track.role === "hit-points" || normalizeMechanicalLabel(track.label) === "hitpoints");
+    const temporaryHitPoints = tracks.find(track =>
+        track.role === "temporary-hit-points"
+        || normalizeMechanicalLabel(track.label) === "temporaryhitpoints"
+        || normalizeMechanicalLabel(track.label) === "temphp");
+    const nonlethal = tracks.find(track =>
+        track.role === "nonlethal-damage"
+        || track.key === "resource.nonlethal-damage"
+        || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
+
+    const currentValue = control.currentHitPoints === undefined
+        ? hitPoints?.current
+        : control.currentHitPoints;
+
+    const header = createElement("div", "dd-health-quick__header");
+    header.append(createElement("h3", "dd-stat__label", "Hit Points"));
+
+    const actions = createElement("div", "dd-health-quick__actions");
+    if (control.readOnly !== true && control.onSetCurrentHitPoints !== undefined) {
+        actions.append(renderHitPointEditor(
+            toFiniteInteger(currentValue),
+            hitPoints?.maximum,
+            control.saving === true,
+            control.onSetCurrentHitPoints));
+    }
+
+    const promoted = new Set(
+        [hitPoints, temporaryHitPoints, nonlethal]
+            .filter((track): track is NonNullable<typeof track> => track !== undefined)
+            .map(track => track.key));
+    const extraTracks = tracks.filter(track => !promoted.has(track.key));
+    const sources = collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]);
+
+    if (extraTracks.length > 0 || sources.length > 0) {
+        const details = createElement("details", "dd-health-quick__details");
+        details.append(createElement("summary", "dd-health-quick__details-toggle", "Details"));
+        const popover = createElement("div", "dd-health-quick__details-popover");
+        if (extraTracks.length > 0) {
+            const extras = createElement("div", "dd-health-card__extras");
+            extras.append(...extraTracks.map(renderHealthTrack));
+            popover.append(extras);
+        }
+        const sourceDisclosure = renderSourceAttributionDisclosure(sources);
+        if (sourceDisclosure !== null) popover.append(sourceDisclosure);
+        details.append(popover);
+        actions.append(details);
+    }
+    header.append(actions);
+
+    const values = createElement("div", "dd-health-quick__values");
+    values.append(
+        renderHealthQuickField("Current", currentValue, "current"),
+        renderHealthQuickField("Max", hitPoints?.maximum, "maximum"),
+        renderHealthQuickField(
+            "Temp",
+            temporaryHitPoints?.formattedValue ?? temporaryHitPoints?.current,
+            "temporary"),
+        renderHealthQuickField(
+            "Nonlethal",
+            nonlethal?.formattedValue ?? nonlethal?.current,
+            "nonlethal"));
+
+    card.append(header, values);
+    return card;
+}
+
+function renderHealthQuickField(
+    label: string,
+    value: unknown,
+    role: string
+): HTMLElement {
+    const field = createElement("div", "dd-health-quick__field");
+    field.setAttribute("data-health-quick-field", role);
+    field.append(
+        createElement("span", "dd-health-quick__label", label),
+        createElement("strong", "dd-health-quick__value", formatOptionalHealthNumber(value)));
+    return field;
+}
+
 export function renderHealthMechanicsCard(
     mechanics: CharacterMechanicsView | null,
     control: HealthControlOptions = {}
