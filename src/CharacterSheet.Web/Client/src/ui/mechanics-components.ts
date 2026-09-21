@@ -288,12 +288,12 @@ export function renderHealthQuickCard(
         renderHealthQuickField("Current", currentValue, "current", hitPoints),
         renderHealthQuickField("Max", hitPoints?.maximum, "maximum", hitPoints),
         renderHealthQuickField(
-            "Temp",
+            "Temporary HP",
             temporaryHitPoints?.formattedValue ?? temporaryHitPoints?.current,
             "temporary",
             temporaryHitPoints),
         renderHealthQuickField(
-            "Nonlethal",
+            "Nonlethal Damage",
             nonlethal?.formattedValue ?? nonlethal?.current,
             "nonlethal",
             nonlethal));
