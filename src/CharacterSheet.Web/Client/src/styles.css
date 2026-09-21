@@ -657,6 +657,113 @@
     margin-top: var(--dd-sheet-space-2);
 }
 
+.dd-health-card {
+    position: relative;
+}
+
+.dd-health-editor {
+    position: relative;
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-health-editor__summary {
+    width: 100%;
+    padding: 0.42rem 0.6rem;
+    color: var(--dd-sheet-accent-strong);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: center;
+    list-style: none;
+}
+
+.dd-health-editor__summary::-webkit-details-marker {
+    display: none;
+}
+
+.dd-health-editor__popover {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.3rem);
+    left: 0;
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    min-width: min(19rem, calc(100vw - 3rem));
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface-raised);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    box-shadow: var(--dd-sheet-shadow);
+}
+
+.dd-health-editor__direct {
+    display: grid;
+    grid-template-columns: minmax(5rem, 1fr) minmax(4rem, 0.8fr) auto;
+    gap: var(--dd-sheet-space-2);
+    align-items: end;
+}
+
+.dd-health-editor__adjust {
+    display: grid;
+    grid-template-columns: minmax(5rem, 1fr) auto auto;
+    gap: var(--dd-sheet-space-2);
+    align-items: end;
+}
+
+.dd-health-editor__field {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.dd-health-editor__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.65rem;
+    font-weight: 750;
+}
+
+.dd-health-editor__input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.2rem;
+    padding: 0.35rem 0.45rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-control-bg);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.dd-health-editor__readonly {
+    display: grid;
+    place-content: center;
+    min-height: 2.2rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-health-editor__set {
+    min-width: 3.2rem;
+}
+
+.dd-health-editor__adjust-button {
+    width: 2.2rem;
+    min-width: 2.2rem;
+    height: 2.2rem;
+    min-height: 2.2rem;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+}
+
 .dd-support-scaffold__row {
     display: flex;
     gap: var(--dd-sheet-space-2);

@@ -33,6 +33,7 @@ import {
     loadCharacterState,
     removeCharacterNote,
     removeInventoryItemOccurrence,
+    setCharacterCurrentHitPoints,
     updateCharacterNote
 } from "./character-state-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
@@ -216,6 +217,8 @@ function renderWorkspace(
                 remove: occurrenceId => void removeFeat(character.characterId, occurrenceId)
             },
             routine: {
+                setCurrentHitPoints: currentHitPoints =>
+                    void setCurrentHitPoints(character.characterId, currentHitPoints),
                 addNote: content => void addNote(character.characterId, content),
                 updateNote: (noteId, content) => void updateNote(character.characterId, noteId, content),
                 deleteNote: noteId => void deleteNote(character.characterId, noteId),
@@ -371,6 +374,15 @@ async function applyRoutineMutation(
         application.dispatch({ type: "routine-mutation-failed", message: errorMessage(error) });
         return false;
     }
+}
+
+async function setCurrentHitPoints(
+    characterId: string,
+    currentHitPoints: number | null
+): Promise<void> {
+    await applyRoutineMutation(
+        "health-update",
+        () => setCharacterCurrentHitPoints(environment, characterId, currentHitPoints));
 }
 
 async function addNote(characterId: string, content: string): Promise<void> {

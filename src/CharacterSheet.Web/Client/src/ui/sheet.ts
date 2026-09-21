@@ -74,6 +74,7 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
 }
 
 export interface RoutineCharacterHandlers {
+    setCurrentHitPoints(currentHitPoints: number | null): void;
     addNote(content: string): void;
     updateNote(noteId: string, content: string): void;
     deleteNote(noteId: string): void;
@@ -153,7 +154,14 @@ export function renderCharacterWorkspace(
     const support = createElement("aside", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderHealthMechanicsCard(mechanics),
+        renderHealthMechanicsCard(mechanics, {
+            currentHitPoints: routine.status === "ready"
+                ? routine.state?.currentHitPoints ?? null
+                : undefined,
+            readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+            saving: routine.mutation?.kind === "health-update",
+            onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints
+        }),
         renderSavingThrowsCard(mechanics?.savingThrows),
         renderSupportScaffoldCard("Passive Values", []),
         renderSupportScaffoldCard("Proficiencies & Training", [])

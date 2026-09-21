@@ -199,7 +199,33 @@ export function renderCombatFundamentalsCard(mechanics: CharacterMechanicsView |
     return card;
 }
 
-export function renderHealthMechanicsCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+export interface HealthControlOptions {
+    currentHitPoints?: number | null;
+    readOnly?: boolean;
+    saving?: boolean;
+    onSetCurrentHitPoints?: (currentHitPoints: number | null) => void;
+}
+
+export function adjustCurrentHitPoints(
+    current: number | null,
+    maximum: unknown,
+    amount: number,
+    direction: -1 | 1
+): number | null {
+    if (current === null || !Number.isFinite(amount) || amount < 0) return null;
+    const delta = Math.trunc(amount) * direction;
+    let next = current + delta;
+    const numericMaximum = toFiniteInteger(maximum);
+    if (direction > 0 && numericMaximum !== null) {
+        next = Math.min(next, numericMaximum);
+    }
+    return next;
+}
+
+export function renderHealthMechanicsCard(
+    mechanics: CharacterMechanicsView | null,
+    control: HealthControlOptions = {}
+): HTMLElement {
     const card = createSectionCard("Hit Points", "dd-support-card dd-health-card");
     const tracks = mechanics?.healthTracks ?? [];
 
@@ -214,12 +240,24 @@ export function renderHealthMechanicsCard(mechanics: CharacterMechanicsView | nu
         || track.key === "resource.nonlethal-damage"
         || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
 
+    const currentValue = control.currentHitPoints === undefined
+        ? hitPoints?.current
+        : control.currentHitPoints;
+
     const primary = createElement("div", "dd-health-card__primary");
     primary.append(
-        renderHealthSummaryField("Current", hitPoints?.current, "dd-health-card__field--current", hitPoints),
+        renderHealthSummaryField("Current", currentValue, "dd-health-card__field--current", hitPoints),
         renderHealthSummaryField("Maximum", hitPoints?.maximum, "dd-health-card__field--maximum", hitPoints)
     );
     card.append(primary);
+
+    if (control.readOnly !== true && control.onSetCurrentHitPoints !== undefined) {
+        card.append(renderHitPointEditor(
+            toFiniteInteger(currentValue),
+            hitPoints?.maximum,
+            control.saving === true,
+            control.onSetCurrentHitPoints));
+    }
 
     const secondary = createElement(
         "div",
@@ -256,6 +294,118 @@ export function renderHealthMechanicsCard(mechanics: CharacterMechanicsView | nu
         collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]));
     if (sources !== null) card.append(sources);
     return card;
+}
+
+function renderHitPointEditor(
+    current: number | null,
+    maximum: unknown,
+    saving: boolean,
+    onSetCurrentHitPoints: (currentHitPoints: number | null) => void
+): HTMLElement {
+    const details = createElement("details", "dd-health-editor");
+    details.setAttribute("data-health-editor", "true");
+    const summary = createElement(
+        "summary",
+        "dd-health-editor__summary",
+        saving ? "Saving HP…" : "Adjust HP");
+    details.append(summary);
+
+    const body = createElement("div", "dd-health-editor__popover");
+    body.setAttribute("role", "group");
+    body.setAttribute("aria-label", "Adjust hit points");
+
+    const direct = createElement("div", "dd-health-editor__direct");
+    const currentField = createElement("label", "dd-health-editor__field");
+    currentField.append(createElement("span", "dd-health-editor__label", "Current HP"));
+    const currentInput = createElement("input", "dd-health-editor__input") as HTMLInputElement;
+    currentInput.type = "number";
+    currentInput.step = "1";
+    currentInput.inputMode = "numeric";
+    currentInput.value = current === null ? "" : String(current);
+    currentInput.placeholder = "-";
+    currentInput.disabled = saving;
+    currentField.append(currentInput);
+
+    const maximumField = createElement("div", "dd-health-editor__field");
+    maximumField.append(
+        createElement("span", "dd-health-editor__label", "Max HP"),
+        createElement(
+            "strong",
+            "dd-health-editor__readonly",
+            formatOptionalHealthNumber(maximum)));
+
+    const set = createElement("button", "dd-button dd-button--secondary dd-health-editor__set", "Set") as HTMLButtonElement;
+    set.type = "button";
+    set.disabled = saving;
+    set.setAttribute("data-health-action", "set");
+    set.onclick = () => {
+        const value = parseOptionalInteger(currentInput.value);
+        if (value.valid) onSetCurrentHitPoints(value.value);
+    };
+    direct.append(currentField, maximumField, set);
+
+    const adjust = createElement("div", "dd-health-editor__adjust");
+    const amountField = createElement("label", "dd-health-editor__field");
+    amountField.append(createElement("span", "dd-health-editor__label", "Modify by"));
+    const amountInput = createElement("input", "dd-health-editor__input") as HTMLInputElement;
+    amountInput.type = "number";
+    amountInput.min = "0";
+    amountInput.step = "1";
+    amountInput.inputMode = "numeric";
+    amountInput.placeholder = "0";
+    amountInput.disabled = saving;
+    amountField.append(amountInput);
+
+    const subtract = createElement("button", "dd-button dd-button--ghost dd-health-editor__adjust-button", "−") as HTMLButtonElement;
+    subtract.type = "button";
+    subtract.disabled = saving || current === null;
+    subtract.setAttribute("aria-label", "Subtract hit points");
+    subtract.setAttribute("data-health-action", "subtract");
+
+    const add = createElement("button", "dd-button dd-button--ghost dd-health-editor__adjust-button", "+") as HTMLButtonElement;
+    add.type = "button";
+    add.disabled = saving || current === null;
+    add.setAttribute("aria-label", "Add hit points");
+    add.setAttribute("data-health-action", "add");
+
+    const apply = (direction: -1 | 1): void => {
+        const amount = parseOptionalInteger(amountInput.value);
+        if (!amount.valid || amount.value === null || amount.value < 0) return;
+        const next = adjustCurrentHitPoints(current, maximum, amount.value, direction);
+        if (next !== null) onSetCurrentHitPoints(next);
+    };
+    subtract.onclick = () => apply(-1);
+    add.onclick = () => apply(1);
+
+    adjust.append(amountField, subtract, add);
+    body.append(direct, adjust);
+    details.append(body);
+    return details;
+}
+
+function parseOptionalInteger(value: string): { valid: boolean; value: number | null } {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return { valid: true, value: null };
+    const parsed = Number(trimmed);
+    return Number.isInteger(parsed)
+        && parsed >= -2147483648
+        && parsed <= 2147483647
+        ? { valid: true, value: parsed }
+        : { valid: false, value: null };
+}
+
+function toFiniteInteger(value: unknown): number | null {
+    if (typeof value === "number") {
+        return Number.isInteger(value) && Number.isFinite(value) ? value : null;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatOptionalHealthNumber(value: unknown): string {
+    const parsed = toFiniteInteger(value);
+    return parsed === null ? "-" : String(parsed);
 }
 
 function renderHealthSummaryField(
