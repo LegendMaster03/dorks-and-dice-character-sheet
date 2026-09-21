@@ -725,6 +725,7 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
     root.setAttribute("data-movement-state", values === undefined ? "unavailable" : "resolved");
 
     if (values === undefined || values.length === 0) {
+        root.className += " dd-movement-values--single";
         const primary = createElement("div", "dd-movement-values__primary");
         primary.append(createElement("strong", "dd-movement-values__primary-value", "-"));
         root.append(primary);
@@ -733,6 +734,7 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
 
     const primaryValue = findPrimaryMovementValue(values);
     const secondaryValues = values.filter(value => value !== primaryValue);
+    if (secondaryValues.length === 0) root.className += " dd-movement-values--single";
 
     const primary = createElement("div", "dd-movement-values__primary");
     primary.setAttribute("data-movement-primary", primaryValue.key);
