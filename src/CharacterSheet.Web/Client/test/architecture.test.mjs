@@ -73,7 +73,7 @@ test("leaf features do not import unrelated sibling features", async () => {
     for (const file of await tsFiles("features")) {
         const [, owner] = file.split("/");
         const text = await source(file);
-        const siblingImports = [...text.matchAll(/from\s+["']\.\.\/([^/"']+)\/[^"']+["']/g)]
+        const siblingImports = [...text.matchAll(/from\s+["']\.\.\/(?!\.\.\/)([^/"']+)\/[^"']+["']/g)]
             .map(match => match[1])
             .filter(target => target !== owner);
 
