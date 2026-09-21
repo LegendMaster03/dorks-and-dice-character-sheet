@@ -141,6 +141,30 @@ test("primary sheet sections expose tab and tabpanel semantics", () => {
     assert.equal(panel.getAttribute("aria-labelledby"), "dd-sheet-tab-actions");
 });
 
+test("Ability cards pair effective score, modifier, and matching Ability save", () => {
+    const rendered = render("actions", {
+        abilityValues: [
+            mechanical("strength", "Strength", "18", {
+                relatedValues: [
+                    { key: "modifier", label: "Modifier", effectiveValue: "+4", formattedValue: "+4" }
+                ]
+            })
+        ],
+        savingThrows: [
+            mechanical("save.strength", "Strength Save", "+6", { governingAbility: "strength" })
+        ]
+    });
+
+    const strength = byAttribute(rendered, "data-ability-key", "strength")[0];
+    assert.ok(strength);
+    assert.equal(byAttribute(strength, "data-ability-modifier", "strength").length, 1);
+    assert.equal(byAttribute(strength, "data-ability-save", "strength").length, 1);
+    assert.equal(byAttribute(strength, "data-saving-throw-key", "save.strength").length, 1);
+    assert.match(visibleText(strength), /Strength/);
+    assert.match(visibleText(strength), /Modifier\s+\+4/);
+    assert.match(visibleText(strength), /Save\s+\+6/);
+});
+
 test("workspace consumes supplied saving throws, competencies, combat, actions, movement, checks, and procedures", () => {
     const mechanics = {
         savingThrows: [mechanical("fort", "Fortitude", "+8")],
@@ -164,6 +188,49 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-action-key", "sword").length, 1);
     assert.equal(byAttribute(rendered, "data-check-key", "assessment").length, 1);
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
+});
+
+test("rest actions live in the top control bar rather than the Hit Points card", () => {
+    const editableBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
+    const activeRoutine = routine([], {}, false, 10);
+    const rendered = renderCharacterWorkspace(
+        character,
+        editableBuilder,
+        activeRoutine,
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        { healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 20 }] },
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                rest() {}
+            }
+        }
+    );
+
+    const modeBar = byClass(rendered, "dd-sheet-mode-bar")[0];
+    const healthCard = byClass(rendered, "dd-health-card")[0];
+    assert.ok(modeBar);
+    assert.ok(healthCard);
+    assert.equal(byAttribute(modeBar, "data-rest-action", "short").length, 1);
+    assert.equal(byAttribute(modeBar, "data-rest-action", "long").length, 1);
+    assert.equal(byAttribute(healthCard, "data-rest-action", "short").length, 0);
+    assert.equal(byAttribute(healthCard, "data-rest-action", "long").length, 0);
 });
 
 test("Character-owned current HP overrides mechanics presentation and is editable for active Characters", () => {
