@@ -26,10 +26,6 @@ export function reduceBuilderState(
             break;
         case "builder-loaded":
             builder = builderStateFromBuild(builder, action.build);
-            if (action.build.readOnly) {
-                sheetMode = "view";
-                guidedBuilder = createInitialGuidedBuilderState();
-            }
             break;
         case "builder-load-failed":
             builder = {
