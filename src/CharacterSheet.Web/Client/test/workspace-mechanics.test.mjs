@@ -182,7 +182,7 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-skill-id", "listen").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "ac").length, 1);
     assert.match(visibleText(rendered), /Current\s+20/);
-    assert.match(visibleText(rendered), /Maximum\s+30/);
+    assert.match(visibleText(rendered), /Max\s+30/);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "bab").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "walk").length, 1);
     assert.equal(byAttribute(rendered, "data-action-key", "sword").length, 1);
@@ -224,7 +224,7 @@ test("rest actions live in the top control bar rather than the Hit Points card",
     );
 
     const modeBar = byClass(rendered, "dd-sheet-mode-bar")[0];
-    const healthCard = byClass(rendered, "dd-health-card")[0];
+    const healthCard = byClass(rendered, "dd-health-quick")[0];
     assert.ok(modeBar);
     assert.ok(healthCard);
     assert.equal(byAttribute(modeBar, "data-rest-action", "short").length, 1);
@@ -249,14 +249,14 @@ test("Character-owned current HP overrides mechanics presentation and is editabl
         handlers
     );
 
-    const card = byClass(rendered, "dd-health-card")[0];
+    const card = byClass(rendered, "dd-health-quick")[0];
     assert.ok(card);
     assert.match(visibleText(card), /Current\s+-2/);
     assert.doesNotMatch(visibleText(card), /Current\s+99/);
     assert.equal(byAttribute(card, "data-health-editor", "true").length, 1);
 });
 
-test("Hit Points card emphasizes current and maximum while keeping temporary and nonlethal tracks distinct", () => {
+test("top-row Hit Points card keeps current, max, temporary, and nonlethal values dense and distinct", () => {
     const rendered = render("actions", {
         healthTracks: [
             { key: "hp", label: "Hit Points", role: "hit-points", current: 21, maximum: 30 },
@@ -264,12 +264,12 @@ test("Hit Points card emphasizes current and maximum while keeping temporary and
             { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 3 }
         ]
     });
-    const card = byClass(rendered, "dd-health-card")[0];
+    const card = byClass(rendered, "dd-health-quick")[0];
     assert.ok(card);
     assert.match(visibleText(card), /Current\s+21/);
-    assert.match(visibleText(card), /Maximum\s+30/);
-    assert.match(visibleText(card), /Temporary HP\s+5/);
-    assert.match(visibleText(card), /Nonlethal Damage\s+3/);
+    assert.match(visibleText(card), /Max\s+30/);
+    assert.match(visibleText(card), /Temp\s+5/);
+    assert.match(visibleText(card), /Nonlethal\s+3/);
     assert.equal(byAttribute(card, "data-health-track-key", "hp").length, 2);
     assert.equal(byAttribute(card, "data-health-track-key", "temp").length, 1);
     assert.equal(byAttribute(card, "data-health-track-key", "nonlethal").length, 1);
@@ -315,12 +315,15 @@ test("Defense and Combat share a compact summary row above Skills", () => {
     assert.equal(byClass(rendered, "dd-skills-card").length, 1);
 });
 
-test("workspace keeps support, mechanics, and primary interaction as separate mockup columns", () => {
+test("wide dashboard starts Skills at the top and keeps Health in the top stat row", () => {
     const rendered = render("actions", null);
+    assert.equal(byClass(rendered, "dd-sheet__dashboard").length, 1);
+    assert.equal(byClass(rendered, "dd-sheet__skills").length, 1);
+    assert.equal(byClass(rendered, "dd-sheet__top-row").length, 1);
+    assert.equal(byClass(rendered, "dd-health-quick").length, 1);
     assert.equal(byClass(rendered, "dd-sheet__support").length, 1);
     assert.equal(byClass(rendered, "dd-sheet__mechanics").length, 1);
     assert.equal(byClass(rendered, "dd-sheet__main").length, 1);
-    assert.equal(byClass(rendered, "dd-health-card").length, 1);
     assert.equal(byClass(rendered, "dd-saving-throws-card").length, 1);
     assert.equal(byClass(rendered, "dd-defense-card").length, 1);
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
@@ -363,7 +366,7 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 0);
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 0);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);
-    assert.ok(byClass(rendered, "dd-health-card").length >= 1);
+    assert.equal(byClass(rendered, "dd-health-quick").length, 1);
 });
 
 test("Inventory joins mechanics by stable occurrence identity and keeps duplicate concepts independent", () => {
