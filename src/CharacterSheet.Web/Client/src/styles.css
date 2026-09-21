@@ -328,7 +328,9 @@
 }
 
 .dd-movement-values__variants {
-    display: flex;
+    display: grid;
+    grid-auto-columns: minmax(2rem, 1fr);
+    grid-auto-flow: column;
     min-width: 0;
     overflow-x: auto;
     border-top: 1px solid var(--dd-sheet-border-strong);
@@ -337,11 +339,10 @@
 
 .dd-movement-values__variant {
     display: grid;
-    flex: 1 0 3.25rem;
     place-content: center;
     gap: 0.06rem;
     min-width: 0;
-    padding: 0.22rem 0.25rem;
+    padding: 0.2rem 0.15rem;
 }
 
 .dd-movement-values__variant + .dd-movement-values__variant {
@@ -350,7 +351,7 @@
 
 .dd-movement-values__variant-label {
     color: var(--dd-sheet-muted);
-    font-size: 0.48rem;
+    font-size: 0.43rem;
     font-weight: 800;
     line-height: 1;
     text-transform: uppercase;
