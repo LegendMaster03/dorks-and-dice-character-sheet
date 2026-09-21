@@ -247,8 +247,12 @@ Prestige Classes remain distinct from ordinary Classes and Subclasses in Charact
 ## Routine Character-owned state
 
 Routine Character state is separate from builder/progression decisions and from calculated/effective
-mechanics. The current persisted routine-state resource contains only inventory ownership occurrences
-and plain Character notes:
+mechanics. The persisted routine-state resource contains Character-owned current hit points, inventory
+ownership occurrences, and plain Character notes. `CurrentHitPoints` is nullable on the Character
+root: null means that current HP has not been recorded. It deliberately does not store or calculate
+maximum HP, temporary HP, death thresholds, or edition-specific health rules.
+
+The remaining routine collections are:
 
 ```text
 character_inventory_item_occurrences
@@ -279,6 +283,7 @@ The coherent routine-state API is:
 
 ```text
 GET    /api/characters/{characterId}/state
+PUT    /api/characters/{characterId}/state/health
 POST   /api/characters/{characterId}/state/inventory
 DELETE /api/characters/{characterId}/state/inventory/{occurrenceId}
 POST   /api/characters/{characterId}/state/notes
@@ -330,6 +335,6 @@ CI and deployment smoke tests use disposable PostgreSQL 18 containers. Integrati
 
 ## Deferred systems
 
-This foundation persists base Ability inputs, rule selections, advancement occurrences, Inventory occurrences, and Notes, and it can present normalized Rules Core competency/check metadata. It still does not implement ability-score generation/provenance, effective/final Ability calculation, Ability modifiers, persisted competency ranks/training/class-skill state, Character capability derivation from Classes/Species/Feats, Character-fact-driven competency/check evaluation, hit points, equipment state or item-occurrence mechanics, movement state, spellcasting state/resources, carrying/encumbrance state, crafting progress/state, Prestige Class selection/prerequisites, multiclass prerequisites, generic level-up flow, Class/Subclass feature application, Campaign-specific mechanics context, optional Campaign modules, Rules-Core-backed Position authoring, Block Initiative integration, or cross-owner DM Character access.
+This foundation persists base Ability inputs, rule selections, advancement occurrences, Inventory occurrences, and Notes, and it can present normalized Rules Core competency/check metadata. It still does not implement ability-score generation/provenance, effective/final Ability calculation, Ability modifiers, persisted competency ranks/training/class-skill state, Character capability derivation from Classes/Species/Feats, Character-fact-driven competency/check evaluation, maximum/derived hit-point calculation, temporary-hit-point state, equipment state or item-occurrence mechanics, movement state, spellcasting state/resources, carrying/encumbrance state, crafting progress/state, Prestige Class selection/prerequisites, multiclass prerequisites, generic level-up flow, Class/Subclass feature application, Campaign-specific mechanics context, optional Campaign modules, Rules-Core-backed Position authoring, Block Initiative integration, or cross-owner DM Character access.
 
 Capability-gated saving throws, defenses, Base Attack Bonus, Grapple, nonlethal damage, and related 3.x mechanics are valid presentation shapes. Applicable Rules Core definitions remain visible with `-` while authoritative Character capability/contribution inputs are unavailable, and resolved values replace those dashes once the backend can evaluate them. Loot Tavern check/procedure definitions can likewise be presented from Rules Core, while Character-specific Harvesting/Crafting evaluation remains deferred until the required Character/runtime/source inputs exist.

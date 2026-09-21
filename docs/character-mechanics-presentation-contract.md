@@ -139,7 +139,7 @@ The Character Sheet promotes the Armor Class family to the core-stat region. Pri
 | `key` | yes | stable projection identity |
 | `label` | yes | Rules Core-derived/display-only |
 | `role` | yes | Rules Core-derived extensible presentation key |
-| `current` | no | Character-owned and/or backend-calculated |
+| `current` | no | backend-calculated/display-only unless a Character-owned runtime value overrides that track |
 | `maximum` | no | backend-calculated |
 | `formattedValue` | no | backend-calculated/display-only |
 | `detail` | no | display-only |
@@ -147,7 +147,7 @@ The Character Sheet promotes the Armor Class family to the core-stat region. Pri
 
 Known role hints include hit points, temporary hit points, nonlethal damage, and resource. The frontend may use these role hints for placement only; it does not apply calculation behavior based on them, so future backend-supplied roles remain permitted.
 
-Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged. The Hit Points card gives Current and Maximum the primary visual emphasis. Temporary HP, when supplied, and Nonlethal Damage occupy secondary fields beneath them. Nonlethal Damage retains a persistent `-` presentation slot when unresolved; Temporary HP is shown when the backend supplies that track. Additional health/resource roles render generically below the primary presentation. A supplied track with no resolved value renders as `-`; the frontend does not relabel unresolved state as `Available`.
+Hit points, temporary hit points, and nonlethal damage are distinct tracks and must not be merged. For the primary Hit Points track, Character Sheet-owned routine state is authoritative for **Current HP** when that state is available; Rules Core remains authoritative for calculated/maximum mechanics. The Hit Points card gives Current and Maximum the primary visual emphasis. The compact adjustment control is adapted from Block Initiative's current/max plus modifier interaction: direct Current HP assignment and add/subtract operations persist only Character-owned current HP. Healing through the `+` control is capped at a supplied numeric maximum, while damage is deliberately allowed below zero because 3.x-style negative hit points remain meaningful. The frontend does not invent an edition-specific death floor. Temporary HP, when supplied, and Nonlethal Damage occupy secondary fields beneath them. Nonlethal Damage retains a persistent `-` presentation slot when unresolved; Temporary HP is shown when the backend supplies that track. Additional health/resource roles render generically below the primary presentation. A supplied track with no resolved value renders as `-`; the frontend does not relabel unresolved state as `Available`.
 
 ## Combat fundamentals
 

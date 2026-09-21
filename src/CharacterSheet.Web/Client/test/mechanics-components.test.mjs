@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+    adjustCurrentHitPoints,
     findInitiativeValue,
     renderActionsPresentation,
     renderArmorClassQuickCard,
     renderCombatMechanicsSummary,
     renderDefenseMechanicsCard,
+    renderHealthMechanicsCard,
     renderQuickMechanicalValue,
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
@@ -178,6 +180,55 @@ test("combat summary groups defenses and saving throws using compact 3.x-style r
     assert.equal(byAttribute(rendered, "data-combat-group", "defense").length, 1);
     assert.equal(byAttribute(rendered, "data-combat-group", "saves").length, 1);
     assert.equal(byClass(rendered, "dd-saving-throw").length, 3);
+});
+
+test("hit point adjustment reuses the combat tracker behavior without imposing a 5e zero floor", () => {
+    assert.equal(adjustCurrentHitPoints(12, 30, 5, -1), 7);
+    assert.equal(adjustCurrentHitPoints(5, 30, 12, -1), -7);
+    assert.equal(adjustCurrentHitPoints(27, 30, 8, 1), 30);
+    assert.equal(adjustCurrentHitPoints(null, 30, 5, -1), null);
+});
+
+test("editable Hit Points card exposes direct and modifier controls while keeping max read-only", () => {
+    const saved = [];
+    const rendered = renderHealthMechanicsCard({
+        healthTracks: [
+            { key: "hp", label: "Hit Points", role: "hit-points", maximum: 30 }
+        ]
+    }, {
+        currentHitPoints: 12,
+        onSetCurrentHitPoints: value => saved.push(value)
+    });
+
+    assert.equal(byAttribute(rendered, "data-health-editor", "true").length, 1);
+    assert.match(visibleText(rendered), /Current\s+12/);
+    assert.match(visibleText(rendered), /Maximum\s+30/);
+    assert.match(visibleText(rendered), /Adjust HP/);
+    assert.match(visibleText(rendered), /Max HP\s+30/);
+
+    const inputs = byClass(rendered, "dd-health-editor__input");
+    const buttons = action => byAttribute(rendered, "data-health-action", action);
+    inputs[1].value = "15";
+    buttons("subtract")[0].onclick();
+    assert.equal(saved.at(-1), -3);
+
+    inputs[1].value = "50";
+    buttons("add")[0].onclick();
+    assert.equal(saved.at(-1), 30);
+
+    inputs[0].value = "-8";
+    buttons("set")[0].onclick();
+    assert.equal(saved.at(-1), -8);
+});
+
+test("read-only Hit Points card omits mutation controls", () => {
+    const rendered = renderHealthMechanicsCard(null, {
+        currentHitPoints: 10,
+        readOnly: true,
+        onSetCurrentHitPoints() {}
+    });
+    assert.equal(byAttribute(rendered, "data-health-editor", "true").length, 0);
+    assert.match(visibleText(rendered), /Current\s+10/);
 });
 
 test("combat summary keeps HP, temporary HP, and nonlethal damage independent", () => {

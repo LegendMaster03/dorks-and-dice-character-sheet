@@ -82,15 +82,16 @@ const handlers = {
     },
     feats: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
     routine: {
+        setCurrentHitPoints() {},
         addNote() {}, updateNote() {}, deleteNote() {}, openInventoryChooser() {}, closeInventoryChooser() {},
         searchInventory() {}, addInventoryItem() {}, removeInventoryItem() {}
     },
     selectSection() {}, enterEditMode() {}, leaveEditMode() {}, openGuidedBuilder() {},
     closeGuidedBuilder() {}, selectGuidedBuilderSection() {}
 };
-const routine = (occurrences = [], references = {}, readOnly = true) => ({
+const routine = (occurrences = [], references = {}, readOnly = true, currentHitPoints = null) => ({
     status: "ready",
-    state: { characterId, readOnly, inventoryItemOccurrences: occurrences, notes: [] },
+    state: { characterId, readOnly, currentHitPoints, inventoryItemOccurrences: occurrences, notes: [] },
     references,
     inventoryChooser: { kind: "closed" },
     mutation: null
@@ -163,6 +164,29 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-action-key", "sword").length, 1);
     assert.equal(byAttribute(rendered, "data-check-key", "assessment").length, 1);
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
+});
+
+test("Character-owned current HP overrides mechanics presentation and is editable for active Characters", () => {
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        routine([], {}, false, -2),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        {
+            healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", current: 99, maximum: 30 }]
+        },
+        handlers
+    );
+
+    const card = byClass(rendered, "dd-health-card")[0];
+    assert.ok(card);
+    assert.match(visibleText(card), /Current\s+-2/);
+    assert.doesNotMatch(visibleText(card), /Current\s+99/);
+    assert.equal(byAttribute(card, "data-health-editor", "true").length, 1);
 });
 
 test("Hit Points card emphasizes current and maximum while keeping temporary and nonlethal tracks distinct", () => {
