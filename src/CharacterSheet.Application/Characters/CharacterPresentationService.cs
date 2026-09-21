@@ -216,7 +216,9 @@ public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CharacterCheckPresentationView>? Checks = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CharacterProcedurePresentationView>? Procedures = null);
+    IReadOnlyList<CharacterProcedurePresentationView>? Procedures = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? Movement = null);
 
 public sealed class CharacterPresentationService(
     CharacterBuildService buildService,
@@ -442,6 +444,21 @@ public static class CharacterPresentationProjector
             })
             .ToArray();
 
+        var movement = catalog.Mechanics
+            .Where(value =>
+                value.IsAvailableUnderRuleset
+                && string.Equals(value.Kind, "movement", StringComparison.Ordinal))
+            .Select(value =>
+            {
+                evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
+                return new CalculatedMechanicalValuePresentationView(
+                    value.MechanicKey,
+                    value.DisplayName,
+                    evaluation is null ? Unconfigured : (object)evaluation.Value,
+                    SourceAttributions: MapAttributions(value.SourceAttributions));
+            })
+            .ToArray();
+
         var resources = catalog.Mechanics
             .Where(value =>
                 value.IsAvailableUnderRuleset
@@ -469,7 +486,8 @@ public static class CharacterPresentationProjector
                 competencies,
                 relationships.Length == 0 ? null : relationships),
             Checks: checks.Length == 0 ? null : checks,
-            Procedures: procedures.Length == 0 ? null : procedures);
+            Procedures: procedures.Length == 0 ? null : procedures,
+            Movement: movement.Length == 0 ? null : movement);
     }
 
     private static CharacterProcedurePresentationView? ProjectProcedure(

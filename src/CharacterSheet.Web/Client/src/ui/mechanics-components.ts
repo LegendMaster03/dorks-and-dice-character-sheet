@@ -723,12 +723,54 @@ function normalizeMechanicalLabel(value: string): string {
 export function renderMovementValues(values: readonly CalculatedMechanicalValueView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-movement-values");
     root.setAttribute("data-movement-state", values === undefined ? "unavailable" : "resolved");
+
     if (values === undefined || values.length === 0) {
-        root.append(createElement("p", "dd-stat__value", "-"));
-    } else {
-        root.append(...values.map(value => renderMechanicalValue(value, true)));
+        const primary = createElement("div", "dd-movement-values__primary");
+        primary.append(createElement("strong", "dd-movement-values__primary-value", "-"));
+        root.append(primary);
+        return root;
     }
+
+    const primaryValue = findPrimaryMovementValue(values);
+    const secondaryValues = values.filter(value => value !== primaryValue);
+
+    const primary = createElement("div", "dd-movement-values__primary");
+    primary.setAttribute("data-movement-primary", primaryValue.key);
+    primary.append(
+        createElement("span", "dd-movement-values__primary-label", primaryValue.label),
+        createElement("strong", "dd-movement-values__primary-value", formatMechanicalValue(primaryValue)));
+    root.append(primary);
+
+    if (secondaryValues.length > 0) {
+        const variants = createElement("div", "dd-movement-values__variants");
+        variants.setAttribute("aria-label", "Additional movement speeds");
+        for (const value of secondaryValues) {
+            const variant = createElement("div", "dd-movement-values__variant");
+            variant.setAttribute("data-mechanic-key", value.key);
+            variant.append(
+                createElement("span", "dd-movement-values__variant-label", value.label),
+                createElement("strong", "dd-movement-values__variant-value", formatMechanicalValue(value)));
+            variants.append(variant);
+        }
+        root.append(variants);
+    }
+
     return root;
+}
+
+function findPrimaryMovementValue(
+    values: readonly CalculatedMechanicalValueView[]
+): CalculatedMechanicalValueView {
+    return values.find(value => {
+        const normalizedKey = normalizeMechanicalLabel(value.key);
+        const normalizedLabel = normalizeMechanicalLabel(value.label);
+        return normalizedLabel === "walk"
+            || normalizedLabel === "walking"
+            || normalizedLabel === "speed"
+            || normalizedLabel === "landspeed"
+            || normalizedKey.includes("walk")
+            || normalizedKey.includes("landspeed");
+    }) ?? values[0];
 }
 
 export function renderActionsPresentation(actions: readonly ActionAttackView[] | undefined): HTMLElement {
