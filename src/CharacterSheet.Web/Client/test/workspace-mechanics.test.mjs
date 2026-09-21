@@ -146,6 +146,25 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
 });
 
+test("Hit Points card emphasizes current and maximum while keeping temporary and nonlethal tracks distinct", () => {
+    const rendered = render("actions", {
+        healthTracks: [
+            { key: "hp", label: "Hit Points", role: "hit-points", current: 21, maximum: 30 },
+            { key: "temp", label: "Temporary HP", role: "temporary-hit-points", current: 5 },
+            { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 3 }
+        ]
+    });
+    const card = byClass(rendered, "dd-health-card")[0];
+    assert.ok(card);
+    assert.match(visibleText(card), /Current\s+21/);
+    assert.match(visibleText(card), /Maximum\s+30/);
+    assert.match(visibleText(card), /Temporary HP\s+5/);
+    assert.match(visibleText(card), /Nonlethal Damage\s+3/);
+    assert.equal(byAttribute(card, "data-health-track-key", "hp").length, 2);
+    assert.equal(byAttribute(card, "data-health-track-key", "temp").length, 1);
+    assert.equal(byAttribute(card, "data-health-track-key", "nonlethal").length, 1);
+});
+
 test("workspace promotes Armor Class beside Movement and Initiative and removes the AC trio from Defense", () => {
     const rendered = render("actions", {
         defenses: {
@@ -192,8 +211,8 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     const rendered = render("actions", null);
     const text = visibleText(rendered);
     assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 1);
-    assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available/);
-    assert.match(text, /Resolved actions and attacks are not available/);
+    assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available|Resolved actions and attacks are not available/);
+    assert.equal(byAttribute(rendered, "data-action-state", "unavailable").length, 1);
 
     for (const label of [
         "Armor Class",
@@ -288,7 +307,8 @@ test("spellcasting profiles render only when supplied", () => {
     assert.match(visibleText(supplied), /Wizard Spellcasting/);
 
     const unavailable = render("spells", null);
-    assert.match(visibleText(unavailable), /Resolved spellcasting profiles are not available/);
+    assert.equal(byAttribute(unavailable, "data-spellcasting-state", "unavailable").length, 1);
+    assert.doesNotMatch(visibleText(unavailable), /Resolved spellcasting profiles are not available/);
     assert.equal(byClass(unavailable, "dd-spellcasting-profile").length, 0);
 });
 
@@ -445,7 +465,9 @@ test("top-level Character mechanics attribution renders once as a projection-wid
     const surfaces = byClass(rendered, "dd-character-mechanics-sources");
     assert.equal(surfaces.length, 1);
     assert.match(visibleText(surfaces[0]), /Rules modules/);
+    assert.match(visibleText(surfaces[0]), /Sources \(1\)/);
     assert.match(visibleText(surfaces[0]), /External rules module/);
+    assert.equal(byTag(surfaces[0], "details").length, 1);
     assert.equal(byTag(surfaces[0], "a").length, 1);
 });
 

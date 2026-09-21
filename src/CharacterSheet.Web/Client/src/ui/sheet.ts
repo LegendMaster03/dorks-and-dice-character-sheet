@@ -48,7 +48,10 @@ import {
     createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
-import { renderSourceAttributions } from "./source-attribution.js";
+import {
+    renderSourceAttributionDisclosure,
+    renderSourceAttributions
+} from "./source-attribution.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
@@ -591,7 +594,7 @@ function renderAdditionalAbilityValues(values: readonly CalculatedMechanicalValu
 }
 
 function renderCharacterMechanicsSources(mechanics: CharacterMechanicsView | null): HTMLElement | null {
-    const sources = renderSourceAttributions(mechanics?.sourceAttributions, true);
+    const sources = renderSourceAttributionDisclosure(mechanics?.sourceAttributions);
     if (sources === null) return null;
 
     const surface = createElement("aside", "dd-character-mechanics-sources");

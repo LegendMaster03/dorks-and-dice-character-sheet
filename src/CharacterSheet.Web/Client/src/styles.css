@@ -560,19 +560,14 @@
 }
 
 .dd-mechanic-group-card__grid,
-.dd-saving-throws-card__grid,
-.dd-health-card__grid {
+.dd-saving-throws-card__grid {
     display: grid;
     gap: var(--dd-sheet-space-2);
     min-width: 0;
 }
 
-.dd-defense-card__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.dd-combat-fundamentals-card__grid,
-.dd-health-card__grid {
+.dd-defense-card__grid,
+.dd-combat-fundamentals-card__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -580,31 +575,55 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.dd-health-card__primary,
+.dd-health-card__secondary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-2);
+}
+
+.dd-health-card__secondary {
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-health-card__secondary--single {
+    grid-template-columns: 1fr;
+}
+
 .dd-health-card__field {
     display: grid;
-    gap: 0.15rem;
+    place-content: center;
+    gap: 0.2rem;
     min-width: 0;
+    min-height: 3.2rem;
     padding: 0.55rem 0.6rem;
+    text-align: center;
     background: var(--dd-sheet-surface-muted);
     border: 1px solid var(--dd-sheet-border);
     border-radius: var(--dd-sheet-radius-sm);
 }
 
-.dd-health-card__field--nonlethal {
-    grid-column: 1 / -1;
+.dd-health-card__primary .dd-health-card__field {
+    min-height: 4rem;
 }
 
 .dd-health-card__label {
     color: var(--dd-sheet-muted);
-    font-size: 0.66rem;
+    font-size: 0.64rem;
     font-weight: 750;
+    letter-spacing: 0.025em;
     text-transform: uppercase;
 }
 
 .dd-health-card__value {
     color: var(--dd-sheet-ink);
-    font-size: 0.84rem;
+    font-size: 0.95rem;
+    font-weight: 850;
     font-variant-numeric: tabular-nums;
+}
+
+.dd-health-card__primary .dd-health-card__value {
+    font-size: 1.15rem;
 }
 
 .dd-health-card__extras {
@@ -997,7 +1016,7 @@
 }
 
 .dd-primary-content {
-    min-height: 24rem;
+    min-height: 18rem;
     overflow: clip;
 }
 
@@ -1158,6 +1177,29 @@
 .dd-sheet-details summary {
     cursor: pointer;
     font-weight: 700;
+}
+
+.dd-character-mechanics-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dd-sheet-space-2);
+    align-items: baseline;
+    padding: var(--dd-sheet-space-2) var(--dd-sheet-space-5);
+    color: var(--dd-sheet-muted);
+    background: var(--dd-sheet-surface);
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
+.dd-character-mechanics-sources__label {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+}
+
+.dd-character-mechanics-sources .dd-source-attribution-disclosure-group {
+    flex: 1 1 16rem;
+    min-width: 0;
 }
 
 /* Structural edit and guided builder presentation */

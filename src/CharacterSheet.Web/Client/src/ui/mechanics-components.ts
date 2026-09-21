@@ -9,7 +9,10 @@ import {
     type SavingThrowView
 } from "./character-mechanics.js";
 import { createElement, createInlineState, createSectionCard } from "./components.js";
-import { renderSourceAttributions } from "./source-attribution.js";
+import {
+    renderSourceAttributionDisclosure,
+    renderSourceAttributions
+} from "./source-attribution.js";
 
 export function renderMechanicalValue(value: CalculatedMechanicalValueView, compact = false): HTMLElement {
     const root = createElement("div", `dd-mechanic-value${compact ? " dd-mechanic-value--compact" : ""}`);
@@ -199,44 +202,76 @@ export function renderCombatFundamentalsCard(mechanics: CharacterMechanicsView |
 export function renderHealthMechanicsCard(mechanics: CharacterMechanicsView | null): HTMLElement {
     const card = createSectionCard("Hit Points", "dd-support-card dd-health-card");
     const tracks = mechanics?.healthTracks ?? [];
+
     const hitPoints = tracks.find(track =>
         track.role === "hit-points" || normalizeMechanicalLabel(track.label) === "hitpoints");
+    const temporaryHitPoints = tracks.find(track =>
+        track.role === "temporary-hit-points"
+        || normalizeMechanicalLabel(track.label) === "temporaryhitpoints"
+        || normalizeMechanicalLabel(track.label) === "temphp");
     const nonlethal = tracks.find(track =>
         track.role === "nonlethal-damage"
         || track.key === "resource.nonlethal-damage"
         || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
 
-    const grid = createElement("div", "dd-health-card__grid");
-    grid.append(
-        renderHealthSummaryField("Current", hitPoints?.current),
-        renderHealthSummaryField("Maximum", hitPoints?.maximum),
-        renderHealthSummaryField(
-            "Nonlethal Damage",
-            nonlethal?.formattedValue ?? nonlethal?.current,
-            "dd-health-card__field--nonlethal")
+    const primary = createElement("div", "dd-health-card__primary");
+    primary.append(
+        renderHealthSummaryField("Current", hitPoints?.current, "dd-health-card__field--current", hitPoints),
+        renderHealthSummaryField("Maximum", hitPoints?.maximum, "dd-health-card__field--maximum", hitPoints)
     );
-    card.append(grid);
+    card.append(primary);
 
-    const extraTracks = tracks.filter(track => track !== hitPoints && track !== nonlethal);
+    const secondary = createElement(
+        "div",
+        temporaryHitPoints === undefined
+            ? "dd-health-card__secondary dd-health-card__secondary--single"
+            : "dd-health-card__secondary");
+    if (temporaryHitPoints !== undefined) {
+        secondary.append(renderHealthSummaryField(
+            "Temporary HP",
+            temporaryHitPoints.formattedValue ?? temporaryHitPoints.current,
+            "dd-health-card__field--temporary",
+            temporaryHitPoints));
+    }
+    secondary.append(renderHealthSummaryField(
+        "Nonlethal Damage",
+        nonlethal?.formattedValue ?? nonlethal?.current,
+        "dd-health-card__field--nonlethal",
+        nonlethal,
+        "nonlethal-damage"));
+    card.append(secondary);
+
+    const promoted = new Set(
+        [hitPoints, temporaryHitPoints, nonlethal]
+            .filter((track): track is NonNullable<typeof track> => track !== undefined)
+            .map(track => track.key));
+    const extraTracks = tracks.filter(track => !promoted.has(track.key));
     if (extraTracks.length > 0) {
         const extras = createElement("div", "dd-health-card__extras");
         extras.append(...extraTracks.map(renderHealthTrack));
         card.append(extras);
     }
 
-    if (hitPoints !== undefined) appendSources(card, hitPoints.sourceAttributions);
-    if (nonlethal !== undefined) appendSources(card, nonlethal.sourceAttributions);
+    const sources = renderSourceAttributionDisclosure(
+        collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]));
+    if (sources !== null) card.append(sources);
     return card;
 }
 
 function renderHealthSummaryField(
     label: string,
     value: unknown,
-    className?: string
+    className: string,
+    track?: NonNullable<CharacterMechanicsView["healthTracks"]>[number],
+    scaffoldKey?: string
 ): HTMLElement {
-    const field = createElement(
-        "div",
-        `dd-health-card__field${className === undefined ? "" : " " + className}`);
+    const field = createElement("div", `dd-health-card__field ${className}`);
+    if (track !== undefined) {
+        field.setAttribute("data-health-track-key", track.key);
+        field.setAttribute("data-health-track-role", track.role);
+    } else if (scaffoldKey !== undefined) {
+        field.setAttribute("data-sheet-scaffold-key", scaffoldKey);
+    }
     field.append(
         createElement("span", "dd-health-card__label", label),
         createElement(
@@ -247,6 +282,18 @@ function renderHealthSummaryField(
                 : String(value))
     );
     return field;
+}
+
+function collectHealthTrackSources(
+    tracks: readonly (NonNullable<CharacterMechanicsView["healthTracks"]>[number] | undefined)[]
+): NonNullable<CharacterMechanicsView["sourceAttributions"]> {
+    const byKey = new Map<string, NonNullable<CharacterMechanicsView["sourceAttributions"]>[number]>();
+    for (const track of tracks) {
+        for (const source of track?.sourceAttributions ?? []) {
+            if (!byKey.has(source.key)) byKey.set(source.key, source);
+        }
+    }
+    return [...byKey.values()];
 }
 
 function appendCombatGroup(
@@ -490,8 +537,9 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
 
 export function renderActionsPresentation(actions: readonly ActionAttackView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-action-list");
+    root.setAttribute("data-action-state", actions === undefined ? "unavailable" : "resolved");
     if (actions === undefined || actions.length === 0) {
-        root.append(createInlineState(actions === undefined ? "Resolved actions and attacks are not available." : "No actions or attacks were supplied for this Character.", "neutral"));
+        root.append(createInlineState("-", "neutral"));
         return root;
     }
     for (const action of actions) {

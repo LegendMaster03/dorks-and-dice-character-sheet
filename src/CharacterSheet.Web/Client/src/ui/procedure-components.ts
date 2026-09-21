@@ -186,8 +186,9 @@ export function renderInventoryMechanics(mechanics: InventoryMechanicsView | und
 
 export function renderSpellcastingPresentation(profiles: readonly SpellcastingProfileView[] | undefined): HTMLElement {
     const root = createElement("div", "dd-spellcasting-profiles");
+    root.setAttribute("data-spellcasting-state", profiles === undefined ? "unavailable" : "resolved");
     if (profiles === undefined || profiles.length === 0) {
-        root.append(createInlineState(profiles === undefined ? "Resolved spellcasting profiles are not available." : "No spellcasting profiles were supplied for this Character.", "neutral"));
+        root.append(createInlineState("-", "neutral"));
         return root;
     }
     for (const profile of profiles) root.append(renderSpellcastingProfile(profile));
