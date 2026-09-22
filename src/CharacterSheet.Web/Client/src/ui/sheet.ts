@@ -17,6 +17,7 @@ import {
     type CharacterMechanicsView
 } from "./character-mechanics.js";
 import { renderRestControls } from "../features/health/health.js";
+import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
 import {
     createButton,
@@ -99,6 +100,7 @@ export function renderCharacterWorkspace(
             builder,
             routine,
             guidedBuilder,
+            advancement,
             mechanics,
             handlers));
         return shell;
@@ -231,6 +233,7 @@ function renderGuidedBuilder(
     builder: CharacterBuilderUiState,
     routine: CharacterRoutineUiState,
     guidedBuilder: GuidedBuilderUiState,
+    advancement: CharacterAdvancementView | null,
     mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
@@ -283,6 +286,14 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Advancement", choices: ["startingClass", "subclass"] }));
+            if (mechanics !== null) {
+                const hitPointGains = renderHitPointGainEditors(
+                    advancement?.occurrences ?? [],
+                    routine,
+                    false,
+                    handlers.rules);
+                if (hitPointGains !== null) panel.append(hitPointGains);
+            }
             break;
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");

@@ -206,7 +206,18 @@ function renderWorkspace(
                 clearChoice: choiceKey =>
                     void rulesInputWorkflow.clearChoice(character.characterId, choiceKey),
                 setResource: (resourceKey, currentValue) =>
-                    void rulesInputWorkflow.setResource(character.characterId, resourceKey, currentValue)
+                    void rulesInputWorkflow.setResource(character.characterId, resourceKey, currentValue),
+                setHitPointGain: (advancementOccurrenceId, classLevel, hitDieValue) =>
+                    void rulesInputWorkflow.setHitPointGain(
+                        character.characterId,
+                        advancementOccurrenceId,
+                        classLevel,
+                        hitDieValue),
+                clearHitPointGain: (advancementOccurrenceId, classLevel) =>
+                    void rulesInputWorkflow.clearHitPointGain(
+                        character.characterId,
+                        advancementOccurrenceId,
+                        classLevel)
             },
             routine: {
                 setCurrentHitPoints: currentHitPoints =>

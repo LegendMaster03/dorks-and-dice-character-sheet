@@ -46,6 +46,15 @@ export interface RulesInputCharacterHandlers {
     setChoice(choiceKey: string, value: string): void;
     clearChoice(choiceKey: string): void;
     setResource(resourceKey: string, currentValue: number): void;
+    setHitPointGain(
+        advancementOccurrenceId: string,
+        classLevel: number,
+        hitDieValue: number
+    ): void;
+    clearHitPointGain(
+        advancementOccurrenceId: string,
+        classLevel: number
+    ): void;
 }
 
 export interface FeatCharacterHandlers {
