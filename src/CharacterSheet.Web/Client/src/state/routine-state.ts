@@ -116,6 +116,76 @@ export function reduceRoutineState(
         case "inventory-chooser-closed":
             routine = { ...routine, inventoryChooser: { kind: "closed" } };
             break;
+        case "spell-chooser-opened":
+            if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly) {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        kind: "open",
+                        query: "",
+                        status: "idle",
+                        results: []
+                    },
+                    mutationError: undefined
+                };
+            }
+            break;
+        case "spell-chooser-query-changed":
+            if (routine.spellChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        query: action.query
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-load-started":
+            if (routine.spellChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        query: action.query,
+                        status: "loading",
+                        results: [],
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-loaded":
+            if (routine.spellChooser.kind === "open"
+                && routine.spellChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        status: "ready",
+                        results: action.results,
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-load-failed":
+            if (routine.spellChooser.kind === "open"
+                && routine.spellChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        status: "error",
+                        results: [],
+                        message: action.message
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-closed":
+            routine = { ...routine, spellChooser: { kind: "closed" } };
+            break;
         case "condition-chooser-opened":
             if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly) {
                 routine = {
@@ -216,6 +286,7 @@ export function createInitialRoutineState(): CharacterRoutineUiState {
         state: null,
         references: {},
         inventoryChooser: { kind: "closed" },
+        spellChooser: { kind: "closed" },
         conditionChooser: { kind: "closed" },
         mutation: null
     };
@@ -247,6 +318,7 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
         state: normalizedState,
         references,
         inventoryChooser: { kind: "closed" },
+        spellChooser: { kind: "closed" },
         conditionChooser: { kind: "closed" },
         mutation: null
     };

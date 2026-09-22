@@ -114,6 +114,16 @@ export type InventoryChooserState =
         message?: string;
     };
 
+export type SpellChooserState =
+    | { kind: "closed" }
+    | {
+        kind: "open";
+        query: string;
+        status: "idle" | "loading" | "ready" | "error";
+        results: ResolvedRuleCatalogItem[];
+        message?: string;
+    };
+
 export type ConditionChooserState =
     | { kind: "closed" }
     | {
@@ -130,6 +140,7 @@ export interface CharacterRoutineUiState {
     message?: string;
     references: Record<string, RuleReferenceState>;
     inventoryChooser: InventoryChooserState;
+    spellChooser: SpellChooserState;
     conditionChooser: ConditionChooserState;
     mutation: { kind: RoutineMutationKind; entryId?: string } | null;
     mutationError?: string;
@@ -200,6 +211,12 @@ export type CharacterSheetAction =
     | { type: "inventory-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
     | { type: "inventory-chooser-load-failed"; query: string; message: string }
     | { type: "inventory-chooser-closed" }
+    | { type: "spell-chooser-opened" }
+    | { type: "spell-chooser-query-changed"; query: string }
+    | { type: "spell-chooser-load-started"; query: string }
+    | { type: "spell-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "spell-chooser-load-failed"; query: string; message: string }
+    | { type: "spell-chooser-closed" }
     | { type: "condition-chooser-opened" }
     | { type: "condition-chooser-query-changed"; query: string }
     | { type: "condition-chooser-load-started"; query: string }
