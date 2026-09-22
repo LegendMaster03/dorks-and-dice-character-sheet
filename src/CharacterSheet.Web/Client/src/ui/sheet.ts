@@ -127,7 +127,7 @@ export function renderCharacterWorkspace(
     const referenceRail = createElement("aside", "dd-sheet__reference-rail");
     referenceRail.setAttribute("aria-label", "Saving throws, senses, and training");
     referenceRail.append(
-        renderSavingThrowsCard(detachedSavingThrows),
+        renderSavingThrowsCard(detachedSavingThrows, true),
         renderSensesSummaryCard(mechanics),
         renderTrainingCard(mechanics)
     );

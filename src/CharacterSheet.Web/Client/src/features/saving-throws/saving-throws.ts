@@ -30,7 +30,8 @@ export const SAVE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
 ];
 
 export function renderSavingThrowsCard(
-    saves: readonly SavingThrowView[] | undefined
+    saves: readonly SavingThrowView[] | undefined,
+    forceThreeXScaffold = false
 ): HTMLElement {
     const card = createSectionCard("Saving Throws", "dd-support-card dd-saving-throws-card");
     card.setAttribute(
@@ -38,7 +39,11 @@ export function renderSavingThrowsCard(
         saves === undefined ? "unavailable" : "resolved");
     const values = saves ?? [];
     const grid = createElement("div", "dd-saving-throws-card__grid");
-    grid.append(...renderSavingThrowScaffold(values));
+    grid.append(...(
+        forceThreeXScaffold || values.length === 0 || usesThreeXSaveScaffold(values)
+            ? renderSavingThrowScaffold(values)
+            : values.map(renderSavingThrowCell)
+    ));
     card.append(grid);
     return card;
 }
@@ -66,6 +71,11 @@ export function renderSavingThrowScaffold(
         if (!usedKeys.has(save.key)) cells.push(renderSavingThrowCell(save));
     }
     return cells;
+}
+
+function usesThreeXSaveScaffold(saves: readonly SavingThrowView[]): boolean {
+    return SAVE_SCAFFOLD.some(slot =>
+        findScaffoldValue(saves, slot, new Set<string>()) !== undefined);
 }
 
 function renderSavingThrowCell(save: SavingThrowView): HTMLElement {
