@@ -271,6 +271,30 @@ test("desktop sheet uses the available viewport and one equal-width top-stat gri
     assert.match(css, /\.dd-core-stats__abilities,\s*\.dd-core-stats__quick\s*\{[^}]*display:\s*contents;/s);
 });
 
+test("Guided Builder overrides display-contents Ability composition with its own responsive grid", () => {
+    assert.match(
+        css,
+        /\.dd-guided-builder__ability-grid\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(6,/s);
+    assert.match(
+        css,
+        /@media \(max-width: 1099px\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*repeat\(3,/s);
+    assert.match(
+        css,
+        /@media \(max-width: 720px\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*repeat\(2,/s);
+});
+
+test("Character Sheet CSS references only defined Character Sheet semantic tokens", () => {
+    const defined = new Set([...css.matchAll(/(--dd-sheet-[a-z0-9-]+)\s*:/g)].map(match => match[1]));
+    const used = new Set([...css.matchAll(/var\((--dd-sheet-[a-z0-9-]+)/g)].map(match => match[1]));
+    for (const token of used) {
+        assert.ok(defined.has(token), `Undefined Character Sheet token: ${token}`);
+    }
+});
+
+test("retired workspace grid selectors are removed after the reference-layout composition change", () => {
+    assert.doesNotMatch(css, /\.dd-sheet__workspace\b/);
+});
+
 test("wide layout uses a full-width top strip, a persistent left rail, and a broad primary workspace", () => {
     assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*grid-template-columns:\s*minmax\(20rem,\s*0\.8fr\)\s+minmax\(0,\s*3\.2fr\)/s);
     assert.match(css, /\.dd-sheet__top-row\s*\{[^}]*padding:/s);

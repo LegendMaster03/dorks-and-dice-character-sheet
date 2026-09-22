@@ -76,6 +76,9 @@
 }
 
 .dd-guided-builder__ability-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--dd-sheet-space-2);
     width: 100%;
 }
 
@@ -135,7 +138,8 @@
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .dd-core-stats {
+    .dd-core-stats,
+    .dd-guided-builder__ability-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
@@ -212,7 +216,8 @@
         padding: var(--dd-sheet-space-3) var(--dd-sheet-space-3) 0;
     }
 
-    .dd-core-stats {
+    .dd-core-stats,
+    .dd-guided-builder__ability-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -239,10 +244,6 @@
     .dd-sheet__dashboard {
         gap: var(--dd-sheet-space-3);
         padding: var(--dd-sheet-space-3);
-    }
-
-    .dd-sheet__workspace {
-        gap: var(--dd-sheet-space-3);
     }
 
     .dd-combat-summary {
@@ -315,7 +316,7 @@
     border: 1px solid var(--dd-sheet-border);
     border-radius: 8px;
     background: var(--dd-sheet-surface);
-    color: var(--dd-sheet-text);
+    color: var(--dd-sheet-ink);
     font: inherit;
     line-height: 1.45;
 }
