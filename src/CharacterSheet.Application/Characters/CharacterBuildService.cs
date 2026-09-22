@@ -41,7 +41,8 @@ public sealed record CharacterAdvancementEntryView(
     string RuleConceptKey,
     Guid? ParentAdvancementEntryId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    int? Level = null);
 
 public sealed record BaseAbilityScoreInputView(
     Guid Id,
@@ -193,6 +194,21 @@ public sealed class CharacterBuildService(
                 token),
             cancellationToken);
 
+    public Task<CharacterBuildResult> SetAdvancementLevelAsync(
+        Guid characterId,
+        Guid advancementEntryId,
+        int level,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.SetAdvancementLevelAsync(
+                characterId,
+                advancementEntryId,
+                level,
+                changedAt,
+                token),
+            cancellationToken);
+
     public Task<CharacterBuildResult> AddFeatOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,
@@ -298,7 +314,8 @@ public sealed class CharacterBuildService(
                     value.RuleConceptKey,
                     value.ParentAdvancementEntryId,
                     value.CreatedAt,
-                    value.UpdatedAt))
+                    value.UpdatedAt,
+                    value.Level))
                 .ToArray());
 
     private static string MapCategory(CharacterFoundationalSelectionCategory category) => category switch

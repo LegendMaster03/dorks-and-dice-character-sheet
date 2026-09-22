@@ -22,6 +22,7 @@ export interface CharacterAdvancementEntryResponse {
     parentAdvancementEntryId: string | null;
     createdAt: string;
     updatedAt: string;
+    level?: number | null;
 }
 
 export const CHARACTER_ABILITY_KEYS = [
@@ -210,6 +211,41 @@ export async function clearCharacterBaseAbilityScore(
     return await response.json() as CharacterBuildResponse;
 }
 
+
+export function buildCharacterAdvancementLevelBackendUrl(
+    environment: HostEnvironment,
+    characterId: string,
+    advancementEntryId: string
+): string {
+    return buildCharacterSheetApiUrl(
+        environment,
+        `/api/characters/${encodeURIComponent(characterId)}/build/advancements/${encodeURIComponent(advancementEntryId)}/level`);
+}
+
+export async function setCharacterAdvancementLevel(
+    environment: HostEnvironment,
+    characterId: string,
+    advancementEntryId: string,
+    level: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterBuildResponse> {
+    const response = await fetcher(
+        buildCharacterAdvancementLevelBackendUrl(environment, characterId, advancementEntryId),
+        {
+            method: "PUT",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ level })
+        });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to save advancement level."),
+            response.status);
+    }
+    return await response.json() as CharacterBuildResponse;
+}
 
 export async function addCharacterFeatOccurrence(
     environment: HostEnvironment,

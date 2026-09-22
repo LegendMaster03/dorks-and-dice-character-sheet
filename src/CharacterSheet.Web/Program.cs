@@ -308,6 +308,32 @@ app.MapDelete("/api/characters/{characterId:guid}/build/classes/{classAdvancemen
     }
 });
 
+app.MapPut("/api/characters/{characterId:guid}/build/advancements/{advancementEntryId:guid}/level", async (
+    Guid characterId,
+    Guid advancementEntryId,
+    AdvancementLevelRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.SetAdvancementLevelAsync(
+                characterId,
+                advancementEntryId,
+                request.Level,
+                cancellationToken),
+            mutating: true);
+    }
+    catch (Exception exception) when (
+        exception is ArgumentException
+        or InvalidOperationException
+        or KeyNotFoundException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
 app.MapPost("/api/characters/{characterId:guid}/build/feats", async (
     Guid characterId,
     RuleConceptSelectionRequest request,
@@ -492,5 +518,7 @@ static IResult ToBuildApiResult(CharacterBuildResult result, bool mutating) => r
 public sealed record RuleConceptSelectionRequest(string ConceptKey);
 
 public sealed record BaseAbilityScoreInputRequest(int Score);
+
+public sealed record AdvancementLevelRequest(int Level);
 
 public partial class Program;

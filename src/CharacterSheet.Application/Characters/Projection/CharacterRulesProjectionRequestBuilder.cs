@@ -30,6 +30,43 @@ public static class CharacterRulesProjectionRequestBuilder
                     value.Id.ToString("D"))))
             .ToArray();
 
+        var advancementById = build.ProgressionEntries.ToDictionary(value => value.Id);
+        var advancements = build.ProgressionEntries
+            .Select(value =>
+            {
+                int? level = value.Kind switch
+                {
+                    CharacterBuildAdvancementKinds.Class
+                        or CharacterBuildAdvancementKinds.PrestigeClass => value.Level,
+                    CharacterBuildAdvancementKinds.Subclass
+                        when value.ParentAdvancementEntryId is Guid parentId
+                            && advancementById.TryGetValue(parentId, out var parent)
+                            && parent.Kind == CharacterBuildAdvancementKinds.Class => parent.Level,
+                    _ => null
+                };
+
+                if (level is not > 0)
+                {
+                    return null;
+                }
+
+                string? parentConceptKey = null;
+                if (value.ParentAdvancementEntryId is Guid linkedParentId
+                    && advancementById.TryGetValue(linkedParentId, out var linkedParent))
+                {
+                    parentConceptKey = linkedParent.RuleConceptKey;
+                }
+
+                return new RulesCoreCharacterAdvancementFactInput(
+                    value.RuleConceptKey,
+                    level.Value,
+                    value.Id.ToString("D"),
+                    parentConceptKey);
+            })
+            .Where(value => value is not null)
+            .Cast<RulesCoreCharacterAdvancementFactInput>()
+            .ToArray();
+
         Dictionary<string, int>? currentResources = null;
         IReadOnlyList<string>? conditionKeys = null;
         IReadOnlyList<string>? itemConceptKeys = null;
@@ -56,6 +93,7 @@ public static class CharacterRulesProjectionRequestBuilder
         return new RulesCoreCharacterRulesProjectionRequest(
             BaseAbilityScores: baseAbilityScores.Count == 0 ? null : baseAbilityScores,
             SelectedConcepts: selectedConcepts.Length == 0 ? null : selectedConcepts,
+            Advancements: advancements.Length == 0 ? null : advancements,
             CurrentResources: currentResources,
             ConditionKeys: conditionKeys,
             ItemConceptKeys: itemConceptKeys);
