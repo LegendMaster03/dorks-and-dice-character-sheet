@@ -395,7 +395,7 @@ test("workspace promotes Armor Class beside Movement and Initiative and removes 
     assert.match(visibleText(defense), /Spell Resistance/);
 });
 
-test("Defense and Combat share a compact summary row above Skills", () => {
+test("Defense and Combat share a compact persistent summary beneath Skills", () => {
     const rendered = render("actions", null);
     const summaries = byClass(rendered, "dd-mechanics-summary-grid");
     assert.equal(summaries.length, 1);

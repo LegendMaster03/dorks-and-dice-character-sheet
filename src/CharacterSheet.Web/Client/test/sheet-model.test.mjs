@@ -262,13 +262,20 @@ const featWorkflowSource = await readFile(new URL("../src/features/features/feat
 test("UI shell defines materially different tablet and mobile compositions", () => {
     assert.match(css, /@media \(max-width: 1099px\)/);
     assert.match(css, /@media \(max-width: 720px\)/);
-    assert.match(css, /@media \(max-width: 720px\)[\s\S]*?\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
+    assert.match(css, /@media \(max-width: 720px\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
 });
 
 test("desktop sheet uses the available viewport and one equal-width top-stat grid", () => {
     assert.match(css, /\.dd-sheet-screen\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*120rem;/s);
     assert.match(css, /\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(12,\s*minmax\(0,\s*1fr\)\)/s);
     assert.match(css, /\.dd-core-stats__abilities,\s*\.dd-core-stats__quick\s*\{[^}]*display:\s*contents;/s);
+});
+
+test("Hit Points spans two top-strip columns without inheriting centered quick-stat layout", () => {
+    assert.match(css, /\.dd-health-quick\s*\{[^}]*grid-column:\s*span 2;/s);
+    assert.match(
+        css,
+        /\.dd-core-stats__quick > \.dd-stat:not\(\.dd-stat--armor-class\):not\(\.dd-stat--health\)\s*\{[^}]*place-content:\s*center;/s);
 });
 
 test("Guided Builder overrides display-contents Ability composition with its own responsive grid", () => {

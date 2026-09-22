@@ -249,7 +249,7 @@
     min-height: 5.5rem;
 }
 
-.dd-core-stats__quick > .dd-stat:not(.dd-stat--armor-class) {
+.dd-core-stats__quick > .dd-stat:not(.dd-stat--armor-class):not(.dd-stat--health) {
     display: grid;
     place-content: center;
 }
