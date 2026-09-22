@@ -334,7 +334,7 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
 });
 
-test("rest actions live in the top control bar rather than the Hit Points card", () => {
+test("Rules Core recovery actions live in the top control bar rather than the Hit Points card", () => {
     const editableBuilder = {
         ...builder,
         status: "ready",
@@ -348,6 +348,7 @@ test("rest actions live in the top control bar rather than the Hit Points card",
         }
     };
     const activeRoutine = routine([], {}, false, 10);
+    const recoveryCalls = [];
     const rendered = renderCharacterWorkspace(
         character,
         editableBuilder,
@@ -357,12 +358,28 @@ test("rest actions live in the top control bar rather than the Hit Points card",
         "view",
         guidedBuilder,
         null,
-        { healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 20 }] },
+        {
+            healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 20 }],
+            recoveryProcedures: [
+                {
+                    procedureKey: "recovery.short.fixture",
+                    displayName: "Short Rest",
+                    presentationRole: "short-rest",
+                    applicabilityState: "applicable"
+                },
+                {
+                    procedureKey: "recovery.long.fixture",
+                    displayName: "Long Rest",
+                    presentationRole: "long-rest",
+                    applicabilityState: "applicable"
+                }
+            ]
+        },
         {
             ...handlers,
             routine: {
                 ...handlers.routine,
-                rest() {}
+                recover(key) { recoveryCalls.push(key); }
             }
         }
     );
@@ -371,10 +388,43 @@ test("rest actions live in the top control bar rather than the Hit Points card",
     const healthCard = byClass(rendered, "dd-health-quick")[0];
     assert.ok(modeBar);
     assert.ok(healthCard);
-    assert.equal(byAttribute(modeBar, "data-rest-action", "short").length, 1);
-    assert.equal(byAttribute(modeBar, "data-rest-action", "long").length, 1);
-    assert.equal(byAttribute(healthCard, "data-rest-action", "short").length, 0);
-    assert.equal(byAttribute(healthCard, "data-rest-action", "long").length, 0);
+    const shortRest = byAttribute(modeBar, "data-recovery-procedure", "recovery.short.fixture")[0];
+    const longRest = byAttribute(modeBar, "data-recovery-procedure", "recovery.long.fixture")[0];
+    assert.ok(shortRest);
+    assert.ok(longRest);
+    assert.equal(byAttribute(healthCard, "data-recovery-procedure", "recovery.short.fixture").length, 0);
+    shortRest.onclick();
+    longRest.onclick();
+    assert.deepEqual(recoveryCalls, ["recovery.short.fixture", "recovery.long.fixture"]);
+});
+
+test("sheet does not invent rest buttons when Rules Core supplies no recovery procedures", () => {
+    const editableBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        editableBuilder,
+        routine([], {}, false, 10),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        { healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 20 }] },
+        handlers
+    );
+    const modeBar = byClass(rendered, "dd-sheet-mode-bar")[0];
+    assert.equal(byClass(modeBar, "dd-rest-button").length, 0);
 });
 
 test("Character-owned current HP overrides mechanics presentation and is editable for active Characters", () => {
@@ -1295,10 +1345,15 @@ test("workspace renders specialized, composite, independent, and unconfigured co
                 mechanical("skill.stealth", "Stealth", "-", { kind: "skill" }),
                 mechanical("skill.hide", "Hide", "-", { kind: "skill", governingAbility: "dexterity" }),
                 mechanical("skill.move-silently", "Move Silently", "-", { kind: "skill" }),
-                mechanical("skill.knowledge-planes", "Knowledge (the planes)", "-", {
+                mechanical("skill.craft", "Craft", "-", {
                     kind: "skill",
-                    family: "Knowledge",
-                    specialty: "the planes",
+                    family: "Craft",
+                    isFamily: true
+                }),
+                mechanical("skill.craft-alchemy", "Craft (Alchemy)", "-", {
+                    kind: "specialized-skill",
+                    family: "Craft",
+                    specialty: "alchemy",
                     supportsRanks: true,
                     supportsClassSkillState: true,
                     supportsTrainingState: true,
@@ -1321,12 +1376,15 @@ test("workspace renders specialized, composite, independent, and unconfigured co
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.hide")[0].getAttribute("data-skill-role"), "component");
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.move-silently")[0].getAttribute("data-skill-role"), "component");
 
-    const specialtyRow = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
-    const specialty = byAttribute(rendered, "data-skill-disclosure", "skill.knowledge-planes")[0];
+    const family = byAttribute(rendered, "data-skill-family", "skill.craft")[0];
+    const specialtyRow = byAttribute(rendered, "data-skill-id", "skill.craft-alchemy")[0];
+    const specialty = byAttribute(rendered, "data-skill-disclosure", "skill.craft-alchemy")[0];
+    assert.ok(family);
     assert.ok(specialty);
-    assert.match(visibleText(specialtyRow), /Knowledge \(the planes\)/);
-    assert.match(visibleText(specialty), /Family\s+Knowledge/);
-    assert.match(visibleText(specialty), /Specialty\s+the planes/);
+    assert.match(visibleText(family), /Craft/);
+    assert.match(visibleText(specialtyRow), /Craft \(Alchemy\)/);
+    assert.match(visibleText(specialty), /Family\s+Craft/);
+    assert.match(visibleText(specialty), /Specialty\s+alchemy/);
     assert.match(visibleText(specialty), /Ranks\s+-/);
     assert.match(visibleText(specialty), /Training\s+-/);
     assert.match(visibleText(specialty), /Class skill\s+-/);
