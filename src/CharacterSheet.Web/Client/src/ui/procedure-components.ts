@@ -205,6 +205,21 @@ function renderSpellcastingProfile(profile: SpellcastingProfileView): HTMLElemen
         ["Prohibited schools", profile.prohibitedSchools?.join(", ")], fieldTuple(profile.arcaneSpellFailure)
     ]);
     if (facts !== null) root.append(facts);
+    if (profile.resources !== undefined && profile.resources.length > 0) {
+        const resourceFields = profile.resources.map(resource => ({
+            key: resource.key,
+            label: resource.label,
+            value: resource.current !== undefined && resource.maximum !== undefined
+                ? `${resource.current} / ${resource.maximum}`
+                : resource.current !== undefined
+                    ? String(resource.current)
+                    : resource.maximum !== undefined
+                        ? `Max ${resource.maximum}`
+                        : "-"
+        }));
+        const rendered = renderDisplayFields(resourceFields, "Resources");
+        if (rendered !== null) root.append(rendered);
+    }
     if (profile.saveDc) root.append(renderMechanicalValue(profile.saveDc, true));
     if (profile.spellAttack) root.append(renderMechanicalValue(profile.spellAttack, true));
     for (const [label, fields] of [["Bonus spells", profile.bonusSpells], [undefined, profile.metadata]] as const) {

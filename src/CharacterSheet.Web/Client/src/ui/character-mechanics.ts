@@ -221,6 +221,28 @@ export interface InventoryMechanicsView {
     crafting?: readonly CraftingProcedureView[];
 }
 
+export interface CharacterFeatureView {
+    key: string;
+    label: string;
+    kind: string;
+    state: string;
+    sourceConceptKey?: string;
+    grantingSourceKind?: string;
+    acquisitionLevel?: number;
+    effects?: readonly DisplayFieldView[];
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
+export interface SpellcastingResourceView {
+    key: string;
+    label: string;
+    state: string;
+    current?: number;
+    maximum?: number;
+    recoveryProcedureKey?: string;
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
 export interface SpellcastingProfileView {
     key: string;
     label: string;
@@ -229,6 +251,7 @@ export interface SpellcastingProfileView {
     saveDc?: CalculatedMechanicalValueView;
     spellAttack?: CalculatedMechanicalValueView;
     resourceSystem?: DisplayFieldView;
+    resources?: readonly SpellcastingResourceView[];
     domains?: readonly string[];
     specialtySchool?: string;
     prohibitedSchools?: readonly string[];
@@ -258,6 +281,8 @@ export interface CharacterMechanicsView {
     checks?: readonly CharacterCheckView[];
     procedures?: readonly CharacterProcedureView[];
     spellcastingProfiles?: readonly SpellcastingProfileView[];
+    features?: readonly CharacterFeatureView[];
+    characterMetadata?: readonly CalculatedMechanicalValueView[];
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
