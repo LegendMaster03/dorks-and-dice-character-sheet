@@ -94,7 +94,13 @@ export function renderCharacterWorkspace(
     }
 
     if (guidedBuilder.open && editable) {
-        shell.append(renderGuidedBuilder(character.characterId, builder, guidedBuilder, handlers));
+        shell.append(renderGuidedBuilder(
+            character.characterId,
+            builder,
+            routine,
+            guidedBuilder,
+            mechanics,
+            handlers));
         return shell;
     }
 
@@ -223,7 +229,9 @@ function renderModeControls(
 function renderGuidedBuilder(
     characterId: string,
     builder: CharacterBuilderUiState,
+    routine: CharacterRoutineUiState,
     guidedBuilder: GuidedBuilderUiState,
+    mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const container = createElement("section", "dd-guided-builder");
@@ -312,6 +320,11 @@ function renderGuidedBuilder(
                 list.append(item);
             }
             review.append(list);
+            const rulesChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers);
+            if (rulesChoices !== null) review.append(rulesChoices);
             panel.append(review);
             break;
         }
@@ -319,6 +332,124 @@ function renderGuidedBuilder(
 
     container.append(panel);
     return container;
+}
+
+function renderRulesChoices(
+    mechanics: CharacterMechanicsView | null,
+    routine: CharacterRoutineUiState,
+    handlers: CharacterSheetHandlers
+): HTMLElement | null {
+    if (mechanics === null) {
+        return null;
+    }
+
+    const choices = mechanics.ruleChoices ?? [];
+    const conflicts = mechanics.projectionConflicts ?? [];
+    if (choices.length === 0 && conflicts.length === 0) {
+        return null;
+    }
+
+    const section = createElement("section", "dd-guided-builder__rules");
+    section.append(createElement(
+        "h3",
+        "dd-guided-builder__subheading",
+        "Rules Choices"));
+
+    const pending = routine.mutation?.kind === "rules-input-update"
+        || routine.mutation?.kind === "rules-input-delete";
+
+    for (const choice of choices) {
+        const card = createElement("article", "dd-build-choice");
+        card.setAttribute("data-rule-choice-key", choice.choiceKey);
+        card.setAttribute("data-rule-choice-state", choice.state);
+        card.append(createElement("h4", "dd-build-choice__label", choice.displayName));
+
+        const selectedOption = choice.options.find(option =>
+            option.value === choice.selectedValue);
+        const selectedLabel = selectedOption?.displayName
+            ?? choice.selectedValue
+            ?? "Not selected";
+        card.append(createElement(
+            "p",
+            "dd-build-choice__value",
+            selectedLabel));
+
+        const metadata = [
+            choice.kind,
+            choice.sourceConceptKey
+        ].filter((value): value is string =>
+            value !== undefined && value.trim().length > 0);
+        if (metadata.length > 0) {
+            card.append(createElement(
+                "p",
+                "dd-build-choice__detail",
+                metadata.join(" • ")));
+        }
+
+        if (choice.options.length > 0) {
+            const controls = createElement("div", "dd-build-choice__actions");
+            const select = createElement("select", "dd-rule-chooser__input");
+            select.setAttribute("aria-label", choice.displayName);
+
+            const placeholder = createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Choose…";
+            select.append(placeholder);
+
+            for (const option of choice.options) {
+                const element = createElement("option");
+                element.value = option.value;
+                element.textContent = option.displayName;
+                if (option.value === choice.selectedValue) {
+                    element.selected = true;
+                }
+                select.append(element);
+            }
+            select.value = choice.selectedValue ?? "";
+
+            controls.append(
+                select,
+                createButton(
+                    choice.selectedValue === undefined ? "Choose" : "Replace",
+                    "dd-button dd-button--secondary",
+                    () => {
+                        if (select.value.length > 0) {
+                            handlers.rules.setChoice(choice.choiceKey, select.value);
+                        }
+                    },
+                    pending));
+            if (choice.selectedValue !== undefined) {
+                controls.append(createButton(
+                    "Clear",
+                    "dd-button dd-button--ghost",
+                    () => handlers.rules.clearChoice(choice.choiceKey),
+                    pending));
+            }
+            card.append(controls);
+        } else if (choice.selectedValue === undefined) {
+            card.append(createInlineState(
+                "Rules Core requires this choice but did not provide selectable options.",
+                "warning"));
+        }
+
+        section.append(card);
+    }
+
+    if (conflicts.length > 0) {
+        const conflictSection = createElement("section", "dd-guided-builder__conflicts");
+        conflictSection.append(createElement(
+            "h3",
+            "dd-guided-builder__subheading",
+            "Rules Conflicts"));
+        for (const conflict of conflicts) {
+            const item = createInlineState(conflict.message, "warning");
+            item.setAttribute("data-rule-conflict-key", conflict.conflictKey);
+            conflictSection.append(item);
+        }
+        section.append(conflictSection);
+    }
+
+    return section;
 }
 
 function guidedStatusLabel(status: ReturnType<typeof getGuidedBuilderSectionStates>[number]["status"]): string {
