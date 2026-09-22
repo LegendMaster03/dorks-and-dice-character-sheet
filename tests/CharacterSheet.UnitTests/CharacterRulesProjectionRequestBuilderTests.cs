@@ -56,6 +56,45 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
                     null,
                     Now,
                     Now)
+            ]);
+
+        var state = new CharacterStateView(
+            build.CharacterId,
+            false,
+            12,
+            new CharacterDeathSavesView(1, 2),
+            [new CharacterInventoryItemOccurrenceView(
+                Guid.NewGuid(),
+                "item.long-sword",
+                Now,
+                Quantity: 1,
+                IsCarried: true,
+                IsEquipped: true,
+                IsAttuned: false)],
+            [],
+            [
+                new CharacterConditionOccurrenceView(
+                    Guid.NewGuid(),
+                    "condition.enlarged",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Now,
+                    Now),
+                new CharacterConditionOccurrenceView(
+                    Guid.NewGuid(),
+                    null,
+                    "Custom reminder",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Now,
+                    Now)
             ],
             [
                 new CharacterRulesInputStateView(
@@ -128,45 +167,6 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
                     classId,
                     1,
                     10,
-                    Now,
-                    Now)
-            ]);
-
-        var state = new CharacterStateView(
-            build.CharacterId,
-            false,
-            12,
-            new CharacterDeathSavesView(1, 2),
-            [new CharacterInventoryItemOccurrenceView(
-                Guid.NewGuid(),
-                "item.long-sword",
-                Now,
-                Quantity: 1,
-                IsCarried: true,
-                IsEquipped: true,
-                IsAttuned: false)],
-            [],
-            [
-                new CharacterConditionOccurrenceView(
-                    Guid.NewGuid(),
-                    "condition.enlarged",
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    Now,
-                    Now),
-                new CharacterConditionOccurrenceView(
-                    Guid.NewGuid(),
-                    null,
-                    "Custom reminder",
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
                     Now,
                     Now)
             ]);
