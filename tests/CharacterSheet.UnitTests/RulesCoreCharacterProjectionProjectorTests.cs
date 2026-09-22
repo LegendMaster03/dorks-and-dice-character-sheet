@@ -190,6 +190,86 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
         Assert.Equal("Fixture conflict", Assert.Single(mechanics.ProjectionConflicts!).Message);
     }
 
+    [Fact]
+    public void EquipmentDefinitionsJoinCharacterOwnedOccurrencesWithoutCollapsingDuplicates()
+    {
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var state = new CharacterStateView(
+            Guid.NewGuid(),
+            false,
+            null,
+            new CharacterDeathSavesView(0, 0),
+            [
+                new CharacterInventoryItemOccurrenceView(
+                    firstId,
+                    "item.long-sword",
+                    DateTimeOffset.UtcNow,
+                    Quantity: 1,
+                    IsCarried: true,
+                    IsEquipped: true,
+                    IsAttuned: false),
+                new CharacterInventoryItemOccurrenceView(
+                    secondId,
+                    "item.long-sword",
+                    DateTimeOffset.UtcNow.AddSeconds(1),
+                    Quantity: 2,
+                    IsCarried: false,
+                    IsEquipped: false,
+                    IsAttuned: false)
+            ],
+            [],
+            []);
+
+        var projection = EmptyProjection() with
+        {
+            Equipment =
+            [
+                new RulesCoreCharacterEquipmentDefinitionView(
+                    "equipment.item.long-sword",
+                    "item.long-sword",
+                    "Longsword",
+                    "resolved",
+                    "weapon",
+                    "martial",
+                    null,
+                    4m,
+                    "lb.",
+                    null,
+                    null,
+                    false,
+                    null,
+                    ["versatile"],
+                    Provenance)
+            ]
+        };
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            null,
+            projection,
+            state);
+
+        var occurrences = mechanics.Inventory!.ItemOccurrences!;
+        Assert.Equal(2, occurrences.Count);
+        Assert.Contains(occurrences, value => value.OccurrenceId == firstId);
+        Assert.Contains(occurrences, value => value.OccurrenceId == secondId);
+        Assert.All(
+            occurrences,
+            value =>
+            {
+                Assert.Contains(value.Facts!, fact =>
+                    fact.Key == "item-type" && fact.Value == "weapon");
+                Assert.Contains(value.Facts!, fact =>
+                    fact.Key == "equipment-category" && fact.Value == "martial");
+                Assert.Contains(value.Facts!, fact =>
+                    fact.Key == "weight" && fact.Value == "4 lb.");
+                Assert.Contains(value.Facts!, fact =>
+                    fact.Key == "requires-attunement" && fact.Value == "No");
+                Assert.Contains(value.Facts!, fact =>
+                    fact.Key == "properties" && fact.Value == "versatile");
+            });
+    }
+
     private static RulesCoreCharacterRulesProjectionView EmptyProjection() =>
         new(
             "global",
