@@ -59,15 +59,6 @@ export function renderHealthQuickCard(
     const header = createElement("div", "dd-health-quick__header");
     header.append(createElement("h3", "dd-stat__label", "Hit Points"));
 
-    const actions = createElement("div", "dd-health-quick__actions");
-    if (control.readOnly !== true && control.onSetCurrentHitPoints !== undefined) {
-        actions.append(renderHitPointEditor(
-            toFiniteInteger(currentValue),
-            hitPoints?.maximum,
-            control.saving === true,
-            control.onSetCurrentHitPoints));
-    }
-
     const promoted = new Set(
         [hitPoints, temporaryHitPoints, nonlethal]
             .filter((track): track is NonNullable<typeof track> => track !== undefined)
@@ -75,10 +66,19 @@ export function renderHealthQuickCard(
     const extraTracks = tracks.filter(track => !promoted.has(track.key));
     const sources = collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]);
 
-    if (extraTracks.length > 0 || sources.length > 0) {
+    const editable = control.readOnly !== true
+        && control.onSetCurrentHitPoints !== undefined;
+    if (editable || extraTracks.length > 0 || sources.length > 0) {
         const details = createElement("details", "dd-health-quick__details");
         details.append(createElement("summary", "dd-health-quick__details-toggle", "Details"));
         const popover = createElement("div", "dd-health-quick__details-popover");
+        if (editable) {
+            popover.append(renderDirectHitPointSetter(
+                toFiniteInteger(currentValue),
+                hitPoints?.maximum,
+                control.saving === true,
+                control.onSetCurrentHitPoints!));
+        }
         if (extraTracks.length > 0) {
             const extras = createElement("div", "dd-health-card__extras");
             extras.append(...extraTracks.map(renderHealthTrack));
@@ -87,9 +87,8 @@ export function renderHealthQuickCard(
         const sourceDisclosure = renderSourceAttributionDisclosure(sources);
         if (sourceDisclosure !== null) popover.append(sourceDisclosure);
         details.append(popover);
-        actions.append(details);
+        header.append(details);
     }
-    header.append(actions);
 
     const values = createElement("div", "dd-health-quick__values");
     values.append(
@@ -106,7 +105,16 @@ export function renderHealthQuickCard(
             "nonlethal",
             nonlethal));
 
+    const quickAdjustment = editable
+        ? renderQuickHitPointAdjustment(
+            toFiniteInteger(currentValue),
+            hitPoints?.maximum,
+            control.saving === true,
+            control.onSetCurrentHitPoints!)
+        : null;
+
     card.append(header, values);
+    if (quickAdjustment !== null) card.append(quickAdjustment);
     return card;
 }
 
@@ -285,6 +293,99 @@ export function renderRestControls(
         createRestButton("short", "Short Rest"),
         createRestButton("long", "Long Rest"));
     return controls;
+}
+
+function renderQuickHitPointAdjustment(
+    current: number | null,
+    maximum: unknown,
+    saving: boolean,
+    onSetCurrentHitPoints: (currentHitPoints: number | null) => void
+): HTMLElement {
+    const controls = createElement("div", "dd-health-quick__adjust");
+    controls.setAttribute("role", "group");
+    controls.setAttribute("aria-label", "Quick hit point adjustment");
+
+    const damage = createElement(
+        "button",
+        "dd-health-quick__adjust-button dd-health-quick__adjust-button--damage",
+        "Damage") as HTMLButtonElement;
+    damage.type = "button";
+    damage.setAttribute("data-health-action", "damage");
+
+    const amount = createElement(
+        "input",
+        "dd-health-quick__adjust-input") as HTMLInputElement;
+    amount.type = "number";
+    amount.min = "0";
+    amount.step = "1";
+    amount.inputMode = "numeric";
+    amount.placeholder = "0";
+    amount.setAttribute("aria-label", "Hit point adjustment amount");
+
+    const heal = createElement(
+        "button",
+        "dd-health-quick__adjust-button dd-health-quick__adjust-button--heal",
+        "Heal") as HTMLButtonElement;
+    heal.type = "button";
+    heal.setAttribute("data-health-action", "heal");
+
+    const disabled = saving || current === null;
+    damage.disabled = disabled;
+    heal.disabled = disabled;
+    amount.disabled = saving;
+
+    const apply = (direction: -1 | 1): void => {
+        const parsed = parseOptionalInteger(amount.value);
+        if (!parsed.valid || parsed.value === null || parsed.value < 0) return;
+        const next = adjustCurrentHitPoints(current, maximum, parsed.value, direction);
+        if (next !== null) onSetCurrentHitPoints(next);
+    };
+    damage.onclick = () => apply(-1);
+    heal.onclick = () => apply(1);
+
+    controls.append(damage, amount, heal);
+    return controls;
+}
+
+function renderDirectHitPointSetter(
+    current: number | null,
+    maximum: unknown,
+    saving: boolean,
+    onSetCurrentHitPoints: (currentHitPoints: number | null) => void
+): HTMLElement {
+    const direct = createElement("div", "dd-health-quick__direct");
+    direct.setAttribute("data-health-direct-setter", "true");
+
+    const currentField = createElement("label", "dd-health-editor__field");
+    currentField.append(createElement("span", "dd-health-editor__label", "Set Current HP"));
+    const currentInput = createElement("input", "dd-health-editor__input") as HTMLInputElement;
+    currentInput.type = "number";
+    currentInput.step = "1";
+    currentInput.inputMode = "numeric";
+    currentInput.value = current === null ? "" : String(current);
+    currentInput.placeholder = "-";
+    currentInput.disabled = saving;
+    currentField.append(currentInput);
+
+    const maximumField = createElement("div", "dd-health-editor__field");
+    maximumField.append(
+        createElement("span", "dd-health-editor__label", "Max HP"),
+        createElement("strong", "dd-health-editor__readonly", formatOptionalHealthNumber(maximum)));
+
+    const set = createElement(
+        "button",
+        "dd-button dd-button--secondary dd-health-editor__set",
+        "Set") as HTMLButtonElement;
+    set.type = "button";
+    set.disabled = saving;
+    set.setAttribute("data-health-action", "set-current");
+    set.onclick = () => {
+        const value = parseOptionalInteger(currentInput.value);
+        if (value.valid) onSetCurrentHitPoints(value.value);
+    };
+
+    direct.append(currentField, maximumField, set);
+    return direct;
 }
 
 function renderHitPointEditor(

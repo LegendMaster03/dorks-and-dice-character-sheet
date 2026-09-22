@@ -364,6 +364,56 @@ test("top-row Hit Points card keeps current, max, temporary, and nonlethal value
     assert.equal(byAttribute(card, "data-health-track-key", "nonlethal").length, 1);
 });
 
+test("top-row Hit Points tracker exposes D&D Beyond-style Heal and Damage controls while retaining direct-set access", () => {
+    const saved = [];
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        routine([], {}, false, 18),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        {
+            healthTracks: [
+                { key: "hp", label: "Hit Points", role: "hit-points", current: 99, maximum: 30 },
+                { key: "temp", label: "Temporary HP", role: "temporary-hit-points", current: 4 },
+                { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 2 }
+            ]
+        },
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setCurrentHitPoints(value) { saved.push(value); }
+            }
+        }
+    );
+
+    const card = byClass(rendered, "dd-health-quick")[0];
+    assert.ok(card);
+    const input = byClass(card, "dd-health-quick__adjust-input")[0];
+    const damage = byAttribute(card, "data-health-action", "damage")[0];
+    const heal = byAttribute(card, "data-health-action", "heal")[0];
+    const directSetter = byAttribute(card, "data-health-direct-setter", "true")[0];
+    assert.ok(input);
+    assert.ok(damage);
+    assert.ok(heal);
+    assert.ok(directSetter);
+
+    input.value = "5";
+    damage.onclick();
+    assert.equal(saved.at(-1), 13);
+
+    input.value = "20";
+    heal.onclick();
+    assert.equal(saved.at(-1), 30);
+
+    assert.match(visibleText(card), /Temporary HP\s+4/);
+    assert.match(visibleText(card), /Nonlethal Damage\s+2/);
+});
+
 test("workspace promotes Armor Class beside Movement and Initiative and removes the AC trio from Defense", () => {
     const rendered = render("actions", {
         defenses: {
