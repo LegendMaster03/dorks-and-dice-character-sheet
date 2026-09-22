@@ -1,4 +1,8 @@
 import type { CharacterRoutineUiState } from "../../app-state.js";
+import type {
+    CharacterInventoryItemOccurrenceResponse,
+    CharacterInventoryItemOccurrenceStateInput
+} from "../../character-state-api.js";
 import {
     findItemOccurrenceMechanics,
     type InventoryMechanicsView
@@ -83,10 +87,16 @@ export function renderInventorySection(
                 "dd-routine-meta",
                 display.detail ?? occurrence.ruleConceptKey)
         );
+        item.append(renderOccurrenceStateSummary(occurrence, routine));
         const occurrenceMechanics = renderItemOccurrenceMechanics(
             findItemOccurrenceMechanics(mechanics, occurrence.id));
         if (occurrenceMechanics !== null) item.append(occurrenceMechanics);
         if (editable) {
+            item.append(renderOccurrenceStateEditor(
+                occurrence,
+                routine,
+                pending,
+                handlers));
             item.append(createButton(
                 routine.mutation?.kind === "inventory-delete"
                     && routine.mutation.entryId === occurrence.id
@@ -105,6 +115,139 @@ export function renderInventorySection(
     if (list.children.length > 0) content.append(list);
     appendInventoryMechanicsPresentation(content, mechanics);
     return content;
+}
+
+function renderOccurrenceStateSummary(
+    occurrence: CharacterInventoryItemOccurrenceResponse,
+    routine: CharacterRoutineUiState
+): HTMLElement {
+    const summary = createElement("p", "dd-routine-meta");
+    summary.setAttribute("data-inventory-state-summary", occurrence.id);
+    const parts = [
+        `Qty ${occurrence.quantity}`,
+        occurrence.isCarried ? "Carried" : "Not carried",
+        occurrence.isEquipped ? "Equipped" : null,
+        occurrence.isAttuned ? "Attuned" : null
+    ].filter((value): value is string => value !== null);
+    if (occurrence.containerOccurrenceId !== null) {
+        parts.push(`In ${inventoryOccurrenceLabel(routine, occurrence.containerOccurrenceId)}`);
+    }
+    summary.textContent = parts.join(" • ");
+    return summary;
+}
+
+function renderOccurrenceStateEditor(
+    occurrence: CharacterInventoryItemOccurrenceResponse,
+    routine: CharacterRoutineUiState,
+    pending: boolean,
+    handlers: RoutineCharacterHandlers
+): HTMLElement {
+    const details = createElement("details", "dd-inventory-item__state-details");
+    details.setAttribute("data-inventory-state-editor", occurrence.id);
+    details.append(createElement("summary", "dd-inventory-item__state-toggle", "Item state"));
+
+    const editor = createElement("div", "dd-inventory-item__state-editor");
+    const quantityLabel = createElement("label", "dd-sheet-screen__label", "Quantity");
+    const quantity = createElement("input", "dd-sheet-screen__input");
+    quantity.type = "number";
+    quantity.step = "1";
+    quantity.min = "1";
+    quantity.max = "2147483647";
+    quantity.inputMode = "numeric";
+    quantity.value = String(occurrence.quantity);
+    quantityLabel.append(quantity);
+    editor.append(quantityLabel);
+
+    const carried = stateCheckbox("Carried", occurrence.isCarried);
+    const equipped = stateCheckbox("Equipped", occurrence.isEquipped);
+    const attuned = stateCheckbox("Attuned", occurrence.isAttuned);
+    editor.append(carried.label, equipped.label, attuned.label);
+
+    const containerLabel = createElement("label", "dd-sheet-screen__label", "Container");
+    const container = createElement("select", "dd-sheet-screen__input");
+    const none = createElement("option");
+    none.value = "";
+    none.textContent = "None";
+    container.append(none);
+    for (const candidate of routine.state?.inventoryItemOccurrences ?? []) {
+        if (candidate.id === occurrence.id) continue;
+        const option = createElement("option");
+        option.value = candidate.id;
+        option.textContent = inventoryOccurrenceLabel(routine, candidate.id);
+        if (candidate.id === occurrence.containerOccurrenceId) {
+            option.selected = true;
+        }
+        container.append(option);
+    }
+    container.value = occurrence.containerOccurrenceId ?? "";
+    containerLabel.append(container);
+    editor.append(containerLabel);
+
+    const save = createButton(
+        routine.mutation?.kind === "inventory-update"
+            && routine.mutation.entryId === occurrence.id
+            ? "Saving…"
+            : "Save item state",
+        "dd-button dd-button--secondary",
+        () => {
+            const parsed = parseInventoryQuantity(quantity.value);
+            if (parsed === null) {
+                quantity.setCustomValidity("Quantity must be a whole number from 1 through 2147483647.");
+                quantity.reportValidity();
+                return;
+            }
+            quantity.setCustomValidity("");
+            const input: CharacterInventoryItemOccurrenceStateInput = {
+                quantity: parsed,
+                isCarried: carried.input.checked,
+                isEquipped: equipped.input.checked,
+                isAttuned: attuned.input.checked,
+                containerOccurrenceId: container.value.length === 0 ? null : container.value
+            };
+            handlers.updateInventoryItem(occurrence.id, input);
+        },
+        pending);
+    editor.append(save);
+    details.append(editor);
+    return details;
+}
+
+function stateCheckbox(
+    labelText: string,
+    checked: boolean
+): { label: HTMLLabelElement; input: HTMLInputElement } {
+    const label = createElement("label", "dd-inventory-item__state-check");
+    const input = createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    label.append(input, document.createTextNode(labelText));
+    return { label, input };
+}
+
+function inventoryOccurrenceLabel(
+    routine: CharacterRoutineUiState,
+    occurrenceId: string
+): string {
+    const occurrences = routine.state?.inventoryItemOccurrences ?? [];
+    const occurrence = occurrences.find(value => value.id === occurrenceId);
+    if (occurrence === undefined) return "Unavailable container";
+    const reference = routine.references[occurrenceId];
+    const base = reference === undefined
+        ? occurrence.ruleConceptKey
+        : toRuleReferenceDisplay(reference).value;
+    const matching = occurrences.filter(value => value.ruleConceptKey === occurrence.ruleConceptKey);
+    if (matching.length <= 1) return base;
+    const index = matching.findIndex(value => value.id === occurrenceId);
+    return index < 0 ? base : `${base} #${index + 1}`;
+}
+
+function parseInventoryQuantity(value: string): number | null {
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 2147483647
+        ? parsed
+        : null;
 }
 
 function appendInventoryMechanicsPresentation(
