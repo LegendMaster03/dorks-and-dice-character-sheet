@@ -65,6 +65,129 @@ public sealed class CharacterSheetRoot
     public ICollection<CharacterConditionOccurrence> Conditions { get; private set; } =
         new List<CharacterConditionOccurrence>();
 
+    public ICollection<CharacterRulesInputState> RulesInputs { get; private set; } =
+        new List<CharacterRulesInputState>();
+
+    public ICollection<CharacterHitPointGainState> HitPointGains { get; private set; } =
+        new List<CharacterHitPointGainState>();
+
+    public CharacterRulesInputState SetRulesInput(
+        CharacterRulesInputKind kind,
+        string key,
+        int? integerValue,
+        bool? booleanValue,
+        string? textValue,
+        DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterRulesInputKey.Normalize(key);
+        var input = RulesInputs.SingleOrDefault(value =>
+            value.Kind == kind && value.Key == normalizedKey);
+        if (input is null)
+        {
+            input = new CharacterRulesInputState(
+                Guid.NewGuid(),
+                CharacterId,
+                kind,
+                normalizedKey,
+                integerValue,
+                booleanValue,
+                textValue,
+                changedAt);
+            RulesInputs.Add(input);
+        }
+        else
+        {
+            input.Replace(integerValue, booleanValue, textValue, changedAt);
+        }
+
+        Touch(changedAt);
+        return input;
+    }
+
+    public bool RemoveRulesInput(
+        CharacterRulesInputKind kind,
+        string key,
+        DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterRulesInputKey.Normalize(key);
+        var input = RulesInputs.SingleOrDefault(value =>
+            value.Kind == kind && value.Key == normalizedKey);
+        if (input is null)
+        {
+            return false;
+        }
+
+        RulesInputs.Remove(input);
+        Touch(changedAt);
+        return true;
+    }
+
+    public CharacterHitPointGainState SetHitPointGain(
+        Guid advancementOccurrenceId,
+        int classLevel,
+        int hitDieValue,
+        DateTimeOffset changedAt)
+    {
+        var advancement = AdvancementEntries.SingleOrDefault(value =>
+            value.Id == advancementOccurrenceId)
+            ?? throw new KeyNotFoundException("Character advancement entry was not found.");
+        if (advancement.Kind is not CharacterAdvancementKind.Class
+            and not CharacterAdvancementKind.PrestigeClass)
+        {
+            throw new InvalidOperationException(
+                "Hit point gains must belong to a Class or Prestige Class advancement occurrence.");
+        }
+        if (classLevel <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classLevel), "Class level must be positive.");
+        }
+
+        var gain = HitPointGains.SingleOrDefault(value =>
+            value.AdvancementOccurrenceId == advancementOccurrenceId
+            && value.ClassLevel == classLevel);
+        if (gain is null)
+        {
+            gain = new CharacterHitPointGainState(
+                Guid.NewGuid(),
+                CharacterId,
+                advancementOccurrenceId,
+                classLevel,
+                hitDieValue,
+                changedAt);
+            HitPointGains.Add(gain);
+        }
+        else
+        {
+            gain.ReplaceValue(hitDieValue, changedAt);
+        }
+
+        Touch(changedAt);
+        return gain;
+    }
+
+    public bool RemoveHitPointGain(
+        Guid advancementOccurrenceId,
+        int classLevel,
+        DateTimeOffset changedAt)
+    {
+        if (classLevel <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classLevel), "Class level must be positive.");
+        }
+
+        var gain = HitPointGains.SingleOrDefault(value =>
+            value.AdvancementOccurrenceId == advancementOccurrenceId
+            && value.ClassLevel == classLevel);
+        if (gain is null)
+        {
+            return false;
+        }
+
+        HitPointGains.Remove(gain);
+        Touch(changedAt);
+        return true;
+    }
+
     public CharacterFoundationalRuleSelection SetFoundationalSelection(
         CharacterFoundationalSelectionCategory category,
         string ruleConceptKey,

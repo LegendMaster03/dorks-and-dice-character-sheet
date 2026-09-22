@@ -13,6 +13,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterInventoryItemOccurrence> InventoryItemOccurrences => Set<CharacterInventoryItemOccurrence>();
     public DbSet<CharacterNote> CharacterNotes => Set<CharacterNote>();
     public DbSet<CharacterConditionOccurrence> CharacterConditions => Set<CharacterConditionOccurrence>();
+    public DbSet<CharacterRulesInputState> CharacterRulesInputs => Set<CharacterRulesInputState>();
+    public DbSet<CharacterHitPointGainState> CharacterHitPointGains => Set<CharacterHitPointGainState>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -215,6 +217,51 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         characterCondition.HasIndex(value => value.CharacterId);
         characterCondition.HasIndex(value => new { value.CharacterId, value.RuleConceptKey });
         root.HasMany(value => value.Conditions)
+            .WithOne()
+            .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var rulesInput = modelBuilder.Entity<CharacterRulesInputState>();
+        rulesInput.ToTable("character_rules_inputs");
+        rulesInput.HasKey(value => value.Id);
+        rulesInput.Property(value => value.Id).ValueGeneratedNever();
+        rulesInput.Property(value => value.CharacterId).ValueGeneratedNever().IsRequired();
+        rulesInput.Property(value => value.Kind)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .IsRequired();
+        rulesInput.Property(value => value.Key)
+            .HasMaxLength(CharacterRulesInputKey.MaxLength)
+            .IsRequired();
+        rulesInput.Property(value => value.IntegerValue);
+        rulesInput.Property(value => value.BooleanValue);
+        rulesInput.Property(value => value.TextValue)
+            .HasMaxLength(CharacterRulesInputKey.MaxTextValueLength);
+        rulesInput.Property(value => value.CreatedAt).IsRequired();
+        rulesInput.Property(value => value.UpdatedAt).IsRequired();
+        rulesInput.HasIndex(value => new { value.CharacterId, value.Kind, value.Key }).IsUnique();
+        root.HasMany(value => value.RulesInputs)
+            .WithOne()
+            .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var hitPointGain = modelBuilder.Entity<CharacterHitPointGainState>();
+        hitPointGain.ToTable("character_hit_point_gains");
+        hitPointGain.HasKey(value => value.Id);
+        hitPointGain.Property(value => value.Id).ValueGeneratedNever();
+        hitPointGain.Property(value => value.CharacterId).ValueGeneratedNever().IsRequired();
+        hitPointGain.Property(value => value.AdvancementOccurrenceId).ValueGeneratedNever().IsRequired();
+        hitPointGain.Property(value => value.ClassLevel).IsRequired();
+        hitPointGain.Property(value => value.HitDieValue).IsRequired();
+        hitPointGain.Property(value => value.CreatedAt).IsRequired();
+        hitPointGain.Property(value => value.UpdatedAt).IsRequired();
+        hitPointGain.HasIndex(value => new
+        {
+            value.CharacterId,
+            value.AdvancementOccurrenceId,
+            value.ClassLevel
+        }).IsUnique();
+        root.HasMany(value => value.HitPointGains)
             .WithOne()
             .HasForeignKey(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
