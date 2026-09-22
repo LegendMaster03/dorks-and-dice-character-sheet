@@ -5,6 +5,7 @@ import {
     type MechanicalScaffoldSlot
 } from "../../core/mechanics/mechanic-value.js";
 import { findInitiativeValue } from "../initiative/initiative.js";
+import { findProficiencyBonusValue } from "../proficiency/proficiency.js";
 import { renderDefenseScaffold } from "../defense/defense.js";
 import { renderHealthScaffold } from "../health/health.js";
 import { renderSavingThrowScaffold } from "../saving-throws/saving-throws.js";
@@ -30,8 +31,9 @@ export function renderCombatFundamentalsCard(
         "Combat",
         "dd-mechanic-group-card dd-combat-fundamentals-card");
     const initiative = findInitiativeValue(mechanics?.combatFundamentals);
+    const proficiency = findProficiencyBonusValue(mechanics?.combatFundamentals);
     const values = (mechanics?.combatFundamentals ?? [])
-        .filter(value => value !== initiative);
+        .filter(value => value !== initiative && value !== proficiency);
     const grid = createElement(
         "div",
         "dd-mechanic-group-card__grid dd-combat-fundamentals-card__grid");

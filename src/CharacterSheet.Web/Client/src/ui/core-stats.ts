@@ -15,8 +15,10 @@ import {
     renderAdditionalAbilityValues
 } from "../features/abilities/ability-stats.js";
 import { findInitiativeValue } from "../features/initiative/initiative.js";
+import { renderHealthQuickCard, type HealthControlOptions } from "../features/health/health.js";
 import { renderArmorClassQuickCard } from "../features/defense/defense.js";
 import { renderMovementValues } from "../features/movement/movement.js";
+import { renderProficiencyQuickCard } from "../features/proficiency/proficiency.js";
 import { renderQuickMechanicalValue } from "../core/mechanics/mechanic-value.js";
 
 export function renderCoreStats(
@@ -24,6 +26,7 @@ export function renderCoreStats(
     structuralEditing: boolean,
     readOnly: boolean,
     mechanics: CharacterMechanicsView | null,
+    healthControl: HealthControlOptions,
     handlers: StructuralCharacterHandlers
 ): HTMLElement {
     const section = createElement("section", "dd-core-stats");
@@ -56,7 +59,9 @@ export function renderCoreStats(
         renderQuickMechanicalValue(findInitiativeValue(mechanics?.combatFundamentals)));
 
     quickGrid.append(
+        renderProficiencyQuickCard(mechanics?.combatFundamentals),
         movement,
+        renderHealthQuickCard(mechanics, healthControl),
         initiative,
         renderArmorClassQuickCard(mechanics)
     );

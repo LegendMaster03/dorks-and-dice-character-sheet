@@ -125,10 +125,6 @@
         order: 1;
     }
 
-    .dd-sheet__top-row {
-        grid-template-columns: 1fr;
-    }
-
     .dd-sheet-header {
         grid-template-columns: 1fr;
         gap: var(--dd-sheet-space-3);
@@ -143,21 +139,8 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .dd-sheet__workspace {
-        grid-template-columns: 1fr;
-    }
-
     .dd-sheet__support {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        order: 3;
-    }
-
-    .dd-sheet__mechanics {
-        order: 2;
-    }
-
-    .dd-sheet__main {
-        order: 1;
     }
 }
 
@@ -225,7 +208,7 @@
         padding: var(--dd-sheet-space-3);
     }
 
-    .dd-core-stats {
+    .dd-sheet__top-row {
         padding: var(--dd-sheet-space-3) var(--dd-sheet-space-3) 0;
     }
 

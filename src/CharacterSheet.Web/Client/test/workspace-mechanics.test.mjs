@@ -404,15 +404,24 @@ test("Defense and Combat share a compact summary row above Skills", () => {
     assert.equal(byClass(rendered, "dd-skills-card").length, 1);
 });
 
-test("wide dashboard starts Skills at the top and keeps Health in the top stat row", () => {
+test("wide shell keeps top statistics full-width and moves persistent facts beneath Skills", () => {
     const rendered = render("actions", null);
-    assert.equal(byClass(rendered, "dd-sheet__dashboard").length, 1);
-    assert.equal(byClass(rendered, "dd-sheet__skills").length, 1);
-    assert.equal(byClass(rendered, "dd-sheet__top-row").length, 1);
-    assert.equal(byClass(rendered, "dd-health-quick").length, 1);
-    assert.equal(byClass(rendered, "dd-sheet__support").length, 1);
-    assert.equal(byClass(rendered, "dd-sheet__mechanics").length, 1);
-    assert.equal(byClass(rendered, "dd-sheet__main").length, 1);
+    const dashboard = byClass(rendered, "dd-sheet__dashboard")[0];
+    const skills = byClass(rendered, "dd-sheet__skills")[0];
+    const topRow = byClass(rendered, "dd-sheet__top-row")[0];
+    const support = byClass(rendered, "dd-sheet__support")[0];
+    const mechanicsColumn = byClass(rendered, "dd-sheet__mechanics")[0];
+    const main = byClass(rendered, "dd-sheet__main")[0];
+    assert.ok(dashboard);
+    assert.ok(skills);
+    assert.ok(topRow);
+    assert.ok(support);
+    assert.ok(mechanicsColumn);
+    assert.ok(main);
+    assert.equal(byClass(topRow, "dd-health-quick").length, 1);
+    assert.equal(walk(skills).includes(support), true);
+    assert.equal(walk(skills).includes(mechanicsColumn), true);
+    assert.equal(walk(skills).includes(main), false);
     assert.equal(byClass(rendered, "dd-saving-throws-card").length, 1);
     assert.equal(byClass(rendered, "dd-defense-card").length, 1);
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
@@ -756,15 +765,16 @@ test("production Ability presentation contains no D&D Ability modifier formula",
 
 test("legacy combat placeholder renderer is removed in favor of generalized mechanic cards", async () => {
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    const coreStatsSource = await readFile(new URL("../src/ui/core-stats.ts", import.meta.url), "utf8");
     assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
     assert.match(source, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(source, /renderCombatFundamentalsCard\(mechanics\)/);
-    assert.match(source, /renderHealthQuickCard\(mechanics,\s*\{/);
+    assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
     assert.match(source, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
 });
 
 
-test("backend-supplied Proficiency Bonus renders only through generalized combat fundamentals", () => {
+test("backend-supplied Proficiency Bonus is promoted into the top stat strip without duplication", () => {
     const rendered = render("actions", {
         combatFundamentals: [mechanical("proficiency-bonus", "Proficiency Bonus", "+3")]
     });
@@ -776,9 +786,13 @@ test("backend-supplied Proficiency Bonus renders only through generalized combat
     assert.doesNotMatch(visibleText(rendered), /Proficiency Bonus\s+Not (?:configured|yet configured)/i);
 });
 
-test("frontend does not infer Proficiency Bonus when the backend does not supply it", () => {
+test("missing Proficiency Bonus keeps the reference slot but does not invent a numeric value", () => {
     const rendered = render("actions", { combatFundamentals: [] });
-    assert.doesNotMatch(visibleText(rendered), /Proficiency Bonus/);
+    const card = byClass(rendered, "dd-stat--proficiency")[0];
+    assert.ok(card);
+    assert.match(visibleText(card), /Proficiency Bonus/);
+    assert.match(visibleText(card), /-/);
+    assert.equal(card.getAttribute("data-proficiency-bonus-state"), "unavailable");
     assert.equal(byAttribute(rendered, "data-unimplemented-mechanic", "proficiency").length, 0);
 });
 

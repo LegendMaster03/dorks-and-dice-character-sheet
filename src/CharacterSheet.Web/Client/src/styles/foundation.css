@@ -226,7 +226,7 @@
 
 .dd-core-stats {
     display: grid;
-    grid-template-columns: repeat(9, minmax(0, 1fr));
+    grid-template-columns: repeat(12, minmax(0, 1fr));
     gap: var(--dd-sheet-space-2);
     align-items: start;
     min-width: 0;
@@ -472,127 +472,6 @@
 }
 
 .dd-stat__value {
-    font-size: 1.08rem;
-    font-weight: 850;
-    line-height: 1;
-}
-
-.dd-ability-stat__primary .dd-stat__detail,
-.dd-ability-stat__primary .dd-stat__base-context {
-    font-size: 0.58rem;
-    line-height: 1.15;
-}
-
-.dd-ability-stat__secondary {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    min-width: 0;
-    border-top: 1px solid var(--dd-sheet-border-strong);
-}
-
-.dd-ability-stat__modifier,
-.dd-ability-stat__save {
-    display: grid;
-    place-content: center;
-    gap: 0.08rem;
-    min-width: 0;
-    padding: 0.28rem 0.2rem;
-}
-
-.dd-ability-stat__save {
-    border-left: 1px solid var(--dd-sheet-border-strong);
-}
-
-.dd-ability-stat__secondary-label {
-    color: var(--dd-sheet-muted);
-    font-size: 0.5rem;
-    font-weight: 800;
-    letter-spacing: 0.025em;
-    line-height: 1;
-    text-transform: uppercase;
-}
-
-.dd-ability-stat__secondary-value {
-    color: var(--dd-sheet-ink);
-    font-size: 0.74rem;
-    font-weight: 850;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-}
-
-.dd-stat--ability > .dd-stat__editor,
-.dd-stat--ability > .dd-stat__mechanics-details,
-.dd-stat--ability > .dd-stat__error {
-    margin-inline: var(--dd-sheet-space-2);
-}
-
-.dd-stat--ability > .dd-stat__editor {
-    margin-bottom: var(--dd-sheet-space-2);
-}
-
-.dd-stat--ability > .dd-stat__mechanics-details {
-    margin-block: var(--dd-sheet-space-2);
-}
-
-.dd-stat--armor-class {
-    display: grid;
-    grid-template-rows: 3fr 1fr;
-    block-size: 5.5rem;
-    padding: 0;
-    overflow: hidden;
-}
-
-.dd-armor-class__primary {
-    display: grid;
-    place-content: center;
-    gap: 0.25rem;
-    min-width: 0;
-    padding: 0.65rem 0.5rem;
-}
-
-.dd-armor-class__primary-value {
-    color: var(--dd-sheet-ink);
-    font-size: 1.35rem;
-    font-weight: 850;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-}
-
-.dd-armor-class__variants {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    border-top: 1px solid var(--dd-sheet-border-strong);
-}
-
-.dd-armor-class__variant {
-    display: grid;
-    place-content: center;
-    gap: 0.15rem;
-    min-width: 0;
-    padding: 0.38rem 0.25rem;
-}
-
-.dd-armor-class__variant + .dd-armor-class__variant {
-    border-left: 1px solid var(--dd-sheet-border-strong);
-}
-
-.dd-armor-class__variant-label {
-    color: var(--dd-sheet-muted);
-    font-size: 0.55rem;
-    font-weight: 800;
-    letter-spacing: 0.025em;
-    line-height: 1.1;
-    text-transform: uppercase;
-}
-
-.dd-armor-class__variant-value {
-    color: var(--dd-sheet-ink);
-    font-size: 0.78rem;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-}
-
-.dd-stat__value {
     margin: 0.35rem 0 0;
     color: var(--dd-sheet-ink);
     font-size: 0.82rem;
@@ -667,47 +546,43 @@
     line-height: 1.25;
 }
 
+.dd-sheet__top-row {
+    min-width: 0;
+    padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) 0;
+}
+
 .dd-sheet__dashboard {
     display: grid;
-    grid-template-columns: minmax(21rem, 0.8fr) minmax(0, 3.2fr);
+    grid-template-columns: minmax(20rem, 0.8fr) minmax(0, 3.2fr);
     gap: var(--dd-sheet-space-3);
     align-items: start;
-    padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
+    padding: var(--dd-sheet-space-3) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
 }
 
 .dd-sheet__skills,
-.dd-sheet__stage {
+.dd-sheet__stage,
+.dd-sheet__support,
+.dd-sheet__mechanics,
+.dd-sheet__main {
     min-width: 0;
 }
 
-.dd-sheet__stage {
-    display: grid;
-    gap: var(--dd-sheet-space-3);
-    align-content: start;
-}
-
-.dd-sheet__top-row {
-    display: grid;
-    grid-template-columns: minmax(0, 9fr) minmax(18rem, 2.6fr);
-    gap: var(--dd-sheet-space-2);
-    align-items: stretch;
-    min-width: 0;
-}
-
-.dd-sheet__workspace {
-    display: grid;
-    grid-template-columns: minmax(14rem, 0.65fr) minmax(18rem, 0.8fr) minmax(32rem, 1.8fr);
-    gap: var(--dd-sheet-space-3);
-    min-width: 0;
-}
-
+.dd-sheet__skills,
 .dd-sheet__support,
 .dd-sheet__mechanics,
 .dd-sheet__main {
     display: grid;
     align-content: start;
     gap: var(--dd-sheet-space-3);
-    min-width: 0;
+}
+
+.dd-sheet__stage {
+    display: grid;
+    align-content: start;
+}
+
+.dd-sheet__skills .dd-mechanics-summary-grid {
+    grid-template-columns: 1fr;
 }
 
 .dd-sheet-card,
@@ -718,7 +593,7 @@
 
 .dd-skill-list {
     display: grid;
-    gap: 0.35rem;
+    gap: 0.2rem;
 }
 
 .dd-skills-controls {
@@ -730,7 +605,7 @@
 .dd-skills-search {
     width: 100%;
     min-width: 0;
-    min-height: 2.2rem;
+    min-height: 2rem;
     padding: 0.4rem 0.6rem;
     color: var(--dd-sheet-ink);
     background: var(--dd-sheet-control-bg);
@@ -761,8 +636,8 @@
     align-items: center;
     justify-content: space-between;
     min-width: 0;
-    min-height: 2.25rem;
-    padding: 0.38rem 0.5rem;
+    min-height: 1.9rem;
+    padding: 0.28rem 0.42rem;
     background: var(--dd-sheet-surface-muted);
 }
 
@@ -926,6 +801,7 @@
 
 .dd-health-quick {
     position: relative;
+    grid-column: span 2;
     display: grid;
     grid-template-rows: auto 1fr;
     block-size: 5.5rem;
