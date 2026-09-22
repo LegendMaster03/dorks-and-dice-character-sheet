@@ -42,6 +42,12 @@ export interface RoutineCharacterHandlers {
     rest?(kind: RestKind): void;
 }
 
+export interface RulesInputCharacterHandlers {
+    setChoice(choiceKey: string, value: string): void;
+    clearChoice(choiceKey: string): void;
+    setResource(resourceKey: string, currentValue: number): void;
+}
+
 export interface FeatCharacterHandlers {
     openChooser(): void;
     closeChooser(): void;
@@ -53,6 +59,7 @@ export interface FeatCharacterHandlers {
 export interface CharacterSheetHandlers {
     structural: StructuralCharacterHandlers;
     feats: FeatCharacterHandlers;
+    rules: RulesInputCharacterHandlers;
     routine: RoutineCharacterHandlers;
     selectSection(section: SheetSection): void;
     enterEditMode(): void;

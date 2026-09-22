@@ -16,6 +16,7 @@ import { renderCharacterHeader, renderCharacterWorkspace } from "./ui/sheet.js";
 import type { SheetSection } from "./ui/sheet-model.js";
 import { createPresentationWorkflow } from "./core/application/presentation-workflow.js";
 import { createRoutineStateWorkflow } from "./core/application/routine-state-workflow.js";
+import { createRulesInputWorkflow } from "./core/application/rules-input-workflow.js";
 import { createBuildStateWorkflow } from "./core/application/build-state-workflow.js";
 import { requestErrorMessage } from "./core/application/request-error.js";
 import { createAdvancementWorkflow } from "./features/advancement/advancement-workflow.js";
@@ -199,6 +200,14 @@ function renderWorkspace(
                 add: conceptKey => void featWorkflow.add(character.characterId, conceptKey),
                 remove: occurrenceId => void featWorkflow.remove(character.characterId, occurrenceId)
             },
+            rules: {
+                setChoice: (choiceKey, value) =>
+                    void rulesInputWorkflow.setChoice(character.characterId, choiceKey, value),
+                clearChoice: choiceKey =>
+                    void rulesInputWorkflow.clearChoice(character.characterId, choiceKey),
+                setResource: (resourceKey, currentValue) =>
+                    void rulesInputWorkflow.setResource(character.characterId, resourceKey, currentValue)
+            },
             routine: {
                 setCurrentHitPoints: currentHitPoints =>
                     void healthWorkflow.setCurrentHitPoints(character.characterId, currentHitPoints),
@@ -339,6 +348,10 @@ const featWorkflow = createFeatWorkflow(
     presentationWorkflow,
     environment);
 const healthWorkflow = createHealthWorkflow(routineStateWorkflow, environment);
+const rulesInputWorkflow = createRulesInputWorkflow(
+    routineStateWorkflow,
+    presentationWorkflow,
+    environment);
 const inventoryWorkflow = createInventoryWorkflow(
     application,
     routineStateWorkflow,

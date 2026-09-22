@@ -261,6 +261,32 @@ export interface SpellcastingProfileView {
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
+export interface CharacterRuleChoiceOptionView {
+    value: string;
+    displayName: string;
+    conceptKey?: string;
+}
+
+export interface CharacterRuleChoiceView {
+    choiceKey: string;
+    groupKey: string;
+    displayName: string;
+    kind: string;
+    state: string;
+    options: readonly CharacterRuleChoiceOptionView[];
+    selectedValue?: string;
+    sourceConceptKey?: string;
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
+export interface CharacterProjectionConflictView {
+    conflictKey: string;
+    kind: string;
+    message: string;
+    relatedMechanicKeys: readonly string[];
+    relatedConceptKeys: readonly string[];
+}
+
 export interface CharacterMechanicsView {
     abilityValues?: readonly CalculatedMechanicalValueView[];
     inspiration?: CalculatedMechanicalValueView;
@@ -283,6 +309,8 @@ export interface CharacterMechanicsView {
     spellcastingProfiles?: readonly SpellcastingProfileView[];
     features?: readonly CharacterFeatureView[];
     characterMetadata?: readonly CalculatedMechanicalValueView[];
+    ruleChoices?: readonly CharacterRuleChoiceView[];
+    projectionConflicts?: readonly CharacterProjectionConflictView[];
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
