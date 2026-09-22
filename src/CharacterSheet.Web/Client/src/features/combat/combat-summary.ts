@@ -15,7 +15,7 @@ export function renderCombatSummaryBand(
     const band = createElement("section", "dd-combat-band");
     band.setAttribute("aria-label", "Combat summary");
 
-    const initiative = createElement("article", "dd-combat-band__initiative");
+    const initiative = createElement("article", "dd-combat-band__initiative dd-stat--initiative");
     initiative.append(
         createElement("h3", "dd-combat-band__heading", "Initiative"),
         renderQuickMechanicalValue(findInitiativeValue(mechanics?.combatFundamentals)));
