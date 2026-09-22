@@ -26,6 +26,7 @@ import { createHealthWorkflow } from "./features/health/health-workflow.js";
 import { createInventoryWorkflow } from "./features/inventory/inventory-workflow.js";
 import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
+import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -200,6 +201,13 @@ function renderWorkspace(
                 add: conceptKey => void featWorkflow.add(character.characterId, conceptKey),
                 remove: occurrenceId => void featWorkflow.remove(character.characterId, occurrenceId)
             },
+            spells: {
+                openChooser: () => knownSpellWorkflow.openChooser(),
+                closeChooser: () => knownSpellWorkflow.closeChooser(),
+                search: query => void knownSpellWorkflow.search(query),
+                add: conceptKey => void knownSpellWorkflow.add(character.characterId, conceptKey),
+                remove: conceptKey => void knownSpellWorkflow.remove(character.characterId, conceptKey)
+            },
             rules: {
                 setChoice: (choiceKey, value) =>
                     void rulesInputWorkflow.setChoice(character.characterId, choiceKey, value),
@@ -362,6 +370,10 @@ const healthWorkflow = createHealthWorkflow(routineStateWorkflow, environment);
 const rulesInputWorkflow = createRulesInputWorkflow(
     routineStateWorkflow,
     presentationWorkflow,
+    environment);
+const knownSpellWorkflow = createKnownSpellWorkflow(
+    application,
+    rulesInputWorkflow,
     environment);
 const inventoryWorkflow = createInventoryWorkflow(
     application,
