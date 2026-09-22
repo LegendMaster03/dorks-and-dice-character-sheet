@@ -72,7 +72,15 @@ export function renderCharacterWorkspace(
 
     shell.append(renderCharacterHeader(character, builder, forceReadOnly, advancement));
     if (advancement !== null && advancement.occurrences.length > 0) {
-        shell.append(renderAdvancementDetails(advancement));
+        const advancementEditing = structuralEditing
+            || (guidedBuilder.open
+                && editable
+                && guidedBuilder.activeSection === "advancement");
+        shell.append(renderAdvancementDetails(
+            advancement,
+            builder,
+            advancementEditing,
+            handlers.structural));
     }
     if (editable) {
         shell.append(renderModeControls(
