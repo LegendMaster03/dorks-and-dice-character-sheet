@@ -324,11 +324,26 @@ test("responsive shell uses persistent presentation scaffolds without fabricatin
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 
-test("deployed-density polish keeps primary tabs on one line and saves integrated into Ability cards", () => {
+test("deployed-density polish keeps primary tabs on one line and separates 3.x saves from Ability saves", () => {
     assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*white-space:\s*nowrap;/s);
     assert.match(css, /\.dd-sheet-mode-bar\s*\{[^}]*padding:\s*0\.4rem/s);
     assert.doesNotMatch(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
-    assert.match(sheetSource, /renderSavingThrowsCard\(detachedSavingThrows\)/);
+    assert.match(sheetSource, /renderSavingThrowsCard\(detachedSavingThrows, true\)/);
+    assert.match(abilitySource, /isThreeXSavingThrowKey\(key\)/);
+});
+
+test("desktop top stats stretch to a shared height and Movement uses a disclosure instead of a horizontal speed strip", () => {
+    assert.match(css, /\.dd-core-stats\s*\{[^}]*align-items:\s*stretch;/s);
+    assert.match(css, /\.dd-core-stats \.dd-stat\s*\{[^}]*height:\s*100%;/s);
+    assert.match(css, /\.dd-movement-values__details\s*\{/s);
+    assert.match(css, /\.dd-movement-values__variants\s*\{[^}]*position:\s*absolute;/s);
+    assert.doesNotMatch(css, /\.dd-movement-values__variants\s*\{[^}]*overflow-x:\s*auto;/s);
+});
+
+test("desktop composite Skills retain the compact split parent-and-children layout", () => {
+    assert.match(css, /\.dd-skill-group--composite\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.95fr\)\s+minmax\(0,\s*1\.05fr\)/s);
+    assert.match(css, /\.dd-skill-group__parent\s*\{[^}]*grid-row:\s*1 \/ span var\(--dd-skill-component-count\);[^}]*border-right:/s);
+    assert.match(css, /\.dd-skill-group__component\s*\{[^}]*grid-column:\s*2;/s);
 });
 
 test("embedded module loads its stylesheet from the same Tool Module asset subtree", () => {
