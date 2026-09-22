@@ -203,6 +203,14 @@ public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CalculatedMechanicalValuePresentationView>? AbilityValues = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CalculatedMechanicalValuePresentationView? Inspiration = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? PassiveValues = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? Training = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? Senses = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SavingThrowPresentationView>? SavingThrows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     DefenseGroupPresentationView? Defenses = null,

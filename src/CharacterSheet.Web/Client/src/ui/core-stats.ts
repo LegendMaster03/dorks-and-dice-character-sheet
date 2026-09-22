@@ -16,6 +16,7 @@ import {
 } from "../features/abilities/ability-stats.js";
 import { findInitiativeValue } from "../features/initiative/initiative.js";
 import { renderHealthQuickCard, type HealthControlOptions } from "../features/health/health.js";
+import { renderInspirationQuickCard } from "../features/inspiration/inspiration.js";
 import { renderArmorClassQuickCard } from "../features/defense/defense.js";
 import { renderMovementValues } from "../features/movement/movement.js";
 import { renderProficiencyQuickCard } from "../features/proficiency/proficiency.js";
@@ -61,6 +62,7 @@ export function renderCoreStats(
     quickGrid.append(
         renderProficiencyQuickCard(mechanics?.combatFundamentals),
         movement,
+        renderInspirationQuickCard(mechanics?.inspiration),
         renderHealthQuickCard(mechanics, healthControl),
         initiative,
         renderArmorClassQuickCard(mechanics)

@@ -218,6 +218,10 @@ export interface SpellcastingProfileView {
 
 export interface CharacterMechanicsView {
     abilityValues?: readonly CalculatedMechanicalValueView[];
+    inspiration?: CalculatedMechanicalValueView;
+    passiveValues?: readonly CalculatedMechanicalValueView[];
+    training?: readonly CalculatedMechanicalValueView[];
+    senses?: readonly CalculatedMechanicalValueView[];
     savingThrows?: readonly SavingThrowView[];
     defenses?: DefenseGroupView;
     combatFundamentals?: readonly CalculatedMechanicalValueView[];

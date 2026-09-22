@@ -226,7 +226,7 @@
 
 .dd-core-stats {
     display: grid;
-    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-columns: repeat(13, minmax(0, 1fr));
     gap: var(--dd-sheet-space-2);
     align-items: start;
     min-width: 0;
@@ -252,6 +252,28 @@
 .dd-core-stats__quick > .dd-stat:not(.dd-stat--armor-class):not(.dd-stat--health) {
     display: grid;
     place-content: center;
+}
+
+.dd-stat--inspiration {
+    display: grid;
+    place-content: center;
+    gap: 0.35rem;
+    padding: 0.45rem;
+}
+
+.dd-inspiration__indicator {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    margin: 0 auto;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: 50%;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
 }
 
 .dd-stat--movement,
@@ -1603,6 +1625,17 @@
 .dd-primary-nav__button:last-child {
     border-inline-end: 0;
 }
+@media (min-width: 1100px) {
+    .dd-primary-nav {
+        overflow-x: visible;
+    }
+
+    .dd-primary-nav__button {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+}
+
 
 .dd-primary-nav__button:hover {
     color: var(--dd-sheet-ink);

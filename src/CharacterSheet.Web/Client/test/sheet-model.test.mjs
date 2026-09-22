@@ -130,8 +130,8 @@ test("builder mutation policy removes editing affordances in read-only state", (
 test("unfinished mechanics remain explicit placeholders without treating resolved generalized mechanics as placeholders", () => {
     assert.ok(MECHANIC_PLACEHOLDERS.length > 0);
     assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "proficiency"), false);
-    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "passive-values"), true);
-    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "training"), true);
+    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "passive-values"), false);
+    assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder => placeholder.id === "training"), false);
     assert.equal(MECHANIC_PLACEHOLDERS.some(placeholder =>
         ABILITY_SCORE_DEFINITIONS.some(ability => ability.key === placeholder.id)), false);
     for (const placeholder of MECHANIC_PLACEHOLDERS) {
@@ -267,7 +267,7 @@ test("UI shell defines materially different tablet and mobile compositions", () 
 
 test("desktop sheet uses the available viewport and one equal-width top-stat grid", () => {
     assert.match(css, /\.dd-sheet-screen\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*120rem;/s);
-    assert.match(css, /\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(12,\s*minmax\(0,\s*1fr\)\)/s);
+    assert.match(css, /\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(13,\s*minmax\(0,\s*1fr\)\)/s);
     assert.match(css, /\.dd-core-stats__abilities,\s*\.dd-core-stats__quick\s*\{[^}]*display:\s*contents;/s);
 });
 
@@ -313,7 +313,10 @@ test("wide layout uses a full-width top strip, a persistent left rail, and a bro
 });
 
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
-    assert.match(sheetSource, /renderSupportScaffoldCard/);
+    assert.doesNotMatch(sheetSource, /renderSupportScaffoldCard/);
+    assert.match(sheetSource, /renderPassiveValuesCard\(mechanics\)/);
+    assert.match(sheetSource, /renderSensesCard\(mechanics\)/);
+    assert.match(sheetSource, /renderTrainingCard\(mechanics\)/);
     assert.match(sheetSource, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(sheetSource, /renderCombatFundamentalsCard\(mechanics\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);

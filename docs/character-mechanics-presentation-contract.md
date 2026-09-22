@@ -111,9 +111,9 @@ Omitted or unmatched effective data never causes the frontend to calculate a val
 
 The six structural Ability cards use the same dense primary/subordinate pattern as Armor Class. The effective score occupies the primary region. The subordinate row contains the supplied **Modifier** and the matching **Save**. Saving throws are associated by normalized `governingAbility` when supplied, with stable save mechanic keys as a compatibility fallback. The backend annotates the standard six Ability saves and the 3.x Fortitude/Reflex/Will keys with their governing Abilities for presentation; it does not calculate the save relationship in the browser. Fortitude appears with Constitution, Reflex with Dexterity, and Will with Wisdom. Missing modifiers or saves render as `-`; the frontend never derives a save value. The normal Character Sheet does not render a second standalone Saving Throws card.
 
-## Unresolved support surfaces
+## Persistent support surfaces
 
-The Character Sheet keeps **Passive Values** and **Proficiencies & Training** visible as stable support regions even before a normalized backend contract exists for those collections. Those regions use a neutral `-` unavailable state. The frontend must not fill them with edition-specific assumptions such as a fixed Perception/Investigation/Insight passive trio or a fixed Armor/Weapons/Tools/Languages training taxonomy. Named rows should appear only when a backend presentation contract supplies the applicable concepts.
+The Character Sheet keeps **Passive Values**, **Senses**, and **Proficiencies & Training** visible as stable support regions. Rules Core mechanics with generic kinds `passive-value`, `sense`, `proficiency`, or `training` project into those collections without the browser inventing a fixed taxonomy. Non-skill competency entries with a supplied training state may also appear in **Proficiencies & Training**. Empty collections use a neutral `-` state. The frontend does not fabricate Perception/Investigation passives, Armor/Weapons/Languages rows, senses, or any other named concept that the projection did not supply.
 
 ## Saving throws
 
@@ -131,6 +131,10 @@ The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six Abi
 `DefenseView` is a calculated value with an optional extensible presentation `role`. `primaryKey` identifies the primary defense when present. The backend may supply only Armor Class, or Armor Class plus Touch, Flat-Footed, Damage Reduction, Spell Resistance, or future defenses. When Rules Core supplies an applicable defense definition but Character-specific state is insufficient to evaluate it, the backend preserves the defense with `-` as its value.
 
 The Character Sheet promotes the Armor Class family to the core-stat region. Primary Armor Class occupies the dominant portion of one card beside Movement and Initiative; Touch AC and Flat-Footed AC are subordinate variants in that same card. The frontend does not calculate any of the three. Their agreed presentation slots remain visible with `-` when unresolved. Damage Reduction and Spell Resistance remain in the lower **Defense** group, and additional backend-supplied defensive mechanics append there rather than being discarded.
+
+## Inspiration
+
+Inspiration is a promoted quick-stat resource. The backend recognizes Rules Core resource mechanics whose stable identity represents **Inspiration** or **Heroic Inspiration** and projects that value separately from health tracks. The top strip always reserves the Inspiration presentation slot; unavailable state is shown as `-`. The current Character-owned runtime contract does not yet provide an Inspiration mutation operation, so the frontend displays the supplied value but does not invent a toggle or persistence rule.
 
 ## Health tracks
 
@@ -318,6 +322,10 @@ This projection intentionally does not define a complete preparation/slot engine
 The projection may supply:
 
 - `abilityValues`;
+- `inspiration`;
+- `passiveValues`;
+- `training`;
+- `senses`;
 - `savingThrows`;
 - `defenses`;
 - `combatFundamentals`;

@@ -59,11 +59,11 @@ internal static class MechanicalCollectionProjector
     internal static CalculatedMechanicalValuePresentationView[] ProjectCalculatedValues(
         IReadOnlyList<RulesCoreMechanicView> mechanics,
         IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey,
-        string kind) =>
+        params string[] kinds) =>
         mechanics
             .Where(value =>
                 value.IsAvailableUnderRuleset
-                && string.Equals(value.Kind, kind, StringComparison.Ordinal))
+                && kinds.Contains(value.Kind, StringComparer.Ordinal))
             .Select(value =>
             {
                 evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
@@ -75,13 +75,32 @@ internal static class MechanicalCollectionProjector
             })
             .ToArray();
 
+    internal static CalculatedMechanicalValuePresentationView? ProjectInspiration(
+        IReadOnlyList<RulesCoreMechanicView> mechanics,
+        IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey)
+    {
+        var mechanic = mechanics.FirstOrDefault(value =>
+            value.IsAvailableUnderRuleset
+            && string.Equals(value.Kind, "resource", StringComparison.Ordinal)
+            && IsInspirationResource(value));
+        if (mechanic is null) return null;
+
+        evaluationByKey.TryGetValue(mechanic.MechanicKey, out var evaluation);
+        return new CalculatedMechanicalValuePresentationView(
+            mechanic.MechanicKey,
+            mechanic.DisplayName,
+            evaluation is null ? CharacterMechanicsProjector.Unconfigured : (object)evaluation.Value,
+            SourceAttributions: SourceAttributionMapper.Map(mechanic.SourceAttributions));
+    }
+
     internal static HealthTrackPresentationView[] ProjectHealthTracks(
         IReadOnlyList<RulesCoreMechanicView> mechanics,
         IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey) =>
         mechanics
             .Where(value =>
                 value.IsAvailableUnderRuleset
-                && string.Equals(value.Kind, "resource", StringComparison.Ordinal))
+                && string.Equals(value.Kind, "resource", StringComparison.Ordinal)
+                && !IsInspirationResource(value))
             .Select(value =>
             {
                 evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
@@ -97,4 +116,15 @@ internal static class MechanicalCollectionProjector
                     SourceAttributions: SourceAttributionMapper.Map(value.SourceAttributions));
             })
             .ToArray();
+    private static bool IsInspirationResource(RulesCoreMechanicView value)
+    {
+        var key = NormalizeIdentity(value.MechanicKey);
+        var label = NormalizeIdentity(value.DisplayName);
+        return key is "inspiration" or "resourceinspiration" or "heroinspiration" or "resourceheroinspiration"
+            || label is "inspiration" or "heroinspiration";
+    }
+
+    private static string NormalizeIdentity(string value) =>
+        new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
 }

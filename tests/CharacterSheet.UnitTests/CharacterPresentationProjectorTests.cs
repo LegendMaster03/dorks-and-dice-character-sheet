@@ -338,6 +338,27 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void InspirationAndPersistentSupportValuesProjectWithoutFrontendSpecificFormulas()
+    {
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(
+            Catalog(
+                UnevaluatedMechanic("resource.heroic-inspiration", "resource", "Heroic Inspiration"),
+                UnevaluatedMechanic("passive.awareness", "passive-value", "Awareness"),
+                UnevaluatedMechanic("training.armor.light", "training", "Light Armor"),
+                UnevaluatedMechanic("proficiency.weapon.simple", "proficiency", "Simple Weapons"),
+                UnevaluatedMechanic("sense.darkvision", "sense", "Darkvision")),
+            null);
+
+        Assert.NotNull(mechanics.Inspiration);
+        Assert.Equal("resource.heroic-inspiration", mechanics.Inspiration.Key);
+        Assert.Equal("-", mechanics.Inspiration.EffectiveValue);
+        Assert.Single(mechanics.PassiveValues!);
+        Assert.Equal(2, mechanics.Training!.Count);
+        Assert.Single(mechanics.Senses!);
+        Assert.Null(mechanics.HealthTracks);
+    }
+
+    [Fact]
     public void MovementMechanicsProjectEveryBackendDefinedModeWithoutFrontendAssumptions()
     {
         var mechanics = CharacterPresentationProjector.ProjectMechanics(

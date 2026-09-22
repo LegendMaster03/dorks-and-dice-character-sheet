@@ -208,6 +208,8 @@ test("section-tab CSS preserves long labels and delegates narrow overflow to the
     assert.match(buttonBlock, /min-width:\s*max-content/);
     assert.doesNotMatch(buttonBlock, /min-width:\s*0/);
     assert.match(buttonBlock, /border-inline-end:/);
+    assert.match(css, /@media \(min-width: 1100px\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*overflow-x:\s*visible;/s);
+    assert.match(css, /@media \(min-width: 1100px\)[\s\S]*?\.dd-primary-nav__button\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*0;/s);
 });
 
 test("player-facing setup copy avoids architecture-first terminology", async () => {
@@ -364,6 +366,22 @@ test("Character-owned current HP overrides mechanics presentation and is editabl
     assert.equal(byAttribute(card, "data-health-editor", "true").length, 1);
 });
 
+test("top strip reserves Inspiration and renders a supplied resource without inventing state", () => {
+    const empty = render("actions", null);
+    const emptyCard = byClass(empty, "dd-stat--inspiration")[0];
+    assert.ok(emptyCard);
+    assert.equal(emptyCard.getAttribute("data-inspiration-state"), "unavailable");
+    assert.match(visibleText(emptyCard), /Inspiration\s+-/);
+
+    const supplied = render("actions", {
+        inspiration: mechanical("resource.heroic-inspiration", "Heroic Inspiration", "1")
+    });
+    const card = byClass(supplied, "dd-stat--inspiration")[0];
+    assert.equal(card.getAttribute("data-inspiration-state"), "resolved");
+    assert.equal(byAttribute(card, "data-mechanic-key", "resource.heroic-inspiration").length, 1);
+    assert.match(visibleText(card), /Inspiration\s+1/);
+});
+
 test("top-row Hit Points card keeps current, max, temporary, and nonlethal values dense and distinct", () => {
     const rendered = render("actions", {
         healthTracks: [
@@ -496,13 +514,29 @@ test("wide shell keeps top statistics full-width and moves persistent facts bene
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
 });
 
-test("support scaffolds do not invent edition-specific passive values or training categories", () => {
-    const rendered = render("actions", null);
-    const text = visibleText(rendered);
-    assert.match(text, /Passive Values/);
-    assert.match(text, /Proficiencies & Training/);
-    assert.doesNotMatch(text, /Passive Values\s+Perception|Passive Values\s+Investigation|Proficiencies & Training\s+Armor/);
-    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 2);
+test("support surfaces stay neutral when unavailable and consume supplied values without edition guesses", () => {
+    const empty = render("actions", null);
+    const emptyText = visibleText(empty);
+    assert.match(emptyText, /Passive Values/);
+    assert.match(emptyText, /Senses/);
+    assert.match(emptyText, /Proficiencies & Training/);
+    assert.doesNotMatch(emptyText, /Passive Values\s+Perception|Proficiencies & Training\s+Armor/);
+    assert.equal(byAttribute(empty, "data-support-scaffold-state", "unavailable").length, 3);
+
+    const supplied = render("actions", {
+        passiveValues: [mechanical("passive.awareness", "Awareness", "17")],
+        senses: [mechanical("sense.darkvision", "Darkvision", "60 ft.")],
+        training: [mechanical("training.armor.light", "Light Armor", "Proficient")],
+        competencies: { entries: [
+            mechanical("tool.alchemist", "Alchemist's Supplies", "-", {
+                kind: "tool", training: "Proficient"
+            })
+        ] }
+    });
+    assert.match(visibleText(supplied), /Awareness\s+17/);
+    assert.match(visibleText(supplied), /Darkvision\s+60 ft\./);
+    assert.match(visibleText(supplied), /Light Armor\s+Proficient/);
+    assert.match(visibleText(supplied), /Alchemist's Supplies\s+Proficient/);
 });
 
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
@@ -526,7 +560,7 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
         assert.ok(text.includes(label), label);
     }
 
-    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 2);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 3);
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 0);
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 0);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);

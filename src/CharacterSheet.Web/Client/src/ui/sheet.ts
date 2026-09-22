@@ -21,10 +21,14 @@ import { renderDefenseMechanicsCard } from "../features/defense/defense.js";
 import { renderRestControls } from "../features/health/health.js";
 import {
     createButton,
-    createElement,
-    createSectionCard
+    createElement
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
+import {
+    renderPassiveValuesCard,
+    renderSensesCard,
+    renderTrainingCard
+} from "../features/support/support-values.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
@@ -115,8 +119,9 @@ export function renderCharacterWorkspace(
     const support = createElement("section", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderSupportScaffoldCard("Passive Values", []),
-        renderSupportScaffoldCard("Proficiencies & Training", [])
+        renderPassiveValuesCard(mechanics),
+        renderSensesCard(mechanics),
+        renderTrainingCard(mechanics)
     );
 
     const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
@@ -371,32 +376,6 @@ function renderReadOnlyBanner(archived: boolean): HTMLElement {
             : "Editing is unavailable for this Character Sheet state.");
     banner.append(title, message);
     return banner;
-}
-
-function renderSupportScaffoldCard(
-    title: string,
-    values: readonly (readonly [string, string])[]
-): HTMLElement {
-    const card = createSectionCard(title, "dd-support-card dd-support-scaffold");
-    const list = createElement("div", "dd-support-scaffold__list");
-    if (values.length === 0) {
-        card.setAttribute("data-support-scaffold-state", "unavailable");
-        const row = createElement("div", "dd-support-scaffold__row dd-support-scaffold__row--empty");
-        row.append(createElement("strong", "dd-support-scaffold__value", "-"));
-        list.append(row);
-    } else {
-        card.setAttribute("data-support-scaffold-state", "resolved");
-        for (const [key, label] of values) {
-            const row = createElement("div", "dd-support-scaffold__row");
-            row.setAttribute("data-support-scaffold-key", key);
-            row.append(
-                createElement("span", "dd-support-scaffold__label", label),
-                createElement("strong", "dd-support-scaffold__value", "-"));
-            list.append(row);
-        }
-    }
-    card.append(list);
-    return card;
 }
 
 function legacyAdvancementHeaderSummary(

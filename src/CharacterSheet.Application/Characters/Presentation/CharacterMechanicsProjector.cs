@@ -43,6 +43,22 @@ internal static class CharacterMechanicsProjector
             checkByMechanicKey,
             evaluationByKey);
 
+        var inspiration = MechanicalCollectionProjector.ProjectInspiration(
+            catalog.Mechanics,
+            evaluationByKey);
+        var passiveValues = MechanicalCollectionProjector.ProjectCalculatedValues(
+            catalog.Mechanics,
+            evaluationByKey,
+            "passive-value");
+        var training = MechanicalCollectionProjector.ProjectCalculatedValues(
+            catalog.Mechanics,
+            evaluationByKey,
+            "proficiency",
+            "training");
+        var senses = MechanicalCollectionProjector.ProjectCalculatedValues(
+            catalog.Mechanics,
+            evaluationByKey,
+            "sense");
         var savingThrows = MechanicalCollectionProjector.ProjectSavingThrows(
             catalog.Mechanics,
             evaluationByKey);
@@ -62,6 +78,10 @@ internal static class CharacterMechanicsProjector
             evaluationByKey);
 
         return new CharacterMechanicsPresentationView(
+            Inspiration: inspiration,
+            PassiveValues: passiveValues.Length == 0 ? null : passiveValues,
+            Training: training.Length == 0 ? null : training,
+            Senses: senses.Length == 0 ? null : senses,
             SavingThrows: savingThrows.Length == 0 ? null : savingThrows,
             Defenses: defenses.Length == 0 ? null : new DefenseGroupPresentationView(defenses),
             CombatFundamentals: combat.Length == 0 ? null : combat,
