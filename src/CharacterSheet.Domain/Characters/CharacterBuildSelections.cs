@@ -73,20 +73,6 @@ public sealed class CharacterFoundationalRuleSelection
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
-    internal void SetLevel(int level, DateTimeOffset changedAt)
-    {
-        if (level <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(level), "Advancement level must be positive.");
-        }
-
-        Level = level;
-        if (changedAt > UpdatedAt)
-        {
-            UpdatedAt = changedAt;
-        }
-    }
-
     internal void ReplaceRule(string ruleConceptKey, DateTimeOffset changedAt)
     {
         RuleConceptKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
@@ -163,6 +149,20 @@ public sealed class CharacterAdvancementEntry
     public DateTimeOffset CreatedAt { get; private set; }
 
     public DateTimeOffset UpdatedAt { get; private set; }
+
+    internal void SetLevel(int level, DateTimeOffset changedAt)
+    {
+        if (level <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(level), "Advancement level must be positive.");
+        }
+
+        Level = level;
+        if (changedAt > UpdatedAt)
+        {
+            UpdatedAt = changedAt;
+        }
+    }
 
     internal void ReplaceRule(string ruleConceptKey, DateTimeOffset changedAt)
     {
