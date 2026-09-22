@@ -33,6 +33,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasMaxLength(64)
                 .HasColumnType("character varying(64)");
 
+            b.Property<int?>("Level")
+                .HasColumnType("integer");
+
             b.Property<int?>("Ordinal")
                 .HasColumnType("integer");
 

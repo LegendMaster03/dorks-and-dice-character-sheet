@@ -73,6 +73,20 @@ public sealed class CharacterFoundationalRuleSelection
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    internal void SetLevel(int level, DateTimeOffset changedAt)
+    {
+        if (level <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(level), "Advancement level must be positive.");
+        }
+
+        Level = level;
+        if (changedAt > UpdatedAt)
+        {
+            UpdatedAt = changedAt;
+        }
+    }
+
     internal void ReplaceRule(string ruleConceptKey, DateTimeOffset changedAt)
     {
         RuleConceptKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
@@ -96,11 +110,16 @@ public sealed class CharacterAdvancementEntry
         string ruleConceptKey,
         int? ordinal,
         Guid? parentAdvancementEntryId,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        int? level = null)
     {
         if (ordinal < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(ordinal), "Advancement ordinal can not be negative.");
+        }
+        if (level is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(level), "Advancement level must be positive when supplied.");
         }
 
         Id = id;
@@ -109,6 +128,7 @@ public sealed class CharacterAdvancementEntry
         RuleConceptKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
         Ordinal = ordinal;
         ParentAdvancementEntryId = parentAdvancementEntryId;
+        Level = level;
         CreatedAt = createdAt;
         UpdatedAt = createdAt;
     }
@@ -133,6 +153,12 @@ public sealed class CharacterAdvancementEntry
     /// must belong to the same Character.
     /// </summary>
     public Guid? ParentAdvancementEntryId { get; private set; }
+
+    /// <summary>
+    /// Character-owned level in this Class or Prestige Class occurrence. Subclass effective level
+    /// follows its parent Class occurrence when building the Rules Core projection.
+    /// </summary>
+    public int? Level { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
 

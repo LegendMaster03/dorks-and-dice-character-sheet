@@ -167,7 +167,8 @@ public sealed class CharacterSheetRoot
                 normalizedConceptKey,
                 0,
                 null,
-                changedAt);
+                changedAt,
+                level: 1);
             AdvancementEntries.Add(entry);
         }
         else
@@ -358,9 +359,37 @@ public sealed class CharacterSheetRoot
             CharacterRuleReference.NormalizeConceptKey(ruleConceptKey),
             ordinal,
             parentAdvancementEntryId,
-            createdAt);
+            createdAt,
+            level: kind is CharacterAdvancementKind.Class or CharacterAdvancementKind.PrestigeClass
+                ? 1
+                : null);
         AdvancementEntries.Add(entry);
         Touch(createdAt);
+        return entry;
+    }
+
+    public CharacterAdvancementEntry SetAdvancementLevel(
+        Guid advancementEntryId,
+        int level,
+        DateTimeOffset changedAt)
+    {
+        if (advancementEntryId == Guid.Empty)
+        {
+            throw new ArgumentException("Advancement entry ID can not be empty.", nameof(advancementEntryId));
+        }
+
+        var entry = AdvancementEntries.SingleOrDefault(value => value.Id == advancementEntryId)
+            ?? throw new KeyNotFoundException("Character advancement entry was not found.");
+
+        if (entry.Kind is not CharacterAdvancementKind.Class
+            and not CharacterAdvancementKind.PrestigeClass)
+        {
+            throw new InvalidOperationException(
+                "Only Class and Prestige Class advancement occurrences own an independent level.");
+        }
+
+        entry.SetLevel(level, changedAt);
+        Touch(changedAt);
         return entry;
     }
 

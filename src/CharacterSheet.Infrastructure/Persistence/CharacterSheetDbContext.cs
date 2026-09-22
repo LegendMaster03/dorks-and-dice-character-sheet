@@ -108,6 +108,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .IsRequired();
         advancement.Property(value => value.Ordinal);
         advancement.Property(value => value.ParentAdvancementEntryId);
+        advancement.Property(value => value.Level);
         advancement.Property(value => value.CreatedAt)
             .IsRequired();
         advancement.Property(value => value.UpdatedAt)
