@@ -705,12 +705,12 @@
 
 .dd-skill-row {
     display: grid;
-    grid-template-columns: 1.8rem 2.15rem minmax(0, 1fr) minmax(2.1rem, max-content);
-    gap: 0.28rem;
+    grid-template-columns: 1.15rem 1.4rem minmax(0, 1fr) max-content;
+    gap: 0.12rem;
     align-items: center;
     min-width: 0;
     min-height: 1.3rem;
-    padding: 0.08rem 0.28rem;
+    padding: 0.06rem 0.14rem;
     background: var(--dd-sheet-surface-muted);
 }
 
@@ -768,14 +768,14 @@
 }
 
 .dd-skill-row__training--other {
-    width: auto;
-    min-width: 1.7rem;
-    max-width: 1.8rem;
-    height: 1rem;
-    padding: 0 0.12rem;
+    width: 1.15rem;
+    min-width: 1.15rem;
+    max-width: 1.15rem;
+    height: 0.9rem;
+    padding: 0;
     border-radius: 999px;
-    font-size: 0.48rem;
-    letter-spacing: 0.02em;
+    font-size: 0.4rem;
+    letter-spacing: 0;
 }
 
 .dd-skill-row__name {

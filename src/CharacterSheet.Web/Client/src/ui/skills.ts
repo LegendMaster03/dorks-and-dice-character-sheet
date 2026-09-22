@@ -225,9 +225,9 @@ function classifyTrainingMarker(training: string): TrainingMarkerState {
 function abbreviateTrainingState(training: string): string {
     const words = training.trim().split(/\s+/).filter(Boolean);
     if (words.length > 1) {
-        return words.map(word => word[0] ?? "").join("").slice(0, 4).toUpperCase();
+        return words.map(word => word[0] ?? "").join("").slice(0, 2).toUpperCase();
     }
-    return training.slice(0, 4).toUpperCase();
+    return training.slice(0, 2).toUpperCase();
 }
 
 function renderCompositeDetails(
