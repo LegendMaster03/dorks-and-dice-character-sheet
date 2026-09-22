@@ -120,8 +120,8 @@ internal static class MechanicalCollectionProjector
     {
         var key = NormalizeIdentity(value.MechanicKey);
         var label = NormalizeIdentity(value.DisplayName);
-        return key is "inspiration" or "resourceinspiration" or "heroinspiration" or "resourceheroinspiration"
-            || label is "inspiration" or "heroinspiration";
+        return key is "inspiration" or "resourceinspiration" or "heroicinspiration" or "resourceheroicinspiration"
+            || label is "inspiration" or "heroicinspiration";
     }
 
     private static string NormalizeIdentity(string value) =>
