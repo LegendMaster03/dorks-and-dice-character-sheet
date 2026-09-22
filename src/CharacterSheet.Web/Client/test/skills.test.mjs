@@ -317,5 +317,7 @@ test("production Character Sheet drives competencies from the nullable mechanics
     assert.doesNotMatch(sheetSource, /renderSkillsCard\(null\)/);
     assert.match(sheetSource, /mechanics\?\.competencies === undefined/);
     assert.match(sheetSource, /buildCompetencyPresentation\(mechanics\.competencies\)/);
-    assert.match(sheetSource, /renderSkillsCard\(competencyPresentation\)/);
+    assert.match(sheetSource, /renderSkillsCard\(\s*competencyPresentation,\s*\{/);
+    assert.match(sheetSource, /onSetRank:\s*handlers\.rules\.setCompetencyRank/);
+    assert.match(sheetSource, /onClearRank:\s*handlers\.rules\.clearCompetencyRank/);
 });
