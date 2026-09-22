@@ -284,6 +284,20 @@ export interface CharacterRuleChoiceView {
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
+export interface CharacterRecoveryProcedureView {
+    procedureKey: string;
+    displayName: string;
+    applicabilityState: string;
+    presentationRole?: string;
+    requiresCharacterState?: boolean;
+    requiresPlayerChoices?: boolean;
+    requiresRolls?: boolean;
+    requiresResourceExpenditure?: boolean;
+    requiresOtherRuntimeFacts?: boolean;
+    missingCapabilityKeys?: readonly string[];
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
 export interface CharacterProjectionConflictView {
     conflictKey: string;
     kind: string;
@@ -316,6 +330,7 @@ export interface CharacterMechanicsView {
     characterMetadata?: readonly CalculatedMechanicalValueView[];
     ruleChoices?: readonly CharacterRuleChoiceView[];
     projectionConflicts?: readonly CharacterProjectionConflictView[];
+    recoveryProcedures?: readonly CharacterRecoveryProcedureView[];
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
