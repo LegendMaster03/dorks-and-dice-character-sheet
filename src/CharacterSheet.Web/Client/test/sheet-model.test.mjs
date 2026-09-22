@@ -320,14 +320,16 @@ test("responsive shell uses persistent presentation scaffolds without fabricatin
     assert.match(sheetSource, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(sheetSource, /renderCombatFundamentalsCard\(mechanics\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
-    assert.doesNotMatch(sheetSource, /renderSavingThrowsCard/);
+    assert.doesNotMatch(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
+    assert.match(sheetSource, /renderSavingThrowsCard\(unmappedSavingThrows\)/);
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 
 test("deployed-density polish keeps primary tabs on one line and saves integrated into Ability cards", () => {
     assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*white-space:\s*nowrap;/s);
     assert.match(css, /\.dd-sheet-mode-bar\s*\{[^}]*padding:\s*0\.4rem/s);
-    assert.doesNotMatch(sheetSource, /renderSavingThrowsCard/);
+    assert.doesNotMatch(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
+    assert.match(sheetSource, /renderSavingThrowsCard\(unmappedSavingThrows\)/);
 });
 
 test("embedded module loads its stylesheet from the same Tool Module asset subtree", () => {
