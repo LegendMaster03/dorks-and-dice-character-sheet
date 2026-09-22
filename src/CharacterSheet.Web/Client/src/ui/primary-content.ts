@@ -14,6 +14,7 @@ import {
 import { renderFeaturesSection } from "../features/features/features-section.js";
 import { renderInventorySection } from "../features/inventory/inventory-section.js";
 import { renderNotesSection } from "../features/notes/notes-section.js";
+import { renderKnownSpellsSection } from "../features/spells/known-spells.js";
 
 export function renderPrimaryContent(
     activeSection: SheetSection,
@@ -105,18 +106,26 @@ export function renderPrimaryContent(
             panel.append(presentation);
             break;
         }
-        case "spells":
-            panel.append(renderSpellcastingPresentation(
-                mechanics?.spellcastingProfiles,
-                {
-                    readOnly: readOnly || routine.status !== "ready" || routine.state === null,
-                    savingResourceKey: routine.mutation?.kind === "rules-input-update"
-                        && routine.mutation.entryId?.startsWith("resource:")
-                        ? routine.mutation.entryId.slice("resource:".length)
-                        : null,
-                    onSetResource: handlers.rules.setResource
-                }));
+        case "spells": {
+            const presentation = createElement("div", "dd-spell-workflows");
+            presentation.append(
+                renderSpellcastingPresentation(
+                    mechanics?.spellcastingProfiles,
+                    {
+                        readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+                        savingResourceKey: routine.mutation?.kind === "rules-input-update"
+                            && routine.mutation.entryId?.startsWith("resource:")
+                            ? routine.mutation.entryId.slice("resource:".length)
+                            : null,
+                        onSetResource: handlers.rules.setResource
+                    }),
+                renderKnownSpellsSection(
+                    routine,
+                    readOnly,
+                    handlers.spells));
+            panel.append(presentation);
             break;
+        }
         default:
             panel.append(
                 createElement(
