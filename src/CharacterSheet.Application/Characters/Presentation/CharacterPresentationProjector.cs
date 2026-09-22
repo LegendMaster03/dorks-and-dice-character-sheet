@@ -21,4 +21,9 @@ public static class CharacterPresentationProjector
         RulesCoreMechanicsCatalogView catalog,
         RulesCoreMechanicsBatchEvaluationView? batchEvaluation) =>
         CharacterMechanicsProjector.Project(catalog, batchEvaluation);
+
+    public static CharacterMechanicsPresentationView ProjectCharacterRules(
+        CharacterMechanicsPresentationView? fallback,
+        RulesCoreCharacterRulesProjectionView projection) =>
+        RulesCoreCharacterProjectionProjector.Apply(fallback, projection);
 }

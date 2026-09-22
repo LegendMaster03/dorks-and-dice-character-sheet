@@ -32,6 +32,21 @@ internal static class SourceAttributionMapper
         return mapped.Length == 0 ? null : mapped;
     }
 
+    internal static IReadOnlyList<SourceAttributionPresentationView>? Map(
+        RulesCoreCharacterMechanicProvenanceView? provenance)
+    {
+        if (provenance is null)
+        {
+            return null;
+        }
+
+        return Map(
+            provenance.EffectiveRule
+                .Concat(provenance.MechanicalProfile)
+                .Concat(provenance.CanonicalConcept)
+                .ToArray());
+    }
+
     private static SourceAttributionPresentationView MapOne(
         RulesCoreMechanicSourceAttributionView source)
     {
