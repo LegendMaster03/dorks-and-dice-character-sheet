@@ -575,7 +575,7 @@
 
 .dd-sheet__dashboard {
     display: grid;
-    grid-template-columns: minmax(20rem, 0.8fr) minmax(0, 3.2fr);
+    grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
     gap: var(--dd-sheet-space-3);
     align-items: start;
     padding: var(--dd-sheet-space-3) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
@@ -1693,7 +1693,7 @@
 
 .dd-sheet-screen {
     width: 100%;
-    max-width: 120rem;
+    max-width: none;
     margin: 0 auto;
     padding: clamp(0.75rem, 1.5vw, 1.5rem);
 }

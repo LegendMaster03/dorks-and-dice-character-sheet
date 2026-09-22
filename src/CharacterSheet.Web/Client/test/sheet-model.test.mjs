@@ -266,7 +266,7 @@ test("UI shell defines materially different tablet and mobile compositions", () 
 });
 
 test("desktop sheet uses the available viewport and one equal-width top-stat grid", () => {
-    assert.match(css, /\.dd-sheet-screen\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*120rem;/s);
+    assert.match(css, /\.dd-sheet-screen\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*none;/s);
     assert.match(css, /\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(13,\s*minmax\(0,\s*1fr\)\)/s);
     assert.match(css, /\.dd-core-stats__abilities,\s*\.dd-core-stats__quick\s*\{[^}]*display:\s*contents;/s);
 });
@@ -303,7 +303,7 @@ test("retired workspace grid selectors are removed after the reference-layout co
 });
 
 test("wide layout uses a full-width top strip, a persistent left rail, and a broad primary workspace", () => {
-    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*grid-template-columns:\s*minmax\(20rem,\s*0\.8fr\)\s+minmax\(0,\s*3\.2fr\)/s);
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*grid-template-columns:\s*minmax\(20rem,\s*24rem\)\s+minmax\(0,\s*1fr\)/s);
     assert.match(css, /\.dd-sheet__top-row\s*\{[^}]*padding:/s);
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__skills"\)/);
     assert.match(sheetSource, /skillsColumn\.append\(support, mechanicsColumn\)/);

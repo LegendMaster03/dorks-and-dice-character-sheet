@@ -1,5 +1,7 @@
 # Character systems readiness audit
 
+> **Status note — September 2026:** This document is a historical readiness audit and preserves the state of the project at the commits named below. It is not the current presentation-contract status. The current Character presentation bridge is documented in [character-mechanics-presentation-contract.md](character-mechanics-presentation-contract.md). The current bridge can consume backend/Rules Core supplied Ability values and modifiers, saving throws, movement, defenses, combat fundamentals, health resources, Inspiration, passive values, senses, proficiency/training, competencies (including composite relationships), checks, and procedures without moving rules arithmetic into the browser. Product decisions such as Background semantics, generalized advancement/leveling, spell state, rich inventory state, and generic overrides remain separate unresolved work.
+
 This audit is based on Character Sheet `main` at
 `fcd823c6b833c624170cd68942c9ebb1eb3f8467` and Rules Core `main` at
 `650868cfa616d33672089cbe91c78ee471b33904`, verified before this implementation pass.
