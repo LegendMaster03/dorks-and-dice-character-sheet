@@ -254,6 +254,25 @@ test("Ability cards pair effective score, modifier, and matching Ability save", 
     assert.match(visibleText(strength), /Save\s+\+6/);
 });
 
+test("3.x Fortitude, Reflex, and Will saves occupy their governing Ability cards without a separate save panel", () => {
+    const rendered = render("actions", {
+        savingThrows: [
+            mechanical("save.fortitude", "Fortitude Save", "+8"),
+            mechanical("save.reflex", "Reflex Save", "+5"),
+            mechanical("save.will", "Will Save", "+7")
+        ]
+    });
+
+    const constitution = byAttribute(rendered, "data-ability-key", "constitution")[0];
+    const dexterity = byAttribute(rendered, "data-ability-key", "dexterity")[0];
+    const wisdom = byAttribute(rendered, "data-ability-key", "wisdom")[0];
+
+    assert.match(visibleText(constitution), /Fort Save\s+\+8/);
+    assert.match(visibleText(dexterity), /Ref Save\s+\+5/);
+    assert.match(visibleText(wisdom), /Will Save\s+\+7/);
+    assert.equal(byClass(rendered, "dd-saving-throws-card").length, 0);
+});
+
 test("workspace consumes supplied saving throws, competencies, combat, actions, movement, checks, and procedures", () => {
     const mechanics = {
         savingThrows: [mechanical("fort", "Fortitude", "+8")],
@@ -472,7 +491,7 @@ test("wide shell keeps top statistics full-width and moves persistent facts bene
     assert.equal(walk(skills).includes(support), true);
     assert.equal(walk(skills).includes(mechanicsColumn), true);
     assert.equal(walk(skills).includes(main), false);
-    assert.equal(byClass(rendered, "dd-saving-throws-card").length, 1);
+    assert.equal(byClass(rendered, "dd-saving-throws-card").length, 0);
     assert.equal(byClass(rendered, "dd-defense-card").length, 1);
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
 });
@@ -499,9 +518,6 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
         "Flat-Footed AC",
         "Damage Reduction",
         "Spell Resistance",
-        "Fortitude Save",
-        "Reflex Save",
-        "Will Save",
         "Hit Points",
         "Nonlethal Damage",
         "Base Attack Bonus",

@@ -68,7 +68,7 @@ export function renderAbilityScoreCard(
                 attributes: { "data-ability-modifier": definition.key }
             },
             {
-                label: "Save",
+                label: abilitySaveLabel(savingThrow, definition),
                 value: savingThrow === undefined ? "-" : formatMechanicalValue(savingThrow),
                 className: "dd-ability-stat__save",
                 attributes: saveAttributes
@@ -149,9 +149,32 @@ export function findAbilitySavingThrow(
         if (governing === abilityKey || governing === abilityLabel) return true;
 
         const key = save.key.trim().toLowerCase();
-        return key === `save.${abilityKey}`
-            || key === `saving-throw.${abilityKey}`;
+        if (key === `save.${abilityKey}`
+            || key === `saving-throw.${abilityKey}`) return true;
+
+        return (abilityKey === "constitution"
+                && (key === "save.fortitude" || key === "saving-throw.fortitude"))
+            || (abilityKey === "dexterity"
+                && (key === "save.reflex" || key === "saving-throw.reflex"))
+            || (abilityKey === "wisdom"
+                && (key === "save.will" || key === "saving-throw.will"));
     });
+}
+
+function abilitySaveLabel(
+    savingThrow: SavingThrowView | undefined,
+    definition: AbilityScoreDefinition
+): string {
+    if (savingThrow === undefined) return "Save";
+    const key = savingThrow.key.trim().toLowerCase();
+    if (key === `save.${definition.key}`
+        || key === `saving-throw.${definition.key}`) {
+        return "Save";
+    }
+    if (key === "save.fortitude" || key === "saving-throw.fortitude") return "Fort Save";
+    if (key === "save.reflex" || key === "saving-throw.reflex") return "Ref Save";
+    if (key === "save.will" || key === "saving-throw.will") return "Will Save";
+    return savingThrow.label;
 }
 
 function renderAbilityMechanicalDetails(value: CalculatedMechanicalValueView): HTMLElement | null {

@@ -19,7 +19,6 @@ import {
 import { renderCombatFundamentalsCard } from "../features/combat/combat.js";
 import { renderDefenseMechanicsCard } from "../features/defense/defense.js";
 import { renderRestControls } from "../features/health/health.js";
-import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
 import {
     createButton,
     createElement,
@@ -116,7 +115,6 @@ export function renderCharacterWorkspace(
     const support = createElement("section", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
     support.append(
-        renderSavingThrowsCard(mechanics?.savingThrows),
         renderSupportScaffoldCard("Passive Values", []),
         renderSupportScaffoldCard("Proficiencies & Training", [])
     );

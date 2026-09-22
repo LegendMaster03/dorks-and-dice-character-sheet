@@ -109,7 +109,7 @@ If an effective Ability entry uses a key that is not one of the six current stru
 
 Omitted or unmatched effective data never causes the frontend to calculate a value or modifier. The browser does not implement an Ability modifier formula and does not assume a relationship such as `(score - 10) / 2`.
 
-The six structural Ability cards use the same dense primary/subordinate pattern as Armor Class. The effective score occupies the primary region. The subordinate row contains the supplied **Modifier** and the matching **Save**. Saving throws are associated by normalized `governingAbility` when supplied, with stable Ability-save mechanic keys as a compatibility fallback. Missing modifiers or saves render as `-`; the frontend never derives either value.
+The six structural Ability cards use the same dense primary/subordinate pattern as Armor Class. The effective score occupies the primary region. The subordinate row contains the supplied **Modifier** and the matching **Save**. Saving throws are associated by normalized `governingAbility` when supplied, with stable save mechanic keys as a compatibility fallback. The backend annotates the standard six Ability saves and the 3.x Fortitude/Reflex/Will keys with their governing Abilities for presentation; it does not calculate the save relationship in the browser. Fortitude appears with Constitution, Reflex with Dexterity, and Will with Wisdom. Missing modifiers or saves render as `-`; the frontend never derives a save value. The normal Character Sheet does not render a second standalone Saving Throws card.
 
 ## Unresolved support surfaces
 
@@ -119,7 +119,7 @@ The Character Sheet keeps **Passive Values** and **Proficiencies & Training** vi
 
 `SavingThrowView` extends the calculated-value primitive with optional `governingAbility` and `training`.
 
-The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six ability saves, or another rule-defined save model. The frontend never computes a save value. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping the named save row. Separately, the Character Sheet keeps its agreed Fortitude/Reflex/Will presentation slots visible with `-` when the mechanics projection is absent or incomplete. Those slots are presentation scaffolds, not fabricated Rules Core definitions; backend-supplied saves replace matching scaffold slots and additional supplied save models remain renderable. If the supplied save model is not Fortitude/Reflex/Will, the arbitrary backend collection renders without forcing the three-save scaffold onto it.
+The collection is arbitrary. A backend may supply Fortitude/Reflex/Will, six Ability saves, or another rule-defined save model. The frontend never computes a save value. When Rules Core supplies a saving-throw definition but Character-specific inputs are not yet sufficient to evaluate it, the backend keeps that save in the projection with `-` as its value rather than dropping it. Saving throws that identify a governing Ability are presented inside that Ability card. Standard 3.x Fortitude/Reflex/Will keys are annotated by the backend so they use the same combined Ability presentation. Unmapped future save models remain valid projection data but are not forced into an unrelated Ability card.
 
 ## Defenses
 

@@ -132,7 +132,6 @@ export interface MechanicPlaceholderDefinition {
 
 export const MECHANIC_PLACEHOLDERS: readonly MechanicPlaceholderDefinition[] = [
     { id: "movement", label: "Movement", message: "Speed is not available yet.", group: "quick" },
-    { id: "saving-throws", label: "Saving Throws", message: "Saving throw modifiers are not available yet.", group: "support" },
     { id: "skills", label: "Skills", message: "Combined skill values are not available yet.", group: "support" },
     { id: "passive-values", label: "Passive Values", message: "Passive values are not available yet.", group: "support" },
     { id: "training", label: "Proficiencies & Training", message: "Armor, weapon, tool, language, and other training data is not available yet.", group: "support" },

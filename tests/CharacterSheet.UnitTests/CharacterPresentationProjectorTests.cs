@@ -289,18 +289,21 @@ public sealed class CharacterPresentationProjectorTests
                 Assert.Equal("save.fortitude", save.Key);
                 Assert.Equal("Fortitude Save", save.Label);
                 Assert.Equal("-", save.EffectiveValue);
+                Assert.Equal("constitution", save.GoverningAbility);
             },
             save =>
             {
                 Assert.Equal("save.reflex", save.Key);
                 Assert.Equal("Reflex Save", save.Label);
                 Assert.Equal("-", save.EffectiveValue);
+                Assert.Equal("dexterity", save.GoverningAbility);
             },
             save =>
             {
                 Assert.Equal("save.will", save.Key);
                 Assert.Equal("Will Save", save.Label);
                 Assert.Equal("-", save.EffectiveValue);
+                Assert.Equal("wisdom", save.GoverningAbility);
             });
     }
 
