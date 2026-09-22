@@ -450,9 +450,76 @@ public sealed class CharacterSheetRoot
             return false;
         }
 
+        foreach (var child in InventoryItemOccurrences.Where(
+            value => value.ContainerOccurrenceId == occurrence.Id))
+        {
+            child.ReplaceState(
+                child.Quantity,
+                child.IsCarried,
+                child.IsEquipped,
+                child.IsAttuned,
+                null,
+                changedAt);
+        }
+
         InventoryItemOccurrences.Remove(occurrence);
         Touch(changedAt);
         return true;
+    }
+
+    public CharacterInventoryItemOccurrence UpdateInventoryItemOccurrence(
+        Guid occurrenceId,
+        int quantity,
+        bool isCarried,
+        bool isEquipped,
+        bool isAttuned,
+        Guid? containerOccurrenceId,
+        DateTimeOffset changedAt)
+    {
+        if (occurrenceId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Inventory occurrence ID can not be empty.",
+                nameof(occurrenceId));
+        }
+
+        var occurrence = InventoryItemOccurrences.SingleOrDefault(value => value.Id == occurrenceId)
+            ?? throw new KeyNotFoundException("Inventory occurrence was not found.");
+
+        if (containerOccurrenceId is Guid containerId)
+        {
+            var container = InventoryItemOccurrences.SingleOrDefault(value => value.Id == containerId)
+                ?? throw new KeyNotFoundException("Inventory container occurrence was not found.");
+            if (container.CharacterId != CharacterId)
+            {
+                throw new InvalidOperationException(
+                    "Inventory container must belong to the same Character.");
+            }
+
+            var cursor = container;
+            while (cursor.ContainerOccurrenceId is Guid parentId)
+            {
+                if (parentId == occurrence.Id)
+                {
+                    throw new InvalidOperationException(
+                        "Inventory containers can not form a cycle.");
+                }
+
+                cursor = InventoryItemOccurrences.SingleOrDefault(value => value.Id == parentId)
+                    ?? throw new InvalidOperationException(
+                        "Inventory container hierarchy contains an unavailable occurrence.");
+            }
+        }
+
+        occurrence.ReplaceState(
+            quantity,
+            isCarried,
+            isEquipped,
+            isAttuned,
+            containerOccurrenceId,
+            changedAt);
+        Touch(changedAt);
+        return occurrence;
     }
 
     public CharacterNote AddNote(string content, DateTimeOffset createdAt)

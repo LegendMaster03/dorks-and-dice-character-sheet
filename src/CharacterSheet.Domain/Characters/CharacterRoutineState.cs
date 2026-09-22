@@ -24,7 +24,12 @@ public sealed class CharacterInventoryItemOccurrence
         Id = id;
         CharacterId = characterId;
         RuleConceptKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
+        Quantity = 1;
+        IsCarried = true;
+        IsEquipped = false;
+        IsAttuned = false;
         CreatedAt = createdAt;
+        UpdatedAt = createdAt;
     }
 
     public Guid Id { get; private set; }
@@ -37,7 +42,49 @@ public sealed class CharacterInventoryItemOccurrence
     /// </summary>
     public string RuleConceptKey { get; private set; } = string.Empty;
 
+    public int Quantity { get; private set; }
+
+    public bool IsCarried { get; private set; }
+
+    public bool IsEquipped { get; private set; }
+
+    public bool IsAttuned { get; private set; }
+
+    public Guid? ContainerOccurrenceId { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
+
+    public DateTimeOffset UpdatedAt { get; private set; }
+
+    internal void ReplaceState(
+        int quantity,
+        bool isCarried,
+        bool isEquipped,
+        bool isAttuned,
+        Guid? containerOccurrenceId,
+        DateTimeOffset changedAt)
+    {
+        if (quantity <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(quantity), "Inventory quantity must be positive.");
+        }
+        if (containerOccurrenceId == Id)
+        {
+            throw new ArgumentException(
+                "An inventory occurrence can not contain itself.",
+                nameof(containerOccurrenceId));
+        }
+
+        Quantity = quantity;
+        IsCarried = isCarried;
+        IsEquipped = isEquipped;
+        IsAttuned = isAttuned;
+        ContainerOccurrenceId = containerOccurrenceId;
+        if (changedAt > UpdatedAt)
+        {
+            UpdatedAt = changedAt;
+        }
+    }
 }
 
 public sealed class CharacterNote

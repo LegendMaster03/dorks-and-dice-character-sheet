@@ -109,15 +109,43 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<Guid>("CharacterId")
                 .HasColumnType("uuid");
 
+            b.Property<Guid?>("ContainerOccurrenceId")
+                .HasColumnType("uuid");
+
             b.Property<DateTimeOffset>("CreatedAt")
                 .HasColumnType("timestamp with time zone");
+
+            b.Property<bool>("IsAttuned")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("boolean")
+                .HasDefaultValue(false);
+
+            b.Property<bool>("IsCarried")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("boolean")
+                .HasDefaultValue(true);
+
+            b.Property<bool>("IsEquipped")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("boolean")
+                .HasDefaultValue(false);
+
+            b.Property<int>("Quantity")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("integer")
+                .HasDefaultValue(1);
 
             b.Property<string>("RuleConceptKey")
                 .IsRequired()
                 .HasMaxLength(300)
                 .HasColumnType("character varying(300)");
 
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
             b.HasKey("Id");
+
+            b.HasIndex("CharacterId", "ContainerOccurrenceId");
 
             b.HasIndex("CharacterId", "RuleConceptKey");
 
