@@ -220,7 +220,7 @@ function stateCheckbox(
     const input = createElement("input");
     input.type = "checkbox";
     input.checked = checked;
-    label.append(input, document.createTextNode(labelText));
+    label.append(input, createElement("span", undefined, labelText));
     return { label, input };
 }
 
