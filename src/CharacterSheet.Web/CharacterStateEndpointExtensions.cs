@@ -48,6 +48,104 @@ public static class CharacterStateEndpointExtensions
             }
         });
 
+        app.MapPut("/api/characters/{characterId:guid}/state/rules-inputs", async (
+            Guid characterId,
+            CharacterRulesInputStateRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetRulesInputAsync(
+                        characterId,
+                        request.Kind,
+                        request.Key,
+                        request.IntegerValue,
+                        request.BooleanValue,
+                        request.TextValue,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapDelete("/api/characters/{characterId:guid}/state/rules-inputs/{kind}", async (
+            Guid characterId,
+            string kind,
+            string key,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.RemoveRulesInputAsync(
+                        characterId,
+                        kind,
+                        key,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPut("/api/characters/{characterId:guid}/state/hit-point-gains/{advancementOccurrenceId:guid}/{classLevel:int}", async (
+            Guid characterId,
+            Guid advancementOccurrenceId,
+            int classLevel,
+            CharacterHitPointGainRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetHitPointGainAsync(
+                        characterId,
+                        advancementOccurrenceId,
+                        classLevel,
+                        request.HitDieValue,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException
+                or InvalidOperationException)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapDelete("/api/characters/{characterId:guid}/state/hit-point-gains/{advancementOccurrenceId:guid}/{classLevel:int}", async (
+            Guid characterId,
+            Guid advancementOccurrenceId,
+            int classLevel,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.RemoveHitPointGainAsync(
+                        characterId,
+                        advancementOccurrenceId,
+                        classLevel,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPost("/api/characters/{characterId:guid}/state/inventory", async (
             Guid characterId,
             CharacterInventoryItemOccurrenceRequest request,
@@ -287,6 +385,15 @@ public static class CharacterStateEndpointExtensions
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
     };
 }
+
+public sealed record CharacterRulesInputStateRequest(
+    string Kind,
+    string Key,
+    int? IntegerValue,
+    bool? BooleanValue,
+    string? TextValue);
+
+public sealed record CharacterHitPointGainRequest(int HitDieValue);
 
 public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
 
