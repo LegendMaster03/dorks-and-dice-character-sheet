@@ -90,6 +90,8 @@ public sealed record SavingThrowPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? FormattedValue = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Unit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? GoverningAbility = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Training = null,
@@ -106,6 +108,8 @@ public sealed record DefensePresentationView(
     object EffectiveValue,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? FormattedValue = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Unit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Role = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
