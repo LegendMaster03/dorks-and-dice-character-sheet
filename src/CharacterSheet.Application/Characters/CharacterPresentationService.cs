@@ -107,25 +107,13 @@ public sealed class CharacterPresentationService(
         try
         {
             var request = CharacterRulesProjectionRequestBuilder.Build(build, state);
-            var campaignIds = build.CampaignIds ?? [];
-            if (campaignIds.Count == 0)
-            {
-                return await rulesCoreGateway.ResolveGlobalCharacterMechanicsAsync(
-                    request,
-                    cancellationToken);
-            }
 
-            if (campaignIds.Count == 1)
-            {
-                return await rulesCoreGateway.ResolveCampaignCharacterMechanicsAsync(
-                    campaignIds[0],
-                    request,
-                    cancellationToken);
-            }
-
-            diagnostics.Add(
-                "rules-projection:Character belongs to multiple campaigns and no active campaign context is available.");
-            return null;
+            // Character-to-Campaign membership is not an active rules-scope selector. Until the
+            // host supplies an explicit Campaign context, preserve the existing global projection
+            // contract rather than silently choosing one Campaign's effective rules.
+            return await rulesCoreGateway.ResolveGlobalCharacterMechanicsAsync(
+                request,
+                cancellationToken);
         }
         catch (RulesCoreGatewayException exception)
         {
