@@ -750,22 +750,65 @@ test("Inventory carrying, components, procedures, and crafting render only when 
     assert.doesNotMatch(visibleText(sparse), /Carrying & Load/);
 });
 
-test("spellcasting profiles render only when supplied", () => {
+test("spellcasting profiles keep independent resource systems and runtime resources", () => {
     const supplied = render("spells", {
         spellcastingProfiles: [{
             key: "wizard",
             label: "Wizard Spellcasting",
             castingAbility: "Intelligence",
+            resourceSystem: { key: "resource-system", label: "Resource System", value: "spell-points" },
+            resources: [{
+                key: "resource.spell-points",
+                label: "Spell Points",
+                state: "resolved",
+                current: 8,
+                maximum: 14
+            }],
             saveDc: mechanical("dc", "Save DC", "16")
+        }, {
+            key: "warlock",
+            label: "Warlock Pact Magic",
+            castingAbility: "Charisma",
+            resourceSystem: { key: "resource-system", label: "Resource System", value: "pact-magic" },
+            resources: [{
+                key: "resource.pact-slot.warlock.level-3",
+                label: "Pact Slots",
+                state: "resolved",
+                current: 1,
+                maximum: 2
+            }]
         }]
     });
     assert.equal(byAttribute(supplied, "data-spellcasting-profile-key", "wizard").length, 1);
+    assert.equal(byAttribute(supplied, "data-spellcasting-profile-key", "warlock").length, 1);
     assert.match(visibleText(supplied), /Wizard Spellcasting/);
+    assert.match(visibleText(supplied), /Spell Points 8 \/ 14/);
+    assert.match(visibleText(supplied), /Warlock Pact Magic/);
+    assert.match(visibleText(supplied), /Pact Slots 1 \/ 2/);
 
     const unavailable = render("spells", null);
     assert.equal(byAttribute(unavailable, "data-spellcasting-state", "unavailable").length, 1);
-    assert.doesNotMatch(visibleText(unavailable), /Resolved spellcasting profiles are not available/);
     assert.equal(byClass(unavailable, "dd-spellcasting-profile").length, 0);
+});
+
+test("Features & Traits renders Rules Core-granted features without replacing Character-owned Feats", () => {
+    const supplied = render("features", {
+        features: [{
+            key: "feature.second-wind",
+            label: "Second Wind",
+            kind: "class-feature",
+            state: "resolved",
+            sourceConceptKey: "class.fighter",
+            grantingSourceKind: "class",
+            acquisitionLevel: 1,
+            effects: [{ key: "effect", label: "Resource", value: "Second Wind use" }]
+        }]
+    });
+    assert.equal(byAttribute(supplied, "data-feature-key", "feature.second-wind").length, 1);
+    assert.match(visibleText(supplied), /Second Wind/);
+    assert.match(visibleText(supplied), /Level 1/);
+    assert.match(visibleText(supplied), /class\.fighter/);
+    assert.match(visibleText(supplied), /Resource: Second Wind use/);
 });
 
 test("production consumes backend advancement and mechanics projections instead of hard-coded nulls", async () => {
