@@ -95,6 +95,26 @@ test("skill card includes working search across parent and component names", () 
     assert.equal(compositeDisclosure.hidden, false);
 });
 
+test("skill rows use one aligned line: proficiency, governing stat, name, then modifier", () => {
+    const card = renderSkillsCard([
+        standalone(competency("arcana", "Arcana", "+7", {
+            governingAbility: "Intelligence",
+            training: "Proficient"
+        }))
+    ]);
+    const row = byAttribute(card, "data-skill-id", "arcana")[0];
+    assert.ok(row);
+    const rowChildren = row.children;
+    assert.equal(rowChildren.length, 4);
+    assert.match(rowChildren[0].className, /dd-skill-row__training/);
+    assert.equal(rowChildren[1].className, "dd-skill-row__ability");
+    assert.equal(rowChildren[1].textContent, "INT");
+    assert.equal(rowChildren[2].className, "dd-skill-row__name");
+    assert.equal(rowChildren[2].textContent, "Arcana");
+    assert.equal(rowChildren[3].className, "dd-skill-row__value");
+    assert.equal(rowChildren[3].textContent, "+7");
+});
+
 test("standalone competency renders as one ordinary row", () => {
     const card = renderSkillsCard([standalone(competency("navigation", "Navigation", "+7"))]);
     assert.equal(byClass(card, "dd-skill-row--standalone").length, 1);

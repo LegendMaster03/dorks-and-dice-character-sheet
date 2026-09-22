@@ -704,13 +704,13 @@
 }
 
 .dd-skill-row {
-    display: flex;
-    gap: 0.45rem;
+    display: grid;
+    grid-template-columns: 1.8rem 2.15rem minmax(0, 1fr) minmax(2.1rem, max-content);
+    gap: 0.28rem;
     align-items: center;
-    justify-content: space-between;
     min-width: 0;
-    min-height: 1.55rem;
-    padding: 0.16rem 0.32rem;
+    min-height: 1.3rem;
+    padding: 0.08rem 0.28rem;
     background: var(--dd-sheet-surface-muted);
 }
 
@@ -722,9 +722,9 @@
 .dd-skill-row__training {
     display: inline-grid;
     place-items: center;
-    flex: 0 0 0.9rem;
-    width: 0.9rem;
-    height: 0.9rem;
+    justify-self: start;
+    width: 0.82rem;
+    height: 0.82rem;
     min-width: 0;
     min-height: 0;
     padding: 0;
@@ -768,47 +768,43 @@
 }
 
 .dd-skill-row__training--other {
-    flex-basis: 2.15rem;
     width: auto;
-    min-width: 2.15rem;
-    height: 1.15rem;
-    padding: 0 0.2rem;
+    min-width: 1.7rem;
+    max-width: 1.8rem;
+    height: 1rem;
+    padding: 0 0.12rem;
     border-radius: 999px;
     font-size: 0.48rem;
     letter-spacing: 0.02em;
 }
 
-.dd-skill-row__identity {
-    display: flex;
-    flex: 1 1 auto;
-    gap: 0.3rem;
-    align-items: baseline;
-    min-width: 0;
-}
-
 .dd-skill-row__name {
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow: hidden;
     color: var(--dd-sheet-ink);
-    font-size: 0.74rem;
+    font-size: 0.69rem;
     font-weight: 750;
-    line-height: 1.25;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .dd-skill-row__ability {
     color: var(--dd-sheet-muted);
-    font-size: 0.56rem;
-    font-weight: 750;
-    letter-spacing: 0.075em;
-    line-height: 1.1;
+    font-size: 0.54rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
 }
 
 .dd-skill-row__value {
-    flex: 0 0 auto;
     color: var(--dd-sheet-ink);
-    font-size: 0.76rem;
+    font-size: 0.7rem;
     font-weight: 850;
     font-variant-numeric: tabular-nums;
+    text-align: right;
     white-space: nowrap;
 }
 
@@ -833,7 +829,6 @@
 
 .dd-skill-group__component {
     grid-column: 2;
-    padding-left: 0.32rem;
 }
 
 .dd-skill-group__component + .dd-skill-group__component {

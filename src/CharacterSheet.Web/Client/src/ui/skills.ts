@@ -148,19 +148,20 @@ function renderCompetencyRow(
     if (competency.kind !== undefined) row.setAttribute("data-competency-kind", competency.kind);
 
     const training = renderTrainingMarker(competency);
-    const identity = createElement("span", "dd-skill-row__identity");
+    const ability = createElement(
+        "span",
+        "dd-skill-row__ability",
+        competency.governingAbility !== undefined
+            && competency.governingAbility.trim().length > 0
+            ? abbreviateAbility(competency.governingAbility)
+            : "-");
+    ability.setAttribute("data-skill-ability", competency.key);
+
     const name = createElement("span", "dd-skill-row__name", competency.label);
     if (labelId !== undefined) name.id = labelId;
-    identity.append(name);
-    if (competency.governingAbility !== undefined && competency.governingAbility.trim().length > 0) {
-        identity.append(createElement(
-            "span",
-            "dd-skill-row__ability",
-            abbreviateAbility(competency.governingAbility)));
-    }
 
     const value = createElement("span", "dd-skill-row__value", formatMechanicalValue(competency));
-    row.append(training, identity, value);
+    row.append(training, ability, name, value);
     return row;
 }
 

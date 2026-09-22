@@ -343,6 +343,13 @@ test("desktop top stats stretch to a shared height and Movement uses a disclosur
     assert.doesNotMatch(css, /\.dd-movement-values__variants\s*\{[^}]*overflow-x:\s*auto;/s);
 });
 
+test("skill rows use stable single-line columns for proficiency, stat, name, and modifier", () => {
+    assert.match(css, /\.dd-skill-row\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1\.8rem\s+2\.15rem\s+minmax\(0,\s*1fr\)\s+minmax\(2\.1rem,\s*max-content\)/s);
+    assert.match(css, /\.dd-skill-row__name\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
+    assert.match(css, /\.dd-skill-row__value\s*\{[^}]*text-align:\s*right;[^}]*white-space:\s*nowrap;/s);
+    assert.doesNotMatch(css, /\.dd-skill-row__identity\s*\{/);
+});
+
 test("desktop composite Skills retain the compact split parent-and-children layout", () => {
     assert.match(css, /\.dd-skill-group--composite\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.95fr\)\s+minmax\(0,\s*1\.05fr\)/s);
     assert.match(css, /\.dd-skill-group__parent\s*\{[^}]*grid-row:\s*1 \/ span var\(--dd-skill-component-count\);[^}]*border-right:/s);
