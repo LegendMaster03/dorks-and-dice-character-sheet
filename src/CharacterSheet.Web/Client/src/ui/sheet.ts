@@ -16,7 +16,7 @@ import {
     buildCompetencyPresentation,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
-import { renderRestControls } from "../features/health/health.js";
+import { renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
 import {
@@ -88,6 +88,7 @@ export function renderCharacterWorkspace(
         shell.append(renderModeControls(
             sheetMode,
             guidedBuilder,
+            mechanics,
             handlers,
             routine.mutation?.kind === "health-update"));
     }
@@ -201,8 +202,9 @@ export function renderCharacterWorkspace(
 function renderModeControls(
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
+    mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers,
-    restSaving: boolean
+    recoverySaving: boolean
 ): HTMLElement {
     const controls = createElement("div", "dd-sheet-mode-bar");
     controls.setAttribute("role", "group");
@@ -218,10 +220,12 @@ function renderModeControls(
         return controls;
     }
 
-    controls.append(renderRestControls(
+    const recoveryControls = renderRecoveryControls(
+        mechanics?.recoveryProcedures,
         false,
-        restSaving,
-        handlers.routine.rest));
+        recoverySaving,
+        handlers.routine.recover);
+    if (recoveryControls !== null) controls.append(recoveryControls);
 
     const configuration = createElement("div", "dd-sheet-mode-bar__configuration");
     const editing = sheetMode === "edit";
