@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace CharacterSheet.Infrastructure.Persistence.Migrations;
 
+[DbContext(typeof(CharacterSheetDbContext))]
+[Migration("20260922064500_AddDeathSaveState")]
 public partial class AddDeathSaveState : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
