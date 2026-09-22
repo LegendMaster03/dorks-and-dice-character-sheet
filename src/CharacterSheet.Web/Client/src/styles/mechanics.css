@@ -298,11 +298,6 @@
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 }
 
-.dd-skill-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-}
-
 .dd-skill-disclosure {
     min-width: 0;
 }

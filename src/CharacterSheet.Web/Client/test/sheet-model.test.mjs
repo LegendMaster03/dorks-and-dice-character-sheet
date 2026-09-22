@@ -237,6 +237,7 @@ test("base score parsing enforces only backend integer representation, not D&D s
     assert.equal(parseBaseAbilityScoreInput("").ok, false);
 });
 
+const mechanicsCssSource = await readFile(new URL("../src/styles/mechanics.css", import.meta.url), "utf8");
 const css = (await Promise.all([
     "../src/styles/foundation.css",
     "../src/styles/builder.css",
@@ -345,6 +346,7 @@ test("desktop top stats stretch to a shared height and Movement uses a disclosur
 
 test("skill rows use stable single-line columns for proficiency, stat, name, and modifier", () => {
     assert.match(css, /\.dd-skill-row\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1\.8rem\s+2\.15rem\s+minmax\(0,\s*1fr\)\s+minmax\(2\.1rem,\s*max-content\)/s);
+    assert.doesNotMatch(mechanicsCssSource, /\.dd-skill-row\s*\{/);
     assert.match(css, /\.dd-skill-row__name\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s);
     assert.match(css, /\.dd-skill-row__value\s*\{[^}]*text-align:\s*right;[^}]*white-space:\s*nowrap;/s);
     assert.doesNotMatch(css, /\.dd-skill-row__identity\s*\{/);
