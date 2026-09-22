@@ -224,7 +224,9 @@ export function createInitialRoutineState(): CharacterRoutineUiState {
 function routineStateFromResponse(state: CharacterStateResponse): CharacterRoutineUiState {
     const normalizedState: CharacterStateResponse = {
         ...state,
-        conditions: state.conditions ?? []
+        conditions: state.conditions ?? [],
+        rulesInputs: state.rulesInputs ?? [],
+        hitPointGains: state.hitPointGains ?? []
     };
     const references: Record<string, RuleReferenceState> = {};
     for (const occurrence of normalizedState.inventoryItemOccurrences) {

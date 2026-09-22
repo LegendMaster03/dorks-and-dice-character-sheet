@@ -96,6 +96,10 @@ export type RoutineMutationKind =
     | "inventory-add"
     | "inventory-update"
     | "inventory-delete"
+    | "rules-input-update"
+    | "rules-input-delete"
+    | "hit-point-gain-update"
+    | "hit-point-gain-delete"
     | "condition-add"
     | "condition-update"
     | "condition-delete";

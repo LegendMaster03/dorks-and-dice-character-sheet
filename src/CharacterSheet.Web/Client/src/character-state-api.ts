@@ -5,6 +5,45 @@ import {
 } from "./character-api.js";
 import type { HostEnvironment } from "./host-environment.js";
 
+export type CharacterRulesInputKind =
+    | "choice"
+    | "competencyRank"
+    | "training"
+    | "classSkill"
+    | "knownSpell"
+    | "resource"
+    | "integerFact"
+    | "booleanFact"
+    | "stringFact";
+
+export interface CharacterRulesInputStateResponse {
+    id: string;
+    kind: CharacterRulesInputKind;
+    key: string;
+    integerValue: number | null;
+    booleanValue: boolean | null;
+    textValue: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CharacterRulesInputStateInput {
+    kind: CharacterRulesInputKind;
+    key: string;
+    integerValue?: number | null;
+    booleanValue?: boolean | null;
+    textValue?: string | null;
+}
+
+export interface CharacterHitPointGainStateResponse {
+    id: string;
+    advancementOccurrenceId: string;
+    classLevel: number;
+    hitDieValue: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface CharacterInventoryItemOccurrenceResponse {
     id: string;
     ruleConceptKey: string;
@@ -71,6 +110,8 @@ export interface CharacterStateResponse {
     inventoryItemOccurrences: CharacterInventoryItemOccurrenceResponse[];
     notes: CharacterNoteResponse[];
     conditions: CharacterConditionOccurrenceResponse[];
+    rulesInputs?: CharacterRulesInputStateResponse[];
+    hitPointGains?: CharacterHitPointGainStateResponse[];
 }
 
 export function buildCharacterStateBackendUrl(
@@ -129,6 +170,75 @@ export async function setCharacterDeathSaves(
         "PUT",
         { successes, failures },
         "Unable to update Character death saves.");
+}
+
+export async function setCharacterRulesInput(
+    environment: HostEnvironment,
+    characterId: string,
+    input: CharacterRulesInputStateInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/rules-inputs`),
+        "PUT",
+        input,
+        "Unable to update Character rules input.");
+}
+
+export async function removeCharacterRulesInput(
+    environment: HostEnvironment,
+    characterId: string,
+    kind: CharacterRulesInputKind,
+    key: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    const base = `/api/characters/${encodeURIComponent(characterId)}/state/rules-inputs/${encodeURIComponent(kind)}`;
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `${base}?key=${encodeURIComponent(key)}`),
+        "DELETE",
+        undefined,
+        "Unable to clear Character rules input.");
+}
+
+export async function setCharacterHitPointGain(
+    environment: HostEnvironment,
+    characterId: string,
+    advancementOccurrenceId: string,
+    classLevel: number,
+    hitDieValue: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/hit-point-gains/${encodeURIComponent(advancementOccurrenceId)}/${classLevel}`),
+        "PUT",
+        { hitDieValue },
+        "Unable to update Character hit point gain.");
+}
+
+export async function removeCharacterHitPointGain(
+    environment: HostEnvironment,
+    characterId: string,
+    advancementOccurrenceId: string,
+    classLevel: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/hit-point-gains/${encodeURIComponent(advancementOccurrenceId)}/${classLevel}`),
+        "DELETE",
+        undefined,
+        "Unable to clear Character hit point gain.");
 }
 
 export async function addInventoryItemOccurrence(
