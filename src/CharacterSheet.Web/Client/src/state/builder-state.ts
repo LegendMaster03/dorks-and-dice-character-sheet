@@ -34,7 +34,10 @@ export function reduceBuilderState(
                 build: null,
                 message: action.message,
                 chooser: { kind: "closed" },
-                saving: null
+                saving: null,
+                savingAbility: null,
+                savingAdvancementLevel: null,
+                savingFeat: null
             };
             break;
         case "rule-reference-resolved": {
@@ -260,6 +263,7 @@ export function reduceBuilderState(
                 && !builder.build.readOnly
                 && builder.saving === null
                 && builder.savingAbility === null
+                && builder.savingAdvancementLevel === null
                 && builder.savingFeat === null) {
                 builder = {
                     ...builder,

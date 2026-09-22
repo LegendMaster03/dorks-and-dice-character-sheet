@@ -48,6 +48,62 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void AdvancementProjectsOwnedLevelsAndSubclassUsesParentClassLevel()
+    {
+        var parentId = Guid.NewGuid();
+        var subclassId = Guid.NewGuid();
+        var prestigeId = Guid.NewGuid();
+        var build = Build(
+            new CharacterAdvancementEntryView(
+                parentId,
+                0,
+                CharacterBuildAdvancementKinds.Class,
+                "class:wizard",
+                null,
+                Now,
+                Now,
+                7),
+            new CharacterAdvancementEntryView(
+                subclassId,
+                null,
+                CharacterBuildAdvancementKinds.Subclass,
+                "subclass:evocation",
+                parentId,
+                Now,
+                Now),
+            new CharacterAdvancementEntryView(
+                prestigeId,
+                8,
+                CharacterBuildAdvancementKinds.PrestigeClass,
+                "prestige:loremaster",
+                null,
+                Now,
+                Now,
+                3));
+        var resolved = new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal)
+        {
+            ["class:wizard"] = Rule("class:wizard", "class", "Wizard"),
+            ["subclass:evocation"] = Rule("subclass:evocation", "subclass", "Evocation"),
+            ["prestige:loremaster"] = Rule("prestige:loremaster", "class", "Loremaster")
+        };
+
+        var projected = CharacterPresentationProjector.ProjectAdvancement(build, resolved);
+
+        var wizard = Assert.Single(projected.Occurrences, value => value.OccurrenceId == parentId);
+        Assert.Equal("Level", wizard.Progression!.Label);
+        Assert.Equal(7, wizard.Progression.Value);
+        Assert.Equal("Level 7", wizard.Progression.FormattedValue);
+
+        var subclass = Assert.Single(projected.Occurrences, value => value.OccurrenceId == subclassId);
+        Assert.Equal("Parent Level", subclass.Progression!.Label);
+        Assert.Equal(7, subclass.Progression.Value);
+        Assert.Equal("Parent Level 7", subclass.Progression.FormattedValue);
+
+        var prestige = Assert.Single(projected.Occurrences, value => value.OccurrenceId == prestigeId);
+        Assert.Equal(3, prestige.Progression!.Value);
+    }
+
+    [Fact]
     public void CompetencyProjectionUsesConceptIdentityMetadataAndOnlyEffectiveDeriveParentRelationships()
     {
         var hide = Competency(
