@@ -141,6 +141,12 @@ public sealed class CharacterSheetRoot
         {
             throw new ArgumentOutOfRangeException(nameof(classLevel), "Class level must be positive.");
         }
+        if (advancement.Level is not int advancementLevel || classLevel > advancementLevel)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(classLevel),
+                "Hit point gain level can not exceed the advancement occurrence level.");
+        }
 
         var gain = HitPointGains.SingleOrDefault(value =>
             value.AdvancementOccurrenceId == advancementOccurrenceId
@@ -299,6 +305,7 @@ public sealed class CharacterSheetRoot
             if (!string.Equals(entry.RuleConceptKey, normalizedConceptKey, StringComparison.Ordinal))
             {
                 RemoveSubclassChildren(entry.Id);
+                RemoveHitPointGainsForAdvancement(entry.Id);
             }
             entry.ReplaceRule(normalizedConceptKey, changedAt);
         }
@@ -322,6 +329,7 @@ public sealed class CharacterSheetRoot
         }
 
         RemoveSubclassChildren(entry.Id);
+        RemoveHitPointGainsForAdvancement(entry.Id);
         AdvancementEntries.Remove(entry);
         Touch(changedAt);
         return true;
@@ -787,6 +795,16 @@ public sealed class CharacterSheetRoot
             throw new InvalidOperationException("Subclass parent must be a Class advancement entry for the same Character.");
         }
         return parent;
+    }
+
+    private void RemoveHitPointGainsForAdvancement(Guid advancementEntryId)
+    {
+        foreach (var gain in HitPointGains
+            .Where(value => value.AdvancementOccurrenceId == advancementEntryId)
+            .ToArray())
+        {
+            HitPointGains.Remove(gain);
+        }
     }
 
     private void RemoveSubclassChildren(Guid classAdvancementEntryId)

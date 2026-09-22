@@ -215,6 +215,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
             .Include(value => value.FoundationalSelections)
             .Include(value => value.BaseAbilityScoreInputs)
             .Include(value => value.AdvancementEntries)
+            .Include(value => value.HitPointGains)
             .AsQueryable();
         return tracking ? query : query.AsNoTracking();
     }

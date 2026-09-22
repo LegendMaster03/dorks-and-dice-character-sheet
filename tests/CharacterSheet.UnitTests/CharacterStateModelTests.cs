@@ -95,6 +95,15 @@ public sealed class CharacterStateModelTests
                 fighter.Id,
                 CharacterAdvancementEntry.MaxSupportedLevel + 1,
                 createdAt.AddMinutes(2)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.SetHitPointGain(
+                fighter.Id,
+                3,
+                5,
+                createdAt.AddMinutes(3)));
+
+        root.SetStartingClass("class:wizard", createdAt.AddMinutes(4));
+        Assert.Empty(root.HitPointGains);
     }
 
     [Fact]

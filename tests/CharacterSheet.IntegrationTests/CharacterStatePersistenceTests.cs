@@ -215,6 +215,22 @@ public sealed class CharacterStatePersistenceTests
                     Assert.Equal(2, value.ClassLevel);
                     Assert.Equal(7, value.HitDieValue);
                 });
+
+            await new PostgresCharacterBuildStore(secondContext).SetAdvancementLevelAsync(
+                characterId,
+                classId,
+                1,
+                DateTimeOffset.UtcNow.AddMinutes(1));
+        }
+
+        await using (var thirdContext = new CharacterSheetDbContext(options))
+        {
+            var state = await new PostgresCharacterStateStore(thirdContext).GetAsync(characterId);
+            Assert.NotNull(state);
+            var remainingGain = Assert.Single(state.HitPointGains);
+            Assert.Equal(classId, remainingGain.AdvancementOccurrenceId);
+            Assert.Equal(1, remainingGain.ClassLevel);
+            Assert.Equal(10, remainingGain.HitDieValue);
         }
     }
 
