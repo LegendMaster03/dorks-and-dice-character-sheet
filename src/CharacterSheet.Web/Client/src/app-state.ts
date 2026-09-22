@@ -88,9 +88,22 @@ export type RoutineMutationKind =
     | "note-update"
     | "note-delete"
     | "inventory-add"
-    | "inventory-delete";
+    | "inventory-delete"
+    | "condition-add"
+    | "condition-update"
+    | "condition-delete";
 
 export type InventoryChooserState =
+    | { kind: "closed" }
+    | {
+        kind: "open";
+        query: string;
+        status: "idle" | "loading" | "ready" | "error";
+        results: ResolvedRuleCatalogItem[];
+        message?: string;
+    };
+
+export type ConditionChooserState =
     | { kind: "closed" }
     | {
         kind: "open";
@@ -106,6 +119,7 @@ export interface CharacterRoutineUiState {
     message?: string;
     references: Record<string, RuleReferenceState>;
     inventoryChooser: InventoryChooserState;
+    conditionChooser: ConditionChooserState;
     mutation: { kind: RoutineMutationKind; entryId?: string } | null;
     mutationError?: string;
 }
@@ -172,6 +186,12 @@ export type CharacterSheetAction =
     | { type: "inventory-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
     | { type: "inventory-chooser-load-failed"; query: string; message: string }
     | { type: "inventory-chooser-closed" }
+    | { type: "condition-chooser-opened" }
+    | { type: "condition-chooser-query-changed"; query: string }
+    | { type: "condition-chooser-load-started"; query: string }
+    | { type: "condition-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "condition-chooser-load-failed"; query: string; message: string }
+    | { type: "condition-chooser-closed" }
     | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
     | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
     | { type: "routine-mutation-failed"; message: string }

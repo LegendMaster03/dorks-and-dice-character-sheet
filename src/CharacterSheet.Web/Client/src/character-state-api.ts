@@ -18,18 +18,45 @@ export interface CharacterNoteResponse {
     updatedAt: string;
 }
 
+export interface CharacterConditionOccurrenceResponse {
+    id: string;
+    ruleConceptKey: string | null;
+    customName: string | null;
+    level: number | null;
+    counterCurrent: number | null;
+    counterMaximum: number | null;
+    duration: string | null;
+    notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CharacterConditionStateInput {
+    customName?: string | null;
+    level?: number | null;
+    counterCurrent?: number | null;
+    counterMaximum?: number | null;
+    duration?: string | null;
+    notes?: string | null;
+}
+
+export interface CharacterConditionCreateInput extends CharacterConditionStateInput {
+    conceptKey?: string | null;
+}
+
 export interface CharacterStateResponse {
     characterId: string;
     readOnly: boolean;
     currentHitPoints: number | null;
     inventoryItemOccurrences: CharacterInventoryItemOccurrenceResponse[];
     notes: CharacterNoteResponse[];
+    conditions: CharacterConditionOccurrenceResponse[];
 }
 
 export function buildCharacterStateBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    resource?: "health" | "inventory" | "notes",
+    resource?: "health" | "inventory" | "notes" | "conditions",
     entryId?: string
 ): string {
     let path = `/api/characters/${encodeURIComponent(characterId)}/state`;
@@ -138,6 +165,49 @@ export async function removeCharacterNote(
         "DELETE",
         undefined,
         "Unable to delete Character note.");
+}
+
+export async function addCharacterCondition(
+    environment: HostEnvironment,
+    characterId: string,
+    input: CharacterConditionCreateInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "conditions"),
+        "POST",
+        input,
+        "Unable to add Character condition.");
+}
+
+export async function updateCharacterCondition(
+    environment: HostEnvironment,
+    characterId: string,
+    conditionId: string,
+    input: CharacterConditionStateInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "conditions", conditionId),
+        "PUT",
+        input,
+        "Unable to update Character condition.");
+}
+
+export async function removeCharacterCondition(
+    environment: HostEnvironment,
+    characterId: string,
+    conditionId: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "conditions", conditionId),
+        "DELETE",
+        undefined,
+        "Unable to remove Character condition.");
 }
 
 async function requestState(

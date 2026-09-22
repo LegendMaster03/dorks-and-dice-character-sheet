@@ -26,7 +26,7 @@ export function createRoutineStateWorkflow(
     environment: HostEnvironment
 ): RoutineStateWorkflow {
     async function resolveReferences(state: CharacterStateResponse): Promise<void> {
-        await Promise.all(state.inventoryItemOccurrences.map(async occurrence => {
+        const inventoryReferences = state.inventoryItemOccurrences.map(async occurrence => {
             try {
                 const rule = await resolveRuleConcept(
                     environment,
@@ -61,7 +61,47 @@ export function createRoutineStateWorkflow(
                     }
                 });
             }
-        }));
+        });
+
+        const conditionReferences = state.conditions
+            .filter(condition => condition.ruleConceptKey !== null)
+            .map(async condition => {
+                const conceptKey = condition.ruleConceptKey!;
+                try {
+                    const rule = await resolveRuleConcept(environment, conceptKey);
+                    const reference = rule !== null
+                        && rule.entityType === "condition"
+                        && rule.conceptKey === conceptKey
+                        ? {
+                            status: "resolved" as const,
+                            conceptKey,
+                            rule
+                        }
+                        : {
+                            status: "unavailable" as const,
+                            conceptKey
+                        };
+                    application.dispatch({
+                        type: "routine-reference-resolved",
+                        occurrenceId: condition.id,
+                        conceptKey,
+                        reference
+                    });
+                } catch (error) {
+                    application.dispatch({
+                        type: "routine-reference-resolved",
+                        occurrenceId: condition.id,
+                        conceptKey,
+                        reference: {
+                            status: "error",
+                            conceptKey,
+                            message: requestErrorMessage(error)
+                        }
+                    });
+                }
+            });
+
+        await Promise.all([...inventoryReferences, ...conditionReferences]);
     }
 
     return {

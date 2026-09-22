@@ -3,6 +3,7 @@ import type {
     CharacterRoutineUiState
 } from "../app-state.js";
 import type { CharacterAbilityKey } from "../builder-api.js";
+import type { CharacterConditionStateInput } from "../character-state-api.js";
 import type { RestKind } from "../features/health/health.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
@@ -22,6 +23,13 @@ export interface RoutineCharacterHandlers {
     searchInventory(query: string): void;
     addInventoryItem(conceptKey: string): void;
     removeInventoryItem(occurrenceId: string): void;
+    openConditionChooser(): void;
+    closeConditionChooser(): void;
+    searchConditions(query: string): void;
+    addRuleCondition(conceptKey: string, input: CharacterConditionStateInput): void;
+    addCustomCondition(customName: string, input: CharacterConditionStateInput): void;
+    updateCondition(conditionId: string, input: CharacterConditionStateInput): void;
+    removeCondition(conditionId: string): void;
     rest?(kind: RestKind): void;
 }
 

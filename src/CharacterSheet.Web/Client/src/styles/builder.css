@@ -146,6 +146,10 @@
     .dd-sheet__support {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .dd-combat-band {
+        grid-template-columns: minmax(6rem, 0.55fr) minmax(12rem, 1fr);
+    }
 }
 
 @media (max-width: 720px) {
@@ -248,6 +252,16 @@
 
     .dd-combat-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dd-combat-band {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-condition-chooser__search,
+    .dd-condition__editor,
+    .dd-condition-chooser__options-grid {
+        grid-template-columns: 1fr;
     }
 
     .dd-build__grid,

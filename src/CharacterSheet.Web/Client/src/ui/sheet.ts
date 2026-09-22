@@ -46,6 +46,7 @@ import { renderCharacterMechanicsSources } from "../core/mechanics/mechanics-sou
 import { renderCoreStats } from "./core-stats.js";
 import { renderPrimaryContent } from "./primary-content.js";
 import { renderCombatSummaryBand } from "../features/combat/combat-summary.js";
+import { renderConditionsCard } from "../features/conditions/conditions.js";
 import type { CharacterSheetHandlers } from "./sheet-contracts.js";
 
 export function renderCharacterWorkspace(
@@ -147,12 +148,9 @@ export function renderCharacterWorkspace(
     skillsColumn.append(support, mechanicsColumn);
 
     const stage = createElement("div", "dd-sheet__stage");
-    const conditionsPlaceholder = createElement("article", "dd-combat-band__conditions");
-    conditionsPlaceholder.setAttribute("data-conditions-state", "unavailable");
-    conditionsPlaceholder.append(
-        createElement("h3", "dd-combat-band__heading", "Conditions"),
-        createElement("span", "dd-combat-conditions__empty", "-"));
-    stage.append(renderCombatSummaryBand(mechanics, conditionsPlaceholder));
+    stage.append(renderCombatSummaryBand(
+        mechanics,
+        renderConditionsCard(routine, readOnly, handlers.routine)));
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");

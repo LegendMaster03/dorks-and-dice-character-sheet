@@ -29,8 +29,10 @@ export function reduceRoutineState(
             break;
         case "routine-reference-resolved": {
             const occurrence = routine.state?.inventoryItemOccurrences.find(value => value.id === action.occurrenceId);
+            const condition = routine.state?.conditions.find(value => value.id === action.occurrenceId);
+            const conceptKey = occurrence?.ruleConceptKey ?? condition?.ruleConceptKey;
             const currentReference = routine.references[action.occurrenceId];
-            if (occurrence?.ruleConceptKey === action.conceptKey
+            if (conceptKey === action.conceptKey
                 && currentReference !== undefined
                 && "conceptKey" in currentReference
                 && currentReference.conceptKey === action.conceptKey) {
@@ -114,6 +116,76 @@ export function reduceRoutineState(
         case "inventory-chooser-closed":
             routine = { ...routine, inventoryChooser: { kind: "closed" } };
             break;
+        case "condition-chooser-opened":
+            if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly) {
+                routine = {
+                    ...routine,
+                    conditionChooser: {
+                        kind: "open",
+                        query: "",
+                        status: "idle",
+                        results: []
+                    },
+                    mutationError: undefined
+                };
+            }
+            break;
+        case "condition-chooser-query-changed":
+            if (routine.conditionChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    conditionChooser: {
+                        ...routine.conditionChooser,
+                        query: action.query
+                    }
+                };
+            }
+            break;
+        case "condition-chooser-load-started":
+            if (routine.conditionChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    conditionChooser: {
+                        ...routine.conditionChooser,
+                        query: action.query,
+                        status: "loading",
+                        results: [],
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "condition-chooser-loaded":
+            if (routine.conditionChooser.kind === "open"
+                && routine.conditionChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    conditionChooser: {
+                        ...routine.conditionChooser,
+                        status: "ready",
+                        results: action.results,
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "condition-chooser-load-failed":
+            if (routine.conditionChooser.kind === "open"
+                && routine.conditionChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    conditionChooser: {
+                        ...routine.conditionChooser,
+                        status: "error",
+                        results: [],
+                        message: action.message
+                    }
+                };
+            }
+            break;
+        case "condition-chooser-closed":
+            routine = { ...routine, conditionChooser: { kind: "closed" } };
+            break;
         case "routine-mutation-started":
             if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly && routine.mutation === null) {
                 routine = {
@@ -144,6 +216,7 @@ export function createInitialRoutineState(): CharacterRoutineUiState {
         state: null,
         references: {},
         inventoryChooser: { kind: "closed" },
+        conditionChooser: { kind: "closed" },
         mutation: null
     };
 }
@@ -156,11 +229,19 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
             conceptKey: occurrence.ruleConceptKey
         };
     }
+    for (const condition of state.conditions) {
+        if (condition.ruleConceptKey === null) continue;
+        references[condition.id] = {
+            status: "loading",
+            conceptKey: condition.ruleConceptKey
+        };
+    }
     return {
         status: "ready",
         state,
         references,
         inventoryChooser: { kind: "closed" },
+        conditionChooser: { kind: "closed" },
         mutation: null
     };
 }

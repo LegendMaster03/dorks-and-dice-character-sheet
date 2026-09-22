@@ -1718,6 +1718,224 @@
     font-variant-numeric: tabular-nums;
 }
 
+.dd-combat-conditions__header {
+    display: flex;
+    gap: var(--dd-sheet-space-2);
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dd-combat-conditions__header .dd-combat-band__heading {
+    margin-bottom: 0;
+}
+
+.dd-condition-add {
+    min-height: 1.65rem;
+    padding: 0.2rem 0.42rem;
+    font-size: 0.58rem;
+}
+
+.dd-combat-conditions__list {
+    display: grid;
+    gap: 0.24rem;
+    margin-top: 0.45rem;
+}
+
+.dd-condition {
+    display: grid;
+    min-width: 0;
+    padding: 0.28rem 0.36rem;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-condition__summary {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    min-width: 0;
+}
+
+.dd-condition__identity {
+    display: grid;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dd-condition__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+.dd-condition__duration {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--dd-sheet-muted);
+    font-size: 0.52rem;
+    white-space: nowrap;
+}
+
+.dd-condition__level {
+    display: inline-flex;
+    gap: 0.14rem;
+    align-items: center;
+}
+
+.dd-condition__level-button {
+    display: inline-grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: 50%;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 850;
+}
+
+.dd-condition__level-button:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.dd-condition__level-value,
+.dd-condition__counter {
+    min-width: 1.5rem;
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.dd-condition__actions {
+    display: inline-flex;
+    gap: 0.1rem;
+}
+
+.dd-condition__actions .dd-button {
+    min-height: 1.35rem;
+    padding: 0.1rem 0.25rem;
+    font-size: 0.52rem;
+}
+
+.dd-condition__editor {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-condition__editor[hidden] {
+    display: none;
+}
+
+.dd-condition__editor > .dd-button {
+    align-self: end;
+}
+
+.dd-condition-field {
+    display: grid;
+    gap: 0.14rem;
+    min-width: 0;
+}
+
+.dd-condition-field__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.52rem;
+    font-weight: 750;
+}
+
+.dd-condition-field__input,
+.dd-condition-chooser__input {
+    width: 100%;
+    min-width: 0;
+    height: 1.75rem;
+    padding: 0.18rem 0.32rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-control-bg);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius-sm);
+    font: inherit;
+    font-size: 0.62rem;
+}
+
+.dd-condition-chooser {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-condition-chooser__title {
+    margin: 0;
+    font-size: 0.72rem;
+}
+
+.dd-condition-chooser__search {
+    display: grid;
+    grid-template-columns: minmax(7rem, 1fr) auto auto auto;
+    gap: 0.25rem;
+}
+
+.dd-condition-chooser__search .dd-button {
+    min-height: 1.75rem;
+    padding: 0.2rem 0.35rem;
+    font-size: 0.56rem;
+}
+
+.dd-condition-chooser__options > summary {
+    cursor: pointer;
+    color: var(--dd-sheet-accent-strong);
+    font-size: 0.6rem;
+    font-weight: 750;
+}
+
+.dd-condition-chooser__options-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+
+.dd-condition-chooser__results {
+    display: grid;
+    gap: 0.25rem;
+    max-height: 11rem;
+    overflow: auto;
+}
+
+.dd-condition-chooser__result {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.28rem 0.35rem;
+    background: var(--dd-sheet-surface-muted);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-condition-chooser__result-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.62rem;
+    white-space: nowrap;
+}
+
+.dd-condition-chooser__empty {
+    margin: 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.6rem;
+}
+
 .dd-combat-defenses__empty,
 .dd-combat-conditions__empty {
     color: var(--dd-sheet-muted);

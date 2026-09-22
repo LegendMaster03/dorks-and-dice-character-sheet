@@ -24,6 +24,7 @@ import { createFeatWorkflow } from "./features/features/feat-workflow.js";
 import { createHealthWorkflow } from "./features/health/health-workflow.js";
 import { createInventoryWorkflow } from "./features/inventory/inventory-workflow.js";
 import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
+import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -206,7 +207,18 @@ function renderWorkspace(
                 closeInventoryChooser: () => inventoryWorkflow.closeChooser(),
                 searchInventory: query => void inventoryWorkflow.search(query),
                 addInventoryItem: conceptKey => void inventoryWorkflow.add(character.characterId, conceptKey),
-                removeInventoryItem: occurrenceId => void inventoryWorkflow.remove(character.characterId, occurrenceId)
+                removeInventoryItem: occurrenceId => void inventoryWorkflow.remove(character.characterId, occurrenceId),
+                openConditionChooser: () => conditionsWorkflow.openChooser(),
+                closeConditionChooser: () => conditionsWorkflow.closeChooser(),
+                searchConditions: query => void conditionsWorkflow.search(query),
+                addRuleCondition: (conceptKey, input) =>
+                    void conditionsWorkflow.addRule(character.characterId, conceptKey, input),
+                addCustomCondition: (customName, input) =>
+                    void conditionsWorkflow.addCustom(character.characterId, customName, input),
+                updateCondition: (conditionId, input) =>
+                    void conditionsWorkflow.update(character.characterId, conditionId, input),
+                removeCondition: conditionId =>
+                    void conditionsWorkflow.remove(character.characterId, conditionId)
             },
             selectSection: section => dispatchAndFocus(
                 { type: "sheet-section-selected", section },
@@ -336,6 +348,10 @@ const inventoryWorkflow = createInventoryWorkflow(
     presentationWorkflow,
     environment);
 const notesWorkflow = createNotesWorkflow(routineStateWorkflow, environment);
+const conditionsWorkflow = createConditionsWorkflow(
+    application,
+    routineStateWorkflow,
+    environment);
 
 application.render();
 void bootstrapCharacter();
