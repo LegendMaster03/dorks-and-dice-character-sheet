@@ -316,6 +316,7 @@ public sealed class CharacterPresentationWorkflowTests
                 [],
                 [],
                 [],
+                [],
                 []);
 
     }
