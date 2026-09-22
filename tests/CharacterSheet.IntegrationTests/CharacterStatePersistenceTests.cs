@@ -1,4 +1,5 @@
 using CharacterSheet.Application.Lifecycle;
+using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -113,6 +114,107 @@ public sealed class CharacterStatePersistenceTests
             var note = Assert.Single(state.Notes);
             Assert.Equal(noteId, note.Id);
             Assert.Equal("Updated note", note.Content);
+        }
+    }
+
+    [Fact]
+    public async Task RulesInputsAndHitPointGainsPersistAcrossDbContextRecreation()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+        Guid classId;
+
+        await using (var firstContext = new CharacterSheetDbContext(options))
+        {
+            await firstContext.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
+
+            var buildStore = new PostgresCharacterBuildStore(firstContext);
+            var build = await buildStore.SetStartingClassAsync(
+                characterId,
+                "class:fighter",
+                DateTimeOffset.UtcNow);
+            Assert.NotNull(build);
+            classId = Assert.Single(build.AdvancementEntries).Id;
+            await buildStore.SetAdvancementLevelAsync(
+                characterId,
+                classId,
+                2,
+                DateTimeOffset.UtcNow.AddSeconds(1));
+
+            var stateStore = new PostgresCharacterStateStore(firstContext);
+            await stateStore.SetRulesInputAsync(
+                characterId,
+                CharacterRulesInputKind.Choice,
+                "spellcasting.resource-system",
+                null,
+                null,
+                "spell-points",
+                DateTimeOffset.UtcNow.AddSeconds(2));
+            await stateStore.SetRulesInputAsync(
+                characterId,
+                CharacterRulesInputKind.Resource,
+                "resource.spell-points",
+                11,
+                null,
+                null,
+                DateTimeOffset.UtcNow.AddSeconds(3));
+            await stateStore.SetRulesInputAsync(
+                characterId,
+                CharacterRulesInputKind.KnownSpell,
+                "spell.magic-missile",
+                null,
+                null,
+                null,
+                DateTimeOffset.UtcNow.AddSeconds(4));
+            await stateStore.SetHitPointGainAsync(
+                characterId,
+                classId,
+                1,
+                10,
+                DateTimeOffset.UtcNow.AddSeconds(5));
+            await stateStore.SetHitPointGainAsync(
+                characterId,
+                classId,
+                2,
+                7,
+                DateTimeOffset.UtcNow.AddSeconds(6));
+        }
+
+        await using (var secondContext = new CharacterSheetDbContext(options))
+        {
+            var state = await new PostgresCharacterStateStore(secondContext).GetAsync(characterId);
+            Assert.NotNull(state);
+            Assert.Equal(3, state.RulesInputs.Count);
+            Assert.Contains(
+                state.RulesInputs,
+                value => value.Kind == CharacterRulesInputKind.Choice
+                    && value.Key == "spellcasting.resource-system"
+                    && value.TextValue == "spell-points");
+            Assert.Contains(
+                state.RulesInputs,
+                value => value.Kind == CharacterRulesInputKind.Resource
+                    && value.Key == "resource.spell-points"
+                    && value.IntegerValue == 11);
+            Assert.Contains(
+                state.RulesInputs,
+                value => value.Kind == CharacterRulesInputKind.KnownSpell
+                    && value.Key == "spell.magic-missile");
+            Assert.Collection(
+                state.HitPointGains.OrderBy(value => value.ClassLevel),
+                value =>
+                {
+                    Assert.Equal(classId, value.AdvancementOccurrenceId);
+                    Assert.Equal(1, value.ClassLevel);
+                    Assert.Equal(10, value.HitDieValue);
+                },
+                value =>
+                {
+                    Assert.Equal(classId, value.AdvancementOccurrenceId);
+                    Assert.Equal(2, value.ClassLevel);
+                    Assert.Equal(7, value.HitDieValue);
+                });
         }
     }
 
