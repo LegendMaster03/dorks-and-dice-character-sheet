@@ -183,6 +183,52 @@ test("ranked specialty competency progressively discloses metadata", () => {
     assert.match(visibleText(card), /Armor Check Penalty/);
 });
 
+test("rank-capable competencies expose sparse Character-owned rank editing", () => {
+    let saved = null;
+    let cleared = null;
+    const card = renderSkillsCard([
+        standalone(competency("skill.arcana", "Arcana", "+9", {
+            ranks: 5,
+            supportsRanks: true
+        }))
+    ], {
+        readOnly: false,
+        onSetRank(key, ranks) { saved = [key, ranks]; },
+        onClearRank(key) { cleared = key; }
+    });
+
+    const editor = byAttribute(card, "data-competency-rank-editor", "skill.arcana")[0];
+    assert.ok(editor);
+    const input = walk(editor).find(node => node.tagName === "INPUT");
+    assert.ok(input);
+    assert.equal(input.value, "5");
+    input.value = "7";
+    const buttons = walk(editor).filter(node => node.tagName === "BUTTON");
+    const save = buttons.find(button => button.textContent === "Save");
+    const clear = buttons.find(button => button.textContent === "Clear");
+    assert.ok(save);
+    assert.ok(clear);
+    save.dispatch("click");
+    clear.dispatch("click");
+    assert.deepEqual(saved, ["skill.arcana", 7]);
+    assert.equal(cleared, "skill.arcana");
+});
+
+test("rank editing is not exposed for competencies that do not support ranks", () => {
+    const card = renderSkillsCard([
+        standalone(competency("tool.thieves-tools", "Thieves' Tools", "+5", {
+            supportsRanks: false,
+            supportsTrainingState: true
+        }))
+    ], {
+        readOnly: false,
+        onSetRank() {
+            throw new Error("rank callback should not be reachable");
+        }
+    });
+    assert.equal(byClass(card, "dd-skill-rank-editor").length, 0);
+});
+
 test("skill rows use reference-style proficiency markers without guessing unresolved training", () => {
     const card = renderSkillsCard([
         standalone(competency("arcana", "Arcana", "+7", {
