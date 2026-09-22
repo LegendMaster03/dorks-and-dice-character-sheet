@@ -64,6 +64,11 @@ export interface CharacterBuilderUiState {
     saving: CharacterBuilderChoice | null;
     saveError?: string;
     savingAbility: CharacterAbilityKey | null;
+    savingAdvancementLevel: string | null;
+    advancementLevelSaveError?: {
+        occurrenceId: string;
+        message: string;
+    };
     abilitySaveError?: {
         abilityKey: CharacterAbilityKey;
         message: string;
@@ -168,6 +173,9 @@ export type CharacterSheetAction =
     | { type: "ability-save-started"; abilityKey: CharacterAbilityKey }
     | { type: "ability-saved"; build: CharacterBuildResponse }
     | { type: "ability-save-failed"; abilityKey: CharacterAbilityKey; message: string }
+    | { type: "advancement-level-save-started"; occurrenceId: string }
+    | { type: "advancement-level-saved"; build: CharacterBuildResponse }
+    | { type: "advancement-level-save-failed"; occurrenceId: string; message: string }
     | { type: "feat-reference-resolved"; occurrenceId: string; conceptKey: string; reference: RuleReferenceState }
     | { type: "feat-chooser-opened" }
     | { type: "feat-chooser-query-changed"; query: string }

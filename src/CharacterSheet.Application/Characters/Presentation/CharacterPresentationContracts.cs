@@ -26,6 +26,12 @@ public sealed record CharacterPresentationView(
 public sealed record CharacterAdvancementPresentationView(
     IReadOnlyList<AdvancementOccurrencePresentationView> Occurrences);
 
+public sealed record AdvancementProgressionPresentationView(
+    string Label,
+    object Value,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? FormattedValue = null);
+
 public sealed record AdvancementOccurrencePresentationView(
     Guid OccurrenceId,
     string ConceptKey,
@@ -33,6 +39,8 @@ public sealed record AdvancementOccurrencePresentationView(
     string DisplayName,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? KindLabel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    AdvancementProgressionPresentationView? Progression = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     Guid? ParentOccurrenceId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

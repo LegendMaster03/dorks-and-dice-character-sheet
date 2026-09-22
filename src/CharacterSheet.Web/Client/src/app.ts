@@ -185,6 +185,8 @@ function renderWorkspace(
                 submitChooserSearch: (target, query) => void advancementWorkflow.search(target, query),
                 closeChooser: () => advancementWorkflow.closeChooser(),
                 saveChoice: (target, conceptKey) => void advancementWorkflow.save(character.characterId, target, conceptKey),
+                setAdvancementLevel: (occurrenceId, level) =>
+                    void advancementWorkflow.setLevel(character.characterId, occurrenceId, level),
                 setBaseAbilityScore: (abilityKey, score) =>
                     void abilityWorkflow.save(character.characterId, abilityKey, score),
                 clearBaseAbilityScore: abilityKey =>

@@ -12,6 +12,7 @@ import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
 
 export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
+    setAdvancementLevel(occurrenceId: string, level: number): void;
     setBaseAbilityScore(abilityKey: CharacterAbilityKey, score: number): void;
     clearBaseAbilityScore(abilityKey: CharacterAbilityKey): void;
 }

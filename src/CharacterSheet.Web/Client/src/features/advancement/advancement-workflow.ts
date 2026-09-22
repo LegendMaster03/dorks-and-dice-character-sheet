@@ -1,5 +1,6 @@
 import {
     clearCharacterBuildChoice,
+    setCharacterAdvancementLevel,
     setCharacterBuildChoice,
     type CharacterBuilderChoice
 } from "../../builder-api.js";
@@ -24,6 +25,7 @@ export interface AdvancementWorkflow {
         conceptKey: string
     ): Promise<void>;
     clear(characterId: string, target: CharacterBuilderChoice): Promise<void>;
+    setLevel(characterId: string, occurrenceId: string, level: number): Promise<void>;
 }
 
 export function createAdvancementWorkflow(
@@ -141,6 +143,29 @@ export function createAdvancementWorkflow(
                     characterId,
                     target,
                     classId));
+        },
+
+        async setLevel(characterId, occurrenceId, level): Promise<void> {
+            application.dispatch({
+                type: "advancement-level-save-started",
+                occurrenceId
+            });
+            try {
+                const build = await setCharacterAdvancementLevel(
+                    environment,
+                    characterId,
+                    occurrenceId,
+                    level);
+                application.dispatch({ type: "advancement-level-saved", build });
+                await buildState.resolveReferences(build);
+                await presentation.load(characterId);
+            } catch (error) {
+                application.dispatch({
+                    type: "advancement-level-save-failed",
+                    occurrenceId,
+                    message: requestErrorMessage(error)
+                });
+            }
         }
     };
 }
