@@ -65,6 +65,35 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> UpdateInventoryItemOccurrenceAsync(
+        Guid characterId,
+        Guid occurrenceId,
+        int quantity,
+        bool isCarried,
+        bool isEquipped,
+        bool isAttuned,
+        Guid? containerOccurrenceId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.UpdateInventoryItemOccurrence(
+            occurrenceId,
+            quantity,
+            isCarried,
+            isEquipped,
+            isAttuned,
+            containerOccurrenceId,
+            changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> RemoveInventoryItemOccurrenceAsync(
         Guid characterId,
         Guid occurrenceId,

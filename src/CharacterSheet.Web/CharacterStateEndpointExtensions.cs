@@ -69,6 +69,35 @@ public static class CharacterStateEndpointExtensions
             }
         });
 
+        app.MapPut("/api/characters/{characterId:guid}/state/inventory/{occurrenceId:guid}", async (
+            Guid characterId,
+            Guid occurrenceId,
+            CharacterInventoryItemOccurrenceStateRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.UpdateInventoryItemOccurrenceAsync(
+                        characterId,
+                        occurrenceId,
+                        request.Quantity,
+                        request.IsCarried,
+                        request.IsEquipped,
+                        request.IsAttuned,
+                        request.ContainerOccurrenceId,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException
+                or InvalidOperationException)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapDelete("/api/characters/{characterId:guid}/state/inventory/{occurrenceId:guid}", async (
             Guid characterId,
             Guid occurrenceId,
@@ -260,6 +289,13 @@ public static class CharacterStateEndpointExtensions
 }
 
 public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
+
+public sealed record CharacterInventoryItemOccurrenceStateRequest(
+    int Quantity,
+    bool IsCarried,
+    bool IsEquipped,
+    bool IsAttuned,
+    Guid? ContainerOccurrenceId);
 
 public sealed record CharacterNoteRequest(string Content);
 

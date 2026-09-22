@@ -31,6 +31,17 @@ public interface ICharacterStateStore
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> UpdateInventoryItemOccurrenceAsync(
+        Guid characterId,
+        Guid occurrenceId,
+        int quantity,
+        bool isCarried,
+        bool isEquipped,
+        bool isAttuned,
+        Guid? containerOccurrenceId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> RemoveInventoryItemOccurrenceAsync(
         Guid characterId,
         Guid occurrenceId,

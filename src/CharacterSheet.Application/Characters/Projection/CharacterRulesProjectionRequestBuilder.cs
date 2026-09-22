@@ -96,6 +96,11 @@ public static class CharacterRulesProjectionRequestBuilder
             Advancements: advancements.Length == 0 ? null : advancements,
             CurrentResources: currentResources,
             ConditionKeys: conditionKeys,
+            EquippedItemConceptKeys: state?.InventoryItemOccurrences
+                .Where(value => value.IsEquipped)
+                .Select(value => value.RuleConceptKey)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
             ItemConceptKeys: itemConceptKeys);
     }
 }

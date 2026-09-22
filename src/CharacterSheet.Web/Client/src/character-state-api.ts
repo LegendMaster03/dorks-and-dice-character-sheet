@@ -9,6 +9,20 @@ export interface CharacterInventoryItemOccurrenceResponse {
     id: string;
     ruleConceptKey: string;
     createdAt: string;
+    quantity: number;
+    isCarried: boolean;
+    isEquipped: boolean;
+    isAttuned: boolean;
+    containerOccurrenceId: string | null;
+    updatedAt: string;
+}
+
+export interface CharacterInventoryItemOccurrenceStateInput {
+    quantity: number;
+    isCarried: boolean;
+    isEquipped: boolean;
+    isAttuned: boolean;
+    containerOccurrenceId?: string | null;
 }
 
 export interface CharacterNoteResponse {
@@ -129,6 +143,21 @@ export async function addInventoryItemOccurrence(
         "POST",
         { conceptKey },
         "Unable to add inventory item.");
+}
+
+export async function updateInventoryItemOccurrence(
+    environment: HostEnvironment,
+    characterId: string,
+    occurrenceId: string,
+    input: CharacterInventoryItemOccurrenceStateInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "inventory", occurrenceId),
+        "PUT",
+        input,
+        "Unable to update inventory item.");
 }
 
 export async function removeInventoryItemOccurrence(

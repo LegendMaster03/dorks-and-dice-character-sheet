@@ -18,7 +18,13 @@ public enum CharacterStateAccessStatus
 public sealed record CharacterInventoryItemOccurrenceView(
     Guid Id,
     string RuleConceptKey,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    int Quantity = 1,
+    bool IsCarried = true,
+    bool IsEquipped = false,
+    bool IsAttuned = false,
+    Guid? ContainerOccurrenceId = null,
+    DateTimeOffset? UpdatedAt = null);
 
 public sealed record CharacterNoteView(
     Guid Id,
@@ -121,6 +127,29 @@ public sealed class CharacterStateService(
             (changedAt, token) => stateStore.AddInventoryItemOccurrenceAsync(
                 characterId,
                 ruleConceptKey,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> UpdateInventoryItemOccurrenceAsync(
+        Guid characterId,
+        Guid occurrenceId,
+        int quantity,
+        bool isCarried,
+        bool isEquipped,
+        bool isAttuned,
+        Guid? containerOccurrenceId,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.UpdateInventoryItemOccurrenceAsync(
+                characterId,
+                occurrenceId,
+                quantity,
+                isCarried,
+                isEquipped,
+                isAttuned,
+                containerOccurrenceId,
                 changedAt,
                 token),
             cancellationToken);
@@ -309,7 +338,13 @@ public sealed class CharacterStateService(
                 .Select(value => new CharacterInventoryItemOccurrenceView(
                     value.Id,
                     value.RuleConceptKey,
-                    value.CreatedAt))
+                    value.CreatedAt,
+                    value.Quantity,
+                    value.IsCarried,
+                    value.IsEquipped,
+                    value.IsAttuned,
+                    value.ContainerOccurrenceId,
+                    value.UpdatedAt))
                 .ToArray(),
             root.Notes
                 .OrderBy(value => value.CreatedAt)
