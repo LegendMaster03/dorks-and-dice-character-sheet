@@ -7,7 +7,6 @@ import type {
     CharacterConditionStateInput,
     CharacterInventoryItemOccurrenceStateInput
 } from "../character-state-api.js";
-import type { RestKind } from "../features/health/health.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
 
@@ -39,7 +38,7 @@ export interface RoutineCharacterHandlers {
     addCustomCondition(customName: string, input: CharacterConditionStateInput): void;
     updateCondition(conditionId: string, input: CharacterConditionStateInput): void;
     removeCondition(conditionId: string): void;
-    rest?(kind: RestKind): void;
+    recover?(procedureKey: string): void;
 }
 
 export interface RulesInputCharacterHandlers {
