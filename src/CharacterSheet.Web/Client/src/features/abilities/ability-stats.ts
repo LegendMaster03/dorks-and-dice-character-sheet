@@ -46,6 +46,7 @@ export function renderAbilityScoreCard(
     };
     if (savingThrow !== undefined) {
         saveAttributes["data-saving-throw-key"] = savingThrow.key;
+        saveAttributes["data-mechanic-key"] = savingThrow.key;
     }
 
     card.append(renderSplitStat({

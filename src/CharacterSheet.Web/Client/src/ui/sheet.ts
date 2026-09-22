@@ -19,9 +19,11 @@ import {
 import { renderCombatFundamentalsCard } from "../features/combat/combat.js";
 import { renderDefenseMechanicsCard } from "../features/defense/defense.js";
 import { renderRestControls } from "../features/health/health.js";
+import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
 import {
     createButton,
-    createElement
+    createElement,
+    createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
 import {
@@ -36,7 +38,10 @@ import {
     humanizeBuilderStatus,
     type SheetSection
 } from "./sheet-model.js";
-import { renderAbilityScoreCard } from "../features/abilities/ability-stats.js";
+import {
+    findAbilitySavingThrow,
+    renderAbilityScoreCard
+} from "../features/abilities/ability-stats.js";
 import { renderCharacterMechanicsSources } from "../core/mechanics/mechanics-sources.js";
 import { renderCoreStats } from "./core-stats.js";
 import { renderPrimaryContent } from "./primary-content.js";
@@ -118,6 +123,12 @@ export function renderCharacterWorkspace(
 
     const support = createElement("section", "dd-sheet__support dd-sheet__support--left");
     support.setAttribute("aria-label", "Character supporting statistics");
+    const unmappedSavingThrows = (mechanics?.savingThrows ?? []).filter(save =>
+        !ABILITY_SCORE_DEFINITIONS.some(definition =>
+            findAbilitySavingThrow([save], definition) === save));
+    if (unmappedSavingThrows.length > 0) {
+        support.append(renderSavingThrowsCard(unmappedSavingThrows));
+    }
     support.append(
         renderPassiveValuesCard(mechanics),
         renderSensesCard(mechanics),
