@@ -308,7 +308,7 @@ test("wide layout uses a full-width top strip, a persistent left rail, and a bro
     assert.match(sheetSource, /skillsColumn\.append\(support, mechanicsColumn\)/);
     assert.match(sheetSource, /stage\.append\(primary\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
-    assert.match(sheetSource, /renderCombatSummaryBand\(mechanics, conditionsPlaceholder\)/);
+    assert.match(sheetSource, /renderCombatSummaryBand\([\s\S]*renderConditionsCard\(routine, readOnly, handlers\.routine\)/s);
 });
 
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {

@@ -48,7 +48,7 @@ export function renderConditionsCard(
     }
 
     const list = createElement("div", "dd-combat-conditions__list");
-    for (const condition of routine.state.conditions) {
+    for (const condition of routine.state.conditions ?? []) {
         list.append(renderCondition(condition, routine, editable, handlers));
     }
     if (list.children.length === 0) {
@@ -56,7 +56,7 @@ export function renderConditionsCard(
     }
     card.append(list);
 
-    if (editable && routine.conditionChooser.kind === "open") {
+    if (editable && routine.conditionChooser?.kind === "open") {
         card.append(renderConditionChooser(routine, handlers));
     }
     return card;
@@ -198,7 +198,7 @@ function renderConditionChooser(
     routine: CharacterRoutineUiState,
     handlers: RoutineCharacterHandlers
 ): HTMLElement {
-    const chooser = routine.conditionChooser;
+    const chooser = routine.conditionChooser ?? { kind: "closed" as const };
     const panel = createElement("section", "dd-condition-chooser");
     panel.setAttribute("data-condition-chooser", "true");
     if (chooser.kind !== "open") return panel;

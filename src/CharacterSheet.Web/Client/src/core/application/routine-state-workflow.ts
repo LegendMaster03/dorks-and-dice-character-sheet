@@ -63,7 +63,7 @@ export function createRoutineStateWorkflow(
             }
         });
 
-        const conditionReferences = state.conditions
+        const conditionReferences = (state.conditions ?? [])
             .filter(condition => condition.ruleConceptKey !== null)
             .map(async condition => {
                 const conceptKey = condition.ruleConceptKey!;

@@ -29,7 +29,7 @@ export function reduceRoutineState(
             break;
         case "routine-reference-resolved": {
             const occurrence = routine.state?.inventoryItemOccurrences.find(value => value.id === action.occurrenceId);
-            const condition = routine.state?.conditions.find(value => value.id === action.occurrenceId);
+            const condition = routine.state?.conditions?.find(value => value.id === action.occurrenceId);
             const conceptKey = occurrence?.ruleConceptKey ?? condition?.ruleConceptKey;
             const currentReference = routine.references[action.occurrenceId];
             if (conceptKey === action.conceptKey
@@ -222,14 +222,18 @@ export function createInitialRoutineState(): CharacterRoutineUiState {
 }
 
 function routineStateFromResponse(state: CharacterStateResponse): CharacterRoutineUiState {
+    const normalizedState: CharacterStateResponse = {
+        ...state,
+        conditions: state.conditions ?? []
+    };
     const references: Record<string, RuleReferenceState> = {};
-    for (const occurrence of state.inventoryItemOccurrences) {
+    for (const occurrence of normalizedState.inventoryItemOccurrences) {
         references[occurrence.id] = {
             status: "loading",
             conceptKey: occurrence.ruleConceptKey
         };
     }
-    for (const condition of state.conditions) {
+    for (const condition of normalizedState.conditions) {
         if (condition.ruleConceptKey === null) continue;
         references[condition.id] = {
             status: "loading",
@@ -238,7 +242,7 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
     }
     return {
         status: "ready",
-        state,
+        state: normalizedState,
         references,
         inventoryChooser: { kind: "closed" },
         conditionChooser: { kind: "closed" },

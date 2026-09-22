@@ -75,7 +75,8 @@ export function renderArmorClassCombatCard(
     const flatFooted = findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[2], usedKeys);
 
     const card = createElement("article", "dd-combat-band__ac");
-    card.setAttribute("data-armor-class-card", "combat");
+    card.setAttribute("data-armor-class-card", "true");
+    card.setAttribute("data-armor-class-location", "combat");
     card.append(createElement("h3", "dd-combat-band__heading", "Armor Class"));
 
     const layout = createElement("div", "dd-combat-ac__layout");
@@ -93,8 +94,8 @@ export function renderArmorClassCombatCard(
 
     const secondary = createElement("div", "dd-combat-ac__secondary");
     secondary.append(
-        renderArmorClassSecondary("Touch", touch, ARMOR_CLASS_SCAFFOLD[1]),
-        renderArmorClassSecondary("Flat-Footed", flatFooted, ARMOR_CLASS_SCAFFOLD[2])
+        renderArmorClassSecondary("Touch AC", touch, ARMOR_CLASS_SCAFFOLD[1]),
+        renderArmorClassSecondary("Flat-Footed AC", flatFooted, ARMOR_CLASS_SCAFFOLD[2])
     );
     layout.append(shield, secondary);
     card.append(layout);
