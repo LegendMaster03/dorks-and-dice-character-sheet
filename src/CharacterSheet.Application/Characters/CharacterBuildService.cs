@@ -56,7 +56,8 @@ public sealed record CharacterBuildView(
     bool ReadOnly,
     IReadOnlyList<FoundationalRuleSelectionView> FoundationalSelections,
     IReadOnlyList<BaseAbilityScoreInputView> BaseAbilityScoreInputs,
-    IReadOnlyList<CharacterAdvancementEntryView> ProgressionEntries);
+    IReadOnlyList<CharacterAdvancementEntryView> ProgressionEntries,
+    IReadOnlyList<Guid>? CampaignIds = null);
 
 public sealed record CharacterBuildResult(
     CharacterBuildAccessStatus Status,
@@ -299,7 +300,8 @@ public sealed class CharacterBuildService(
                     value.ParentAdvancementEntryId,
                     value.CreatedAt,
                     value.UpdatedAt))
-                .ToArray());
+                .ToArray(),
+            character.CampaignIds.OrderBy(value => value).ToArray());
 
     private static string MapCategory(CharacterFoundationalSelectionCategory category) => category switch
     {

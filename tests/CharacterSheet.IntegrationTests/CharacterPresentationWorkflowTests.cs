@@ -240,7 +240,9 @@ public sealed class CharacterPresentationWorkflowTests
     {
         public bool Throw { get; set; }
         public bool GlobalMechanicsRequested { get; private set; }
-        public bool CampaignMechanicsRequested => false;
+        public bool GlobalCharacterProjectionRequested { get; private set; }
+        public Guid? CharacterProjectionCampaignId { get; private set; }
+        public bool CampaignMechanicsRequested => CharacterProjectionCampaignId is not null;
         public Dictionary<string, RulesCoreResolvedRuleSummaryView> ResolvedRules { get; } =
             new(StringComparer.Ordinal);
         public RulesCoreMechanicsCatalogView Catalog { get; set; } =
@@ -273,5 +275,48 @@ public sealed class CharacterPresentationWorkflowTests
             return Task.FromResult(new RulesCoreMechanicsBatchEvaluationView(
                 "global", null, 1, DateTimeOffset.UtcNow, []));
         }
+
+        public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
+            RulesCoreCharacterRulesProjectionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            GlobalCharacterProjectionRequested = true;
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            return Task.FromResult(EmptyProjection("global", null));
+        }
+
+        public Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
+            Guid campaignId,
+            RulesCoreCharacterRulesProjectionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            CharacterProjectionCampaignId = campaignId;
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            return Task.FromResult(EmptyProjection("campaign", campaignId));
+        }
+
+        private static RulesCoreCharacterRulesProjectionView EmptyProjection(
+            string scope,
+            Guid? campaignId) =>
+            new(
+                scope,
+                campaignId,
+                1,
+                DateTimeOffset.UtcNow,
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                []);
+
     }
 }

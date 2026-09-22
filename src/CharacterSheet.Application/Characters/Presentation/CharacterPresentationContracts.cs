@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
@@ -18,7 +19,9 @@ public sealed record CharacterPresentationResult(
 
 public sealed record CharacterPresentationView(
     CharacterAdvancementPresentationView Advancement,
-    CharacterMechanicsPresentationView? Mechanics);
+    CharacterMechanicsPresentationView? Mechanics,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    RulesCoreCharacterRulesProjectionView? RuleProjection = null);
 
 public sealed record CharacterAdvancementPresentationView(
     IReadOnlyList<AdvancementOccurrencePresentationView> Occurrences);

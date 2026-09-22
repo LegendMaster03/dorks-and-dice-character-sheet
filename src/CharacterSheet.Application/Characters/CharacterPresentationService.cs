@@ -8,6 +8,7 @@ namespace CharacterSheet.Application.Characters;
 /// </summary>
 public sealed class CharacterPresentationService(
     CharacterBuildService buildService,
+    CharacterStateService stateService,
     IRulesCoreGateway rulesCoreGateway)
 {
     public async Task<CharacterPresentationResult> GetAsync(
@@ -23,12 +24,28 @@ public sealed class CharacterPresentationService(
         var build = buildResult.View;
         var diagnostics = new List<string>();
 
+        CharacterStateView? state = null;
+        var stateResult = await stateService.GetAsync(characterId, cancellationToken);
+        if (stateResult.Status == CharacterStateAccessStatus.Ready)
+        {
+            state = stateResult.View;
+        }
+        else
+        {
+            diagnostics.Add($"character-state:{stateResult.Status}");
+        }
+
         var advancement = await ProjectAdvancementAsync(build, diagnostics, cancellationToken);
         var mechanics = await ProjectMechanicsAsync(diagnostics, cancellationToken);
+        var ruleProjection = await ProjectCharacterRulesAsync(
+            build,
+            state,
+            diagnostics,
+            cancellationToken);
 
         return new CharacterPresentationResult(
             CharacterPresentationAccessStatus.Ready,
-            new CharacterPresentationView(advancement, mechanics),
+            new CharacterPresentationView(advancement, mechanics, ruleProjection),
             diagnostics);
     }
 
@@ -77,6 +94,42 @@ public sealed class CharacterPresentationService(
         catch (RulesCoreGatewayException exception)
         {
             diagnostics.Add($"mechanics:{exception.Message}");
+            return null;
+        }
+    }
+
+    private async Task<RulesCoreCharacterRulesProjectionView?> ProjectCharacterRulesAsync(
+        CharacterBuildView build,
+        CharacterStateView? state,
+        ICollection<string> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var request = CharacterRulesProjectionRequestBuilder.Build(build, state);
+            var campaignIds = build.CampaignIds ?? [];
+            if (campaignIds.Count == 0)
+            {
+                return await rulesCoreGateway.ResolveGlobalCharacterMechanicsAsync(
+                    request,
+                    cancellationToken);
+            }
+
+            if (campaignIds.Count == 1)
+            {
+                return await rulesCoreGateway.ResolveCampaignCharacterMechanicsAsync(
+                    campaignIds[0],
+                    request,
+                    cancellationToken);
+            }
+
+            diagnostics.Add(
+                "rules-projection:Character belongs to multiple campaigns and no active campaign context is available.");
+            return null;
+        }
+        catch (RulesCoreGatewayException exception)
+        {
+            diagnostics.Add($"rules-projection:{exception.Message}");
             return null;
         }
     }

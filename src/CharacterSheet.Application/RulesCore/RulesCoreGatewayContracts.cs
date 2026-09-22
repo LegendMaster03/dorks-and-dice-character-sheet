@@ -228,4 +228,13 @@ public interface IRulesCoreGateway
     Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
         RulesCoreMechanicsBatchEvaluationRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
+        RulesCoreCharacterRulesProjectionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
+        Guid campaignId,
+        RulesCoreCharacterRulesProjectionRequest request,
+        CancellationToken cancellationToken = default);
 }
