@@ -167,7 +167,7 @@ The backend remains authoritative for combat values and their calculations. Base
 
 `CompetencyView` extends the calculated-value primitive with optional:
 
-- `kind`: extensible presentation key; known hints include skill/tool/other;
+- `kind`: extensible presentation key; known hints include skill/specialized-skill/tool/other;
 - `ranks`;
 - `governingAbility`;
 - `training`;
@@ -186,7 +186,9 @@ Ranks, final modifiers, class-skill effects, trained-only rules, and Armor Check
 
 ### Specialty competencies
 
-Specialized entries such as a named Craft specialty are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. The frontend does not identify specialties or reconstruct families by parsing competency names.
+Specialized entries are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. A Rules Core entry marked `isFamily: true` may be rendered as an expandable family row containing the independently addressable entries whose supplied `family` value matches that family. The family grouping is taxonomy only: each specialized child keeps its own value, ranks, class-skill state, training state, and other supplied mechanics.
+
+The frontend does not identify specialties, parse names such as `Craft (...)`, or maintain a hard-coded list of family names. Family nesting is driven only by the authoritative competency metadata. This is distinct from composite relationships, which represent explicit mechanical composition rather than taxonomy.
 
 ### Composite relationships
 
