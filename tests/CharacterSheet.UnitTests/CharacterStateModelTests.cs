@@ -158,15 +158,47 @@ public sealed class CharacterStateModelTests
     }
 
     [Fact]
-    public void RoutineStateDoesNotCopyRulesMechanicsOrEquipmentUsageState()
+    public void InventoryOccurrenceOwnsMutableUsageStateButDoesNotCopyRuleDefinitions()
     {
+        var root = Root();
+        var bag = root.AddInventoryItemOccurrence("item:backpack", DateTimeOffset.UtcNow);
+        var sword = root.AddInventoryItemOccurrence(
+            "item:longsword",
+            DateTimeOffset.UtcNow.AddSeconds(1));
+
+        Assert.Equal(1, sword.Quantity);
+        Assert.True(sword.IsCarried);
+        Assert.False(sword.IsEquipped);
+        Assert.False(sword.IsAttuned);
+        Assert.Null(sword.ContainerOccurrenceId);
+
+        root.UpdateInventoryItemOccurrence(
+            sword.Id,
+            quantity: 2,
+            isCarried: true,
+            isEquipped: true,
+            isAttuned: true,
+            bag.Id,
+            DateTimeOffset.UtcNow.AddMinutes(1));
+
+        Assert.Equal(2, sword.Quantity);
+        Assert.True(sword.IsEquipped);
+        Assert.True(sword.IsAttuned);
+        Assert.Equal(bag.Id, sword.ContainerOccurrenceId);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.UpdateInventoryItemOccurrence(
+                sword.Id, 0, true, false, false, null, DateTimeOffset.UtcNow));
+        Assert.Throws<InvalidOperationException>(() =>
+            root.UpdateInventoryItemOccurrence(
+                bag.Id, 1, true, false, false, sword.Id, DateTimeOffset.UtcNow));
+
         Assert.DoesNotContain(
             typeof(CharacterInventoryItemOccurrence).GetProperties(),
             property => property.Name.Contains("DisplayName", StringComparison.Ordinal)
                 || property.Name.Contains("Json", StringComparison.Ordinal)
-                || property.Name.Contains("Equipped", StringComparison.Ordinal)
-                || property.Name.Contains("Attun", StringComparison.Ordinal)
-                || property.Name.Contains("Carried", StringComparison.Ordinal));
+                || property.Name.Contains("Weight", StringComparison.Ordinal)
+                || property.Name.Contains("Armor", StringComparison.Ordinal)
+                || property.Name.Contains("Damage", StringComparison.Ordinal));
 
         Assert.DoesNotContain(
             typeof(CharacterStateService).Assembly.GetReferencedAssemblies(),

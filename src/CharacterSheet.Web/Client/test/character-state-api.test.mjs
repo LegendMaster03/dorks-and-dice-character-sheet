@@ -9,7 +9,8 @@ import {
     removeInventoryItemOccurrence,
     setCharacterCurrentHitPoints,
     setCharacterDeathSaves,
-    updateCharacterNote
+    updateCharacterNote,
+    updateInventoryItemOccurrence
 } from "../.test-dist/character-state-api.js";
 
 const characterId = "8f62ed58-0f5f-4e71-9a18-8d9dcfe71dc7";
@@ -77,6 +78,18 @@ test("routine-state mutations send only Character-owned state inputs and return 
     await setCharacterCurrentHitPoints(environment, characterId, -4, fetcher);
     await setCharacterDeathSaves(environment, characterId, 2, 1, fetcher);
     await addInventoryItemOccurrence(environment, characterId, "item:rope", fetcher);
+    await updateInventoryItemOccurrence(
+        environment,
+        characterId,
+        occurrenceId,
+        {
+            quantity: 3,
+            isCarried: true,
+            isEquipped: true,
+            isAttuned: false,
+            containerOccurrenceId: null
+        },
+        fetcher);
     await removeInventoryItemOccurrence(environment, characterId, occurrenceId, fetcher);
     await addCharacterNote(environment, characterId, "First note", fetcher);
     await updateCharacterNote(environment, characterId, noteId, "Updated note", fetcher);
@@ -88,10 +101,18 @@ test("routine-state mutations send only Character-owned state inputs and return 
     assert.equal(calls[1].method, "PUT");
     assert.deepEqual(JSON.parse(calls[2].body), { conceptKey: "item:rope" });
     assert.equal(calls[2].method, "POST");
-    assert.equal(calls[3].method, "DELETE");
-    assert.equal(calls[3].body, undefined);
-    assert.deepEqual(JSON.parse(calls[4].body), { content: "First note" });
-    assert.deepEqual(JSON.parse(calls[5].body), { content: "Updated note" });
-    assert.equal(calls[6].method, "DELETE");
+    assert.deepEqual(JSON.parse(calls[3].body), {
+        quantity: 3,
+        isCarried: true,
+        isEquipped: true,
+        isAttuned: false,
+        containerOccurrenceId: null
+    });
+    assert.equal(calls[3].method, "PUT");
+    assert.equal(calls[4].method, "DELETE");
+    assert.equal(calls[4].body, undefined);
+    assert.deepEqual(JSON.parse(calls[5].body), { content: "First note" });
+    assert.deepEqual(JSON.parse(calls[6].body), { content: "Updated note" });
+    assert.equal(calls[7].method, "DELETE");
     assert.equal(calls.some(call => String(call.body).includes("displayName")), false);
 });

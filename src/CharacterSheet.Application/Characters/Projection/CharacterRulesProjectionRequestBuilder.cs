@@ -70,6 +70,7 @@ public static class CharacterRulesProjectionRequestBuilder
         Dictionary<string, int>? currentResources = null;
         IReadOnlyList<string>? conditionKeys = null;
         IReadOnlyList<string>? itemConceptKeys = null;
+        IReadOnlyList<string>? equippedItemConceptKeys = null;
         if (state is not null)
         {
             currentResources = new Dictionary<string, int>(StringComparer.Ordinal)
@@ -88,6 +89,12 @@ public static class CharacterRulesProjectionRequestBuilder
                 .Select(value => value.RuleConceptKey)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
+            var equipped = state.InventoryItemOccurrences
+                .Where(value => value.IsEquipped)
+                .Select(value => value.RuleConceptKey)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            equippedItemConceptKeys = equipped.Length == 0 ? null : equipped;
         }
 
         return new RulesCoreCharacterRulesProjectionRequest(
@@ -96,11 +103,7 @@ public static class CharacterRulesProjectionRequestBuilder
             Advancements: advancements.Length == 0 ? null : advancements,
             CurrentResources: currentResources,
             ConditionKeys: conditionKeys,
-            EquippedItemConceptKeys: state?.InventoryItemOccurrences
-                .Where(value => value.IsEquipped)
-                .Select(value => value.RuleConceptKey)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray(),
+            EquippedItemConceptKeys: equippedItemConceptKeys,
             ItemConceptKeys: itemConceptKeys);
     }
 }

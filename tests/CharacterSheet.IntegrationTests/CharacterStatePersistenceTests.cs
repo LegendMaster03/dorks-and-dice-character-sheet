@@ -56,6 +56,15 @@ public sealed class CharacterStatePersistenceTests
             firstItemId = items[0].Id;
             secondItemId = items[1].Id;
             Assert.NotEqual(firstItemId, secondItemId);
+            await stateStore.UpdateInventoryItemOccurrenceAsync(
+                characterId,
+                secondItemId,
+                quantity: 4,
+                isCarried: true,
+                isEquipped: true,
+                isAttuned: true,
+                containerOccurrenceId: firstItemId,
+                DateTimeOffset.UtcNow.AddSeconds(3));
             noteId = Assert.Single(state.Notes).Id;
         }
 
@@ -67,6 +76,14 @@ public sealed class CharacterStatePersistenceTests
             Assert.Equal(2, state.DeathSaveSuccesses);
             Assert.Equal(1, state.DeathSaveFailures);
             Assert.Equal(2, state.InventoryItemOccurrences.Count);
+            var equipped = Assert.Single(
+                state.InventoryItemOccurrences,
+                value => value.Id == secondItemId);
+            Assert.Equal(4, equipped.Quantity);
+            Assert.True(equipped.IsCarried);
+            Assert.True(equipped.IsEquipped);
+            Assert.True(equipped.IsAttuned);
+            Assert.Equal(firstItemId, equipped.ContainerOccurrenceId);
             Assert.Equal("Initial note", Assert.Single(state.Notes).Content);
 
             await stateStore.RemoveInventoryItemOccurrenceAsync(
@@ -89,6 +106,10 @@ public sealed class CharacterStatePersistenceTests
             Assert.Equal(1, state.DeathSaveFailures);
             var item = Assert.Single(state.InventoryItemOccurrences);
             Assert.Equal(secondItemId, item.Id);
+            Assert.Equal(4, item.Quantity);
+            Assert.True(item.IsEquipped);
+            Assert.True(item.IsAttuned);
+            Assert.Null(item.ContainerOccurrenceId);
             var note = Assert.Single(state.Notes);
             Assert.Equal(noteId, note.Id);
             Assert.Equal("Updated note", note.Content);
