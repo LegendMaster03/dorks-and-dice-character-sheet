@@ -1,13 +1,12 @@
 import {
     formatHealthTrack,
     type CharacterMechanicsView,
+    type CharacterRecoveryProcedureView,
     type HealthTrackView
 } from "../../ui/character-mechanics.js";
 import { createElement, createSectionCard } from "../../ui/components.js";
 import { renderSourceAttributionDisclosure } from "../../ui/source-attribution.js";
 import { appendSources, normalizeMechanicalLabel } from "../../core/mechanics/mechanic-value.js";
-
-export type RestKind = "short" | "long";
 
 export interface DeathSaveState {
     successes: number;
@@ -21,7 +20,6 @@ export interface HealthControlOptions {
     saving?: boolean;
     onSetCurrentHitPoints?: (currentHitPoints: number | null) => void;
     onSetDeathSaves?: (successes: number, failures: number) => void;
-    onRest?: (kind: RestKind) => void;
 }
 
 export function adjustCurrentHitPoints(
@@ -385,42 +383,51 @@ export function renderHealthScaffold(
     return cells;
 }
 
-export function renderRestControls(
+export function renderRecoveryControls(
+    procedures: readonly CharacterRecoveryProcedureView[] | undefined,
     readOnly: boolean,
     saving: boolean,
-    onRest: ((kind: RestKind) => void) | undefined
-): HTMLElement {
+    onRecovery: ((procedureKey: string) => void) | undefined
+): HTMLElement | null {
+    if (procedures === undefined || procedures.length === 0) return null;
+
     const controls = createElement("div", "dd-rest-controls");
     controls.setAttribute("role", "group");
-    controls.setAttribute("aria-label", "Rest actions");
+    controls.setAttribute("aria-label", "Recovery actions");
 
-    const available = onRest !== undefined;
-    const disabled = readOnly || saving || !available;
-    const unavailableTitle = readOnly
-        ? "Rest actions are unavailable while this Character is read-only."
-        : saving
-            ? "Wait for the current Character state change to finish."
-            : "Rest resolution is not available from the current rules projection.";
-
-    const createRestButton = (
-        kind: RestKind,
-        label: string
-    ): HTMLButtonElement => {
+    for (const procedure of procedures) {
+        const applicable = procedure.applicabilityState === "applicable";
+        const executable = onRecovery !== undefined;
+        const disabled = readOnly || saving || !applicable || !executable;
         const button = createElement(
             "button",
             "dd-button dd-button--ghost dd-rest-button",
-            label) as HTMLButtonElement;
+            procedure.displayName) as HTMLButtonElement;
         button.type = "button";
         button.disabled = disabled;
-        button.setAttribute("data-rest-action", kind);
-        if (disabled) button.title = unavailableTitle;
-        if (!disabled) button.onclick = () => onRest?.(kind);
-        return button;
-    };
+        button.setAttribute("data-recovery-procedure", procedure.procedureKey);
+        if (procedure.presentationRole !== undefined) {
+            button.setAttribute("data-recovery-role", procedure.presentationRole);
+            if (procedure.presentationRole === "short-rest") {
+                button.setAttribute("data-rest-action", "short");
+            } else if (procedure.presentationRole === "long-rest") {
+                button.setAttribute("data-rest-action", "long");
+            }
+        }
+        if (disabled) {
+            button.title = readOnly
+                ? "Recovery actions are unavailable while this Character is read-only."
+                : saving
+                    ? "Wait for the current Character state change to finish."
+                    : !applicable
+                        ? "This recovery procedure is not currently applicable to the Character."
+                        : "Recovery execution is not available yet.";
+        } else {
+            button.onclick = () => onRecovery(procedure.procedureKey);
+        }
+        controls.append(button);
+    }
 
-    controls.append(
-        createRestButton("short", "Short Rest"),
-        createRestButton("long", "Long Rest"));
     return controls;
 }
 
