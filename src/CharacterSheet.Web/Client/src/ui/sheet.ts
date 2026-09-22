@@ -286,14 +286,12 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Advancement", choices: ["startingClass", "subclass"] }));
-            if (mechanics !== null) {
-                const hitPointGains = renderHitPointGainEditors(
-                    advancement?.occurrences ?? [],
-                    routine,
-                    false,
-                    handlers.rules);
-                if (hitPointGains !== null) panel.append(hitPointGains);
-            }
+            const hitPointGains = renderHitPointGainEditors(
+                advancement?.occurrences ?? [],
+                routine,
+                false,
+                handlers.rules);
+            if (hitPointGains !== null) panel.append(hitPointGains);
             break;
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");

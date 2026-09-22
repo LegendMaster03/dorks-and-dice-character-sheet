@@ -106,7 +106,7 @@ function renderLevelEditor(
     input.type = "number";
     input.step = "1";
     input.min = "1";
-    input.max = "2147483647";
+    input.max = "1000";
     input.inputMode = "numeric";
     input.value = level === null || level === undefined ? "1" : String(level);
     input.setAttribute("aria-label", "Advancement level");
@@ -121,7 +121,7 @@ function renderLevelEditor(
         () => {
             const parsed = parseAdvancementLevel(input.value);
             if (parsed === null) {
-                input.setCustomValidity("Level must be a whole number from 1 through 2147483647.");
+                input.setCustomValidity("Level must be a whole number from 1 through 1000.");
                 input.reportValidity();
                 return;
             }
@@ -150,7 +150,7 @@ function parseAdvancementLevel(value: string): number | null {
     const normalized = value.trim();
     if (!/^\d+$/.test(normalized)) return null;
     const parsed = Number(normalized);
-    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 2147483647
+    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 1000
         ? parsed
         : null;
 }

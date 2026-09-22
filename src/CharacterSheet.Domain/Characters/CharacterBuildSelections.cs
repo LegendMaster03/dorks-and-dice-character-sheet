@@ -85,6 +85,9 @@ public sealed class CharacterFoundationalRuleSelection
 
 public sealed class CharacterAdvancementEntry
 {
+    // Technical safety ceiling, not a game-rule maximum. It prevents pathological
+    // allocations/projections while remaining far above official advancement ranges.
+    public const int MaxSupportedLevel = 1000;
     private CharacterAdvancementEntry()
     {
     }
@@ -103,9 +106,11 @@ public sealed class CharacterAdvancementEntry
         {
             throw new ArgumentOutOfRangeException(nameof(ordinal), "Advancement ordinal can not be negative.");
         }
-        if (level is <= 0)
+        if (level is <= 0 or > MaxSupportedLevel)
         {
-            throw new ArgumentOutOfRangeException(nameof(level), "Advancement level must be positive when supplied.");
+            throw new ArgumentOutOfRangeException(
+                nameof(level),
+                $"Advancement level must be from 1 through {MaxSupportedLevel} when supplied.");
         }
 
         Id = id;
@@ -152,9 +157,11 @@ public sealed class CharacterAdvancementEntry
 
     internal void SetLevel(int level, DateTimeOffset changedAt)
     {
-        if (level <= 0)
+        if (level <= 0 || level > MaxSupportedLevel)
         {
-            throw new ArgumentOutOfRangeException(nameof(level), "Advancement level must be positive.");
+            throw new ArgumentOutOfRangeException(
+                nameof(level),
+                $"Advancement level must be from 1 through {MaxSupportedLevel}.");
         }
 
         Level = level;

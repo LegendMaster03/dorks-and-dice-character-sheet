@@ -512,6 +512,15 @@ public sealed class CharacterSheetRoot
         }
 
         entry.SetLevel(level, changedAt);
+        foreach (var staleGain in HitPointGains
+            .Where(value =>
+                value.AdvancementOccurrenceId == advancementEntryId
+                && value.ClassLevel > level)
+            .ToArray())
+        {
+            HitPointGains.Remove(staleGain);
+        }
+
         Touch(changedAt);
         return entry;
     }
