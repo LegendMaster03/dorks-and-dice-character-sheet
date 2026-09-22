@@ -93,6 +93,7 @@ const handlers = {
         setAdvancementLevel() {}, setBaseAbilityScore() {}, clearBaseAbilityScore() {}
     },
     feats: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
+    spells: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
     rules: {
         setChoice() {}, clearChoice() {}, setResource() {},
         setHitPointGain() {}, clearHitPointGain() {}
@@ -125,6 +126,8 @@ const routine = (
     },
     references,
     inventoryChooser: { kind: "closed" },
+    spellChooser: { kind: "closed" },
+    conditionChooser: { kind: "closed" },
     mutation: null
 });
 const mechanical = (key, label, formattedValue, extra = {}) => ({
@@ -753,6 +756,61 @@ test("Inventory carrying, components, procedures, and crafting render only when 
     assert.equal(byClass(sparse, "dd-component-card").length, 0);
     assert.equal(byClass(sparse, "dd-crafting-card").length, 0);
     assert.doesNotMatch(visibleText(sparse), /Carrying & Load/);
+});
+
+test("Known Spells renders Character-owned spell concepts and delegates add/remove without prepared state", () => {
+    let removed = null;
+    const knownSpellId = "known-spell-input";
+    const currentRoutine = routine([], {
+        [knownSpellId]: resolvedItem("spell.magic-missile", "Magic Missile")
+    }, false);
+    currentRoutine.state.rulesInputs = [{
+        id: knownSpellId,
+        kind: "knownSpell",
+        key: "spell.magic-missile",
+        integerValue: null,
+        booleanValue: null,
+        textValue: null,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+    currentRoutine.references[knownSpellId] = {
+        status: "resolved",
+        conceptKey: "spell.magic-missile",
+        rule: {
+            ...resolvedItem("spell.magic-missile", "Magic Missile").rule,
+            entityType: "spell"
+        }
+    };
+
+    const spellHandlers = {
+        ...handlers,
+        spells: {
+            ...handlers.spells,
+            remove(conceptKey) { removed = conceptKey; }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        currentRoutine,
+        "spells",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        { spellcastingProfiles: [] },
+        spellHandlers
+    );
+
+    const spell = byAttribute(rendered, "data-known-spell-key", "spell.magic-missile")[0];
+    assert.ok(spell);
+    assert.match(visibleText(spell), /Magic Missile/);
+    assert.doesNotMatch(visibleText(rendered), /Prepared Spells/i);
+    const remove = byTag(spell, "button").find(button => button.textContent === "Remove");
+    assert.ok(remove);
+    remove.dispatchEvent({ type: "click" });
+    assert.equal(removed, "spell.magic-missile");
 });
 
 test("spellcasting profiles keep independent resource systems and runtime resources", () => {
