@@ -186,6 +186,71 @@ public sealed class RulesCoreGatewayContractTests
     }
 
     [Fact]
+    public void CurrentCharacterSupportJsonPreservesRecoveryProcedureMetadata()
+    {
+        const string json = """
+        {
+          "scope": "global",
+          "campaignId": null,
+          "revisionNumber": 14,
+          "publishedAt": "2026-09-22T20:00:00Z",
+          "recoveryProcedures": [{
+            "procedureKey": "recovery.short-rest",
+            "displayName": "Short Rest",
+            "presentationRole": "short-rest",
+            "isAvailableUnderRuleset": true,
+            "applicabilityState": "applicable",
+            "applicability": {
+              "kind": "capability",
+              "requiresCharacterState": true,
+              "requiredCapabilityKeys": ["rest.short"],
+              "sourcePackageKey": null
+            },
+            "missingCapabilityKeys": [],
+            "inputs": [],
+            "choices": [{
+              "key": "resource",
+              "prompt": "Choose resource",
+              "required": true,
+              "options": [{ "key": "hit-die", "displayName": "Hit Die", "value": "resource.hit-die" }]
+            }],
+            "rolls": [{
+              "key": "recovery-roll",
+              "rollKind": "die",
+              "prompt": "Roll recovery",
+              "required": true,
+              "mechanicKey": "health.recovery"
+            }],
+            "runtimeRequirements": {
+              "requiresCharacterState": true,
+              "requiresPlayerChoices": true,
+              "requiresRolls": true,
+              "requiresResourceExpenditure": true,
+              "requiresOtherRuntimeFacts": false
+            },
+            "sourceAttributions": []
+          }],
+          "passiveValues": [],
+          "qualifications": []
+        }
+        """;
+
+        var support = JsonSerializer.Deserialize<RulesCoreCharacterSupportProjectionView>(json, JsonOptions);
+
+        Assert.NotNull(support);
+        var procedure = Assert.Single(support.RecoveryProcedures);
+        Assert.Equal("recovery.short-rest", procedure.ProcedureKey);
+        Assert.Equal("short-rest", procedure.PresentationRole);
+        Assert.Equal("applicable", procedure.ApplicabilityState);
+        Assert.Equal(["rest.short"], procedure.Applicability.RequiredCapabilityKeys);
+        Assert.True(procedure.RuntimeRequirements.RequiresPlayerChoices);
+        Assert.True(procedure.RuntimeRequirements.RequiresRolls);
+        Assert.True(procedure.RuntimeRequirements.RequiresResourceExpenditure);
+        Assert.Equal("resource.hit-die", Assert.Single(Assert.Single(procedure.Choices).Options).Value);
+        Assert.Equal("health.recovery", Assert.Single(procedure.Rolls).MechanicKey);
+    }
+
+    [Fact]
     public void CurrentBatchEvaluationJsonPreservesCompetencyBreakdown()
     {
         const string json = """
