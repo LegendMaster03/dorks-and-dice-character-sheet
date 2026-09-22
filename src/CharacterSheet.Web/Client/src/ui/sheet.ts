@@ -154,7 +154,20 @@ export function renderCharacterWorkspace(
 
     const skillsColumn = createElement("aside", "dd-sheet__skills");
     skillsColumn.setAttribute("aria-label", "Skills and competencies");
-    skillsColumn.append(renderSkillsCard(competencyPresentation));
+    skillsColumn.append(renderSkillsCard(
+        competencyPresentation,
+        {
+            readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+            savingKey: routine.mutation?.kind === "rules-input-update"
+                && routine.mutation.entryId?.startsWith("competencyRank:")
+                ? routine.mutation.entryId.slice("competencyRank:".length)
+                : routine.mutation?.kind === "rules-input-delete"
+                    && routine.mutation.entryId?.startsWith("competencyRank:")
+                    ? routine.mutation.entryId.slice("competencyRank:".length)
+                    : null,
+            onSetRank: handlers.rules.setCompetencyRank,
+            onClearRank: handlers.rules.clearCompetencyRank
+        }));
 
     const stage = createElement("div", "dd-sheet__stage");
     stage.append(renderCombatSummaryBand(
