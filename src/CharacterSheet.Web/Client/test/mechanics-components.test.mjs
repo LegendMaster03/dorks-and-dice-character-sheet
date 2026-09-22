@@ -96,6 +96,7 @@ test("Armor Class quick card promotes primary AC and keeps touch and flat-footed
         }
     });
     assert.equal(rendered.getAttribute("data-armor-class-card"), "true");
+    assert.equal(byClass(rendered, "dd-split-stat").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac.touch").length, 1);
     assert.equal(byAttribute(rendered, "data-mechanic-key", "defense.ac.flat-footed").length, 1);

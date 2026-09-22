@@ -245,6 +245,7 @@ test("Ability cards pair effective score, modifier, and matching Ability save", 
 
     const strength = byAttribute(rendered, "data-ability-key", "strength")[0];
     assert.ok(strength);
+    assert.equal(byClass(strength, "dd-split-stat").length, 1);
     assert.equal(byAttribute(strength, "data-ability-modifier", "strength").length, 1);
     assert.equal(byAttribute(strength, "data-ability-save", "strength").length, 1);
     assert.equal(byAttribute(strength, "data-saving-throw-key", "save.strength").length, 1);

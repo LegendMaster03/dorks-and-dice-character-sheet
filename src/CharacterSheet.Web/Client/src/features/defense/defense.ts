@@ -4,6 +4,7 @@ import {
     type CharacterMechanicsView
 } from "../../ui/character-mechanics.js";
 import { createElement, createSectionCard } from "../../ui/components.js";
+import { renderSplitStat } from "../../ui/split-stat.js";
 import {
     findScaffoldValue,
     renderMechanicalScaffold,
@@ -41,23 +42,24 @@ export function renderArmorClassQuickCard(
     const card = createElement("article", "dd-stat dd-stat--armor-class");
     card.setAttribute("data-armor-class-card", "true");
 
-    const primaryRegion = createElement("div", "dd-armor-class__primary");
-    primaryRegion.append(
-        createElement("h3", "dd-stat__label", "Armor Class"),
-        renderArmorClassValue(
-            primary,
-            ARMOR_CLASS_SCAFFOLD[0],
-            "dd-armor-class__primary-value"));
-
-    const variants = createElement("div", "dd-armor-class__variants");
-    variants.append(
-        renderArmorClassVariant("Touch AC", touch, ARMOR_CLASS_SCAFFOLD[1]),
-        renderArmorClassVariant(
-            "Flat-Footed AC",
-            flatFooted,
-            ARMOR_CLASS_SCAFFOLD[2]));
-
-    card.append(primaryRegion, variants);
+    card.append(renderSplitStat({
+        label: "Armor Class",
+        primaryValue: primary === undefined ? "-" : formatMechanicalValue(primary),
+        primaryAttributes: metricAttributes(primary, ARMOR_CLASS_SCAFFOLD[0]),
+        className: "dd-armor-class__presentation",
+        secondary: [
+            {
+                label: "Touch AC",
+                value: touch === undefined ? "-" : formatMechanicalValue(touch),
+                attributes: metricAttributes(touch, ARMOR_CLASS_SCAFFOLD[1])
+            },
+            {
+                label: "Flat-Footed AC",
+                value: flatFooted === undefined ? "-" : formatMechanicalValue(flatFooted),
+                attributes: metricAttributes(flatFooted, ARMOR_CLASS_SCAFFOLD[2])
+            }
+        ]
+    }));
     return card;
 }
 
@@ -121,41 +123,13 @@ function findPrimaryArmorClassValue(
     return findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[0], usedKeys);
 }
 
-function renderArmorClassValue(
-    value: CalculatedMechanicalValueView | undefined,
-    scaffold: MechanicalScaffoldSlot,
-    className: string
-): HTMLElement {
-    const rendered = createElement(
-        "strong",
-        className,
-        value === undefined ? "-" : formatMechanicalValue(value));
-    if (value === undefined) {
-        rendered.setAttribute("data-sheet-scaffold-key", scaffold.id);
-    } else {
-        rendered.setAttribute("data-mechanic-key", value.key);
-    }
-    return rendered;
-}
-
-function renderArmorClassVariant(
-    label: string,
+function metricAttributes(
     value: CalculatedMechanicalValueView | undefined,
     scaffold: MechanicalScaffoldSlot
-): HTMLElement {
-    const cell = createElement("div", "dd-armor-class__variant");
-    if (value === undefined) {
-        cell.setAttribute("data-sheet-scaffold-key", scaffold.id);
-    } else {
-        cell.setAttribute("data-mechanic-key", value.key);
-    }
-    cell.append(
-        createElement("span", "dd-armor-class__variant-label", label),
-        createElement(
-            "strong",
-            "dd-armor-class__variant-value",
-            value === undefined ? "-" : formatMechanicalValue(value)));
-    return cell;
+): Record<string, string> {
+    return value === undefined
+        ? { "data-sheet-scaffold-key": scaffold.id }
+        : { "data-mechanic-key": value.key };
 }
 
 function orderedDefenses(

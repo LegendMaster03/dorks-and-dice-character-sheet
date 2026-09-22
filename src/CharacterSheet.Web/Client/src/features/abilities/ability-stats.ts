@@ -5,6 +5,7 @@ import {
     type SavingThrowView
 } from "../../ui/character-mechanics.js";
 import { createButton, createElement } from "../../ui/components.js";
+import { renderSplitStat } from "../../ui/split-stat.js";
 import { renderSourceAttributions } from "../../ui/source-attribution.js";
 import {
     getAbilityScoreActionPolicy,
@@ -35,50 +36,45 @@ export function renderAbilityScoreCard(
     card.setAttribute("data-ability-score-state", display.status);
     card.setAttribute("data-effective-ability-state", effectiveValue === undefined ? "unavailable" : "resolved");
 
-    const presentation = createElement("div", "dd-ability-stat__presentation");
-    const primary = createElement("div", "dd-ability-stat__primary");
-    primary.append(createElement("h3", "dd-stat__label", definition.label));
-
-    if (effectiveValue === undefined) {
-        primary.append(
-            createElement("p", "dd-stat__value", display.value),
-            createElement("p", "dd-stat__detail", display.detail));
-    } else {
+    const modifier = findAbilityModifier(effectiveValue);
+    if (effectiveValue !== undefined) {
         card.setAttribute("data-effective-ability-key", effectiveValue.key);
-        primary.append(
-            createElement("p", "dd-stat__value", formatMechanicalValue(effectiveValue)),
-            createElement("p", "dd-stat__detail", "Effective value"),
-            createElement(
-                "p",
-                "dd-stat__base-context",
-                `Base input: ${display.value}`));
     }
 
-    const secondary = createElement("div", "dd-ability-stat__secondary");
+    const saveAttributes: Record<string, string> = {
+        "data-ability-save": definition.key
+    };
+    if (savingThrow !== undefined) {
+        saveAttributes["data-saving-throw-key"] = savingThrow.key;
+    }
 
-    const modifier = findAbilityModifier(effectiveValue);
-    const modifierRegion = createElement("div", "dd-ability-stat__modifier");
-    modifierRegion.setAttribute("data-ability-modifier", definition.key);
-    modifierRegion.append(
-        createElement("span", "dd-ability-stat__secondary-label", "Modifier"),
-        createElement(
-            "strong",
-            "dd-ability-stat__secondary-value",
-            modifier === undefined ? "-" : formatMechanicalValue(modifier)));
-
-    const saveRegion = createElement("div", "dd-ability-stat__save");
-    saveRegion.setAttribute("data-ability-save", definition.key);
-    if (savingThrow !== undefined) saveRegion.setAttribute("data-saving-throw-key", savingThrow.key);
-    saveRegion.append(
-        createElement("span", "dd-ability-stat__secondary-label", "Save"),
-        createElement(
-            "strong",
-            "dd-ability-stat__secondary-value",
-            savingThrow === undefined ? "-" : formatMechanicalValue(savingThrow)));
-
-    secondary.append(modifierRegion, saveRegion);
-    presentation.append(primary, secondary);
-    card.append(presentation);
+    card.append(renderSplitStat({
+        label: definition.label,
+        primaryValue: effectiveValue === undefined
+            ? display.value
+            : formatMechanicalValue(effectiveValue),
+        primaryDetail: effectiveValue === undefined
+            ? display.detail
+            : "Effective value",
+        primaryContext: effectiveValue === undefined
+            ? undefined
+            : `Base input: ${display.value}`,
+        className: "dd-ability-stat__presentation",
+        secondary: [
+            {
+                label: "Modifier",
+                value: modifier === undefined ? "-" : formatMechanicalValue(modifier),
+                className: "dd-ability-stat__modifier",
+                attributes: { "data-ability-modifier": definition.key }
+            },
+            {
+                label: "Save",
+                value: savingThrow === undefined ? "-" : formatMechanicalValue(savingThrow),
+                className: "dd-ability-stat__save",
+                attributes: saveAttributes
+            }
+        ]
+    }));
 
     if (effectiveValue !== undefined) {
         const details = renderAbilityMechanicalDetails(effectiveValue);
