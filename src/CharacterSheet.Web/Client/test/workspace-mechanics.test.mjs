@@ -81,6 +81,7 @@ const builder = {
     chooser: { kind: "closed" },
     saving: null,
     savingAbility: null,
+    savingAdvancementLevel: null,
     featReferences: {},
     featChooser: { kind: "closed" },
     savingFeat: null
@@ -89,9 +90,10 @@ const guidedBuilder = { open: false, activeSection: "species", returnSheetMode: 
 const handlers = {
     structural: {
         openChooser() {}, clearChoice() {}, submitChooserSearch() {}, closeChooser() {}, saveChoice() {},
-        setBaseAbilityScore() {}, clearBaseAbilityScore() {}
+        setAdvancementLevel() {}, setBaseAbilityScore() {}, clearBaseAbilityScore() {}
     },
     feats: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
+    rules: { setChoice() {}, clearChoice() {}, setResource() {} },
     routine: {
         setCurrentHitPoints() {},
         setDeathSaves() {},
@@ -809,6 +811,75 @@ test("Features & Traits renders Rules Core-granted features without replacing Ch
     assert.match(visibleText(supplied), /Level 1/);
     assert.match(visibleText(supplied), /class\.fighter/);
     assert.match(visibleText(supplied), /Resource: Second Wind use/);
+});
+
+test("Guided Setup renders Rules Core choices and delegates the selected value without interpreting it", () => {
+    let saved = null;
+    const choiceHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            setChoice(choiceKey, value) { saved = [choiceKey, value]; }
+        }
+    };
+    const configuredBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
+    const openGuided = { open: true, activeSection: "review", returnSheetMode: "view" };
+    const rendered = renderCharacterWorkspace(
+        character,
+        configuredBuilder,
+        routine([], {}, false),
+        "actions",
+        false,
+        "view",
+        openGuided,
+        null,
+        {
+            ruleChoices: [{
+                choiceKey: "spellcasting.resource-system",
+                groupKey: "spellcasting",
+                displayName: "Spellcasting Resource System",
+                kind: "single-select",
+                state: "choice-required",
+                options: [
+                    { value: "spell-slots", displayName: "Spell Slots" },
+                    { value: "spell-points", displayName: "Spell Points" }
+                ]
+            }],
+            projectionConflicts: [{
+                conflictKey: "conflict.fixture",
+                kind: "fixture",
+                message: "Choose one resource system.",
+                relatedMechanicKeys: [],
+                relatedConceptKeys: []
+            }]
+        },
+        choiceHandlers
+    );
+
+    const choice = byAttribute(rendered, "data-rule-choice-key", "spellcasting.resource-system")[0];
+    assert.ok(choice);
+    assert.match(visibleText(choice), /Spellcasting Resource System/);
+    assert.match(visibleText(choice), /Spell Slots/);
+    assert.match(visibleText(choice), /Spell Points/);
+    assert.equal(byAttribute(rendered, "data-rule-conflict-key", "conflict.fixture").length, 1);
+
+    const select = byTag(choice, "select")[0];
+    select.value = "spell-points";
+    const choose = byTag(choice, "button").find(button => button.textContent === "Choose");
+    assert.ok(choose);
+    choose.dispatchEvent({ type: "click" });
+    assert.deepEqual(saved, ["spellcasting.resource-system", "spell-points"]);
 });
 
 test("production consumes backend advancement and mechanics projections instead of hard-coded nulls", async () => {

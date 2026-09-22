@@ -109,6 +109,37 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
                     [],
                     [],
                     Provenance)
+            ],
+            Choices =
+            [
+                new RulesCoreCharacterChoiceView(
+                    "spellcasting.resource-system",
+                    "spellcasting",
+                    "Spellcasting Resource System",
+                    "single-select",
+                    "choice-required",
+                    [
+                        new RulesCoreCharacterChoiceOptionView(
+                            "spell-slots",
+                            "Spell Slots",
+                            null),
+                        new RulesCoreCharacterChoiceOptionView(
+                            "spell-points",
+                            "Spell Points",
+                            null)
+                    ],
+                    "spell-points",
+                    "house.spellcasting-resource",
+                    Provenance)
+            ],
+            Conflicts =
+            [
+                new RulesCoreCharacterProjectionConflictView(
+                    "conflict.fixture",
+                    "fixture",
+                    "Fixture conflict",
+                    ["defense.ac.total"],
+                    ["class.fighter"])
             ]
         };
 
@@ -151,6 +182,12 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
         var warlock = Assert.Single(mechanics.SpellcastingProfiles!, value => value.Key == "spellcasting.class.warlock");
         Assert.Equal("pact-magic", warlock.ResourceSystem!.Value);
         Assert.Equal(2, Assert.Single(warlock.Resources!).Maximum);
+
+        var choice = Assert.Single(mechanics.RuleChoices!);
+        Assert.Equal("spellcasting.resource-system", choice.ChoiceKey);
+        Assert.Equal("spell-points", choice.SelectedValue);
+        Assert.Equal(["Spell Slots", "Spell Points"], choice.Options.Select(value => value.DisplayName).ToArray());
+        Assert.Equal("Fixture conflict", Assert.Single(mechanics.ProjectionConflicts!).Message);
     }
 
     private static RulesCoreCharacterRulesProjectionView EmptyProjection() =>
