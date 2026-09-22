@@ -107,7 +107,15 @@ export function renderPrimaryContent(
         }
         case "spells":
             panel.append(renderSpellcastingPresentation(
-                mechanics?.spellcastingProfiles));
+                mechanics?.spellcastingProfiles,
+                {
+                    readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+                    savingResourceKey: routine.mutation?.kind === "rules-input-update"
+                        && routine.mutation.entryId?.startsWith("resource:")
+                        ? routine.mutation.entryId.slice("resource:".length)
+                        : null,
+                    onSetResource: handlers.rules.setResource
+                }));
             break;
         default:
             panel.append(

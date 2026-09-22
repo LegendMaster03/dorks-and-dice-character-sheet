@@ -184,18 +184,30 @@ export function renderInventoryMechanics(mechanics: InventoryMechanicsView | und
     return root.children.length === 0 ? null : root;
 }
 
-export function renderSpellcastingPresentation(profiles: readonly SpellcastingProfileView[] | undefined): HTMLElement {
+export interface SpellcastingResourceControlOptions {
+    readOnly?: boolean;
+    savingResourceKey?: string | null;
+    onSetResource?: (resourceKey: string, currentValue: number) => void;
+}
+
+export function renderSpellcastingPresentation(
+    profiles: readonly SpellcastingProfileView[] | undefined,
+    control: SpellcastingResourceControlOptions = {}
+): HTMLElement {
     const root = createElement("div", "dd-spellcasting-profiles");
     root.setAttribute("data-spellcasting-state", profiles === undefined ? "unavailable" : "resolved");
     if (profiles === undefined || profiles.length === 0) {
         root.append(createInlineState("-", "neutral"));
         return root;
     }
-    for (const profile of profiles) root.append(renderSpellcastingProfile(profile));
+    for (const profile of profiles) root.append(renderSpellcastingProfile(profile, control));
     return root;
 }
 
-function renderSpellcastingProfile(profile: SpellcastingProfileView): HTMLElement {
+function renderSpellcastingProfile(
+    profile: SpellcastingProfileView,
+    control: SpellcastingResourceControlOptions
+): HTMLElement {
     const root = createElement("article", "dd-spellcasting-profile");
     root.setAttribute("data-spellcasting-profile-key", profile.key);
     root.append(createElement("h3", "dd-spellcasting-profile__name", profile.label));
@@ -206,19 +218,7 @@ function renderSpellcastingProfile(profile: SpellcastingProfileView): HTMLElemen
     ]);
     if (facts !== null) root.append(facts);
     if (profile.resources !== undefined && profile.resources.length > 0) {
-        const resourceFields = profile.resources.map(resource => ({
-            key: resource.key,
-            label: resource.label,
-            value: resource.current !== undefined && resource.maximum !== undefined
-                ? `${resource.current} / ${resource.maximum}`
-                : resource.current !== undefined
-                    ? String(resource.current)
-                    : resource.maximum !== undefined
-                        ? `Max ${resource.maximum}`
-                        : "-"
-        }));
-        const rendered = renderDisplayFields(resourceFields, "Resources");
-        if (rendered !== null) root.append(rendered);
+        root.append(renderSpellcastingResources(profile.resources, control));
     }
     if (profile.saveDc) root.append(renderMechanicalValue(profile.saveDc, true));
     if (profile.spellAttack) root.append(renderMechanicalValue(profile.spellAttack, true));
@@ -228,6 +228,83 @@ function renderSpellcastingProfile(profile: SpellcastingProfileView): HTMLElemen
     }
     appendSources(root, profile.sourceAttributions);
     return root;
+}
+
+function renderSpellcastingResources(
+    resources: NonNullable<SpellcastingProfileView["resources"]>,
+    control: SpellcastingResourceControlOptions
+): HTMLElement {
+    const section = createElement("section", "dd-spellcasting-profile__resources");
+    section.append(createElement("h4", "dd-spellcasting-profile__resources-title", "Resources"));
+
+    for (const resource of resources) {
+        const row = createElement("div", "dd-definition-row");
+        row.setAttribute("data-spellcasting-resource-key", resource.key);
+        const label = createElement("span", "dd-definition-row__term", resource.label);
+        const value = resource.current !== undefined && resource.maximum !== undefined
+            ? `${resource.current} / ${resource.maximum}`
+            : resource.current !== undefined
+                ? String(resource.current)
+                : resource.maximum !== undefined
+                    ? `Max ${resource.maximum}`
+                    : "-";
+        const valueElement = createElement("span", "dd-definition-row__value", value);
+        row.append(label, valueElement);
+
+        if (resource.recoveryProcedureKey !== undefined) {
+            row.append(createElement(
+                "span",
+                "dd-routine-meta",
+                `Recovery: ${resource.recoveryProcedureKey}`));
+        }
+
+        if (control.readOnly !== true && control.onSetResource !== undefined) {
+            const editor = createElement("div", "dd-spellcasting-profile__resource-editor");
+            const input = createElement("input", "dd-sheet-screen__input");
+            input.type = "number";
+            input.step = "1";
+            input.inputMode = "numeric";
+            input.value = resource.current === undefined ? "" : String(resource.current);
+            input.setAttribute("aria-label", `${resource.label} current value`);
+            input.addEventListener("input", () => input.setCustomValidity(""));
+
+            const saving = control.savingResourceKey === resource.key;
+            const save = createElement(
+                "button",
+                "dd-button dd-button--secondary",
+                saving ? "Saving…" : "Set") as HTMLButtonElement;
+            save.type = "button";
+            save.disabled = control.savingResourceKey !== null
+                && control.savingResourceKey !== undefined;
+            save.addEventListener("click", () => {
+                const parsed = parseResourceValue(input.value);
+                if (parsed === null) {
+                    input.setCustomValidity(
+                        "Enter a whole number that can be represented by the Character Sheet API.");
+                    input.reportValidity();
+                    return;
+                }
+                input.setCustomValidity("");
+                control.onSetResource!(resource.key, parsed);
+            });
+            editor.append(input, save);
+            row.append(editor);
+        }
+
+        section.append(row);
+    }
+    return section;
+}
+
+function parseResourceValue(value: string): number | null {
+    const normalized = value.trim();
+    if (!/^-?\d+$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed)
+        && parsed >= -2147483648
+        && parsed <= 2147483647
+        ? parsed
+        : null;
 }
 
 function fieldTuple(field: DisplayFieldView | undefined): readonly [string, string] | undefined {
