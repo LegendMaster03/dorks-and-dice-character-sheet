@@ -61,6 +61,71 @@ public sealed class CharacterPresentationWorkflowTests
     }
 
     [Fact]
+    public async Task RecoverySupportUsesResolvedCharacterCapabilitiesAndProjectsProcedures()
+    {
+        using var factory = new PresentationFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            characterId, "Recovery", "Active", null, []));
+        using var initialize = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/sheet");
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+
+        factory.Gateway.ProjectionCapabilities =
+        [
+            new RulesCoreCharacterCapabilityView(
+                "recovery.short-rest",
+                "Short Rest",
+                [],
+                new RulesCoreCharacterMechanicProvenanceView([], [], []))
+        ];
+        factory.Gateway.SupportProjection = new RulesCoreCharacterSupportProjectionView(
+            "global",
+            null,
+            1,
+            DateTimeOffset.UtcNow,
+            [
+                new RulesCoreCharacterRecoveryProcedureView(
+                    "recovery.short-rest",
+                    "Catch Breath",
+                    "short-rest",
+                    true,
+                    "applicable",
+                    new RulesCoreMechanicApplicabilityView(
+                        "capability",
+                        true,
+                        ["recovery.short-rest"],
+                        null),
+                    [],
+                    [],
+                    [],
+                    [],
+                    new RulesCoreCharacterRecoveryRuntimeRequirementsView(
+                        true,
+                        false,
+                        false,
+                        false,
+                        false),
+                    [])
+            ]);
+
+        using var response = await factory.SendHostedAsync(
+            HttpMethod.Get,
+            $"/api/characters/{characterId:D}/presentation");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var recovery = Assert.Single(json.RootElement.GetProperty("mechanics")
+            .GetProperty("recoveryProcedures").EnumerateArray().ToArray());
+        Assert.Equal("recovery.short-rest", recovery.GetProperty("procedureKey").GetString());
+        Assert.Equal("Catch Breath", recovery.GetProperty("displayName").GetString());
+        Assert.Equal("short-rest", recovery.GetProperty("presentationRole").GetString());
+        Assert.Equal(
+            ["recovery.short-rest"],
+            factory.Gateway.LastSupportCapabilityKeys);
+    }
+
+    [Fact]
     public async Task UninitializedAndUnauthorizedCharactersRemainUnavailable()
     {
         using var factory = new PresentationFactory();
@@ -247,6 +312,10 @@ public sealed class CharacterPresentationWorkflowTests
             new(StringComparer.Ordinal);
         public RulesCoreMechanicsCatalogView Catalog { get; set; } =
             new("global", null, 1, DateTimeOffset.UtcNow, []);
+        public IReadOnlyList<RulesCoreCharacterCapabilityView> ProjectionCapabilities { get; set; } = [];
+        public RulesCoreCharacterSupportProjectionView SupportProjection { get; set; } =
+            new("global", null, 1, DateTimeOffset.UtcNow, []);
+        public IReadOnlyList<string>? LastSupportCapabilityKeys { get; private set; }
 
         public Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
             IReadOnlyCollection<string> conceptKeys,
@@ -276,13 +345,25 @@ public sealed class CharacterPresentationWorkflowTests
                 "global", null, 1, DateTimeOffset.UtcNow, []));
         }
 
+        public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
+            RulesCoreCharacterSupportProjectionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            LastSupportCapabilityKeys = request.CapabilityKeys;
+            return Task.FromResult(SupportProjection);
+        }
+
         public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
             RulesCoreCharacterRulesProjectionRequest request,
             CancellationToken cancellationToken = default)
         {
             GlobalCharacterProjectionRequested = true;
             if (Throw) throw new RulesCoreGatewayException("test outage");
-            return Task.FromResult(EmptyProjection("global", null));
+            return Task.FromResult(EmptyProjection("global", null) with
+            {
+                Capabilities = ProjectionCapabilities
+            });
         }
 
         public Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
