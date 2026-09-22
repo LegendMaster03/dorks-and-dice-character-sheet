@@ -257,6 +257,79 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_foundational_rule_selections");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterHitPointGainState", b =>
+        {
+            b.Property<Guid>("Id")
+                .HasColumnType("uuid");
+
+            b.Property<Guid>("AdvancementOccurrenceId")
+                .HasColumnType("uuid");
+
+            b.Property<int>("ClassLevel")
+                .HasColumnType("integer");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<int>("HitDieValue")
+                .HasColumnType("integer");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CharacterId", "AdvancementOccurrenceId", "ClassLevel")
+                .IsUnique();
+
+            b.ToTable("character_hit_point_gains");
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterRulesInputState", b =>
+        {
+            b.Property<Guid>("Id")
+                .HasColumnType("uuid");
+
+            b.Property<bool?>("BooleanValue")
+                .HasColumnType("boolean");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<int?>("IntegerValue")
+                .HasColumnType("integer");
+
+            b.Property<string>("Key")
+                .IsRequired()
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.Property<string>("Kind")
+                .IsRequired()
+                .HasMaxLength(64)
+                .HasColumnType("character varying(64)");
+
+            b.Property<string>("TextValue")
+                .HasMaxLength(2000)
+                .HasColumnType("character varying(2000)");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CharacterId", "Kind", "Key")
+                .IsUnique();
+
+            b.ToTable("character_rules_inputs");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSheetRoot", b =>
         {
             b.Property<Guid>("CharacterId")
@@ -355,6 +428,15 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .IsRequired();
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterHitPointGainState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithMany("HitPointGains")
+                .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterInventoryItemOccurrence", b =>
         {
             b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
@@ -373,14 +455,25 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .IsRequired();
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterRulesInputState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithMany("RulesInputs")
+                .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSheetRoot", b =>
         {
             b.Navigation("AdvancementEntries");
             b.Navigation("BaseAbilityScoreInputs");
             b.Navigation("Conditions");
             b.Navigation("FoundationalSelections");
+            b.Navigation("HitPointGains");
             b.Navigation("InventoryItemOccurrences");
             b.Navigation("Notes");
+            b.Navigation("RulesInputs");
         });
 #pragma warning restore 612, 618
     }
