@@ -56,6 +56,80 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
                     null,
                     Now,
                     Now)
+            ],
+            [
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.Choice,
+                    "spellcasting.resource-system",
+                    null,
+                    null,
+                    "spell-points",
+                    Now,
+                    Now),
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.CompetencyRank,
+                    "skill.climb",
+                    4,
+                    null,
+                    null,
+                    Now,
+                    Now),
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.KnownSpell,
+                    "spell.magic-missile",
+                    null,
+                    null,
+                    null,
+                    Now,
+                    Now),
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.Resource,
+                    "resource.spell-points",
+                    9,
+                    null,
+                    null,
+                    Now,
+                    Now),
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.IntegerFact,
+                    "combat.initiative.other",
+                    2,
+                    null,
+                    null,
+                    Now,
+                    Now),
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.BooleanFact,
+                    "character.flat-footed",
+                    null,
+                    true,
+                    null,
+                    Now,
+                    Now),
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.StringFact,
+                    "character.size-category",
+                    null,
+                    null,
+                    "large",
+                    Now,
+                    Now)
+            ],
+            [
+                new CharacterHitPointGainStateView(
+                    Guid.NewGuid(),
+                    classId,
+                    1,
+                    10,
+                    Now,
+                    Now)
             ]);
 
         var state = new CharacterStateView(
@@ -66,7 +140,11 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
             [new CharacterInventoryItemOccurrenceView(
                 Guid.NewGuid(),
                 "item.long-sword",
-                Now)],
+                Now,
+                Quantity: 1,
+                IsCarried: true,
+                IsEquipped: true,
+                IsAttuned: false)],
             [],
             [
                 new CharacterConditionOccurrenceView(
@@ -118,8 +196,20 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
         Assert.Equal(2, request.CurrentResources["resource.death-save.failures"]);
         Assert.Equal(["condition.enlarged"], request.ConditionKeys);
         Assert.Equal(["item.long-sword"], request.ItemConceptKeys);
-        Assert.Null(request.EquippedItemConceptKeys);
-        Assert.Null(request.KnownSpellConceptKeys);
-        Assert.Null(request.Choices);
+        Assert.Equal(["item.long-sword"], request.EquippedItemConceptKeys);
+        Assert.Equal(["spell.magic-missile"], request.KnownSpellConceptKeys);
+        Assert.Equal(4, request.CompetencyRanks!["skill.climb"]);
+        Assert.Equal(
+            "spell-points",
+            Assert.Single(request.Choices!).Value);
+        Assert.Equal(9, request.CurrentResources["resource.spell-points"]);
+        Assert.Equal(2, request.IntegerFacts!["combat.initiative.other"]);
+        Assert.True(request.BooleanFacts!["character.flat-footed"]);
+        Assert.Equal("large", request.StringFacts!["character.size-category"]);
+        var hpGain = Assert.Single(request.HitPointGains!);
+        Assert.Equal("class.fighter", hpGain.ConceptKey);
+        Assert.Equal(1, hpGain.ClassLevel);
+        Assert.Equal(10, hpGain.HitDieValue);
+        Assert.Equal(classId.ToString("D"), hpGain.OccurrenceKey);
     }
 }

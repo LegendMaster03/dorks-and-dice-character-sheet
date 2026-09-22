@@ -74,6 +74,30 @@ public sealed class CharacterStateModelTests
     }
 
     [Fact]
+    public void AdvancementLevelUsesTechnicalSafetyCeilingAndPrunesStaleHitPointGains()
+    {
+        var root = Root();
+        var createdAt = DateTimeOffset.UtcNow;
+        var fighter = root.SetStartingClass("class:fighter", createdAt);
+
+        root.SetAdvancementLevel(fighter.Id, 3, createdAt.AddSeconds(1));
+        root.SetHitPointGain(fighter.Id, 1, 10, createdAt.AddSeconds(2));
+        root.SetHitPointGain(fighter.Id, 2, 6, createdAt.AddSeconds(3));
+        root.SetHitPointGain(fighter.Id, 3, 5, createdAt.AddSeconds(4));
+
+        root.SetAdvancementLevel(fighter.Id, 2, createdAt.AddMinutes(1));
+
+        Assert.Equal(2, fighter.Level);
+        Assert.Equal(2, root.HitPointGains.Count);
+        Assert.DoesNotContain(root.HitPointGains, value => value.ClassLevel > 2);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.SetAdvancementLevel(
+                fighter.Id,
+                CharacterAdvancementEntry.MaxSupportedLevel + 1,
+                createdAt.AddMinutes(2)));
+    }
+
+    [Fact]
     public void NotesHaveStableCharacterOwnedIdentityAndPreserveAuthoredContent()
     {
         var root = Root();

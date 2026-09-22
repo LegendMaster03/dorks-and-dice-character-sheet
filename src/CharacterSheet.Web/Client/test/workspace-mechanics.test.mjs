@@ -93,7 +93,10 @@ const handlers = {
         setAdvancementLevel() {}, setBaseAbilityScore() {}, clearBaseAbilityScore() {}
     },
     feats: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
-    rules: { setChoice() {}, clearChoice() {}, setResource() {} },
+    rules: {
+        setChoice() {}, clearChoice() {}, setResource() {},
+        setHitPointGain() {}, clearHitPointGain() {}
+    },
     routine: {
         setCurrentHitPoints() {},
         setDeathSaves() {},
@@ -791,6 +794,126 @@ test("spellcasting profiles keep independent resource systems and runtime resour
     const unavailable = render("spells", null);
     assert.equal(byAttribute(unavailable, "data-spellcasting-state", "unavailable").length, 1);
     assert.equal(byClass(unavailable, "dd-spellcasting-profile").length, 0);
+});
+
+test("spellcasting resource editor persists the backend resource key and current value", () => {
+    let saved = null;
+    const resourceHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            setResource(resourceKey, currentValue) { saved = [resourceKey, currentValue]; }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        routine([], {}, false),
+        "spells",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        {
+            spellcastingProfiles: [{
+                key: "wizard",
+                label: "Wizard Spellcasting",
+                resourceSystem: { key: "resource-system", label: "Resource System", value: "spell-points" },
+                resources: [{
+                    key: "resource.spell-points",
+                    label: "Spell Points",
+                    state: "resolved",
+                    current: 8,
+                    maximum: 14
+                }]
+            }]
+        },
+        resourceHandlers
+    );
+
+    const resource = byAttribute(rendered, "data-spellcasting-resource-key", "resource.spell-points")[0];
+    assert.ok(resource);
+    const input = byTag(resource, "input")[0];
+    input.value = "6";
+    const save = byTag(resource, "button").find(button => button.textContent === "Set");
+    assert.ok(save);
+    save.dispatchEvent({ type: "click" });
+    assert.deepEqual(saved, ["resource.spell-points", 6]);
+});
+
+test("guided advancement exposes one raw hit-die outcome per owned Class level", () => {
+    let saved = null;
+    const hpHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            setHitPointGain(occurrenceId, classLevel, hitDieValue) {
+                saved = [occurrenceId, classLevel, hitDieValue];
+            }
+        }
+    };
+    const configuredBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: [{
+                id: "fighter-entry",
+                ordinal: 0,
+                kind: "class",
+                ruleConceptKey: "class.fighter",
+                parentAdvancementEntryId: null,
+                createdAt: "now",
+                updatedAt: "now",
+                level: 2
+            }]
+        }
+    };
+    const openGuided = { open: true, activeSection: "advancement", returnSheetMode: "view" };
+    const currentRoutine = routine([], {}, false);
+    currentRoutine.state.hitPointGains = [{
+        id: "gain-one",
+        advancementOccurrenceId: "fighter-entry",
+        classLevel: 1,
+        hitDieValue: 10,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+
+    const rendered = renderCharacterWorkspace(
+        character,
+        configuredBuilder,
+        currentRoutine,
+        "actions",
+        false,
+        "view",
+        openGuided,
+        {
+            occurrences: [{
+                occurrenceId: "fighter-entry",
+                conceptKey: "class.fighter",
+                kind: "class",
+                displayName: "Fighter",
+                progression: { label: "Level", value: 2, formattedValue: "Level 2" }
+            }]
+        },
+        {},
+        hpHandlers
+    );
+
+    assert.equal(byAttribute(rendered, "data-hit-point-gain-key", "fighter-entry:1").length, 1);
+    const levelTwo = byAttribute(rendered, "data-hit-point-gain-key", "fighter-entry:2")[0];
+    assert.ok(levelTwo);
+    const input = byTag(levelTwo, "input")[0];
+    input.value = "7";
+    const save = byTag(levelTwo, "button").find(button => button.textContent === "Save");
+    assert.ok(save);
+    save.dispatchEvent({ type: "click" });
+    assert.deepEqual(saved, ["fighter-entry", 2, 7]);
 });
 
 test("Features & Traits renders Rules Core-granted features without replacing Character-owned Feats", () => {
