@@ -22,6 +22,7 @@ import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.
 import {
     createButton,
     createElement,
+    createInlineState,
     createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";

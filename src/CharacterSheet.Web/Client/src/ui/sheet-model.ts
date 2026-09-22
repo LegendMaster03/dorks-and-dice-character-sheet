@@ -175,7 +175,7 @@ export interface AbilityScoreActionPolicy {
 export function hasPendingBuildMutation(builder: CharacterBuilderUiState): boolean {
     return builder.saving !== null
         || builder.savingAbility !== null
-        || builder.savingAdvancementLevel !== null
+        || builder.savingAdvancementLevel != null
         || builder.savingFeat !== null;
 }
 
