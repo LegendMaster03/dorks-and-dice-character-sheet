@@ -279,16 +279,16 @@ test("Hit Points owns the wide final top-strip track and top cards are not fixed
     assert.doesNotMatch(css, /\.dd-core-stats__quick > \.dd-stat\s*\{[^}]*block-size:/s);
 });
 
-test("Guided Builder overrides display-contents Ability composition with its own responsive grid", () => {
+test("Guided Builder overrides display-contents Ability composition with its own container-responsive grid", () => {
     assert.match(
         css,
         /\.dd-guided-builder__ability-grid\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*repeat\(6,/s);
     assert.match(
         css,
-        /@media \(max-width: 1099px\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*repeat\(3,/s);
+        /@container character-sheet \(max-width: 62rem\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*repeat\(3,/s);
     assert.match(
         css,
-        /@media \(max-width: 720px\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*repeat\(2,/s);
+        /@container character-sheet \(max-width: 45rem\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*repeat\(2,/s);
 });
 
 test("Character Sheet CSS references only defined Character Sheet semantic tokens", () => {

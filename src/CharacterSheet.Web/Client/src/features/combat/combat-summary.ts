@@ -59,12 +59,18 @@ function renderCombatFundamentalRows(
     rows.append(
         renderCombatFundamentalRow(
             "Base Attack Bonus",
-            findCombatFundamental(mechanics, "combat.base-attack-bonus"),
+            findCombatFundamental(
+                mechanics,
+                ["combat.base-attack-bonus", "base-attack-bonus", "bab"],
+                ["Base Attack Bonus"]),
             "base-attack-bonus"),
         renderCombatFundamentalRow(
-            "Grapple",
-            findCombatFundamental(mechanics, "combat.grapple"),
-            "grapple")
+            "Grapple Modifier",
+            findCombatFundamental(
+                mechanics,
+                ["combat.grapple", "grapple", "grapple-modifier"],
+                ["Grapple", "Grapple Modifier"]),
+            "grapple-modifier")
     );
     return rows;
 }
@@ -89,9 +95,14 @@ function renderCombatFundamentalRow(
 
 function findCombatFundamental(
     mechanics: CharacterMechanicsView | null,
-    key: string
+    keys: readonly string[],
+    labels: readonly string[]
 ): CalculatedMechanicalValueView | undefined {
-    return mechanics?.combatFundamentals?.find(value => value.key === key);
+    const normalizedKeys = new Set(keys.map(value => value.trim().toLowerCase()));
+    const normalizedLabels = new Set(labels.map(value => value.trim().toLowerCase()));
+    return mechanics?.combatFundamentals?.find(value =>
+        normalizedKeys.has(value.key.trim().toLowerCase())
+        || normalizedLabels.has(value.label.trim().toLowerCase()));
 }
 
 function findDefenseValue(

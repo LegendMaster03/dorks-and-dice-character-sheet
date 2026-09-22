@@ -208,8 +208,8 @@ test("section-tab CSS preserves long labels and delegates narrow overflow to the
     assert.match(buttonBlock, /min-width:\s*max-content/);
     assert.doesNotMatch(buttonBlock, /min-width:\s*0/);
     assert.match(buttonBlock, /border-inline-end:/);
-    assert.match(css, /@media \(min-width: 1100px\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*overflow-x:\s*visible;/s);
-    assert.match(css, /@media \(min-width: 1100px\)[\s\S]*?\.dd-primary-nav__button\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*0;/s);
+    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*overflow-x:\s*visible;/s);
+    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav__button\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*0;/s);
 });
 
 test("player-facing setup copy avoids architecture-first terminology", async () => {
@@ -462,7 +462,7 @@ test("top-row Hit Points tracker exposes D&D Beyond-style Heal and Damage contro
     assert.match(visibleText(card), /Nonlethal Damage\s+2/);
 });
 
-test("workspace promotes Armor Class beside Movement and Initiative and removes the AC trio from Defense", () => {
+test("workspace promotes Armor Class beside Initiative and keeps all non-AC defenses in one combat-band card", () => {
     const rendered = render("actions", {
         defenses: {
             primaryKey: "defense.ac",
@@ -486,20 +486,30 @@ test("workspace promotes Armor Class beside Movement and Initiative and removes 
     assert.match(visibleText(acCard), /13/);
     assert.match(visibleText(acCard), /15/);
 
-    const defense = byClass(rendered, "dd-defense-card")[0];
+    const defense = byClass(rendered, "dd-combat-band__defenses")[0];
     assert.ok(defense);
     assert.doesNotMatch(visibleText(defense), /Armor Class|Touch AC|Flat-Footed/);
-    assert.match(visibleText(defense), /Damage Reduction/);
-    assert.match(visibleText(defense), /Spell Resistance/);
+    assert.match(visibleText(defense), /Resistances/);
+    assert.match(visibleText(defense), /Immunities/);
+    assert.match(visibleText(defense), /Vulnerabilities/);
+    assert.match(visibleText(defense), /Damage Reduction\s+5 \/ magic/);
+    assert.match(visibleText(defense), /Spell Resistance\s+17/);
+    assert.equal(byClass(rendered, "dd-defense-card").length, 0);
 });
 
-test("Defense and Combat share a compact persistent summary beneath Skills", () => {
+test("Defense and combat fundamentals stay above the tabs instead of trailing Skills", () => {
     const rendered = render("actions", null);
-    const summaries = byClass(rendered, "dd-mechanics-summary-grid");
-    assert.equal(summaries.length, 1);
-    assert.equal(byClass(summaries[0], "dd-defense-card").length, 1);
-    assert.equal(byClass(summaries[0], "dd-combat-fundamentals-card").length, 1);
-    assert.equal(byClass(rendered, "dd-skills-card").length, 1);
+    const skills = byClass(rendered, "dd-sheet__skills")[0];
+    const band = byClass(rendered, "dd-combat-band")[0];
+    assert.ok(skills);
+    assert.ok(band);
+    assert.equal(byClass(rendered, "dd-mechanics-summary-grid").length, 0);
+    assert.equal(byClass(rendered, "dd-defense-card").length, 0);
+    assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 0);
+    assert.match(visibleText(band), /Base Attack Bonus/);
+    assert.match(visibleText(band), /Grapple Modifier/);
+    assert.match(visibleText(band), /Damage Reduction/);
+    assert.match(visibleText(band), /Spell Resistance/);
 });
 
 test("wide shell uses a Beyond-style reference rail beside Skills and the primary stage", () => {
@@ -508,21 +518,20 @@ test("wide shell uses a Beyond-style reference rail beside Skills and the primar
     const rail = byClass(rendered, "dd-sheet__reference-rail")[0];
     const skills = byClass(rendered, "dd-sheet__skills")[0];
     const topRow = byClass(rendered, "dd-sheet__top-row")[0];
-    const mechanicsColumn = byClass(rendered, "dd-sheet__mechanics")[0];
     const main = byClass(rendered, "dd-sheet__main")[0];
     assert.ok(dashboard);
     assert.ok(rail);
     assert.ok(skills);
     assert.ok(topRow);
-    assert.ok(mechanicsColumn);
     assert.ok(main);
     assert.equal(byClass(topRow, "dd-health-quick").length, 1);
     assert.equal(walk(rail).includes(byClass(rendered, "dd-saving-throws-card")[0]), true);
     assert.equal(walk(rail).includes(byClass(rendered, "dd-senses-summary-card")[0]), true);
-    assert.equal(walk(skills).includes(mechanicsColumn), true);
     assert.equal(walk(skills).includes(main), false);
-    assert.equal(byClass(rendered, "dd-defense-card").length, 1);
-    assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
+    assert.equal(byClass(rendered, "dd-defense-card").length, 0);
+    assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 0);
+    assert.equal(byClass(rendered, "dd-combat-band__defenses").length, 1);
+    assert.equal(byClass(rendered, "dd-combat-band__initiative").length, 1);
 });
 
 test("support surfaces stay neutral when unavailable and consume supplied values without edition guesses", () => {
@@ -879,8 +888,9 @@ test("legacy combat placeholder renderer is removed in favor of generalized mech
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     const coreStatsSource = await readFile(new URL("../src/ui/core-stats.ts", import.meta.url), "utf8");
     assert.doesNotMatch(source, /function renderCombatSummary\s*\(/);
-    assert.match(source, /renderDefenseMechanicsCard\(mechanics\)/);
-    assert.match(source, /renderCombatFundamentalsCard\(mechanics\)/);
+    assert.doesNotMatch(source, /renderDefenseMechanicsCard\(mechanics\)/);
+    assert.doesNotMatch(source, /renderCombatFundamentalsCard\(mechanics\)/);
+    assert.match(source, /renderCombatSummaryBand\(/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
     assert.doesNotMatch(source, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
     assert.match(source, /renderSavingThrowsCard\(detachedSavingThrows, true\)/);
