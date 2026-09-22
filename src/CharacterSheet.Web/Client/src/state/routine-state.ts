@@ -29,8 +29,12 @@ export function reduceRoutineState(
             break;
         case "routine-reference-resolved": {
             const occurrence = routine.state?.inventoryItemOccurrences.find(value => value.id === action.occurrenceId);
+            const knownSpell = routine.state?.rulesInputs?.find(value =>
+                value.id === action.occurrenceId && value.kind === "knownSpell");
             const condition = routine.state?.conditions?.find(value => value.id === action.occurrenceId);
-            const conceptKey = occurrence?.ruleConceptKey ?? condition?.ruleConceptKey;
+            const conceptKey = occurrence?.ruleConceptKey
+                ?? knownSpell?.key
+                ?? condition?.ruleConceptKey;
             const currentReference = routine.references[action.occurrenceId];
             if (conceptKey === action.conceptKey
                 && currentReference !== undefined
@@ -304,6 +308,13 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
         references[occurrence.id] = {
             status: "loading",
             conceptKey: occurrence.ruleConceptKey
+        };
+    }
+    for (const input of normalizedState.rulesInputs ?? []) {
+        if (input.kind !== "knownSpell") continue;
+        references[input.id] = {
+            status: "loading",
+            conceptKey: input.key
         };
     }
     for (const condition of normalizedState.conditions) {
