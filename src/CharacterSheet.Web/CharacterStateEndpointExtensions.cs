@@ -132,6 +132,81 @@ public static class CharacterStateEndpointExtensions
                 return Results.BadRequest(new { error = exception.Message });
             }
         });
+        app.MapPost("/api/characters/{characterId:guid}/state/conditions", async (
+            Guid characterId,
+            CharacterConditionCreateRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.AddConditionAsync(
+                        characterId,
+                        request.ConceptKey,
+                        request.CustomName,
+                        request.Level,
+                        request.CounterCurrent,
+                        request.CounterMaximum,
+                        request.Duration,
+                        request.Notes,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPut("/api/characters/{characterId:guid}/state/conditions/{conditionId:guid}", async (
+            Guid characterId,
+            Guid conditionId,
+            CharacterConditionUpdateRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.UpdateConditionAsync(
+                        characterId,
+                        conditionId,
+                        request.CustomName,
+                        request.Level,
+                        request.CounterCurrent,
+                        request.CounterMaximum,
+                        request.Duration,
+                        request.Notes,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapDelete("/api/characters/{characterId:guid}/state/conditions/{conditionId:guid}", async (
+            Guid characterId,
+            Guid conditionId,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.RemoveConditionAsync(
+                        characterId,
+                        conditionId,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
     }
 
     private static IResult ToApiResult(CharacterStateResult result, bool mutating) => result.Status switch
@@ -167,3 +242,20 @@ public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
 public sealed record CharacterNoteRequest(string Content);
 
 public sealed record CharacterHealthRequest(int? CurrentHitPoints);
+
+public sealed record CharacterConditionCreateRequest(
+    string? ConceptKey,
+    string? CustomName,
+    int? Level,
+    int? CounterCurrent,
+    int? CounterMaximum,
+    string? Duration,
+    string? Notes);
+
+public sealed record CharacterConditionUpdateRequest(
+    string? CustomName,
+    int? Level,
+    int? CounterCurrent,
+    int? CounterMaximum,
+    string? Duration,
+    string? Notes);

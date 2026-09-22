@@ -12,6 +12,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterBaseAbilityScoreInput> BaseAbilityScoreInputs => Set<CharacterBaseAbilityScoreInput>();
     public DbSet<CharacterInventoryItemOccurrence> InventoryItemOccurrences => Set<CharacterInventoryItemOccurrence>();
     public DbSet<CharacterNote> CharacterNotes => Set<CharacterNote>();
+    public DbSet<CharacterConditionOccurrence> CharacterConditions => Set<CharacterConditionOccurrence>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -161,6 +162,36 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .IsRequired();
         characterNote.HasIndex(value => value.CharacterId);
         root.HasMany(value => value.Notes)
+            .WithOne()
+            .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var characterCondition = modelBuilder.Entity<CharacterConditionOccurrence>();
+        characterCondition.ToTable("character_conditions");
+        characterCondition.HasKey(value => value.Id);
+        characterCondition.Property(value => value.Id)
+            .ValueGeneratedNever();
+        characterCondition.Property(value => value.CharacterId)
+            .ValueGeneratedNever()
+            .IsRequired();
+        characterCondition.Property(value => value.RuleConceptKey)
+            .HasMaxLength(CharacterRuleReference.MaxConceptKeyLength);
+        characterCondition.Property(value => value.CustomName)
+            .HasMaxLength(CharacterConditionOccurrence.MaxCustomNameLength);
+        characterCondition.Property(value => value.Level);
+        characterCondition.Property(value => value.CounterCurrent);
+        characterCondition.Property(value => value.CounterMaximum);
+        characterCondition.Property(value => value.Duration)
+            .HasMaxLength(CharacterConditionOccurrence.MaxDurationLength);
+        characterCondition.Property(value => value.Notes)
+            .HasMaxLength(CharacterConditionOccurrence.MaxNotesLength);
+        characterCondition.Property(value => value.CreatedAt)
+            .IsRequired();
+        characterCondition.Property(value => value.UpdatedAt)
+            .IsRequired();
+        characterCondition.HasIndex(value => value.CharacterId);
+        characterCondition.HasIndex(value => new { value.CharacterId, value.RuleConceptKey });
+        root.HasMany(value => value.Conditions)
             .WithOne()
             .HasForeignKey(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);

@@ -58,6 +58,9 @@ public sealed class CharacterSheetRoot
     public ICollection<CharacterNote> Notes { get; private set; } =
         new List<CharacterNote>();
 
+    public ICollection<CharacterConditionOccurrence> Conditions { get; private set; } =
+        new List<CharacterConditionOccurrence>();
+
     public CharacterFoundationalRuleSelection SetFoundationalSelection(
         CharacterFoundationalSelectionCategory category,
         string ruleConceptKey,
@@ -442,6 +445,79 @@ public sealed class CharacterSheetRoot
         }
 
         Notes.Remove(note);
+        Touch(changedAt);
+        return true;
+    }
+
+    public CharacterConditionOccurrence AddCondition(
+        string? ruleConceptKey,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        DateTimeOffset createdAt)
+    {
+        var occurrence = new CharacterConditionOccurrence(
+            Guid.NewGuid(),
+            CharacterId,
+            ruleConceptKey,
+            customName,
+            level,
+            counterCurrent,
+            counterMaximum,
+            duration,
+            notes,
+            createdAt);
+        Conditions.Add(occurrence);
+        Touch(createdAt);
+        return occurrence;
+    }
+
+    public CharacterConditionOccurrence UpdateCondition(
+        Guid conditionId,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        DateTimeOffset changedAt)
+    {
+        if (conditionId == Guid.Empty)
+        {
+            throw new ArgumentException("Condition occurrence ID can not be empty.", nameof(conditionId));
+        }
+
+        var condition = Conditions.SingleOrDefault(value => value.Id == conditionId)
+            ?? throw new KeyNotFoundException("Character condition was not found.");
+        condition.ReplaceState(
+            customName,
+            level,
+            counterCurrent,
+            counterMaximum,
+            duration,
+            notes,
+            changedAt);
+        Touch(changedAt);
+        return condition;
+    }
+
+    public bool RemoveCondition(Guid conditionId, DateTimeOffset changedAt)
+    {
+        if (conditionId == Guid.Empty)
+        {
+            throw new ArgumentException("Condition occurrence ID can not be empty.", nameof(conditionId));
+        }
+
+        var condition = Conditions.SingleOrDefault(value => value.Id == conditionId);
+        if (condition is null)
+        {
+            return false;
+        }
+
+        Conditions.Remove(condition);
         Touch(changedAt);
         return true;
     }

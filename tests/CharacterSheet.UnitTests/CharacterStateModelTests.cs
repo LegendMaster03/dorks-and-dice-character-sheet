@@ -85,6 +85,59 @@ public sealed class CharacterStateModelTests
     }
 
     [Fact]
+    public void ConditionsSupportRulesDefinedCustomLeveledAndCountedState()
+    {
+        var root = Root();
+        var createdAt = DateTimeOffset.UtcNow;
+        var exhaustion = root.AddCondition(
+            "condition:exhaustion",
+            null,
+            level: 2,
+            counterCurrent: null,
+            counterMaximum: null,
+            duration: null,
+            notes: null,
+            createdAt);
+        var custom = root.AddCondition(
+            null,
+            "  Burning  ",
+            level: null,
+            counterCurrent: 2,
+            counterMaximum: 5,
+            duration: "3 rounds",
+            notes: "Custom table condition",
+            createdAt.AddSeconds(1));
+
+        Assert.Equal("condition:exhaustion", exhaustion.RuleConceptKey);
+        Assert.Equal(2, exhaustion.Level);
+        Assert.Equal("Burning", custom.CustomName);
+        Assert.Equal(2, custom.CounterCurrent);
+        Assert.Equal(5, custom.CounterMaximum);
+
+        root.UpdateCondition(
+            exhaustion.Id,
+            customName: null,
+            level: 3,
+            counterCurrent: null,
+            counterMaximum: null,
+            duration: "Until rest",
+            notes: null,
+            createdAt.AddMinutes(1));
+        Assert.Equal(3, exhaustion.Level);
+        Assert.Equal("Until rest", exhaustion.Duration);
+    }
+
+    [Fact]
+    public void ConditionIdentityRequiresEitherRuleOrCustomNameButNotBoth()
+    {
+        var root = Root();
+        Assert.Throws<ArgumentException>(() => root.AddCondition(
+            null, null, null, null, null, null, null, DateTimeOffset.UtcNow));
+        Assert.Throws<ArgumentException>(() => root.AddCondition(
+            "condition:prone", "Prone", null, null, null, null, null, DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
     public void RoutineStateDoesNotCopyRulesMechanicsOrEquipmentUsageState()
     {
         Assert.DoesNotContain(

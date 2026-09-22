@@ -40,6 +40,7 @@ public sealed class CharacterStateWorkflowTests
             Assert.Null(view.CurrentHitPoints);
             Assert.Empty(view.InventoryItemOccurrences);
             Assert.Empty(view.Notes);
+            Assert.Empty(view.Conditions);
         }
 
         using (var setHealth = await factory.SendHostedAsync(
@@ -78,6 +79,43 @@ public sealed class CharacterStateWorkflowTests
             Assert.Equal(2, view.InventoryItemOccurrences.Select(value => value.Id).Distinct().Count());
         }
 
+        Guid conditionId;
+        using (var addCondition = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/state/conditions",
+                   new {
+                       customName = "Burning",
+                       level = (int?)null,
+                       counterCurrent = 2,
+                       counterMaximum = 5,
+                       duration = "3 rounds",
+                       notes = "Table condition"
+                   }))
+        {
+            Assert.Equal(HttpStatusCode.OK, addCondition.StatusCode);
+            var view = await addCondition.Content.ReadFromJsonAsync<CharacterStateView>();
+            Assert.NotNull(view);
+            var condition = Assert.Single(view.Conditions);
+            conditionId = condition.Id;
+            Assert.Equal("Burning", condition.CustomName);
+            Assert.Equal(2, condition.CounterCurrent);
+        }
+
+        using (var updateCondition = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/conditions/{conditionId:D}",
+                   new {
+                       customName = "Burning",
+                       level = 2,
+                       counterCurrent = (int?)null,
+                       counterMaximum = (int?)null,
+                       duration = "Until end of next turn",
+                       notes = (string?)null
+                   }))
+        {
+            Assert.Equal(HttpStatusCode.OK, updateCondition.StatusCode);
+        }
+
         Guid noteId;
         using (var addNote = await factory.SendHostedAsync(
                    HttpMethod.Post,
@@ -114,6 +152,9 @@ public sealed class CharacterStateWorkflowTests
         Assert.Equal(-4, persisted.CurrentHitPoints);
         Assert.Single(persisted.InventoryItemOccurrences);
         Assert.Equal("Updated", Assert.Single(persisted.Notes).Content);
+        var persistedCondition = Assert.Single(persisted.Conditions);
+        Assert.Equal(2, persistedCondition.Level);
+        Assert.Equal("Until end of next turn", persistedCondition.Duration);
     }
 
     [Fact]

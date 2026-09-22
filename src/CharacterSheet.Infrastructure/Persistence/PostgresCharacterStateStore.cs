@@ -116,6 +116,73 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> AddConditionAsync(
+        Guid characterId,
+        string? ruleConceptKey,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.AddCondition(
+            ruleConceptKey,
+            customName,
+            level,
+            counterCurrent,
+            counterMaximum,
+            duration,
+            notes,
+            changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> UpdateConditionAsync(
+        Guid characterId,
+        Guid conditionId,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.UpdateCondition(
+            conditionId,
+            customName,
+            level,
+            counterCurrent,
+            counterMaximum,
+            duration,
+            notes,
+            changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveConditionAsync(
+        Guid characterId,
+        Guid conditionId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.RemoveCondition(conditionId, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     private Task<CharacterSheetRoot?> GetTrackedAsync(
         Guid characterId,
         CancellationToken cancellationToken) =>
@@ -127,6 +194,7 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         var query = dbContext.CharacterSheets
             .Include(value => value.InventoryItemOccurrences)
             .Include(value => value.Notes)
+            .Include(value => value.Conditions)
             .AsQueryable();
         return tracking ? query : query.AsNoTracking();
     }

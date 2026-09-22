@@ -26,12 +26,25 @@ public sealed record CharacterNoteView(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public sealed record CharacterConditionOccurrenceView(
+    Guid Id,
+    string? RuleConceptKey,
+    string? CustomName,
+    int? Level,
+    int? CounterCurrent,
+    int? CounterMaximum,
+    string? Duration,
+    string? Notes,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record CharacterStateView(
     Guid CharacterId,
     bool ReadOnly,
     int? CurrentHitPoints,
     IReadOnlyList<CharacterInventoryItemOccurrenceView> InventoryItemOccurrences,
-    IReadOnlyList<CharacterNoteView> Notes);
+    IReadOnlyList<CharacterNoteView> Notes,
+    IReadOnlyList<CharacterConditionOccurrenceView> Conditions);
 
 public sealed record CharacterStateResult(
     CharacterStateAccessStatus Status,
@@ -146,6 +159,69 @@ public sealed class CharacterStateService(
                 token),
             cancellationToken);
 
+    public Task<CharacterStateResult> AddConditionAsync(
+        Guid characterId,
+        string? ruleConceptKey,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.AddConditionAsync(
+                characterId,
+                ruleConceptKey,
+                customName,
+                level,
+                counterCurrent,
+                counterMaximum,
+                duration,
+                notes,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> UpdateConditionAsync(
+        Guid characterId,
+        Guid conditionId,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.UpdateConditionAsync(
+                characterId,
+                conditionId,
+                customName,
+                level,
+                counterCurrent,
+                counterMaximum,
+                duration,
+                notes,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> RemoveConditionAsync(
+        Guid characterId,
+        Guid conditionId,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.RemoveConditionAsync(
+                characterId,
+                conditionId,
+                changedAt,
+                token),
+            cancellationToken);
+
     private async Task<CharacterStateResult> MutateAsync(
         Guid characterId,
         Func<DateTimeOffset, CancellationToken, Task<CharacterSheetRoot?>> mutation,
@@ -220,6 +296,21 @@ public sealed class CharacterStateService(
                 .Select(value => new CharacterNoteView(
                     value.Id,
                     value.Content,
+                    value.CreatedAt,
+                    value.UpdatedAt))
+                .ToArray(),
+            root.Conditions
+                .OrderBy(value => value.CreatedAt)
+                .ThenBy(value => value.Id)
+                .Select(value => new CharacterConditionOccurrenceView(
+                    value.Id,
+                    value.RuleConceptKey,
+                    value.CustomName,
+                    value.Level,
+                    value.CounterCurrent,
+                    value.CounterMaximum,
+                    value.Duration,
+                    value.Notes,
                     value.CreatedAt,
                     value.UpdatedAt))
                 .ToArray());

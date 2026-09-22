@@ -146,6 +146,54 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_notes");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterConditionOccurrence", b =>
+        {
+            b.Property<Guid>("Id")
+                .HasColumnType("uuid");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<int?>("CounterCurrent")
+                .HasColumnType("integer");
+
+            b.Property<int?>("CounterMaximum")
+                .HasColumnType("integer");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("CustomName")
+                .HasMaxLength(120)
+                .HasColumnType("character varying(120)");
+
+            b.Property<string>("Duration")
+                .HasMaxLength(160)
+                .HasColumnType("character varying(160)");
+
+            b.Property<int?>("Level")
+                .HasColumnType("integer");
+
+            b.Property<string>("Notes")
+                .HasMaxLength(2000)
+                .HasColumnType("character varying(2000)");
+
+            b.Property<string>("RuleConceptKey")
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CharacterId");
+
+            b.HasIndex("CharacterId", "RuleConceptKey");
+
+            b.ToTable("character_conditions");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>
         {
             b.Property<Guid>("Id")
@@ -248,6 +296,15 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .IsRequired();
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterConditionOccurrence", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithMany("Conditions")
+                .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>
         {
             b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
@@ -279,6 +336,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
         {
             b.Navigation("AdvancementEntries");
             b.Navigation("BaseAbilityScoreInputs");
+            b.Navigation("Conditions");
             b.Navigation("FoundationalSelections");
             b.Navigation("InventoryItemOccurrences");
             b.Navigation("Notes");

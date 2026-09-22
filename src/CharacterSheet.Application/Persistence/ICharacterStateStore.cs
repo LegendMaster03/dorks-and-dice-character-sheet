@@ -48,4 +48,34 @@ public interface ICharacterStateStore
         Guid noteId,
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> AddConditionAsync(
+        Guid characterId,
+        string? ruleConceptKey,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> UpdateConditionAsync(
+        Guid characterId,
+        Guid conditionId,
+        string? customName,
+        int? level,
+        int? counterCurrent,
+        int? counterMaximum,
+        string? duration,
+        string? notes,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> RemoveConditionAsync(
+        Guid characterId,
+        Guid conditionId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
 }
