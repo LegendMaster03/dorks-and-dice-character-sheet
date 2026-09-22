@@ -8,6 +8,7 @@ import {
     removeCharacterNote,
     removeInventoryItemOccurrence,
     setCharacterCurrentHitPoints,
+    setCharacterDeathSaves,
     updateCharacterNote
 } from "../.test-dist/character-state-api.js";
 
@@ -26,8 +27,10 @@ const state = {
     characterId,
     readOnly: false,
     currentHitPoints: null,
+    deathSaves: { successes: 0, failures: 0 },
     inventoryItemOccurrences: [],
-    notes: []
+    notes: [],
+    conditions: []
 };
 
 test("routine-state API remains behind Character Sheet Tool Host authorization", () => {
@@ -37,6 +40,9 @@ test("routine-state API remains behind Character Sheet Tool Host authorization",
     assert.equal(
         buildCharacterStateBackendUrl(environment, characterId, "health"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/health`);
+    assert.equal(
+        buildCharacterStateBackendUrl(environment, characterId, "death-saves"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/death-saves`);
     assert.equal(
         buildCharacterStateBackendUrl(environment, characterId, "inventory", occurrenceId),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/inventory/${occurrenceId}`);
@@ -69,6 +75,7 @@ test("routine-state mutations send only Character-owned state inputs and return 
     };
 
     await setCharacterCurrentHitPoints(environment, characterId, -4, fetcher);
+    await setCharacterDeathSaves(environment, characterId, 2, 1, fetcher);
     await addInventoryItemOccurrence(environment, characterId, "item:rope", fetcher);
     await removeInventoryItemOccurrence(environment, characterId, occurrenceId, fetcher);
     await addCharacterNote(environment, characterId, "First note", fetcher);
@@ -77,12 +84,14 @@ test("routine-state mutations send only Character-owned state inputs and return 
 
     assert.deepEqual(JSON.parse(calls[0].body), { currentHitPoints: -4 });
     assert.equal(calls[0].method, "PUT");
-    assert.deepEqual(JSON.parse(calls[1].body), { conceptKey: "item:rope" });
-    assert.equal(calls[1].method, "POST");
-    assert.equal(calls[2].method, "DELETE");
-    assert.equal(calls[2].body, undefined);
-    assert.deepEqual(JSON.parse(calls[3].body), { content: "First note" });
-    assert.deepEqual(JSON.parse(calls[4].body), { content: "Updated note" });
-    assert.equal(calls[5].method, "DELETE");
+    assert.deepEqual(JSON.parse(calls[1].body), { successes: 2, failures: 1 });
+    assert.equal(calls[1].method, "PUT");
+    assert.deepEqual(JSON.parse(calls[2].body), { conceptKey: "item:rope" });
+    assert.equal(calls[2].method, "POST");
+    assert.equal(calls[3].method, "DELETE");
+    assert.equal(calls[3].body, undefined);
+    assert.deepEqual(JSON.parse(calls[4].body), { content: "First note" });
+    assert.deepEqual(JSON.parse(calls[5].body), { content: "Updated note" });
+    assert.equal(calls[6].method, "DELETE");
     assert.equal(calls.some(call => String(call.body).includes("displayName")), false);
 });

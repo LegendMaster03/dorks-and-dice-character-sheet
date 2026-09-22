@@ -108,9 +108,14 @@ export function renderCharacterWorkspace(
                 && routine.state?.currentHitPoints !== null
                 ? routine.state?.currentHitPoints
                 : undefined,
+            deathSaves: routine.status === "ready"
+                ? routine.state?.deathSaves
+                : undefined,
             readOnly: readOnly || routine.status !== "ready" || routine.state === null,
-            saving: routine.mutation?.kind === "health-update",
-            onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints
+            saving: routine.mutation?.kind === "health-update"
+                || routine.mutation?.kind === "death-saves-update",
+            onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints,
+            onSetDeathSaves: handlers.routine.setDeathSaves
         },
         handlers.structural));
 

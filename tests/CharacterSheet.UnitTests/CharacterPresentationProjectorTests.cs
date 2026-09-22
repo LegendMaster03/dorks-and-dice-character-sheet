@@ -318,7 +318,8 @@ public sealed class CharacterPresentationProjectorTests
                 UnevaluatedMechanic("defense.damage-reduction", "defense", "Damage Reduction", "none", false),
                 UnevaluatedMechanic("combat.base-attack-bonus", "combat-value", "Base Attack Bonus"),
                 UnevaluatedMechanic("combat.grapple", "combat-value", "Grapple Modifier"),
-                UnevaluatedMechanic("resource.nonlethal-damage", "resource", "Nonlethal Damage")),
+                UnevaluatedMechanic("resource.nonlethal-damage", "resource", "Nonlethal Damage"),
+                UnevaluatedMechanic("resource.hit-dice", "resource", "Hit Dice")),
             null);
 
         Assert.Equal(
@@ -331,10 +332,20 @@ public sealed class CharacterPresentationProjectorTests
             mechanics.CombatFundamentals!.Select(value => value.Key).ToArray());
         Assert.All(mechanics.CombatFundamentals, value => Assert.Equal("-", value.EffectiveValue));
 
-        var nonlethal = Assert.Single(mechanics.HealthTracks!);
-        Assert.Equal("resource.nonlethal-damage", nonlethal.Key);
-        Assert.Equal("nonlethal-damage", nonlethal.Role);
-        Assert.Equal("-", nonlethal.Current);
+        Assert.Collection(
+            mechanics.HealthTracks!,
+            nonlethal =>
+            {
+                Assert.Equal("resource.nonlethal-damage", nonlethal.Key);
+                Assert.Equal("nonlethal-damage", nonlethal.Role);
+                Assert.Equal("-", nonlethal.Current);
+            },
+            hitDice =>
+            {
+                Assert.Equal("resource.hit-dice", hitDice.Key);
+                Assert.Equal("hit-dice", hitDice.Role);
+                Assert.Equal("-", hitDice.Current);
+            });
     }
 
     [Fact]

@@ -18,6 +18,11 @@ export interface CharacterNoteResponse {
     updatedAt: string;
 }
 
+export interface CharacterDeathSavesResponse {
+    successes: number;
+    failures: number;
+}
+
 export interface CharacterConditionOccurrenceResponse {
     id: string;
     ruleConceptKey: string | null;
@@ -48,6 +53,7 @@ export interface CharacterStateResponse {
     characterId: string;
     readOnly: boolean;
     currentHitPoints: number | null;
+    deathSaves: CharacterDeathSavesResponse;
     inventoryItemOccurrences: CharacterInventoryItemOccurrenceResponse[];
     notes: CharacterNoteResponse[];
     conditions: CharacterConditionOccurrenceResponse[];
@@ -56,7 +62,7 @@ export interface CharacterStateResponse {
 export function buildCharacterStateBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    resource?: "health" | "inventory" | "notes" | "conditions",
+    resource?: "health" | "death-saves" | "inventory" | "notes" | "conditions",
     entryId?: string
 ): string {
     let path = `/api/characters/${encodeURIComponent(characterId)}/state`;
@@ -94,6 +100,21 @@ export async function setCharacterCurrentHitPoints(
         "PUT",
         { currentHitPoints },
         "Unable to update Character hit points.");
+}
+
+export async function setCharacterDeathSaves(
+    environment: HostEnvironment,
+    characterId: string,
+    successes: number,
+    failures: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "death-saves"),
+        "PUT",
+        { successes, failures },
+        "Unable to update Character death saves.");
 }
 
 export async function addInventoryItemOccurrence(

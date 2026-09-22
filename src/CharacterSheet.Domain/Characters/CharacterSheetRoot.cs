@@ -43,6 +43,10 @@ public sealed class CharacterSheetRoot
 
     public int? CurrentHitPoints { get; private set; }
 
+    public int DeathSaveSuccesses { get; private set; }
+
+    public int DeathSaveFailures { get; private set; }
+
     public ICollection<CharacterFoundationalRuleSelection> FoundationalSelections { get; private set; } =
         new List<CharacterFoundationalRuleSelection>();
 
@@ -364,6 +368,26 @@ public sealed class CharacterSheetRoot
     {
         CurrentHitPoints = currentHitPoints;
         Touch(changedAt);
+    }
+
+    public void SetDeathSaves(int successes, int failures, DateTimeOffset changedAt)
+    {
+        ValidateDeathSaveCount(successes, nameof(successes));
+        ValidateDeathSaveCount(failures, nameof(failures));
+
+        DeathSaveSuccesses = successes;
+        DeathSaveFailures = failures;
+        Touch(changedAt);
+    }
+
+    private static void ValidateDeathSaveCount(int value, string parameterName)
+    {
+        if (value is < 0 or > 3)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                "Death save successes and failures must be between 0 and 3.");
+        }
     }
 
     public CharacterInventoryItemOccurrence AddInventoryItemOccurrence(

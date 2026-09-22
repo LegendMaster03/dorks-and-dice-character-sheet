@@ -18,6 +18,13 @@ public interface ICharacterStateStore
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> SetDeathSavesAsync(
+        Guid characterId,
+        int successes,
+        int failures,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> AddInventoryItemOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,

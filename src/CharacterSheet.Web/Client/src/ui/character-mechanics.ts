@@ -62,7 +62,7 @@ export interface DefenseGroupView {
 }
 
 export type HealthTrackRole = ExtensiblePresentationKey<
-    "hit-points" | "temporary-hit-points" | "nonlethal-damage" | "resource"
+    "hit-points" | "temporary-hit-points" | "nonlethal-damage" | "hit-dice" | "resource"
 >;
 
 export interface HealthTrackView {

@@ -21,6 +21,26 @@ public sealed class CharacterStateModelTests
     }
 
     [Fact]
+    public void DeathSavesAreCharacterOwnedBoundedRuntimeState()
+    {
+        var root = Root();
+        var changedAt = DateTimeOffset.UtcNow;
+
+        root.SetDeathSaves(2, 1, changedAt);
+
+        Assert.Equal(2, root.DeathSaveSuccesses);
+        Assert.Equal(1, root.DeathSaveFailures);
+        Assert.Equal(changedAt, root.UpdatedAt);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.SetDeathSaves(-1, 0, changedAt.AddMinutes(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.SetDeathSaves(0, 4, changedAt.AddMinutes(1)));
+        Assert.Equal(2, root.DeathSaveSuccesses);
+        Assert.Equal(1, root.DeathSaveFailures);
+    }
+
+    [Fact]
     public void InventoryOccurrencesUseStableConceptKeysAndPermitDuplicates()
     {
         var root = Root();

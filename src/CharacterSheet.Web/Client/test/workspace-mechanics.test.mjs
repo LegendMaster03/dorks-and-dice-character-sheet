@@ -94,15 +94,30 @@ const handlers = {
     feats: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
     routine: {
         setCurrentHitPoints() {},
+        setDeathSaves() {},
         addNote() {}, updateNote() {}, deleteNote() {}, openInventoryChooser() {}, closeInventoryChooser() {},
         searchInventory() {}, addInventoryItem() {}, removeInventoryItem() {}
     },
     selectSection() {}, enterEditMode() {}, leaveEditMode() {}, openGuidedBuilder() {},
     closeGuidedBuilder() {}, selectGuidedBuilderSection() {}
 };
-const routine = (occurrences = [], references = {}, readOnly = true, currentHitPoints = null) => ({
+const routine = (
+    occurrences = [],
+    references = {},
+    readOnly = true,
+    currentHitPoints = null,
+    deathSaves = { successes: 0, failures: 0 }
+) => ({
     status: "ready",
-    state: { characterId, readOnly, currentHitPoints, inventoryItemOccurrences: occurrences, notes: [] },
+    state: {
+        characterId,
+        readOnly,
+        currentHitPoints,
+        deathSaves,
+        inventoryItemOccurrences: occurrences,
+        notes: [],
+        conditions: []
+    },
     references,
     inventoryChooser: { kind: "closed" },
     mutation: null
@@ -398,7 +413,8 @@ test("top-row Hit Points card keeps current, max, temporary, and nonlethal value
         healthTracks: [
             { key: "hp", label: "Hit Points", role: "hit-points", current: 21, maximum: 30 },
             { key: "temp", label: "Temporary HP", role: "temporary-hit-points", current: 5 },
-            { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 3 }
+            { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 3 },
+            { key: "resource.hit-dice", label: "Hit Dice", role: "hit-dice", current: 2, maximum: 4 }
         ]
     });
     const card = byClass(rendered, "dd-health-quick")[0];
@@ -407,6 +423,8 @@ test("top-row Hit Points card keeps current, max, temporary, and nonlethal value
     assert.match(visibleText(card), /Max\s+30/);
     assert.match(visibleText(card), /Temporary HP\s+5/);
     assert.match(visibleText(card), /Nonlethal Damage\s+3/);
+    assert.match(visibleText(card), /Hit Dice\s+2 \/ 4/);
+    assert.match(visibleText(card), /Death Saves\s+S 0 • F 0/);
     assert.equal(byAttribute(card, "data-health-track-key", "hp").length, 2);
     assert.equal(byAttribute(card, "data-health-track-key", "temp").length, 1);
     assert.equal(byAttribute(card, "data-health-track-key", "nonlethal").length, 1);
@@ -462,14 +480,61 @@ test("top-row Hit Points tracker exposes D&D Beyond-style Heal and Damage contro
     assert.match(visibleText(card), /Nonlethal Damage\s+2/);
 });
 
+test("Death Saves remain visible and editable through persisted runtime handlers", () => {
+    const saved = [];
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        routine([], {}, false, 18, { successes: 1, failures: 2 }),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        {
+            healthTracks: [
+                { key: "hp", label: "Hit Points", role: "hit-points", maximum: 30 },
+                { key: "resource.hit-dice", label: "Hit Dice", role: "hit-dice", current: 3, maximum: 5 }
+            ]
+        },
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setDeathSaves(successes, failures) { saved.push([successes, failures]); }
+            }
+        }
+    );
+
+    const card = byClass(rendered, "dd-health-quick")[0];
+    assert.match(visibleText(card), /Hit Dice\s+3 \/ 5/);
+    assert.match(visibleText(card), /Death Saves\s+S 1 • F 2/);
+    assert.equal(byAttribute(card, "data-death-saves-editor", "true").length, 1);
+
+    byAttribute(card, "data-death-save-action", "success-increment")[0].onclick();
+    assert.deepEqual(saved.at(-1), [2, 2]);
+
+    byAttribute(card, "data-death-save-action", "failure-decrement")[0].onclick();
+    assert.deepEqual(saved.at(-1), [1, 1]);
+
+    byAttribute(card, "data-death-save-action", "reset")[0].onclick();
+    assert.deepEqual(saved.at(-1), [0, 0]);
+});
+
 test("workspace promotes Armor Class beside Initiative and keeps all non-AC defenses in one combat-band card", () => {
     const rendered = render("actions", {
         defenses: {
             primaryKey: "defense.ac",
             values: [
-                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac", "Armor Class", "18", {
+                    breakdown: [
+                        mechanical("armor", "Armor", "6"),
+                        mechanical("dexterity", "Dexterity", "2")
+                    ]
+                }),
                 mechanical("defense.ac.touch", "Touch Armor Class", "13"),
                 mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.miss-chance", "Miss Chance", "20%"),
                 mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic"),
                 mechanical("defense.spell-resistance", "Spell Resistance", "17")
             ]
@@ -485,6 +550,9 @@ test("workspace promotes Armor Class beside Initiative and keeps all non-AC defe
     assert.match(visibleText(acCard), /18/);
     assert.match(visibleText(acCard), /13/);
     assert.match(visibleText(acCard), /15/);
+    assert.match(visibleText(acCard), /Details/);
+    assert.match(visibleText(acCard), /Armor\s+6/);
+    assert.match(visibleText(acCard), /Dexterity\s+2/);
 
     const defense = byClass(rendered, "dd-combat-band__defenses")[0];
     assert.ok(defense);
@@ -494,6 +562,8 @@ test("workspace promotes Armor Class beside Initiative and keeps all non-AC defe
     assert.match(visibleText(defense), /Vulnerabilities/);
     assert.match(visibleText(defense), /Damage Reduction\s+5 \/ magic/);
     assert.match(visibleText(defense), /Spell Resistance\s+17/);
+    assert.match(visibleText(defense), /More defenses/);
+    assert.match(visibleText(defense), /Miss Chance\s+20%/);
     assert.equal(byClass(rendered, "dd-defense-card").length, 0);
 });
 

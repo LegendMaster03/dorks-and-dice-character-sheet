@@ -30,6 +30,24 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> SetDeathSavesAsync(
+        Guid characterId,
+        int successes,
+        int failures,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.SetDeathSaves(successes, failures, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> AddInventoryItemOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,

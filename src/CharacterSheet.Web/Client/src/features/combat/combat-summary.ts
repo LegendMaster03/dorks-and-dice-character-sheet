@@ -4,9 +4,15 @@ import {
     type CharacterMechanicsView
 } from "../../ui/character-mechanics.js";
 import { createElement } from "../../ui/components.js";
-import { renderArmorClassCombatCard } from "../defense/defense.js";
+import {
+    promotedArmorClassKeys,
+    renderArmorClassCombatCard
+} from "../defense/defense.js";
 import { findInitiativeValue } from "../initiative/initiative.js";
-import { renderQuickMechanicalValue } from "../../core/mechanics/mechanic-value.js";
+import {
+    renderMechanicalValue,
+    renderQuickMechanicalValue
+} from "../../core/mechanics/mechanic-value.js";
 
 export function renderCombatSummaryBand(
     mechanics: CharacterMechanicsView | null,
@@ -49,7 +55,34 @@ function renderDefensesCard(mechanics: CharacterMechanicsView | null): HTMLEleme
             "spell-resistance")
     );
     card.append(groups);
+
+    const additional = additionalDefenseValues(mechanics);
+    if (additional.length > 0) {
+        const details = createElement("details", "dd-combat-defenses__details");
+        details.append(createElement(
+            "summary",
+            "dd-combat-defenses__details-toggle",
+            "More defenses"));
+        const body = createElement("div", "dd-combat-defenses__details-body");
+        for (const value of additional) {
+            body.append(renderMechanicalValue(value, true));
+        }
+        details.append(body);
+        card.append(details);
+    }
     return card;
+}
+
+function additionalDefenseValues(
+    mechanics: CharacterMechanicsView | null
+): readonly CalculatedMechanicalValueView[] {
+    const excluded = promotedArmorClassKeys(mechanics);
+    const fixedKeys = new Set([
+        "defense.damage-reduction",
+        "defense.spell-resistance"
+    ]);
+    return (mechanics?.defenses?.values ?? []).filter(value =>
+        !excluded.has(value.key) && !fixedKeys.has(value.key));
 }
 
 function renderCombatFundamentalRows(

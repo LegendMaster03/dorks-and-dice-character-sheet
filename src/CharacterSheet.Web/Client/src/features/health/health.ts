@@ -9,11 +9,18 @@ import { appendSources, normalizeMechanicalLabel } from "../../core/mechanics/me
 
 export type RestKind = "short" | "long";
 
+export interface DeathSaveState {
+    successes: number;
+    failures: number;
+}
+
 export interface HealthControlOptions {
     currentHitPoints?: number | null;
+    deathSaves?: DeathSaveState;
     readOnly?: boolean;
     saving?: boolean;
     onSetCurrentHitPoints?: (currentHitPoints: number | null) => void;
+    onSetDeathSaves?: (successes: number, failures: number) => void;
     onRest?: (kind: RestKind) => void;
 }
 
@@ -51,6 +58,11 @@ export function renderHealthQuickCard(
         track.role === "nonlethal-damage"
         || track.key === "resource.nonlethal-damage"
         || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
+    const hitDice = tracks.find(track =>
+        track.role === "hit-dice"
+        || normalizeMechanicalLabel(track.key) === "resourcehitdice"
+        || normalizeMechanicalLabel(track.label) === "hitdice"
+        || normalizeMechanicalLabel(track.label) === "hitdie");
 
     const currentValue = control.currentHitPoints === undefined
         ? hitPoints?.current
@@ -60,24 +72,39 @@ export function renderHealthQuickCard(
     header.append(createElement("h3", "dd-stat__label", "Hit Points"));
 
     const promoted = new Set(
-        [hitPoints, temporaryHitPoints, nonlethal]
+        [hitPoints, temporaryHitPoints, nonlethal, hitDice]
             .filter((track): track is NonNullable<typeof track> => track !== undefined)
             .map(track => track.key));
     const extraTracks = tracks.filter(track => !promoted.has(track.key));
-    const sources = collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]);
+    const sources = collectHealthTrackSources([
+        hitPoints,
+        temporaryHitPoints,
+        nonlethal,
+        hitDice,
+        ...extraTracks
+    ]);
 
-    const editable = control.readOnly !== true
+    const editableHitPoints = control.readOnly !== true
         && control.onSetCurrentHitPoints !== undefined;
-    if (editable || extraTracks.length > 0 || sources.length > 0) {
+    const editableDeathSaves = control.readOnly !== true
+        && control.deathSaves !== undefined
+        && control.onSetDeathSaves !== undefined;
+    if (editableHitPoints || editableDeathSaves || extraTracks.length > 0 || sources.length > 0) {
         const details = createElement("details", "dd-health-quick__details");
         details.append(createElement("summary", "dd-health-quick__details-toggle", "Details"));
         const popover = createElement("div", "dd-health-quick__details-popover");
-        if (editable) {
+        if (editableHitPoints) {
             popover.append(renderDirectHitPointSetter(
                 toFiniteInteger(currentValue),
                 hitPoints?.maximum,
                 control.saving === true,
                 control.onSetCurrentHitPoints!));
+        }
+        if (editableDeathSaves) {
+            popover.append(renderDeathSaveEditor(
+                control.deathSaves!,
+                control.saving === true,
+                control.onSetDeathSaves!));
         }
         if (extraTracks.length > 0) {
             const extras = createElement("div", "dd-health-card__extras");
@@ -105,7 +132,16 @@ export function renderHealthQuickCard(
             "nonlethal",
             nonlethal));
 
-    const quickAdjustment = editable
+    const recovery = createElement("div", "dd-health-quick__recovery");
+    recovery.append(
+        renderHealthTextField(
+            "Hit Dice",
+            hitDice === undefined ? "-" : formatHealthTrack(hitDice),
+            "hit-dice",
+            hitDice),
+        renderDeathSaveSummary(control.deathSaves));
+
+    const quickAdjustment = editableHitPoints
         ? renderQuickHitPointAdjustment(
             toFiniteInteger(currentValue),
             hitPoints?.maximum,
@@ -113,7 +149,7 @@ export function renderHealthQuickCard(
             control.onSetCurrentHitPoints!)
         : null;
 
-    card.append(header, values);
+    card.append(header, values, recovery);
     if (quickAdjustment !== null) card.append(quickAdjustment);
     return card;
 }
@@ -131,6 +167,99 @@ function renderHealthQuickField(
         createElement("span", "dd-health-quick__label", label),
         createElement("strong", "dd-health-quick__value", formatOptionalHealthNumber(value)));
     return field;
+}
+
+function renderHealthTextField(
+    label: string,
+    value: string,
+    role: string,
+    track?: HealthTrackView
+): HTMLElement {
+    const field = createElement("div", "dd-health-quick__field");
+    field.setAttribute("data-health-quick-field", role);
+    if (track !== undefined) field.setAttribute("data-health-track-key", track.key);
+    field.append(
+        createElement("span", "dd-health-quick__label", label),
+        createElement("strong", "dd-health-quick__value", value));
+    return field;
+}
+
+function renderDeathSaveSummary(state: DeathSaveState | undefined): HTMLElement {
+    const successes = state?.successes;
+    const failures = state?.failures;
+    const value = successes === undefined || failures === undefined
+        ? "-"
+        : `S ${successes} • F ${failures}`;
+    return renderHealthTextField("Death Saves", value, "death-saves");
+}
+
+function renderDeathSaveEditor(
+    state: DeathSaveState,
+    saving: boolean,
+    onSetDeathSaves: (successes: number, failures: number) => void
+): HTMLElement {
+    const editor = createElement("div", "dd-death-saves-editor");
+    editor.setAttribute("data-death-saves-editor", "true");
+    editor.append(createElement("span", "dd-health-editor__label", "Death Saves"));
+
+    const controls = createElement("div", "dd-death-saves-editor__controls");
+    controls.append(
+        renderDeathSaveCounter("Successes", state.successes, saving, value =>
+            onSetDeathSaves(value, state.failures)),
+        renderDeathSaveCounter("Failures", state.failures, saving, value =>
+            onSetDeathSaves(state.successes, value)));
+
+    const reset = createElement(
+        "button",
+        "dd-button dd-button--ghost dd-death-saves-editor__reset",
+        "Reset") as HTMLButtonElement;
+    reset.type = "button";
+    reset.disabled = saving || (state.successes === 0 && state.failures === 0);
+    reset.setAttribute("data-death-save-action", "reset");
+    reset.onclick = () => onSetDeathSaves(0, 0);
+
+    editor.append(controls, reset);
+    return editor;
+}
+
+function renderDeathSaveCounter(
+    label: string,
+    value: number,
+    saving: boolean,
+    onChange: (value: number) => void
+): HTMLElement {
+    const counter = createElement("div", "dd-death-saves-editor__counter");
+    counter.append(createElement("span", "dd-death-saves-editor__label", label));
+
+    const decrement = createElement(
+        "button",
+        "dd-button dd-button--ghost dd-death-saves-editor__button",
+        "−") as HTMLButtonElement;
+    decrement.type = "button";
+    decrement.disabled = saving || value <= 0;
+    decrement.setAttribute(
+        "data-death-save-action",
+        label === "Successes" ? "success-decrement" : "failure-decrement");
+    decrement.onclick = () => onChange(Math.max(0, value - 1));
+
+    const count = createElement(
+        "strong",
+        "dd-death-saves-editor__value",
+        String(value));
+
+    const increment = createElement(
+        "button",
+        "dd-button dd-button--ghost dd-death-saves-editor__button",
+        "+") as HTMLButtonElement;
+    increment.type = "button";
+    increment.disabled = saving || value >= 3;
+    increment.setAttribute(
+        "data-death-save-action",
+        label === "Successes" ? "success-increment" : "failure-increment");
+    increment.onclick = () => onChange(Math.min(3, value + 1));
+
+    counter.append(decrement, count, increment);
+    return counter;
 }
 
 export function renderHealthMechanicsCard(

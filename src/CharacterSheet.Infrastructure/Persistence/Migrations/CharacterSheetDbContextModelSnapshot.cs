@@ -242,6 +242,16 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<int?>("CurrentHitPoints")
                 .HasColumnType("integer");
 
+            b.Property<int>("DeathSaveFailures")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("integer")
+                .HasDefaultValue(0);
+
+            b.Property<int>("DeathSaveSuccesses")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("integer")
+                .HasDefaultValue(0);
+
             b.Property<int>("SchemaVersion")
                 .HasColumnType("integer");
 

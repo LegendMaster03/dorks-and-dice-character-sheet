@@ -200,6 +200,8 @@ function renderWorkspace(
             routine: {
                 setCurrentHitPoints: currentHitPoints =>
                     void healthWorkflow.setCurrentHitPoints(character.characterId, currentHitPoints),
+                setDeathSaves: (successes, failures) =>
+                    void healthWorkflow.setDeathSaves(character.characterId, successes, failures),
                 addNote: content => void notesWorkflow.add(character.characterId, content),
                 updateNote: (noteId, content) => void notesWorkflow.update(character.characterId, noteId, content),
                 deleteNote: noteId => void notesWorkflow.remove(character.characterId, noteId),

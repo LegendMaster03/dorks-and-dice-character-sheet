@@ -27,6 +27,11 @@ public sealed class CharacterStatePersistenceTests
                 characterId,
                 -2,
                 DateTimeOffset.UtcNow.AddMilliseconds(500));
+            await stateStore.SetDeathSavesAsync(
+                characterId,
+                2,
+                1,
+                DateTimeOffset.UtcNow.AddMilliseconds(750));
             await stateStore.AddInventoryItemOccurrenceAsync(
                 characterId,
                 "  ITEM:TORCH  ",
@@ -43,6 +48,8 @@ public sealed class CharacterStatePersistenceTests
             var state = await stateStore.GetAsync(characterId);
             Assert.NotNull(state);
             Assert.Equal(-2, state.CurrentHitPoints);
+            Assert.Equal(2, state.DeathSaveSuccesses);
+            Assert.Equal(1, state.DeathSaveFailures);
             var items = state.InventoryItemOccurrences.ToArray();
             Assert.Equal(2, items.Length);
             Assert.All(items, value => Assert.Equal("item:torch", value.RuleConceptKey));
@@ -57,6 +64,8 @@ public sealed class CharacterStatePersistenceTests
             var stateStore = new PostgresCharacterStateStore(secondContext);
             var state = await stateStore.GetAsync(characterId);
             Assert.NotNull(state);
+            Assert.Equal(2, state.DeathSaveSuccesses);
+            Assert.Equal(1, state.DeathSaveFailures);
             Assert.Equal(2, state.InventoryItemOccurrences.Count);
             Assert.Equal("Initial note", Assert.Single(state.Notes).Content);
 
@@ -76,6 +85,8 @@ public sealed class CharacterStatePersistenceTests
             var state = await new PostgresCharacterStateStore(thirdContext).GetAsync(characterId);
             Assert.NotNull(state);
             Assert.Equal(-2, state.CurrentHitPoints);
+            Assert.Equal(2, state.DeathSaveSuccesses);
+            Assert.Equal(1, state.DeathSaveFailures);
             var item = Assert.Single(state.InventoryItemOccurrences);
             Assert.Equal(secondItemId, item.Id);
             var note = Assert.Single(state.Notes);

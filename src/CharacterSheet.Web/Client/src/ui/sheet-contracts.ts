@@ -15,6 +15,7 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
 
 export interface RoutineCharacterHandlers {
     setCurrentHitPoints(currentHitPoints: number | null): void;
+    setDeathSaves(successes: number, failures: number): void;
     addNote(content: string): void;
     updateNote(noteId: string, content: string): void;
     deleteNote(noteId: string): void;

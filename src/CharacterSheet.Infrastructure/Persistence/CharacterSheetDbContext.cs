@@ -33,6 +33,12 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         root.Property(character => character.UpdatedAt)
             .IsRequired();
         root.Property(character => character.CurrentHitPoints);
+        root.Property(character => character.DeathSaveSuccesses)
+            .HasDefaultValue(0)
+            .IsRequired();
+        root.Property(character => character.DeathSaveFailures)
+            .HasDefaultValue(0)
+            .IsRequired();
 
         var foundationalSelection = modelBuilder.Entity<CharacterFoundationalRuleSelection>();
         foundationalSelection.ToTable("character_foundational_rule_selections");

@@ -26,6 +26,28 @@ public static class CharacterStateEndpointExtensions
                     cancellationToken),
                 mutating: true));
 
+        app.MapPut("/api/characters/{characterId:guid}/state/death-saves", async (
+            Guid characterId,
+            CharacterDeathSavesRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetDeathSavesAsync(
+                        characterId,
+                        request.Successes,
+                        request.Failures,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentOutOfRangeException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPost("/api/characters/{characterId:guid}/state/inventory", async (
             Guid characterId,
             CharacterInventoryItemOccurrenceRequest request,
@@ -242,6 +264,8 @@ public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
 public sealed record CharacterNoteRequest(string Content);
 
 public sealed record CharacterHealthRequest(int? CurrentHitPoints);
+
+public sealed record CharacterDeathSavesRequest(int Successes, int Failures);
 
 public sealed record CharacterConditionCreateRequest(
     string? ConceptKey,

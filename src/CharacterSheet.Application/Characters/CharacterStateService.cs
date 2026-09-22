@@ -26,6 +26,10 @@ public sealed record CharacterNoteView(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public sealed record CharacterDeathSavesView(
+    int Successes,
+    int Failures);
+
 public sealed record CharacterConditionOccurrenceView(
     Guid Id,
     string? RuleConceptKey,
@@ -42,6 +46,7 @@ public sealed record CharacterStateView(
     Guid CharacterId,
     bool ReadOnly,
     int? CurrentHitPoints,
+    CharacterDeathSavesView DeathSaves,
     IReadOnlyList<CharacterInventoryItemOccurrenceView> InventoryItemOccurrences,
     IReadOnlyList<CharacterNoteView> Notes,
     IReadOnlyList<CharacterConditionOccurrenceView> Conditions);
@@ -88,6 +93,21 @@ public sealed class CharacterStateService(
             (changedAt, token) => stateStore.SetCurrentHitPointsAsync(
                 characterId,
                 currentHitPoints,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> SetDeathSavesAsync(
+        Guid characterId,
+        int successes,
+        int failures,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.SetDeathSavesAsync(
+                characterId,
+                successes,
+                failures,
                 changedAt,
                 token),
             cancellationToken);
@@ -282,6 +302,7 @@ public sealed class CharacterStateService(
             root.CharacterId,
             readOnly,
             root.CurrentHitPoints,
+            new CharacterDeathSavesView(root.DeathSaveSuccesses, root.DeathSaveFailures),
             root.InventoryItemOccurrences
                 .OrderBy(value => value.CreatedAt)
                 .ThenBy(value => value.Id)

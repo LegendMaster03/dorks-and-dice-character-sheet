@@ -87,6 +87,10 @@ public sealed record SavingThrowPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Training = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<MechanicalContributionPresentationView>? Breakdown = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RelatedMechanicalValuePresentationView>? RelatedValues = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
 public sealed record DefensePresentationView(
@@ -97,6 +101,10 @@ public sealed record DefensePresentationView(
     string? FormattedValue = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Role = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<MechanicalContributionPresentationView>? Breakdown = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RelatedMechanicalValuePresentationView>? RelatedValues = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
