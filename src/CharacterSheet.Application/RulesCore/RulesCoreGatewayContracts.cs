@@ -173,6 +173,55 @@ public sealed record RulesCoreMechanicSourceAttributionView(
     bool PresentationRequired,
     bool ReferenceLinkRequired);
 
+public sealed record RulesCoreCharacterSupportProjectionRequest(
+    IReadOnlyList<string>? CapabilityKeys = null);
+
+public sealed record RulesCoreCharacterRecoveryRuntimeRequirementsView(
+    bool RequiresCharacterState,
+    bool RequiresPlayerChoices,
+    bool RequiresRolls,
+    bool RequiresResourceExpenditure,
+    bool RequiresOtherRuntimeFacts);
+
+public sealed record RulesCoreCharacterRecoveryChoiceOptionView(
+    string Key,
+    string DisplayName,
+    string? Value);
+
+public sealed record RulesCoreCharacterRecoveryChoiceView(
+    string Key,
+    string Prompt,
+    bool Required,
+    IReadOnlyList<RulesCoreCharacterRecoveryChoiceOptionView> Options);
+
+public sealed record RulesCoreCharacterRecoveryRollView(
+    string Key,
+    string RollKind,
+    string Prompt,
+    bool Required,
+    string? MechanicKey);
+
+public sealed record RulesCoreCharacterRecoveryProcedureView(
+    string ProcedureKey,
+    string DisplayName,
+    string? PresentationRole,
+    bool IsAvailableUnderRuleset,
+    string ApplicabilityState,
+    RulesCoreMechanicApplicabilityView Applicability,
+    IReadOnlyList<string> MissingCapabilityKeys,
+    IReadOnlyList<RulesCoreMechanicInputView> Inputs,
+    IReadOnlyList<RulesCoreCharacterRecoveryChoiceView> Choices,
+    IReadOnlyList<RulesCoreCharacterRecoveryRollView> Rolls,
+    RulesCoreCharacterRecoveryRuntimeRequirementsView RuntimeRequirements,
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions);
+
+public sealed record RulesCoreCharacterSupportProjectionView(
+    string Scope,
+    Guid? CampaignId,
+    int? RevisionNumber,
+    DateTimeOffset? PublishedAt,
+    IReadOnlyList<RulesCoreCharacterRecoveryProcedureView> RecoveryProcedures);
+
 public sealed record RulesCoreMechanicEvaluationRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     Dictionary<string, int>? IntegerInputs = null,
@@ -227,6 +276,10 @@ public interface IRulesCoreGateway
 
     Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
         RulesCoreMechanicsBatchEvaluationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
+        RulesCoreCharacterSupportProjectionRequest request,
         CancellationToken cancellationToken = default);
 
     Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
