@@ -63,6 +63,29 @@ internal static class RulesCoreCharacterProjectionProjector
             .Where(value => string.Equals(value.Kind, "character-metadata", StringComparison.Ordinal))
             .Select(ProjectCalculated)
             .ToArray();
+        var choices = projection.Choices
+            .Select(value => new CharacterRuleChoicePresentationView(
+                value.ChoiceKey,
+                value.GroupKey,
+                value.DisplayName,
+                value.Kind,
+                value.State,
+                value.Options.Select(option => new CharacterRuleChoiceOptionPresentationView(
+                    option.Value,
+                    option.DisplayName,
+                    option.ConceptKey)).ToArray(),
+                value.SelectedValue,
+                value.SourceConceptKey,
+                SourceAttributionMapper.Map(value.Provenance)))
+            .ToArray();
+        var conflicts = projection.Conflicts
+            .Select(value => new CharacterProjectionConflictPresentationView(
+                value.ConflictKey,
+                value.Kind,
+                value.Message,
+                value.RelatedMechanicKeys,
+                value.RelatedConceptKeys))
+            .ToArray();
         var competencies = ProjectCompetencies(fallback?.Competencies, projection.Mechanics);
 
         return (fallback ?? new CharacterMechanicsPresentationView()) with
@@ -85,7 +108,9 @@ internal static class RulesCoreCharacterProjectionProjector
             Actions = actions.Length == 0 ? null : actions,
             SpellcastingProfiles = spellcasting.Length == 0 ? null : spellcasting,
             Features = features.Length == 0 ? null : features,
-            CharacterMetadata = metadata.Length == 0 ? null : metadata
+            CharacterMetadata = metadata.Length == 0 ? null : metadata,
+            RuleChoices = choices.Length == 0 ? null : choices,
+            ProjectionConflicts = conflicts.Length == 0 ? null : conflicts
         };
     }
 

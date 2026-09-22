@@ -327,6 +327,33 @@ public sealed record SpellcastingProfilePresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
+public sealed record CharacterRuleChoiceOptionPresentationView(
+    string Value,
+    string DisplayName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ConceptKey = null);
+
+public sealed record CharacterRuleChoicePresentationView(
+    string ChoiceKey,
+    string GroupKey,
+    string DisplayName,
+    string Kind,
+    string State,
+    IReadOnlyList<CharacterRuleChoiceOptionPresentationView> Options,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SelectedValue = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourceConceptKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record CharacterProjectionConflictPresentationView(
+    string ConflictKey,
+    string Kind,
+    string Message,
+    IReadOnlyList<string> RelatedMechanicKeys,
+    IReadOnlyList<string> RelatedConceptKeys);
+
 public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CalculatedMechanicalValuePresentationView>? AbilityValues = null,
@@ -367,4 +394,8 @@ public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CharacterFeaturePresentationView>? Features = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CalculatedMechanicalValuePresentationView>? CharacterMetadata = null);
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? CharacterMetadata = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterRuleChoicePresentationView>? RuleChoices = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterProjectionConflictPresentationView>? ProjectionConflicts = null);
