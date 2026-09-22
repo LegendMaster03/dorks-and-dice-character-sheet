@@ -125,12 +125,19 @@ public sealed class CharacterPresentationProjectorTests
             ]);
         var move = Competency("competency.skill.move-silently", "skill.move-silently", "Move Silently");
         var stealth = Competency("competency.skill.stealth", "skill.stealth", "Stealth");
-        var knowledge = Competency(
-            "competency.skill.knowledge-planes",
-            "skill.knowledge-planes",
-            "Knowledge (the planes)",
-            family: "Knowledge",
-            specialty: "the planes");
+        var craft = Competency(
+            "competency.skill.craft",
+            "skill.craft",
+            "Craft",
+            family: "Craft",
+            isFamily: true);
+        var craftAlchemy = Competency(
+            "competency.skill.craft-alchemy",
+            "skill.craft-alchemy",
+            "Craft (Alchemy)",
+            family: "Craft",
+            specialty: "alchemy",
+            competencyKind: "specialized-skill");
         var independent = Competency(
             "competency.skill.perception",
             "skill.perception",
@@ -147,16 +154,21 @@ public sealed class CharacterPresentationProjectorTests
                     true,
                     [])
             ]);
-        var catalog = Catalog(hide, move, stealth, knowledge, independent);
+        var catalog = Catalog(hide, move, stealth, craft, craftAlchemy, independent);
 
         var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
 
         Assert.NotNull(mechanics.Competencies);
         var entries = mechanics.Competencies.Entries;
-        var specialized = Assert.Single(entries, value => value.Key == "skill.knowledge-planes");
+        var family = Assert.Single(entries, value => value.Key == "skill.craft");
+        Assert.True(family.IsFamily);
+        Assert.Equal("Craft", family.Family);
+        var specialized = Assert.Single(entries, value => value.Key == "skill.craft-alchemy");
         Assert.Equal("-", specialized.EffectiveValue);
-        Assert.Equal("Knowledge", specialized.Family);
-        Assert.Equal("the planes", specialized.Specialty);
+        Assert.False(specialized.IsFamily);
+        Assert.Equal("specialized-skill", specialized.Kind);
+        Assert.Equal("Craft", specialized.Family);
+        Assert.Equal("alchemy", specialized.Specialty);
         Assert.Equal("intelligence", specialized.GoverningAbility);
         Assert.True(specialized.SupportsRanks);
         Assert.True(specialized.SupportsClassSkillState);
@@ -658,10 +670,12 @@ public sealed class CharacterPresentationProjectorTests
         string displayName,
         string? family = null,
         string? specialty = null,
-        IReadOnlyList<RulesCoreMechanicRelationshipView>? relationships = null)
+        IReadOnlyList<RulesCoreMechanicRelationshipView>? relationships = null,
+        string competencyKind = "skill",
+        bool isFamily = false)
     {
         var definition = new RulesCoreCompetencyDefinitionView(
-            "skill",
+            competencyKind,
             family,
             specialty,
             "intelligence",
@@ -671,7 +685,8 @@ public sealed class CharacterPresentationProjectorTests
             true,
             true,
             null,
-            []);
+            [],
+            IsFamily: isFamily);
         return new RulesCoreMechanicView(
             mechanicKey,
             "competency",
