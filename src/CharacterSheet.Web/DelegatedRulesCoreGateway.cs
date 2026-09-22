@@ -80,6 +80,18 @@ public sealed class DelegatedRulesCoreGateway(
             cancellationToken);
     }
 
+    public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
+        RulesCoreCharacterSupportProjectionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterSupportProjectionView>(
+            HttpMethod.Post,
+            "/api/rules/mechanics/support",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
     public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
         RulesCoreCharacterRulesProjectionRequest request,
         CancellationToken cancellationToken = default)
