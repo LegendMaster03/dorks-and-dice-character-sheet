@@ -87,7 +87,10 @@ internal static class RulesCoreCharacterProjectionProjector
                 value.RelatedMechanicKeys,
                 value.RelatedConceptKeys))
             .ToArray();
-        var competencies = ProjectCompetencies(fallback?.Competencies, projection.Mechanics);
+        var competencies = ProjectCompetencies(
+            fallback?.Competencies,
+            projection.Mechanics,
+            state);
         var inventory = ProjectInventory(state, projection.Equipment);
 
         return (fallback ?? new CharacterMechanicsPresentationView()) with
@@ -477,12 +480,22 @@ internal static class RulesCoreCharacterProjectionProjector
 
     private static CompetencyCollectionPresentationView? ProjectCompetencies(
         CompetencyCollectionPresentationView? fallback,
-        IReadOnlyList<RulesCoreCharacterResolvedMechanicView> projectedMechanics)
+        IReadOnlyList<RulesCoreCharacterResolvedMechanicView> projectedMechanics,
+        CharacterStateView? state)
     {
         if (fallback is null)
         {
             return null;
         }
+
+        var rankByConcept = (state?.RulesInputs ?? [])
+            .Where(value => value.Kind == CharacterRulesInputKinds.CompetencyRank
+                && value.IntegerValue is not null)
+            .GroupBy(value => value.Key, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Last().IntegerValue!.Value,
+                StringComparer.Ordinal);
 
         var projectedByConcept = projectedMechanics
             .Where(value => string.Equals(value.Kind, "competency", StringComparison.Ordinal))
@@ -508,6 +521,9 @@ internal static class RulesCoreCharacterProjectionProjector
                 return entry with
                 {
                     EffectiveValue = EffectiveValue(projected),
+                    Ranks = rankByConcept.TryGetValue(entry.Key, out var ranks)
+                        ? ranks
+                        : entry.Ranks,
                     SourceAttributions = SourceAttributionMapper.Map(projected.Provenance)
                         ?? entry.SourceAttributions,
                     Breakdown = ProjectContributions(projected.Contributions)
