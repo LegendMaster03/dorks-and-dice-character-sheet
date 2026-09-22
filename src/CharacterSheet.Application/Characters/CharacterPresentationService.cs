@@ -44,7 +44,7 @@ public sealed class CharacterPresentationService(
             cancellationToken);
         if (ruleProjection is not null)
         {
-            mechanics = RulesCoreCharacterProjectionProjector.Apply(mechanics, ruleProjection);
+            mechanics = RulesCoreCharacterProjectionProjector.Apply(mechanics, ruleProjection, state);
         }
 
         return new CharacterPresentationResult(

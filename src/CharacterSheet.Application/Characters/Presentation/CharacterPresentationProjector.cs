@@ -24,6 +24,7 @@ public static class CharacterPresentationProjector
 
     public static CharacterMechanicsPresentationView ProjectCharacterRules(
         CharacterMechanicsPresentationView? fallback,
-        RulesCoreCharacterRulesProjectionView projection) =>
-        RulesCoreCharacterProjectionProjector.Apply(fallback, projection);
+        RulesCoreCharacterRulesProjectionView projection,
+        CharacterStateView? state = null) =>
+        RulesCoreCharacterProjectionProjector.Apply(fallback, projection, state);
 }

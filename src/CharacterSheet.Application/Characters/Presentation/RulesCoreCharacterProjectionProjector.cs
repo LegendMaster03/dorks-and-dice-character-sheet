@@ -9,7 +9,8 @@ internal static class RulesCoreCharacterProjectionProjector
 
     internal static CharacterMechanicsPresentationView Apply(
         CharacterMechanicsPresentationView? fallback,
-        RulesCoreCharacterRulesProjectionView projection)
+        RulesCoreCharacterRulesProjectionView projection,
+        CharacterStateView? state = null)
     {
         ArgumentNullException.ThrowIfNull(projection);
 
@@ -87,6 +88,7 @@ internal static class RulesCoreCharacterProjectionProjector
                 value.RelatedConceptKeys))
             .ToArray();
         var competencies = ProjectCompetencies(fallback?.Competencies, projection.Mechanics);
+        var inventory = ProjectInventory(state, projection.Equipment);
 
         return (fallback ?? new CharacterMechanicsPresentationView()) with
         {
@@ -104,6 +106,7 @@ internal static class RulesCoreCharacterProjectionProjector
             CombatFundamentals = combat.Length == 0 ? null : combat,
             HealthTracks = health.Length == 0 ? null : health,
             Competencies = competencies,
+            Inventory = inventory,
             Movement = movement.Length == 0 ? null : movement,
             Actions = actions.Length == 0 ? null : actions,
             SpellcastingProfiles = spellcasting.Length == 0 ? null : spellcasting,
@@ -390,6 +393,86 @@ internal static class RulesCoreCharacterProjectionProjector
             value.AcquisitionLevel,
             effects.Length == 0 ? null : effects,
             SourceAttributionMapper.Map(value.FeatureProvenance ?? value.Provenance));
+    }
+
+    private static InventoryMechanicsPresentationView? ProjectInventory(
+        CharacterStateView? state,
+        IReadOnlyList<RulesCoreCharacterEquipmentDefinitionView> equipment)
+    {
+        if (state is null || state.InventoryItemOccurrences.Count == 0)
+        {
+            return null;
+        }
+
+        var byConcept = equipment
+            .GroupBy(value => value.ConceptKey, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First(),
+                StringComparer.Ordinal);
+
+        var occurrences = state.InventoryItemOccurrences
+            .Select(occurrence =>
+            {
+                if (!byConcept.TryGetValue(occurrence.RuleConceptKey, out var definition))
+                {
+                    return null;
+                }
+
+                var facts = new List<DisplayFieldPresentationView>();
+                AddFact("item-type", "Item Type", definition.ItemType);
+                AddFact("equipment-category", "Equipment Category", definition.EquipmentCategory);
+                AddFact("armor-role", "Armor Role", definition.ArmorRole);
+                if (definition.Weight is decimal weight)
+                {
+                    AddFact(
+                        "weight",
+                        "Weight",
+                        string.IsNullOrWhiteSpace(definition.WeightUnit)
+                            ? weight.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            : $"{weight.ToString(System.Globalization.CultureInfo.InvariantCulture)} {definition.WeightUnit}");
+                }
+                AddFact("ammunition-type", "Ammunition", definition.AmmunitionType);
+                AddFact("capacity", "Capacity", definition.Capacity);
+                if (definition.RequiresAttunement is bool requiresAttunement)
+                {
+                    AddFact(
+                        "requires-attunement",
+                        "Requires Attunement",
+                        requiresAttunement ? "Yes" : "No");
+                }
+                AddFact(
+                    "attunement-requirement",
+                    "Attunement Requirement",
+                    definition.AttunementRequirement);
+                if (definition.PropertyKeys.Count > 0)
+                {
+                    AddFact(
+                        "properties",
+                        "Properties",
+                        string.Join(", ", definition.PropertyKeys));
+                }
+
+                return new ItemOccurrenceMechanicsPresentationView(
+                    occurrence.Id,
+                    Facts: facts.Count == 0 ? null : facts,
+                    SourceAttributions: SourceAttributionMapper.Map(definition.Provenance));
+
+                void AddFact(string key, string label, string? value)
+                {
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        facts.Add(new DisplayFieldPresentationView(key, label, value));
+                    }
+                }
+            })
+            .Where(value => value is not null)
+            .Cast<ItemOccurrenceMechanicsPresentationView>()
+            .ToArray();
+
+        return occurrences.Length == 0
+            ? null
+            : new InventoryMechanicsPresentationView(occurrences);
     }
 
     private static CompetencyCollectionPresentationView? ProjectCompetencies(

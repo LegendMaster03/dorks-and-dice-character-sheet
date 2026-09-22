@@ -278,6 +278,19 @@ public sealed record ActionAttackPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
+public sealed record ItemOccurrenceMechanicsPresentationView(
+    Guid OccurrenceId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? Values = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<DisplayFieldPresentationView>? Facts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record InventoryMechanicsPresentationView(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<ItemOccurrenceMechanicsPresentationView>? ItemOccurrences = null);
+
 public sealed record CharacterFeaturePresentationView(
     string Key,
     string Label,
@@ -385,6 +398,8 @@ public sealed record CharacterMechanicsPresentationView(
     IReadOnlyList<CharacterCheckPresentationView>? Checks = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CharacterProcedurePresentationView>? Procedures = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    InventoryMechanicsPresentationView? Inventory = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CalculatedMechanicalValuePresentationView>? Movement = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
