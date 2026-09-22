@@ -42,7 +42,9 @@ export function renderSkillsCard(
     const renderedItems = items.map((item, index) => {
         const element = item.kind === "standalone"
             ? renderStandaloneCompetency(item.competency, control)
-            : renderCompositeCompetency(item, index, control);
+            : item.kind === "family"
+                ? renderCompetencyFamily(item, control)
+                : renderCompositeCompetency(item, index, control);
         list.append(element);
         return {
             element,
@@ -96,6 +98,26 @@ function renderStandaloneCompetency(
     return disclosure;
 }
 
+function renderCompetencyFamily(
+    item: Extract<CompetencyPresentationItem, { kind: "family" }>,
+    control: CompetencyRankControlOptions
+): HTMLElement {
+    const disclosure = createElement("details", "dd-skill-disclosure dd-skill-disclosure--family");
+    disclosure.setAttribute("data-skill-family", item.parent.key);
+
+    const summary = createElement("summary", "dd-skill-disclosure__summary");
+    summary.append(renderCompetencyRow(item.parent, "standalone", undefined, "span"));
+
+    const body = createElement("div", "dd-skill-disclosure__body dd-skill-family-details");
+    const members = createElement("div", "dd-skill-family-members");
+    for (const member of item.members) {
+        members.append(renderStandaloneCompetency(member, control));
+    }
+    body.append(members);
+    disclosure.append(summary, body);
+    return disclosure;
+}
+
 function renderCompositeCompetency(
     item: Extract<CompetencyPresentationItem, { kind: "composite" }>,
     index: number,
@@ -124,7 +146,9 @@ function renderCompositeCompetency(
 function competencySearchText(item: CompetencyPresentationItem): string {
     const competencies = item.kind === "standalone"
         ? [item.competency]
-        : [item.parent, ...item.components];
+        : item.kind === "family"
+            ? [item.parent, ...item.members]
+            : [item.parent, ...item.components];
     return competencies
         .flatMap(value => [
             value.label,
