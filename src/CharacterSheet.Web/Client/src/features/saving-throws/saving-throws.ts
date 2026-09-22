@@ -9,9 +9,24 @@ import {
 } from "../../core/mechanics/mechanic-value.js";
 
 export const SAVE_SCAFFOLD: readonly MechanicalScaffoldSlot[] = [
-    { id: "fortitude", label: "Fortitude Save", keys: ["save.fortitude"], labels: ["Fortitude"] },
-    { id: "reflex", label: "Reflex Save", keys: ["save.reflex"], labels: ["Reflex"] },
-    { id: "will", label: "Will Save", keys: ["save.will"], labels: ["Will"] }
+    {
+        id: "fortitude",
+        label: "Fortitude Save",
+        keys: ["save.fortitude", "saving-throw.fortitude"],
+        labels: ["Fortitude", "Fortitude Save"]
+    },
+    {
+        id: "reflex",
+        label: "Reflex Save",
+        keys: ["save.reflex", "saving-throw.reflex"],
+        labels: ["Reflex", "Reflex Save"]
+    },
+    {
+        id: "will",
+        label: "Will Save",
+        keys: ["save.will", "saving-throw.will"],
+        labels: ["Will", "Will Save"]
+    }
 ];
 
 export function renderSavingThrowsCard(
@@ -23,11 +38,7 @@ export function renderSavingThrowsCard(
         saves === undefined ? "unavailable" : "resolved");
     const values = saves ?? [];
     const grid = createElement("div", "dd-saving-throws-card__grid");
-    grid.append(...(
-        values.length === 0 || usesThreeXSaveScaffold(values)
-            ? renderSavingThrowScaffold(values)
-            : values.map(renderSavingThrowCell)
-    ));
+    grid.append(...renderSavingThrowScaffold(values));
     card.append(grid);
     return card;
 }
@@ -55,11 +66,6 @@ export function renderSavingThrowScaffold(
         if (!usedKeys.has(save.key)) cells.push(renderSavingThrowCell(save));
     }
     return cells;
-}
-
-function usesThreeXSaveScaffold(saves: readonly SavingThrowView[]): boolean {
-    return SAVE_SCAFFOLD.some(slot =>
-        findScaffoldValue(saves, slot, new Set<string>()) !== undefined);
 }
 
 function renderSavingThrowCell(save: SavingThrowView): HTMLElement {

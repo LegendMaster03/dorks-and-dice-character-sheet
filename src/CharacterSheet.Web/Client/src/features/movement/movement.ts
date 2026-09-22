@@ -33,6 +33,8 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
             walk === undefined ? "-" : formatMechanicalValue(walk)));
     root.append(primary);
 
+    const details = createElement("details", "dd-movement-values__details");
+    const toggle = createElement("summary", "dd-movement-values__details-toggle", "Other speeds");
     const variants = createElement("div", "dd-movement-values__variants");
     variants.setAttribute("aria-label", "Additional movement speeds");
 
@@ -46,7 +48,8 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
         variants.append(renderMovementVariant(value.key, value.label, value));
     }
 
-    root.append(variants);
+    details.append(toggle, variants);
+    root.append(details);
     return root;
 }
 

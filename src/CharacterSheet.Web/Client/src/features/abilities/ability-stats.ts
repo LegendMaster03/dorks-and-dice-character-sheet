@@ -146,19 +146,14 @@ export function findAbilitySavingThrow(
     const abilityKey = definition.key.toLowerCase();
     const abilityLabel = definition.label.trim().toLowerCase();
     return saves?.find(save => {
+        const key = save.key.trim().toLowerCase();
+        if (isThreeXSavingThrowKey(key)) return false;
+
         const governing = save.governingAbility?.trim().toLowerCase();
         if (governing === abilityKey || governing === abilityLabel) return true;
 
-        const key = save.key.trim().toLowerCase();
-        if (key === `save.${abilityKey}`
-            || key === `saving-throw.${abilityKey}`) return true;
-
-        return (abilityKey === "constitution"
-                && (key === "save.fortitude" || key === "saving-throw.fortitude"))
-            || (abilityKey === "dexterity"
-                && (key === "save.reflex" || key === "saving-throw.reflex"))
-            || (abilityKey === "wisdom"
-                && (key === "save.will" || key === "saving-throw.will"));
+        return key === `save.${abilityKey}`
+            || key === `saving-throw.${abilityKey}`;
     });
 }
 
@@ -172,10 +167,17 @@ function abilitySaveLabel(
         || key === `saving-throw.${definition.key}`) {
         return "Save";
     }
-    if (key === "save.fortitude" || key === "saving-throw.fortitude") return "Fort Save";
-    if (key === "save.reflex" || key === "saving-throw.reflex") return "Ref Save";
-    if (key === "save.will" || key === "saving-throw.will") return "Will Save";
     return savingThrow.label;
+}
+
+function isThreeXSavingThrowKey(key: string): boolean {
+    const normalized = key.trim().toLowerCase();
+    return normalized === "save.fortitude"
+        || normalized === "saving-throw.fortitude"
+        || normalized === "save.reflex"
+        || normalized === "saving-throw.reflex"
+        || normalized === "save.will"
+        || normalized === "saving-throw.will";
 }
 
 function renderAbilityMechanicalDetails(value: CalculatedMechanicalValueView): HTMLElement | null {

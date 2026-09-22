@@ -32,9 +32,6 @@ internal static class MechanicalCollectionProjector
             "save.intelligence" or "saving-throw.intelligence" => "intelligence",
             "save.wisdom" or "saving-throw.wisdom" => "wisdom",
             "save.charisma" or "saving-throw.charisma" => "charisma",
-            "save.fortitude" or "saving-throw.fortitude" => "constitution",
-            "save.reflex" or "saving-throw.reflex" => "dexterity",
-            "save.will" or "saving-throw.will" => "wisdom",
             _ => null
         };
 

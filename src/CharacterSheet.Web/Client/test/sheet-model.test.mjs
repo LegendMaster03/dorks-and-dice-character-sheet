@@ -302,10 +302,11 @@ test("retired workspace grid selectors are removed after the reference-layout co
 });
 
 test("wide layout uses a full-width top strip, a persistent left rail, and a broad primary workspace", () => {
-    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*grid-template-columns:\s*minmax\(20rem,\s*24rem\)\s+minmax\(0,\s*1fr\)/s);
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(0,\s*1fr\)/s);
     assert.match(css, /\.dd-sheet__top-row\s*\{[^}]*padding:/s);
+    assert.match(sheetSource, /createElement\("aside", "dd-sheet__reference-rail"\)/);
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__skills"\)/);
-    assert.match(sheetSource, /skillsColumn\.append\(support, mechanicsColumn\)/);
+    assert.match(sheetSource, /dashboard\.append\(referenceRail, skillsColumn, stage\)/);
     assert.match(sheetSource, /stage\.append\(primary\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
     assert.match(sheetSource, /renderCombatSummaryBand\([\s\S]*renderConditionsCard\(routine, readOnly, handlers\.routine\)/s);
@@ -313,14 +314,13 @@ test("wide layout uses a full-width top strip, a persistent left rail, and a bro
 
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
     assert.doesNotMatch(sheetSource, /renderSupportScaffoldCard/);
-    assert.match(sheetSource, /renderPassiveValuesCard\(mechanics\)/);
-    assert.match(sheetSource, /renderSensesCard\(mechanics\)/);
+    assert.match(sheetSource, /renderSensesSummaryCard\(mechanics\)/);
     assert.match(sheetSource, /renderTrainingCard\(mechanics\)/);
     assert.match(sheetSource, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.match(sheetSource, /renderCombatFundamentalsCard\(mechanics\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
     assert.doesNotMatch(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
-    assert.match(sheetSource, /renderSavingThrowsCard\(unmappedSavingThrows\)/);
+    assert.match(sheetSource, /renderSavingThrowsCard\(detachedSavingThrows\)/);
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 
@@ -328,7 +328,7 @@ test("deployed-density polish keeps primary tabs on one line and saves integrate
     assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*white-space:\s*nowrap;/s);
     assert.match(css, /\.dd-sheet-mode-bar\s*\{[^}]*padding:\s*0\.4rem/s);
     assert.doesNotMatch(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
-    assert.match(sheetSource, /renderSavingThrowsCard\(unmappedSavingThrows\)/);
+    assert.match(sheetSource, /renderSavingThrowsCard\(detachedSavingThrows\)/);
 });
 
 test("embedded module loads its stylesheet from the same Tool Module asset subtree", () => {

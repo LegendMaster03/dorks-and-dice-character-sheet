@@ -256,9 +256,12 @@ test("Ability cards pair effective score, modifier, and matching Ability save", 
     assert.match(visibleText(strength), /Save\s+\+6/);
 });
 
-test("3.x Fortitude, Reflex, and Will saves occupy their governing Ability cards without a separate save panel", () => {
+test("3.x Fortitude, Reflex, and Will remain independent from six Ability saves", () => {
     const rendered = render("actions", {
         savingThrows: [
+            mechanical("save.dexterity", "Dexterity Save", "+4", { governingAbility: "dexterity" }),
+            mechanical("save.constitution", "Constitution Save", "+3", { governingAbility: "constitution" }),
+            mechanical("save.wisdom", "Wisdom Save", "+5", { governingAbility: "wisdom" }),
             mechanical("save.fortitude", "Fortitude Save", "+8"),
             mechanical("save.reflex", "Reflex Save", "+5"),
             mechanical("save.will", "Will Save", "+7")
@@ -268,11 +271,19 @@ test("3.x Fortitude, Reflex, and Will saves occupy their governing Ability cards
     const constitution = byAttribute(rendered, "data-ability-key", "constitution")[0];
     const dexterity = byAttribute(rendered, "data-ability-key", "dexterity")[0];
     const wisdom = byAttribute(rendered, "data-ability-key", "wisdom")[0];
+    const saveCard = byClass(rendered, "dd-saving-throws-card")[0];
 
-    assert.match(visibleText(constitution), /Fort Save\s+\+8/);
-    assert.match(visibleText(dexterity), /Ref Save\s+\+5/);
-    assert.match(visibleText(wisdom), /Will Save\s+\+7/);
-    assert.equal(byClass(rendered, "dd-saving-throws-card").length, 0);
+    assert.match(visibleText(constitution), /Save\s+\+3/);
+    assert.doesNotMatch(visibleText(constitution), /Fortitude|Fort Save/);
+    assert.match(visibleText(dexterity), /Save\s+\+4/);
+    assert.doesNotMatch(visibleText(dexterity), /Reflex|Ref Save/);
+    assert.match(visibleText(wisdom), /Save\s+\+5/);
+    assert.doesNotMatch(visibleText(wisdom), /Will Save\s+\+7/);
+
+    assert.ok(saveCard);
+    assert.match(visibleText(saveCard), /Fortitude Save\s+\+8/);
+    assert.match(visibleText(saveCard), /Reflex Save\s+\+5/);
+    assert.match(visibleText(saveCard), /Will Save\s+\+7/);
 });
 
 test("workspace consumes supplied saving throws, competencies, combat, actions, movement, checks, and procedures", () => {
@@ -491,25 +502,25 @@ test("Defense and Combat share a compact persistent summary beneath Skills", () 
     assert.equal(byClass(rendered, "dd-skills-card").length, 1);
 });
 
-test("wide shell keeps top statistics full-width and moves persistent facts beneath Skills", () => {
+test("wide shell uses a Beyond-style reference rail beside Skills and the primary stage", () => {
     const rendered = render("actions", null);
     const dashboard = byClass(rendered, "dd-sheet__dashboard")[0];
+    const rail = byClass(rendered, "dd-sheet__reference-rail")[0];
     const skills = byClass(rendered, "dd-sheet__skills")[0];
     const topRow = byClass(rendered, "dd-sheet__top-row")[0];
-    const support = byClass(rendered, "dd-sheet__support")[0];
     const mechanicsColumn = byClass(rendered, "dd-sheet__mechanics")[0];
     const main = byClass(rendered, "dd-sheet__main")[0];
     assert.ok(dashboard);
+    assert.ok(rail);
     assert.ok(skills);
     assert.ok(topRow);
-    assert.ok(support);
     assert.ok(mechanicsColumn);
     assert.ok(main);
     assert.equal(byClass(topRow, "dd-health-quick").length, 1);
-    assert.equal(walk(skills).includes(support), true);
+    assert.equal(walk(rail).includes(byClass(rendered, "dd-saving-throws-card")[0]), true);
+    assert.equal(walk(rail).includes(byClass(rendered, "dd-senses-summary-card")[0]), true);
     assert.equal(walk(skills).includes(mechanicsColumn), true);
     assert.equal(walk(skills).includes(main), false);
-    assert.equal(byClass(rendered, "dd-saving-throws-card").length, 0);
     assert.equal(byClass(rendered, "dd-defense-card").length, 1);
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 1);
 });
@@ -517,11 +528,12 @@ test("wide shell keeps top statistics full-width and moves persistent facts bene
 test("support surfaces stay neutral when unavailable and consume supplied values without edition guesses", () => {
     const empty = render("actions", null);
     const emptyText = visibleText(empty);
-    assert.match(emptyText, /Passive Values/);
     assert.match(emptyText, /Senses/);
+    assert.match(emptyText, /Passive Values/);
+    assert.match(emptyText, /Additional Senses/);
     assert.match(emptyText, /Proficiencies & Training/);
     assert.doesNotMatch(emptyText, /Passive Values\s+Perception|Proficiencies & Training\s+Armor/);
-    assert.equal(byAttribute(empty, "data-support-scaffold-state", "unavailable").length, 3);
+    assert.equal(byAttribute(empty, "data-support-scaffold-state", "unavailable").length, 2);
 
     const supplied = render("actions", {
         passiveValues: [mechanical("passive.awareness", "Awareness", "17")],
@@ -560,7 +572,7 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
         assert.ok(text.includes(label), label);
     }
 
-    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 3);
+    assert.equal(byAttribute(rendered, "data-support-scaffold-state", "unavailable").length, 2);
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "passive-perception").length, 0);
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 0);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);

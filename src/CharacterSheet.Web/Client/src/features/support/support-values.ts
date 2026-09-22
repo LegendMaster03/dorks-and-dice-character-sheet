@@ -14,6 +14,23 @@ export function renderSensesCard(mechanics: CharacterMechanicsView | null): HTML
     return renderSupportValuesCard("Senses", "senses", mechanics?.senses);
 }
 
+export function renderSensesSummaryCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    const card = createSectionCard("Senses", "dd-support-card dd-support-values dd-senses-summary-card");
+    card.setAttribute("data-support-values-kind", "senses-summary");
+
+    const passiveValues = mechanics?.passiveValues;
+    const senses = mechanics?.senses;
+    card.setAttribute(
+        "data-support-scaffold-state",
+        passiveValues === undefined && senses === undefined ? "unavailable" : "resolved");
+
+    card.append(
+        renderSupportGroup("Passive Values", passiveValues, "passive"),
+        renderSupportGroup("Additional Senses", senses, "senses")
+    );
+    return card;
+}
+
 export function renderTrainingCard(mechanics: CharacterMechanicsView | null): HTMLElement {
     const competencyRows = (mechanics?.competencies?.entries ?? [])
         .filter(isNonSkillTraining)
@@ -23,6 +40,35 @@ export function renderTrainingCard(mechanics: CharacterMechanicsView | null): HT
         "training",
         mechanics?.training,
         competencyRows);
+}
+
+function renderSupportGroup(
+    label: string,
+    values: readonly CalculatedMechanicalValueView[] | undefined,
+    kind: string
+): HTMLElement {
+    const group = createElement("section", "dd-support-values__group");
+    group.setAttribute("data-support-group", kind);
+    group.append(createElement("h3", "dd-support-values__group-title", label));
+
+    const list = createElement("div", "dd-support-scaffold__list");
+    const supplied = values ?? [];
+    if (supplied.length === 0) {
+        const row = createElement("div", "dd-support-scaffold__row dd-support-scaffold__row--empty");
+        row.append(createElement("strong", "dd-support-scaffold__value", "-"));
+        list.append(row);
+    } else {
+        for (const value of supplied) {
+            const row = createElement("div", "dd-support-scaffold__row");
+            row.setAttribute("data-mechanic-key", value.key);
+            row.append(
+                createElement("span", "dd-support-scaffold__label", value.label),
+                createElement("strong", "dd-support-scaffold__value", formatMechanicalValue(value)));
+            list.append(row);
+        }
+    }
+    group.append(list);
+    return group;
 }
 
 function renderSupportValuesCard(

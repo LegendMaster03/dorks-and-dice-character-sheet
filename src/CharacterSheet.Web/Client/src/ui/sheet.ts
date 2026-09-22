@@ -27,8 +27,7 @@ import {
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
 import {
-    renderPassiveValuesCard,
-    renderSensesCard,
+    renderSensesSummaryCard,
     renderTrainingCard
 } from "../features/support/support-values.js";
 import {
@@ -119,33 +118,33 @@ export function renderCharacterWorkspace(
 
     const dashboard = createElement("div", "dd-sheet__dashboard");
 
-    const skillsColumn = createElement("aside", "dd-sheet__skills");
-    skillsColumn.setAttribute("aria-label", "Skills and persistent Character statistics");
-    skillsColumn.append(renderSkillsCard(competencyPresentation));
+    const detachedSavingThrows = mechanics?.savingThrows === undefined
+        ? undefined
+        : mechanics.savingThrows.filter(save =>
+            !ABILITY_SCORE_DEFINITIONS.some(definition =>
+                findAbilitySavingThrow([save], definition) === save));
 
-    const support = createElement("section", "dd-sheet__support dd-sheet__support--left");
-    support.setAttribute("aria-label", "Character supporting statistics");
-    const unmappedSavingThrows = (mechanics?.savingThrows ?? []).filter(save =>
-        !ABILITY_SCORE_DEFINITIONS.some(definition =>
-            findAbilitySavingThrow([save], definition) === save));
-    if (unmappedSavingThrows.length > 0) {
-        support.append(renderSavingThrowsCard(unmappedSavingThrows));
-    }
-    support.append(
-        renderPassiveValuesCard(mechanics),
-        renderSensesCard(mechanics),
+    const referenceRail = createElement("aside", "dd-sheet__reference-rail");
+    referenceRail.setAttribute("aria-label", "Saving throws, senses, and training");
+    referenceRail.append(
+        renderSavingThrowsCard(detachedSavingThrows),
+        renderSensesSummaryCard(mechanics),
         renderTrainingCard(mechanics)
     );
 
+    const skillsColumn = createElement("aside", "dd-sheet__skills");
+    skillsColumn.setAttribute("aria-label", "Skills and competencies");
+    skillsColumn.append(renderSkillsCard(competencyPresentation));
+
     const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
-    mechanicsColumn.setAttribute("aria-label", "Character combat mechanics");
+    mechanicsColumn.setAttribute("aria-label", "Additional Character combat mechanics");
     const combatSummary = createElement("div", "dd-mechanics-summary-grid");
     combatSummary.append(
         renderDefenseMechanicsCard(mechanics),
         renderCombatFundamentalsCard(mechanics)
     );
     mechanicsColumn.append(combatSummary);
-    skillsColumn.append(support, mechanicsColumn);
+    skillsColumn.append(mechanicsColumn);
 
     const stage = createElement("div", "dd-sheet__stage");
     stage.append(renderCombatSummaryBand(
@@ -171,7 +170,7 @@ export function renderCharacterWorkspace(
         handlers));
     stage.append(primary);
 
-    dashboard.append(skillsColumn, stage);
+    dashboard.append(referenceRail, skillsColumn, stage);
     shell.append(topRow, dashboard);
     return shell;
 }
