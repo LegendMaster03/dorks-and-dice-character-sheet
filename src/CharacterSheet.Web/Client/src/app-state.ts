@@ -89,6 +89,7 @@ export type RoutineMutationKind =
     | "note-update"
     | "note-delete"
     | "inventory-add"
+    | "inventory-update"
     | "inventory-delete"
     | "condition-add"
     | "condition-update"
