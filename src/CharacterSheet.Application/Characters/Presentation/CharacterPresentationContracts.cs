@@ -360,6 +360,27 @@ public sealed record CharacterRuleChoicePresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
+public sealed record CharacterRecoveryProcedurePresentationView(
+    string ProcedureKey,
+    string DisplayName,
+    string ApplicabilityState,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PresentationRole = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresCharacterState = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresPlayerChoices = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresRolls = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresResourceExpenditure = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresOtherRuntimeFacts = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? MissingCapabilityKeys = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
 public sealed record CharacterProjectionConflictPresentationView(
     string ConflictKey,
     string Kind,
@@ -413,4 +434,6 @@ public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CharacterRuleChoicePresentationView>? RuleChoices = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CharacterProjectionConflictPresentationView>? ProjectionConflicts = null);
+    IReadOnlyList<CharacterProjectionConflictPresentationView>? ProjectionConflicts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterRecoveryProcedurePresentationView>? RecoveryProcedures = null);
