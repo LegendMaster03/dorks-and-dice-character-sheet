@@ -65,6 +65,18 @@ internal static class CharacterMechanicsProjector
         var defenses = MechanicalCollectionProjector.ProjectDefenses(
             catalog.Mechanics,
             evaluationByKey);
+        var resistances = MechanicalCollectionProjector.ProjectDefenseTraits(
+            catalog.Mechanics,
+            evaluationByKey,
+            "resistance");
+        var immunities = MechanicalCollectionProjector.ProjectDefenseTraits(
+            catalog.Mechanics,
+            evaluationByKey,
+            "immunity");
+        var vulnerabilities = MechanicalCollectionProjector.ProjectDefenseTraits(
+            catalog.Mechanics,
+            evaluationByKey,
+            "vulnerability");
         var combat = MechanicalCollectionProjector.ProjectCalculatedValues(
             catalog.Mechanics,
             evaluationByKey,
@@ -84,6 +96,9 @@ internal static class CharacterMechanicsProjector
             Senses: senses.Length == 0 ? null : senses,
             SavingThrows: savingThrows.Length == 0 ? null : savingThrows,
             Defenses: defenses.Length == 0 ? null : new DefenseGroupPresentationView(defenses),
+            Resistances: resistances.Length == 0 ? null : resistances,
+            Immunities: immunities.Length == 0 ? null : immunities,
+            Vulnerabilities: vulnerabilities.Length == 0 ? null : vulnerabilities,
             CombatFundamentals: combat.Length == 0 ? null : combat,
             HealthTracks: resources.Length == 0 ? null : resources,
             Competencies: competencies,

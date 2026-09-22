@@ -14,13 +14,10 @@ import {
     renderAbilityScoreCard,
     renderAdditionalAbilityValues
 } from "../features/abilities/ability-stats.js";
-import { findInitiativeValue } from "../features/initiative/initiative.js";
 import { renderHealthQuickCard, type HealthControlOptions } from "../features/health/health.js";
 import { renderInspirationQuickCard } from "../features/inspiration/inspiration.js";
-import { renderArmorClassQuickCard } from "../features/defense/defense.js";
 import { renderMovementValues } from "../features/movement/movement.js";
 import { renderProficiencyQuickCard } from "../features/proficiency/proficiency.js";
-import { renderQuickMechanicalValue } from "../core/mechanics/mechanic-value.js";
 
 export function renderCoreStats(
     builder: CharacterBuilderUiState,
@@ -54,18 +51,11 @@ export function renderCoreStats(
         createElement("h3", "dd-stat__label", "Movement"),
         renderMovementValues(mechanics?.movement));
 
-    const initiative = createElement("article", "dd-stat dd-stat--initiative");
-    initiative.append(
-        createElement("h3", "dd-stat__label", "Initiative"),
-        renderQuickMechanicalValue(findInitiativeValue(mechanics?.combatFundamentals)));
-
     quickGrid.append(
         renderProficiencyQuickCard(mechanics?.combatFundamentals),
         movement,
         renderInspirationQuickCard(mechanics?.inspiration),
-        renderHealthQuickCard(mechanics, healthControl),
-        initiative,
-        renderArmorClassQuickCard(mechanics)
+        renderHealthQuickCard(mechanics, healthControl)
     );
     section.append(abilityGrid, quickGrid);
 

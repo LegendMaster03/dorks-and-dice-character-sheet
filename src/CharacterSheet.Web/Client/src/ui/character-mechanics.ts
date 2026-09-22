@@ -224,6 +224,9 @@ export interface CharacterMechanicsView {
     senses?: readonly CalculatedMechanicalValueView[];
     savingThrows?: readonly SavingThrowView[];
     defenses?: DefenseGroupView;
+    resistances?: readonly CalculatedMechanicalValueView[];
+    immunities?: readonly CalculatedMechanicalValueView[];
+    vulnerabilities?: readonly CalculatedMechanicalValueView[];
     combatFundamentals?: readonly CalculatedMechanicalValueView[];
     healthTracks?: readonly HealthTrackView[];
     competencies?: CompetencyCollectionView;

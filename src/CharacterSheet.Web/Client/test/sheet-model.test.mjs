@@ -265,17 +265,16 @@ test("UI shell defines materially different tablet and mobile compositions", () 
     assert.match(css, /@media \(max-width: 720px\)[\s\S]*?\.dd-core-stats,\s*\.dd-guided-builder__ability-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
 });
 
-test("desktop sheet uses the available viewport and one equal-width top-stat grid", () => {
+test("desktop sheet uses the available viewport and content-aware top-stat columns", () => {
     assert.match(css, /\.dd-sheet-screen\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*none;/s);
-    assert.match(css, /\.dd-core-stats\s*\{[^}]*grid-template-columns:\s*repeat\(13,\s*minmax\(0,\s*1fr\)\)/s);
+    assert.match(css, /\.dd-core-stats\s*\{[^}]*repeat\(6,\s*minmax\(5\.35rem,\s*1fr\)\)[^}]*minmax\(16rem,\s*2\.45fr\)/s);
     assert.match(css, /\.dd-core-stats__abilities,\s*\.dd-core-stats__quick\s*\{[^}]*display:\s*contents;/s);
 });
 
-test("Hit Points spans two top-strip columns without inheriting centered quick-stat layout", () => {
-    assert.match(css, /\.dd-health-quick\s*\{[^}]*grid-column:\s*span 2;/s);
-    assert.match(
-        css,
-        /\.dd-core-stats__quick > \.dd-stat:not\(\.dd-stat--armor-class\):not\(\.dd-stat--health\)\s*\{[^}]*place-content:\s*center;/s);
+test("Hit Points owns the wide final top-strip track and top cards are not fixed-height clipped", () => {
+    assert.doesNotMatch(css, /\.dd-health-quick\s*\{[^}]*grid-column:\s*span 2;/s);
+    assert.match(css, /\.dd-health-quick\s*\{[^}]*min-height:\s*5\.75rem;/s);
+    assert.doesNotMatch(css, /\.dd-core-stats__quick > \.dd-stat\s*\{[^}]*block-size:/s);
 });
 
 test("Guided Builder overrides display-contents Ability composition with its own responsive grid", () => {
@@ -309,7 +308,7 @@ test("wide layout uses a full-width top strip, a persistent left rail, and a bro
     assert.match(sheetSource, /skillsColumn\.append\(support, mechanicsColumn\)/);
     assert.match(sheetSource, /stage\.append\(primary\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
-    assert.match(css, /\.dd-health-quick\s*\{[^}]*grid-column:\s*span 2;/s);
+    assert.match(sheetSource, /renderCombatSummaryBand\(mechanics, conditionsPlaceholder\)/);
 });
 
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {

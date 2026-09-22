@@ -56,6 +56,40 @@ internal static class MechanicalCollectionProjector
             })
             .ToArray();
 
+    internal static CalculatedMechanicalValuePresentationView[] ProjectDefenseTraits(
+        IReadOnlyList<RulesCoreMechanicView> mechanics,
+        IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey,
+        string traitKind)
+    {
+        var normalizedKind = traitKind.Trim().ToLowerInvariant();
+        return mechanics
+            .Where(value =>
+                value.IsAvailableUnderRuleset
+                && IsDefenseTrait(value, normalizedKind))
+            .Select(value =>
+            {
+                evaluationByKey.TryGetValue(value.MechanicKey, out var evaluation);
+                return new CalculatedMechanicalValuePresentationView(
+                    value.MechanicKey,
+                    value.DisplayName,
+                    evaluation is null ? CharacterMechanicsProjector.Unconfigured : (object)evaluation.Value,
+                    SourceAttributions: SourceAttributionMapper.Map(value.SourceAttributions));
+            })
+            .ToArray();
+    }
+
+    private static bool IsDefenseTrait(RulesCoreMechanicView value, string normalizedKind)
+    {
+        if (string.Equals(value.Kind, normalizedKind, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var key = value.MechanicKey.Trim().ToLowerInvariant();
+        return key.StartsWith(normalizedKind + ".", StringComparison.Ordinal)
+            || key.StartsWith("defense." + normalizedKind + ".", StringComparison.Ordinal);
+    }
+
     internal static CalculatedMechanicalValuePresentationView[] ProjectCalculatedValues(
         IReadOnlyList<RulesCoreMechanicView> mechanics,
         IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey,

@@ -63,6 +63,62 @@ export function renderArmorClassQuickCard(
     return card;
 }
 
+export function renderArmorClassCombatCard(
+    mechanics: CharacterMechanicsView | null
+): HTMLElement {
+    const values = orderedDefenses(mechanics);
+    const usedKeys = new Set<string>();
+    const primary = findPrimaryArmorClassValue(mechanics, values, usedKeys);
+    if (primary !== undefined) usedKeys.add(primary.key);
+    const touch = findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[1], usedKeys);
+    if (touch !== undefined) usedKeys.add(touch.key);
+    const flatFooted = findScaffoldValue(values, ARMOR_CLASS_SCAFFOLD[2], usedKeys);
+
+    const card = createElement("article", "dd-combat-band__ac");
+    card.setAttribute("data-armor-class-card", "combat");
+    card.append(createElement("h3", "dd-combat-band__heading", "Armor Class"));
+
+    const layout = createElement("div", "dd-combat-ac__layout");
+    const shield = createElement("div", "dd-combat-ac__shield");
+    const shieldInner = createElement("div", "dd-combat-ac__shield-inner");
+    const primaryValue = createElement(
+        "strong",
+        "dd-combat-ac__value",
+        primary === undefined ? "-" : formatMechanicalValue(primary));
+    for (const [name, value] of Object.entries(metricAttributes(primary, ARMOR_CLASS_SCAFFOLD[0]))) {
+        primaryValue.setAttribute(name, value);
+    }
+    shieldInner.append(primaryValue);
+    shield.append(shieldInner);
+
+    const secondary = createElement("div", "dd-combat-ac__secondary");
+    secondary.append(
+        renderArmorClassSecondary("Touch", touch, ARMOR_CLASS_SCAFFOLD[1]),
+        renderArmorClassSecondary("Flat-Footed", flatFooted, ARMOR_CLASS_SCAFFOLD[2])
+    );
+    layout.append(shield, secondary);
+    card.append(layout);
+    return card;
+}
+
+function renderArmorClassSecondary(
+    label: string,
+    value: CalculatedMechanicalValueView | undefined,
+    scaffold: MechanicalScaffoldSlot
+): HTMLElement {
+    const row = createElement("div", "dd-combat-ac__secondary-row");
+    for (const [name, attribute] of Object.entries(metricAttributes(value, scaffold))) {
+        row.setAttribute(name, attribute);
+    }
+    row.append(
+        createElement("span", "dd-combat-ac__secondary-label", label),
+        createElement(
+            "strong",
+            "dd-combat-ac__secondary-value",
+            value === undefined ? "-" : formatMechanicalValue(value)));
+    return row;
+}
+
 export function renderDefenseMechanicsCard(
     mechanics: CharacterMechanicsView | null
 ): HTMLElement {
@@ -75,7 +131,7 @@ export function renderDefenseMechanicsCard(
     const secondaryValues = values.filter(value => !armorClassKeys.has(value.key));
 
     const card = createSectionCard(
-        "Defense",
+        "Other Defensive Mechanics",
         "dd-mechanic-group-card dd-defense-card");
     const grid = createElement(
         "div",

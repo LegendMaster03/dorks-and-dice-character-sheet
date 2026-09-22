@@ -226,7 +226,12 @@
 
 .dd-core-stats {
     display: grid;
-    grid-template-columns: repeat(13, minmax(0, 1fr));
+    grid-template-columns:
+        repeat(6, minmax(5.35rem, 1fr))
+        minmax(6.4rem, 0.95fr)
+        minmax(6.2rem, 0.9fr)
+        minmax(6.2rem, 0.9fr)
+        minmax(16rem, 2.45fr);
     gap: var(--dd-sheet-space-2);
     align-items: start;
     min-width: 0;
@@ -239,17 +244,15 @@
 
 .dd-core-stats__quick > .dd-stat {
     box-sizing: border-box;
-    block-size: 5.5rem;
-    min-height: 5.5rem;
+    min-height: 5.75rem;
 }
 
 .dd-sheet[data-sheet-mode="view"] .dd-core-stats .dd-stat {
     box-sizing: border-box;
-    block-size: 5.5rem;
-    min-height: 5.5rem;
+    min-height: 5.75rem;
 }
 
-.dd-core-stats__quick > .dd-stat:not(.dd-stat--armor-class):not(.dd-stat--health) {
+.dd-core-stats__quick > .dd-stat:not(.dd-stat--health) {
     display: grid;
     place-content: center;
 }
@@ -414,9 +417,9 @@
 
 .dd-split-stat {
     display: grid;
-    grid-template-rows: minmax(3.75rem, 3fr) minmax(1.75rem, 1fr);
+    grid-template-rows: minmax(3.55rem, auto) minmax(2rem, auto);
     min-width: 0;
-    min-height: 5.5rem;
+    min-height: 5.75rem;
 }
 
 .dd-split-stat__primary {
@@ -615,7 +618,7 @@
 
 .dd-skill-list {
     display: grid;
-    gap: 0.2rem;
+    gap: 0.12rem;
 }
 
 .dd-skills-controls {
@@ -627,7 +630,7 @@
 .dd-skills-search {
     width: 100%;
     min-width: 0;
-    min-height: 2rem;
+    min-height: 1.8rem;
     padding: 0.4rem 0.6rem;
     color: var(--dd-sheet-ink);
     background: var(--dd-sheet-control-bg);
@@ -658,8 +661,8 @@
     align-items: center;
     justify-content: space-between;
     min-width: 0;
-    min-height: 1.9rem;
-    padding: 0.28rem 0.42rem;
+    min-height: 1.55rem;
+    padding: 0.16rem 0.32rem;
     background: var(--dd-sheet-surface-muted);
 }
 
@@ -728,9 +731,10 @@
 }
 
 .dd-skill-row__identity {
-    display: grid;
+    display: flex;
     flex: 1 1 auto;
-    gap: 0.08rem;
+    gap: 0.3rem;
+    align-items: baseline;
     min-width: 0;
 }
 
@@ -738,14 +742,14 @@
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--dd-sheet-ink);
-    font-size: 0.79rem;
+    font-size: 0.74rem;
     font-weight: 750;
     line-height: 1.25;
 }
 
 .dd-skill-row__ability {
     color: var(--dd-sheet-muted);
-    font-size: 0.61rem;
+    font-size: 0.56rem;
     font-weight: 750;
     letter-spacing: 0.075em;
     line-height: 1.1;
@@ -754,7 +758,7 @@
 .dd-skill-row__value {
     flex: 0 0 auto;
     color: var(--dd-sheet-ink);
-    font-size: 0.83rem;
+    font-size: 0.76rem;
     font-weight: 850;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -763,8 +767,7 @@
 .dd-skill-group--composite {
     --dd-skill-component-count: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-auto-flow: row;
+    grid-template-columns: minmax(0, 1fr);
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--dd-sheet-border);
@@ -773,14 +776,13 @@
 
 .dd-skill-group__parent {
     grid-column: 1;
-    grid-row: 1 / span var(--dd-skill-component-count);
-    align-self: stretch;
     background: var(--dd-sheet-surface);
-    border-right: 1px solid var(--dd-sheet-border);
+    border-bottom: 1px solid var(--dd-sheet-border);
 }
 
 .dd-skill-group__component {
-    grid-column: 2;
+    grid-column: 1;
+    padding-left: 1.15rem;
 }
 
 .dd-skill-group__component + .dd-skill-group__component {
@@ -862,9 +864,7 @@
     position: relative;
     display: grid;
     grid-template-rows: auto 1fr auto;
-    grid-column: span 2;
-    block-size: 5.5rem;
-    min-height: 5.5rem;
+    min-height: 5.75rem;
     padding: 0.36rem 0.45rem 0.42rem;
     overflow: visible;
     text-align: left;
@@ -1585,6 +1585,143 @@
     color: var(--dd-sheet-muted);
     font-size: 0.7rem;
     white-space: nowrap;
+}
+
+.dd-combat-band {
+    display: grid;
+    grid-template-columns: minmax(6rem, 0.55fr) minmax(12rem, 1fr) minmax(17rem, 1.65fr) minmax(17rem, 1.65fr);
+    gap: var(--dd-sheet-space-2);
+    margin-bottom: var(--dd-sheet-space-3);
+    min-width: 0;
+}
+
+.dd-combat-band > article {
+    min-width: 0;
+    min-height: 7rem;
+    padding: 0.65rem;
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius);
+    box-shadow: var(--dd-sheet-shadow);
+}
+
+.dd-combat-band__heading {
+    margin: 0 0 0.45rem;
+    color: var(--dd-sheet-muted);
+    font-size: 0.66rem;
+    font-weight: 850;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+.dd-combat-band__initiative {
+    display: grid;
+    place-content: center;
+    text-align: center;
+}
+
+.dd-combat-band__initiative .dd-mechanic-value__value {
+    font-size: 1.35rem;
+    font-weight: 850;
+}
+
+.dd-combat-ac__layout {
+    display: grid;
+    grid-template-columns: 5.2rem minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: center;
+}
+
+.dd-combat-ac__shield,
+.dd-combat-ac__shield-inner {
+    display: grid;
+    place-items: center;
+    clip-path: polygon(50% 0%, 91% 14%, 84% 67%, 50% 100%, 16% 67%, 9% 14%);
+}
+
+.dd-combat-ac__shield {
+    width: 5rem;
+    height: 5.6rem;
+    background: var(--dd-sheet-accent);
+}
+
+.dd-combat-ac__shield-inner {
+    width: 4.55rem;
+    height: 5.05rem;
+    background: var(--dd-sheet-surface-raised);
+}
+
+.dd-combat-ac__value {
+    color: var(--dd-sheet-ink-strong);
+    font-size: 1.55rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.dd-combat-ac__secondary {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.dd-combat-ac__secondary-row {
+    display: flex;
+    gap: 0.45rem;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
+.dd-combat-ac__secondary-label,
+.dd-combat-defenses__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.62rem;
+    font-weight: 750;
+}
+
+.dd-combat-ac__secondary-value {
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-combat-defenses {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.dd-combat-defenses__group {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 0.45rem;
+    align-items: start;
+}
+
+.dd-combat-defenses__values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    min-width: 0;
+}
+
+.dd-combat-defenses__item {
+    display: inline-flex;
+    gap: 0.25rem;
+    align-items: baseline;
+    padding: 0.18rem 0.35rem;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: 999px;
+    font-size: 0.64rem;
+}
+
+.dd-combat-defenses__item-value {
+    font-variant-numeric: tabular-nums;
+}
+
+.dd-combat-defenses__empty,
+.dd-combat-conditions__empty {
+    color: var(--dd-sheet-muted);
+    font-weight: 750;
 }
 
 .dd-primary-content {
