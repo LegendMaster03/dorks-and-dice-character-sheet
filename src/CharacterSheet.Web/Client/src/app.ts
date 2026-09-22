@@ -215,6 +215,17 @@ function renderWorkspace(
                     void rulesInputWorkflow.clearChoice(character.characterId, choiceKey),
                 setResource: (resourceKey, currentValue) =>
                     void rulesInputWorkflow.setResource(character.characterId, resourceKey, currentValue),
+                setCompetencyRank: (competencyKey, ranks) =>
+                    void rulesInputWorkflow.set(character.characterId, {
+                        kind: "competencyRank",
+                        key: competencyKey,
+                        integerValue: ranks
+                    }),
+                clearCompetencyRank: competencyKey =>
+                    void rulesInputWorkflow.remove(
+                        character.characterId,
+                        "competencyRank",
+                        competencyKey),
                 setHitPointGain: (advancementOccurrenceId, classLevel, hitDieValue) =>
                     void rulesInputWorkflow.setHitPointGain(
                         character.characterId,
