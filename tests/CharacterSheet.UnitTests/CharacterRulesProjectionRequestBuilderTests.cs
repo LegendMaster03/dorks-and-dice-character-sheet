@@ -8,10 +8,11 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
         new(2026, 9, 22, 19, 50, 0, TimeSpan.Zero);
 
     [Fact]
-    public void ProjectsOnlyCharacterOwnedFactsWithoutInferringAdvancementLevels()
+    public void ProjectsOnlyExplicitCharacterOwnedFactsAndPreservesAdvancementLevels()
     {
         var speciesId = Guid.NewGuid();
         var classId = Guid.NewGuid();
+        var subclassId = Guid.NewGuid();
         var featId = Guid.NewGuid();
         var build = new CharacterBuildView(
             Guid.NewGuid(),
@@ -36,6 +37,15 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
                     CharacterBuildAdvancementKinds.Class,
                     "class.fighter",
                     null,
+                    Now,
+                    Now,
+                    7),
+                new CharacterAdvancementEntryView(
+                    subclassId,
+                    null,
+                    CharacterBuildAdvancementKinds.Subclass,
+                    "subclass.champion",
+                    classId,
                     Now,
                     Now),
                 new CharacterAdvancementEntryView(
@@ -86,8 +96,20 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
         var request = CharacterRulesProjectionRequestBuilder.Build(build, state);
 
         Assert.Equal(16, request.BaseAbilityScores!["strength"]);
-        Assert.Null(request.Advancements);
-        Assert.Equal(3, request.SelectedConcepts!.Count);
+        Assert.Equal(2, request.Advancements!.Count);
+        Assert.Contains(
+            request.Advancements,
+            value => value.ConceptKey == "class.fighter"
+                && value.Level == 7
+                && value.OccurrenceKey == classId.ToString("D")
+                && value.ParentConceptKey is null);
+        Assert.Contains(
+            request.Advancements,
+            value => value.ConceptKey == "subclass.champion"
+                && value.Level == 7
+                && value.OccurrenceKey == subclassId.ToString("D")
+                && value.ParentConceptKey == "class.fighter");
+        Assert.Equal(4, request.SelectedConcepts!.Count);
         Assert.Contains(
             request.SelectedConcepts,
             value => value.ConceptKey == "class.fighter"
