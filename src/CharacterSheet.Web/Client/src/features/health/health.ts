@@ -354,6 +354,7 @@ function renderDirectHitPointSetter(
     onSetCurrentHitPoints: (currentHitPoints: number | null) => void
 ): HTMLElement {
     const direct = createElement("div", "dd-health-quick__direct");
+    direct.setAttribute("data-health-editor", "true");
     direct.setAttribute("data-health-direct-setter", "true");
 
     const currentField = createElement("label", "dd-health-editor__field");
