@@ -719,6 +719,13 @@
     border-radius: var(--dd-sheet-radius-sm);
 }
 
+.dd-skill-family-members {
+    display: grid;
+    gap: 0.12rem;
+    margin-top: 0.12rem;
+    padding-left: 0.65rem;
+}
+
 .dd-skill-row__training {
     display: inline-grid;
     place-items: center;
