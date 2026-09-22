@@ -28,10 +28,16 @@ export function createKnownSpellWorkflow(
                 environment,
                 "spell",
                 normalizedQuery);
+            const known = new Set(
+                (application.getState().routine.state?.rulesInputs ?? [])
+                    .filter(input => input.kind === "knownSpell")
+                    .map(input => input.key));
             application.dispatch({
                 type: "spell-chooser-loaded",
                 query: normalizedQuery,
-                results: catalog.rules.filter(rule => rule.entityType === "spell")
+                results: catalog.rules.filter(rule =>
+                    rule.entityType === "spell"
+                    && !known.has(rule.conceptKey))
             });
         } catch (error) {
             application.dispatch({
