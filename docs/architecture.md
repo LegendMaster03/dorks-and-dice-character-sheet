@@ -340,7 +340,7 @@ src/
   styles/            ordered stylesheet modules composed by styles.css
 ```
 
-Leaf features may depend on generic core/UI contracts but should not reach into unrelated leaf features. Cross-feature layout belongs in an explicit composition boundary such as `ui/core-stats.ts`; the Combat presentation is the intentional feature-level composition of Defense, Saves, Health, Initiative, and generic combat values. Shared core code must not import feature modules.
+Leaf features may depend on generic core/UI contracts but should not reach into unrelated leaf features. Cross-feature layout belongs in an explicit composition boundary such as `ui/core-stats.ts`; the Combat presentation is the intentional feature-level composition of Defense, Saves, Health, Initiative, Proficiency Bonus, and generic combat values. Shared core code must not import feature modules.
 
 `ui/mechanics-components.ts` remains as a compatibility re-export surface for older callers. It contains no mechanic implementation. `ui/sheet.ts` owns the Character Sheet shell, header, dashboard layout, guided setup, and composition only; Notes, Inventory, Feats, Ability cards, primary tab content, and generalized mechanic families live with their owners.
 

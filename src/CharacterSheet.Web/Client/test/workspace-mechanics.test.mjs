@@ -779,9 +779,12 @@ test("backend-supplied Proficiency Bonus is promoted into the top stat strip wit
         combatFundamentals: [mechanical("proficiency-bonus", "Proficiency Bonus", "+3")]
     });
     const resolved = byAttribute(rendered, "data-mechanic-key", "proficiency-bonus");
+    const card = byClass(rendered, "dd-stat--proficiency")[0];
     assert.equal(resolved.length, 1);
-    assert.match(visibleText(resolved[0]), /Proficiency Bonus/);
-    assert.match(visibleText(resolved[0]), /\+3/);
+    assert.ok(card);
+    assert.equal(walk(card).includes(resolved[0]), true);
+    assert.match(visibleText(card), /Proficiency Bonus/);
+    assert.match(visibleText(card), /\+3/);
     assert.equal(byAttribute(rendered, "data-unimplemented-mechanic", "proficiency").length, 0);
     assert.doesNotMatch(visibleText(rendered), /Proficiency Bonus\s+Not (?:configured|yet configured)/i);
 });

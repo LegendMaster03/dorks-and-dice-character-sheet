@@ -67,7 +67,7 @@ test("core modules do not depend on feature modules", async () => {
 
 test("leaf features do not import unrelated sibling features", async () => {
     const allowedComposition = new Map([
-        ["combat", new Set(["initiative", "defense", "health", "saving-throws"])]
+        ["combat", new Set(["initiative", "defense", "health", "proficiency", "saving-throws"])]
     ]);
 
     for (const file of await tsFiles("features")) {
