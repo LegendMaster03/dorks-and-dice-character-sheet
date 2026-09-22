@@ -163,7 +163,7 @@ test("ranked specialty competency progressively discloses metadata", () => {
     assert.match(visibleText(card), /Armor Check Penalty/);
 });
 
-test("skill rows expose compact training indicators without guessing unresolved proficiency", () => {
+test("skill rows use reference-style proficiency markers without guessing unresolved training", () => {
     const card = renderSkillsCard([
         standalone(competency("arcana", "Arcana", "+7", {
             governingAbility: "Intelligence",
@@ -181,10 +181,33 @@ test("skill rows expose compact training indicators without guessing unresolved 
 
     assert.ok(arcanaTraining);
     assert.ok(historyTraining);
-    assert.equal(arcanaTraining.textContent, "PROF");
+    assert.equal(arcanaTraining.textContent, "");
     assert.equal(historyTraining.textContent, "-");
+    assert.equal(arcanaTraining.getAttribute("data-skill-training-state"), "proficient");
+    assert.equal(historyTraining.getAttribute("data-skill-training-state"), "unresolved");
     assert.match(arcanaTraining.getAttribute("aria-label"), /Arcana training: Proficient/);
     assert.match(historyTraining.getAttribute("aria-label"), /History training unresolved/);
+});
+
+
+test("composite skill rows keep each backend-supplied proficiency marker independent", () => {
+    const card = renderSkillsCard([
+        composite(
+            competency("fieldcraft", "Fieldcraft", "+5", { training: "Proficient" }),
+            [
+                competency("tracking", "Tracking", "+7", { training: "Expertise" }),
+                competency("foraging", "Foraging", "+3", { training: "Untrained" })
+            ]
+        )
+    ]);
+
+    const parent = byAttribute(card, "data-skill-id", "fieldcraft")[0];
+    const tracking = byAttribute(card, "data-skill-id", "tracking")[0];
+    const foraging = byAttribute(card, "data-skill-id", "foraging")[0];
+
+    assert.equal(byAttribute(parent, "data-skill-training-state", "proficient").length, 1);
+    assert.equal(byAttribute(tracking, "data-skill-training-state", "expertise").length, 1);
+    assert.equal(byAttribute(foraging, "data-skill-training-state", "none").length, 1);
 });
 
 test("specialty Skill and tool proficiency remain separate rows", () => {

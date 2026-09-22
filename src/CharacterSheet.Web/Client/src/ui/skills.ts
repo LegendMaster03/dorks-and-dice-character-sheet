@@ -147,7 +147,7 @@ function renderCompetencyRow(
     row.setAttribute("data-skill-role", relationship);
     if (competency.kind !== undefined) row.setAttribute("data-competency-kind", competency.kind);
 
-    const training = renderTrainingIndicator(competency);
+    const training = renderTrainingMarker(competency);
     const identity = createElement("span", "dd-skill-row__identity");
     const name = createElement("span", "dd-skill-row__name", competency.label);
     if (labelId !== undefined) name.id = labelId;
@@ -164,27 +164,61 @@ function renderCompetencyRow(
     return row;
 }
 
-function renderTrainingIndicator(competency: CompetencyView): HTMLElement {
+type TrainingMarkerState = "unresolved" | "none" | "proficient" | "expertise" | "other";
+
+function renderTrainingMarker(competency: CompetencyView): HTMLElement {
     const training = competency.training?.trim();
     if (training === undefined || training.length === 0) {
-        const unresolved = createElement(
+        const marker = createElement(
             "span",
             "dd-skill-row__training dd-skill-row__training--unresolved",
             "-");
-        unresolved.setAttribute("aria-label", `${competency.label} training unresolved`);
-        unresolved.title = "Training state is not resolved.";
-        unresolved.setAttribute("data-skill-training", "unresolved");
-        return unresolved;
+        marker.setAttribute("aria-label", `${competency.label} training unresolved`);
+        marker.title = "Training state is not resolved.";
+        marker.setAttribute("data-skill-training", "unresolved");
+        marker.setAttribute("data-skill-training-state", "unresolved");
+        return marker;
     }
 
-    const indicator = createElement(
+    const state = classifyTrainingMarker(training);
+    const marker = createElement(
         "span",
-        "dd-skill-row__training dd-skill-row__training--resolved",
-        abbreviateTrainingState(training));
-    indicator.setAttribute("aria-label", `${competency.label} training: ${training}`);
-    indicator.title = training;
-    indicator.setAttribute("data-skill-training", training);
-    return indicator;
+        `dd-skill-row__training dd-skill-row__training--resolved dd-skill-row__training--${state}`,
+        state === "other" ? abbreviateTrainingState(training) : "");
+    marker.setAttribute("aria-label", `${competency.label} training: ${training}`);
+    marker.title = training;
+    marker.setAttribute("data-skill-training", training);
+    marker.setAttribute("data-skill-training-state", state);
+    return marker;
+}
+
+function classifyTrainingMarker(training: string): TrainingMarkerState {
+    const normalized = training
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (/\b(?:expertise|expert|mastery|master)\b/.test(normalized)
+        || normalized.includes("double proficiency")
+        || normalized.includes("enhanced proficiency")) {
+        return "expertise";
+    }
+
+    if (normalized === "none"
+        || normalized.includes("not proficient")
+        || normalized.includes("no proficiency")
+        || /\buntrained\b/.test(normalized)) {
+        return "none";
+    }
+
+    if (/\bproficient\b/.test(normalized)
+        || /\btrained\b/.test(normalized)) {
+        return "proficient";
+    }
+
+    return "other";
 }
 
 function abbreviateTrainingState(training: string): string {

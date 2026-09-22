@@ -649,23 +649,60 @@
 .dd-skill-row__training {
     display: inline-grid;
     place-items: center;
-    flex: 0 0 2.3rem;
+    flex: 0 0 0.9rem;
+    width: 0.9rem;
+    height: 0.9rem;
     min-width: 0;
-    min-height: 1.5rem;
-    padding: 0.12rem 0.2rem;
+    min-height: 0;
+    padding: 0;
     color: var(--dd-sheet-muted);
-    border: 1px solid var(--dd-sheet-border);
-    border-radius: 999px;
-    font-size: 0.52rem;
+    background: transparent;
+    border: 1.5px solid var(--dd-sheet-border-strong);
+    border-radius: 50%;
+    font-size: 0.5rem;
     font-weight: 850;
-    letter-spacing: 0.025em;
     line-height: 1;
 }
 
-.dd-skill-row__training--resolved {
-    color: var(--dd-sheet-ink);
-    border-color: var(--dd-sheet-border-strong);
+.dd-skill-row__training--proficient {
+    color: var(--dd-sheet-on-accent);
+    background: var(--dd-sheet-accent);
+    border-color: var(--dd-sheet-accent);
+}
+
+.dd-skill-row__training--expertise {
+    position: relative;
     background: var(--dd-sheet-surface);
+    border: 2px solid var(--dd-sheet-accent);
+}
+
+.dd-skill-row__training--expertise::after {
+    content: "";
+    width: 0.32rem;
+    height: 0.32rem;
+    background: var(--dd-sheet-accent);
+    border-radius: 50%;
+}
+
+.dd-skill-row__training--none {
+    background: transparent;
+    border-color: var(--dd-sheet-border-strong);
+}
+
+.dd-skill-row__training--unresolved {
+    border-style: dashed;
+    color: var(--dd-sheet-muted);
+}
+
+.dd-skill-row__training--other {
+    flex-basis: 2.15rem;
+    width: auto;
+    min-width: 2.15rem;
+    height: 1.15rem;
+    padding: 0 0.2rem;
+    border-radius: 999px;
+    font-size: 0.48rem;
+    letter-spacing: 0.02em;
 }
 
 .dd-skill-row__identity {
