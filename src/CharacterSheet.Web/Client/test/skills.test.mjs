@@ -34,6 +34,8 @@ class FakeElement {
     dispatch(name) {
         for (const handler of this.listeners?.get(name) ?? []) handler({ target: this });
     }
+    setCustomValidity(message) { this.validationMessage = String(message); }
+    reportValidity() { return (this.validationMessage ?? "").length === 0; }
 }
 
 globalThis.document = { createElement: tagName => new FakeElement(tagName) };
