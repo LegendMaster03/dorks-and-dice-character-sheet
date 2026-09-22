@@ -48,6 +48,38 @@ public interface ICharacterStateStore
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> SetRulesInputAsync(
+        Guid characterId,
+        CharacterRulesInputKind kind,
+        string key,
+        int? integerValue,
+        bool? booleanValue,
+        string? textValue,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> RemoveRulesInputAsync(
+        Guid characterId,
+        CharacterRulesInputKind kind,
+        string key,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> SetHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        int hitDieValue,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> RemoveHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> AddNoteAsync(
         Guid characterId,
         string content,

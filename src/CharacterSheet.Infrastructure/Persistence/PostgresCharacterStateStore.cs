@@ -111,6 +111,66 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> SetRulesInputAsync(
+        Guid characterId,
+        CharacterRulesInputKind kind,
+        string key,
+        int? integerValue,
+        bool? booleanValue,
+        string? textValue,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.SetRulesInput(kind, key, integerValue, booleanValue, textValue, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveRulesInputAsync(
+        Guid characterId,
+        CharacterRulesInputKind kind,
+        string key,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.RemoveRulesInput(kind, key, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> SetHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        int hitDieValue,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.SetHitPointGain(advancementOccurrenceId, classLevel, hitDieValue, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.RemoveHitPointGain(advancementOccurrenceId, classLevel, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> AddNoteAsync(
         Guid characterId,
         string content,
@@ -242,6 +302,9 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
             .Include(value => value.InventoryItemOccurrences)
             .Include(value => value.Notes)
             .Include(value => value.Conditions)
+            .Include(value => value.RulesInputs)
+            .Include(value => value.HitPointGains)
+            .Include(value => value.AdvancementEntries)
             .AsQueryable();
         return tracking ? query : query.AsNoTracking();
     }

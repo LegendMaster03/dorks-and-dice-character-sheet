@@ -36,6 +36,37 @@ public sealed record CharacterDeathSavesView(
     int Successes,
     int Failures);
 
+public static class CharacterRulesInputKinds
+{
+    public const string Choice = "choice";
+    public const string CompetencyRank = "competencyRank";
+    public const string Training = "training";
+    public const string ClassSkill = "classSkill";
+    public const string KnownSpell = "knownSpell";
+    public const string Resource = "resource";
+    public const string IntegerFact = "integerFact";
+    public const string BooleanFact = "booleanFact";
+    public const string StringFact = "stringFact";
+}
+
+public sealed record CharacterRulesInputStateView(
+    Guid Id,
+    string Kind,
+    string Key,
+    int? IntegerValue,
+    bool? BooleanValue,
+    string? TextValue,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record CharacterHitPointGainStateView(
+    Guid Id,
+    Guid AdvancementOccurrenceId,
+    int ClassLevel,
+    int HitDieValue,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record CharacterConditionOccurrenceView(
     Guid Id,
     string? RuleConceptKey,
@@ -55,7 +86,9 @@ public sealed record CharacterStateView(
     CharacterDeathSavesView DeathSaves,
     IReadOnlyList<CharacterInventoryItemOccurrenceView> InventoryItemOccurrences,
     IReadOnlyList<CharacterNoteView> Notes,
-    IReadOnlyList<CharacterConditionOccurrenceView> Conditions);
+    IReadOnlyList<CharacterConditionOccurrenceView> Conditions,
+    IReadOnlyList<CharacterRulesInputStateView>? RulesInputs = null,
+    IReadOnlyList<CharacterHitPointGainStateView>? HitPointGains = null);
 
 public sealed record CharacterStateResult(
     CharacterStateAccessStatus Status,
@@ -163,6 +196,74 @@ public sealed class CharacterStateService(
             (changedAt, token) => stateStore.RemoveInventoryItemOccurrenceAsync(
                 characterId,
                 occurrenceId,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> SetRulesInputAsync(
+        Guid characterId,
+        string kind,
+        string key,
+        int? integerValue,
+        bool? booleanValue,
+        string? textValue,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.SetRulesInputAsync(
+                characterId,
+                ParseRulesInputKind(kind),
+                key,
+                integerValue,
+                booleanValue,
+                textValue,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> RemoveRulesInputAsync(
+        Guid characterId,
+        string kind,
+        string key,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.RemoveRulesInputAsync(
+                characterId,
+                ParseRulesInputKind(kind),
+                key,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> SetHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        int hitDieValue,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.SetHitPointGainAsync(
+                characterId,
+                advancementOccurrenceId,
+                classLevel,
+                hitDieValue,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> RemoveHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.RemoveHitPointGainAsync(
+                characterId,
+                advancementOccurrenceId,
+                classLevel,
                 changedAt,
                 token),
             cancellationToken);
@@ -369,5 +470,57 @@ public sealed class CharacterStateService(
                     value.Notes,
                     value.CreatedAt,
                     value.UpdatedAt))
+                .ToArray(),
+            root.RulesInputs
+                .OrderBy(value => value.Kind)
+                .ThenBy(value => value.Key, StringComparer.Ordinal)
+                .Select(value => new CharacterRulesInputStateView(
+                    value.Id,
+                    MapRulesInputKind(value.Kind),
+                    value.Key,
+                    value.IntegerValue,
+                    value.BooleanValue,
+                    value.TextValue,
+                    value.CreatedAt,
+                    value.UpdatedAt))
+                .ToArray(),
+            root.HitPointGains
+                .OrderBy(value => value.AdvancementOccurrenceId)
+                .ThenBy(value => value.ClassLevel)
+                .Select(value => new CharacterHitPointGainStateView(
+                    value.Id,
+                    value.AdvancementOccurrenceId,
+                    value.ClassLevel,
+                    value.HitDieValue,
+                    value.CreatedAt,
+                    value.UpdatedAt))
                 .ToArray());
+    private static CharacterRulesInputKind ParseRulesInputKind(string value) =>
+        value?.Trim() switch
+        {
+            CharacterRulesInputKinds.Choice => CharacterRulesInputKind.Choice,
+            CharacterRulesInputKinds.CompetencyRank => CharacterRulesInputKind.CompetencyRank,
+            CharacterRulesInputKinds.Training => CharacterRulesInputKind.Training,
+            CharacterRulesInputKinds.ClassSkill => CharacterRulesInputKind.ClassSkill,
+            CharacterRulesInputKinds.KnownSpell => CharacterRulesInputKind.KnownSpell,
+            CharacterRulesInputKinds.Resource => CharacterRulesInputKind.Resource,
+            CharacterRulesInputKinds.IntegerFact => CharacterRulesInputKind.IntegerFact,
+            CharacterRulesInputKinds.BooleanFact => CharacterRulesInputKind.BooleanFact,
+            CharacterRulesInputKinds.StringFact => CharacterRulesInputKind.StringFact,
+            _ => throw new ArgumentException($"Unsupported rules input kind '{value}'.", nameof(value))
+        };
+
+    private static string MapRulesInputKind(CharacterRulesInputKind kind) => kind switch
+    {
+        CharacterRulesInputKind.Choice => CharacterRulesInputKinds.Choice,
+        CharacterRulesInputKind.CompetencyRank => CharacterRulesInputKinds.CompetencyRank,
+        CharacterRulesInputKind.Training => CharacterRulesInputKinds.Training,
+        CharacterRulesInputKind.ClassSkill => CharacterRulesInputKinds.ClassSkill,
+        CharacterRulesInputKind.KnownSpell => CharacterRulesInputKinds.KnownSpell,
+        CharacterRulesInputKind.Resource => CharacterRulesInputKinds.Resource,
+        CharacterRulesInputKind.IntegerFact => CharacterRulesInputKinds.IntegerFact,
+        CharacterRulesInputKind.BooleanFact => CharacterRulesInputKinds.BooleanFact,
+        CharacterRulesInputKind.StringFact => CharacterRulesInputKinds.StringFact,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), "Unsupported rules input kind.")
+    };
 }
