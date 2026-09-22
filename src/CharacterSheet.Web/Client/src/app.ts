@@ -239,7 +239,6 @@ function renderWorkspace(
                 { type: "guided-builder-section-selected", section },
                 `[data-guided-builder-section="${section}"]`)
         });
-    workspace.append(renderDevelopmentDetails(character));
     return workspace;
 }
 
@@ -262,14 +261,6 @@ function renderStateScreen(
     const screen = createElement("section", "dd-sheet-screen");
     screen.append(createStateCard(title, message, tone));
     return screen;
-}
-
-function renderDevelopmentDetails(character: CharacterSheetBootstrapResponse): HTMLElement {
-    const details = createElement("details", "dd-sheet-details");
-    const summary = createElement("summary", undefined, "Technical details");
-    const characterId = createElement("p", undefined, `Character ID: ${character.characterId}`);
-    details.append(summary, characterId);
-    return details;
 }
 
 async function bootstrapCharacter(): Promise<void> {

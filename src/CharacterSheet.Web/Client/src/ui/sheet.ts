@@ -16,8 +16,6 @@ import {
     buildCompetencyPresentation,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
-import { renderCombatFundamentalsCard } from "../features/combat/combat.js";
-import { renderDefenseMechanicsCard } from "../features/defense/defense.js";
 import { renderRestControls } from "../features/health/health.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
 import {
@@ -135,16 +133,6 @@ export function renderCharacterWorkspace(
     const skillsColumn = createElement("aside", "dd-sheet__skills");
     skillsColumn.setAttribute("aria-label", "Skills and competencies");
     skillsColumn.append(renderSkillsCard(competencyPresentation));
-
-    const mechanicsColumn = createElement("section", "dd-sheet__mechanics");
-    mechanicsColumn.setAttribute("aria-label", "Additional Character combat mechanics");
-    const combatSummary = createElement("div", "dd-mechanics-summary-grid");
-    combatSummary.append(
-        renderDefenseMechanicsCard(mechanics),
-        renderCombatFundamentalsCard(mechanics)
-    );
-    mechanicsColumn.append(combatSummary);
-    skillsColumn.append(mechanicsColumn);
 
     const stage = createElement("div", "dd-sheet__stage");
     stage.append(renderCombatSummaryBand(

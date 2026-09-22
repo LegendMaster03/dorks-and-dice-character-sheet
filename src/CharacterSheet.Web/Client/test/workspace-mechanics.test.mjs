@@ -1015,5 +1015,22 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
     assert.ok(byClass(rendered, "dd-stat--initiative").some(node => walk(node).includes(initiative)));
     assert.match(visibleText(rendered), /Touch AC/);
     assert.match(visibleText(rendered), /Base Attack Bonus/);
+    assert.match(visibleText(rendered), /Grapple/);
+    assert.match(visibleText(rendered), /Damage Reduction/);
+    assert.match(visibleText(rendered), /Spell Resistance/);
     assert.match(visibleText(rendered), /Nonlethal Damage/);
+
+    const defensesCard = byClass(rendered, "dd-combat-band__defenses")[0];
+    assert.ok(defensesCard);
+    assert.match(visibleText(defensesCard), /Resistances/);
+    assert.match(visibleText(defensesCard), /Immunities/);
+    assert.match(visibleText(defensesCard), /Vulnerabilities/);
+    assert.match(visibleText(defensesCard), /Damage Reduction/);
+    assert.match(visibleText(defensesCard), /Spell Resistance/);
+
+    const initiativeCard = byClass(rendered, "dd-combat-band__initiative")[0];
+    assert.match(visibleText(initiativeCard), /Base Attack Bonus/);
+    assert.match(visibleText(initiativeCard), /Grapple/);
+    assert.equal(byClass(rendered, "dd-defense-card").length, 0);
+    assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 0);
 });

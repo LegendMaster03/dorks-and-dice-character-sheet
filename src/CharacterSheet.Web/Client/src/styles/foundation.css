@@ -64,6 +64,8 @@
 }
 
 .dd-sheet {
+    container-name: character-sheet;
+    container-type: inline-size;
     min-width: 0;
     background: var(--dd-sheet-background);
     border: 1px solid var(--dd-sheet-border);
@@ -646,6 +648,8 @@
 }
 
 .dd-sheet__stage {
+    container-name: character-stage;
+    container-type: inline-size;
     display: grid;
     align-content: start;
 }
@@ -1698,13 +1702,45 @@
 
 .dd-combat-band__initiative {
     display: grid;
-    place-content: center;
+    align-content: start;
     text-align: center;
 }
 
 .dd-combat-band__initiative .dd-mechanic-value__value {
     font-size: 1.35rem;
     font-weight: 850;
+}
+
+.dd-combat-initiative__secondary {
+    display: grid;
+    gap: 0.3rem;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-combat-initiative__secondary-row {
+    display: flex;
+    gap: 0.45rem;
+    align-items: baseline;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.dd-combat-initiative__secondary-label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.55rem;
+    font-weight: 750;
+    text-align: left;
+}
+
+.dd-combat-initiative__secondary-value,
+.dd-combat-defenses__metric {
+    color: var(--dd-sheet-ink);
+    font-size: 0.68rem;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
 }
 
 .dd-combat-ac__layout {
@@ -2062,7 +2098,7 @@
 .dd-primary-nav__button:last-child {
     border-inline-end: 0;
 }
-@media (min-width: 1100px) {
+@container character-stage (min-width: 54rem) {
     .dd-primary-nav {
         overflow-x: visible;
     }
@@ -2209,16 +2245,5 @@
 .dd-character-init__copy {
     margin: var(--dd-sheet-space-2) 0 var(--dd-sheet-space-4);
     color: var(--dd-sheet-muted);
-}
-
-.dd-sheet-details {
-    margin-top: var(--dd-sheet-space-3);
-    color: var(--dd-sheet-muted);
-    font-size: 0.74rem;
-}
-
-.dd-sheet-details summary {
-    cursor: pointer;
-    font-weight: 700;
 }
 

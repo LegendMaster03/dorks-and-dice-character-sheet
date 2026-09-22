@@ -524,3 +524,96 @@
 }
 
 
+
+
+/* Container-aware embedded Character Sheet composition */
+@container character-sheet (max-width: 78rem) {
+    .dd-sheet__dashboard {
+        grid-template-columns: minmax(13.5rem, 16rem) minmax(0, 1fr);
+    }
+
+    .dd-sheet__reference-rail {
+        grid-column: 1;
+        grid-row: 1;
+        order: initial;
+    }
+
+    .dd-sheet__skills {
+        grid-column: 1;
+        grid-row: 2;
+        order: initial;
+    }
+
+    .dd-sheet__stage {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        order: initial;
+    }
+}
+
+@container character-sheet (max-width: 62rem) {
+    .dd-sheet__dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-sheet__stage {
+        grid-column: 1;
+        grid-row: auto;
+        order: 1;
+    }
+
+    .dd-sheet__reference-rail {
+        grid-column: 1;
+        grid-row: auto;
+        order: 2;
+    }
+
+    .dd-sheet__skills {
+        grid-column: 1;
+        grid-row: auto;
+        order: 3;
+    }
+
+    .dd-sheet-header {
+        grid-template-columns: 1fr;
+        gap: var(--dd-sheet-space-3);
+        min-height: auto;
+    }
+
+    .dd-sheet-header__summary {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .dd-core-stats,
+    .dd-guided-builder__ability-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@container character-sheet (max-width: 45rem) {
+    .dd-sheet-header__summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dd-core-stats,
+    .dd-guided-builder__ability-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@container character-stage (max-width: 70rem) {
+    .dd-combat-band {
+        grid-template-columns: minmax(7rem, 0.7fr) minmax(13rem, 1fr);
+    }
+}
+
+@container character-stage (max-width: 36rem) {
+    .dd-combat-band {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-primary-nav__button {
+        flex: 0 0 auto;
+        min-width: 7rem;
+    }
+}
