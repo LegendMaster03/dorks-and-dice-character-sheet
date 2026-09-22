@@ -130,6 +130,11 @@ export interface CompetencyRelationshipView {
 export type CompetencyPresentationItem =
     | { kind: "standalone"; competency: CompetencyView }
     | {
+        kind: "family";
+        parent: CompetencyView;
+        members: readonly [CompetencyView, ...CompetencyView[]];
+    }
+    | {
         kind: "composite";
         parent: CompetencyView;
         components: readonly [CompetencyView, ...CompetencyView[]];
@@ -376,6 +381,27 @@ export function buildCompetencyPresentation(
             parent: presentedParent,
             components: components as [CompetencyView, ...CompetencyView[]],
             relationship
+        });
+    }
+
+    for (const parent of collection.entries) {
+        if (consumed.has(parent.key) || parent.isFamily !== true) continue;
+        const familyName = parent.family?.trim();
+        if (familyName === undefined || familyName.length === 0) continue;
+
+        const members = collection.entries.filter(entry =>
+            entry.key !== parent.key
+            && !consumed.has(entry.key)
+            && entry.isFamily !== true
+            && entry.family?.trim() === familyName);
+        if (members.length === 0) continue;
+
+        consumed.add(parent.key);
+        for (const member of members) consumed.add(member.key);
+        groups.set(parent.key, {
+            kind: "family",
+            parent,
+            members: members as [CompetencyView, ...CompetencyView[]]
         });
     }
 
