@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { renderSkillsCard } from "../.test-dist/ui/skills.js";
+import { buildCompetencyPresentation } from "../.test-dist/ui/character-mechanics.js";
 
 class FakeStyle {
     values = new Map();
@@ -124,6 +125,40 @@ test("standalone competency renders as one ordinary row", () => {
     assert.equal(byAttribute(card, "data-skill-id", "navigation").length, 1);
     assert.match(visibleText(card), /Navigation/);
     assert.match(visibleText(card), /\+7/);
+});
+
+test("Rules Core family metadata adds a nested specialty disclosure without changing ordinary rows", () => {
+    const presentation = buildCompetencyPresentation({
+        entries: [
+            competency("family.artisan", "Artisan Work", "-", {
+                family: "artisan",
+                isFamily: true
+            }),
+            competency("specialty.glass", "Glasswork", "+6", {
+                kind: "specialized-skill",
+                family: "artisan",
+                specialty: "glass",
+                supportsRanks: true,
+                ranks: 4
+            }),
+            competency("navigation", "Navigation", "+3")
+        ],
+        relationships: []
+    });
+
+    assert.equal(presentation.length, 2);
+    const family = presentation.find(item => item.kind === "family");
+    assert.ok(family);
+    assert.equal(family.parent.key, "family.artisan");
+    assert.deepEqual(family.members.map(member => member.key), ["specialty.glass"]);
+
+    const card = renderSkillsCard(presentation);
+    const familyDisclosure = byAttribute(card, "data-skill-family", "family.artisan")[0];
+    assert.ok(familyDisclosure);
+    assert.equal(byClass(familyDisclosure, "dd-skill-family-members").length, 1);
+    assert.equal(byAttribute(familyDisclosure, "data-skill-id", "specialty.glass").length, 1);
+    assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 0);
+    assert.equal(byAttribute(card, "data-skill-id", "navigation").length, 1);
 });
 
 test("composite competency supports arbitrary component counts and preserves hierarchy", () => {
@@ -290,7 +325,7 @@ test("specialty Skill and tool proficiency remain separate rows", () => {
 
 test("renderer remains generic and does not special-case known Rules Core skill names", async () => {
     const source = await readFile(new URL("../src/ui/skills.ts", import.meta.url), "utf8");
-    assert.doesNotMatch(source, /\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble)\b/);
+    assert.doesNotMatch(source, /\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble|Craft|Perform|Profession)\b/);
 });
 
 test("presentation adds no permanent Derived, Independent, Composite, or Parent labels", () => {
