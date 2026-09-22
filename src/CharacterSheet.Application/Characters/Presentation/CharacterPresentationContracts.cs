@@ -130,6 +130,22 @@ public sealed record HealthTrackPresentationView(
 
 public sealed record ArmorCheckPenaltyPresentationView(bool Applies);
 
+public sealed record CompetencyFacetPresentationView(
+    string FacetType,
+    bool SupportsRanks,
+    bool SupportsClassSkillState,
+    bool SupportsTrainingState,
+    IReadOnlyList<string>? MechanicKeys = null);
+
+public sealed record RelatedCompetencyPresentationView(
+    string Kind,
+    string TargetType,
+    string TargetName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Scope = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool SharesTrainingState = false);
+
 public sealed record CompetencyPresentationView(
     string Key,
     string Label,
@@ -161,7 +177,19 @@ public sealed record CompetencyPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     bool? SupportsTrainingState = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? IdentityKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? IdentityName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SharedTrainingKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool IsFamily = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CompetencyFacetPresentationView>? Facets = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RelatedCompetencyPresentationView>? RelatedCompetencies = null);
 
 public sealed record CompetencyRelationshipPresentationView(
     string ParentKey,

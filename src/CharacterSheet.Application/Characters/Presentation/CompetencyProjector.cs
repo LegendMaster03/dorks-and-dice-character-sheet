@@ -57,7 +57,49 @@ internal static class CompetencyProjector
             SupportsRanks: competency.SupportsRanks,
             SupportsClassSkillState: competency.SupportsClassSkillState,
             SupportsTrainingState: competency.SupportsTrainingState,
-            SourceAttributions: SourceAttributionMapper.Map(mechanic.SourceAttributions));
+            SourceAttributions: SourceAttributionMapper.Map(mechanic.SourceAttributions),
+            IdentityKey: competency.IdentityKey,
+            IdentityName: competency.IdentityName,
+            SharedTrainingKey: competency.SharedTrainingKey,
+            IsFamily: competency.IsFamily,
+            Facets: ProjectFacets(competency.Facets),
+            RelatedCompetencies: ProjectRelatedCompetencies(competency.RelatedCompetencies));
+    }
+
+    private static IReadOnlyList<CompetencyFacetPresentationView>? ProjectFacets(
+        IReadOnlyList<RulesCoreCompetencyFacetView>? facets)
+    {
+        if (facets is null || facets.Count == 0)
+        {
+            return null;
+        }
+
+        return facets
+            .Select(value => new CompetencyFacetPresentationView(
+                value.FacetType,
+                value.SupportsRanks,
+                value.SupportsClassSkillState,
+                value.SupportsTrainingState,
+                value.MechanicKeys))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<RelatedCompetencyPresentationView>? ProjectRelatedCompetencies(
+        IReadOnlyList<RulesCoreCompetencyRelationshipView>? relatedCompetencies)
+    {
+        if (relatedCompetencies is null || relatedCompetencies.Count == 0)
+        {
+            return null;
+        }
+
+        return relatedCompetencies
+            .Select(value => new RelatedCompetencyPresentationView(
+                value.Kind,
+                value.TargetType,
+                value.TargetName,
+                value.Scope,
+                value.SharesTrainingState))
+            .ToArray();
     }
 
     private static CompetencyRelationshipPresentationView? ProjectRelationship(

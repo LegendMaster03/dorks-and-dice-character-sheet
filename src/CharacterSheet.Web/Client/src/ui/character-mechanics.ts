@@ -81,7 +81,23 @@ export interface ArmorCheckPenaltyView {
     formattedEffect?: string;
 }
 
-export type CompetencyKind = ExtensiblePresentationKey<"skill" | "tool" | "other">;
+export type CompetencyKind = ExtensiblePresentationKey<"skill" | "specialized-skill" | "tool" | "other">;
+
+export interface CompetencyFacetView {
+    facetType: string;
+    supportsRanks: boolean;
+    supportsClassSkillState: boolean;
+    supportsTrainingState: boolean;
+    mechanicKeys?: readonly string[];
+}
+
+export interface RelatedCompetencyView {
+    kind: string;
+    targetType: string;
+    targetName: string;
+    scope?: string;
+    sharesTrainingState?: boolean;
+}
 
 export interface CompetencyView extends CalculatedMechanicalValueView {
     kind?: CompetencyKind;
@@ -96,6 +112,12 @@ export interface CompetencyView extends CalculatedMechanicalValueView {
     supportsRanks?: boolean;
     supportsClassSkillState?: boolean;
     supportsTrainingState?: boolean;
+    identityKey?: string;
+    identityName?: string;
+    sharedTrainingKey?: string;
+    isFamily?: boolean;
+    facets?: readonly CompetencyFacetView[];
+    relatedCompetencies?: readonly RelatedCompetencyView[];
 }
 
 export interface CompetencyRelationshipView {

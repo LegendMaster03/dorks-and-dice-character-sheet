@@ -104,6 +104,88 @@ public sealed class RulesCoreGatewayContractTests
     }
 
     [Fact]
+    public void CurrentMechanicsCatalogJsonPreservesCompetencyFamiliesFacetsAndToolRelationships()
+    {
+        const string json = """
+        {
+          "scope": "global",
+          "campaignId": null,
+          "revisionNumber": 13,
+          "publishedAt": "2026-09-22T19:28:21Z",
+          "mechanics": [{
+            "mechanicKey": "competency.skill.alchemy",
+            "kind": "competency",
+            "displayName": "Alchemy",
+            "conceptKey": "skill.alchemy",
+            "isAvailableUnderRuleset": true,
+            "applicability": { "kind": "always", "requiresCharacterState": true, "requiredCapabilityKeys": [], "sourcePackageKey": null },
+            "evaluationKind": "competency-profile",
+            "canEvaluate": true,
+            "inputs": [],
+            "relationships": [],
+            "booleanRequirements": [],
+            "check": null,
+            "competency": {
+              "competencyKind": "specialized-skill",
+              "familyName": "Craft",
+              "specialty": "alchemy",
+              "governingAbilityKey": "intelligence",
+              "supportsRanks": true,
+              "supportsClassSkillState": true,
+              "supportsTrainingState": true,
+              "trainedOnly": false,
+              "armorCheckPenaltyApplies": false,
+              "defaultProfileSourceEntityRevisionId": null,
+              "profiles": [],
+              "identityKey": "competency.alchemy",
+              "identityName": "Alchemy",
+              "sharedTrainingKey": "training.alchemy",
+              "isFamily": false,
+              "facets": [{
+                "facetType": "skill",
+                "profileSourceEntityRevisionIds": [],
+                "supportsRanks": true,
+                "supportsClassSkillState": true,
+                "supportsTrainingState": true,
+                "mechanicKeys": ["competency.skill.alchemy"]
+              }, {
+                "facetType": "tool",
+                "profileSourceEntityRevisionIds": [],
+                "supportsRanks": false,
+                "supportsClassSkillState": false,
+                "supportsTrainingState": true,
+                "mechanicKeys": ["competency.tool.alchemists-supplies"]
+              }],
+              "relatedCompetencies": [{
+                "kind": "related-competency",
+                "targetType": "tool",
+                "targetName": "Alchemist's Supplies",
+                "scope": null,
+                "sharesTrainingState": true
+              }]
+            },
+            "contributorGroups": [],
+            "sourceAttributions": []
+          }]
+        }
+        """;
+
+        var catalog = JsonSerializer.Deserialize<RulesCoreMechanicsCatalogView>(json, JsonOptions);
+
+        Assert.NotNull(catalog);
+        var competency = Assert.Single(catalog.Mechanics).Competency;
+        Assert.NotNull(competency);
+        Assert.Equal("competency.alchemy", competency.IdentityKey);
+        Assert.Equal("training.alchemy", competency.SharedTrainingKey);
+        Assert.False(competency.IsFamily);
+        Assert.Equal(2, competency.Facets!.Count);
+        Assert.Contains(competency.Facets, value => value.FacetType == "tool");
+        var relationship = Assert.Single(competency.RelatedCompetencies!);
+        Assert.Equal("Alchemist's Supplies", relationship.TargetName);
+        Assert.True(relationship.SharesTrainingState);
+    }
+
+    [Fact]
     public void CurrentBatchEvaluationJsonPreservesCompetencyBreakdown()
     {
         const string json = """

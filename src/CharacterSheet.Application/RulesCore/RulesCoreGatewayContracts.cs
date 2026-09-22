@@ -95,6 +95,21 @@ public sealed record RulesCoreMechanicCheckView(
     RulesCoreCheckAbilityView Ability,
     RulesCoreCheckCompetencyView Competency);
 
+public sealed record RulesCoreCompetencyRelationshipView(
+    string Kind,
+    string TargetType,
+    string TargetName,
+    string? Scope,
+    bool SharesTrainingState);
+
+public sealed record RulesCoreCompetencyFacetView(
+    string FacetType,
+    IReadOnlyList<Guid> ProfileSourceEntityRevisionIds,
+    bool SupportsRanks,
+    bool SupportsClassSkillState,
+    bool SupportsTrainingState,
+    IReadOnlyList<string>? MechanicKeys = null);
+
 public sealed record RulesCoreCompetencyProfileView(
     Guid SourceEntityRevisionId,
     string ProfileKey,
@@ -113,7 +128,14 @@ public sealed record RulesCoreCompetencyProfileView(
     bool CanEvaluate,
     IReadOnlyList<RulesCoreMechanicInputView> Inputs,
     IReadOnlyList<RulesCoreMechanicBooleanRequirementView> BooleanRequirements,
-    string? GameEdition);
+    string? GameEdition,
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView>? SourceAttributions = null,
+    string? FacetType = null,
+    bool IsFamily = false,
+    string? IdentityKey = null,
+    string? IdentityName = null,
+    string? SharedTrainingKey = null,
+    IReadOnlyList<RulesCoreCompetencyRelationshipView>? RelatedCompetencies = null);
 
 public sealed record RulesCoreCompetencyDefinitionView(
     string CompetencyKind,
@@ -126,7 +148,13 @@ public sealed record RulesCoreCompetencyDefinitionView(
     bool? TrainedOnly,
     bool? ArmorCheckPenaltyApplies,
     Guid? DefaultProfileSourceEntityRevisionId,
-    IReadOnlyList<RulesCoreCompetencyProfileView> Profiles);
+    IReadOnlyList<RulesCoreCompetencyProfileView> Profiles,
+    string? IdentityKey = null,
+    string? IdentityName = null,
+    string? SharedTrainingKey = null,
+    bool IsFamily = false,
+    IReadOnlyList<RulesCoreCompetencyFacetView>? Facets = null,
+    IReadOnlyList<RulesCoreCompetencyRelationshipView>? RelatedCompetencies = null);
 
 public sealed record RulesCoreMechanicSourceAttributionView(
     string? PackageKey,
