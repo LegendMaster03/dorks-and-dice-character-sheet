@@ -16,7 +16,8 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
                     "-",
                     Kind: "skill",
                     Family: "Knowledge",
-                    Specialty: "arcana")]));
+                    Specialty: "arcana",
+                    SupportsRanks: true)]));
 
         var projection = EmptyProjection() with
         {
@@ -143,7 +144,30 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
             ]
         };
 
-        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(fallback, projection);
+        var state = new CharacterStateView(
+            Guid.NewGuid(),
+            false,
+            null,
+            new CharacterDeathSavesView(0, 0),
+            [],
+            [],
+            [],
+            [
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.CompetencyRank,
+                    "skill.arcana",
+                    5,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow)
+            ]);
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            fallback,
+            projection,
+            state);
 
         var strength = Assert.Single(mechanics.AbilityValues!);
         Assert.Equal(14, strength.EffectiveValue);
@@ -165,6 +189,7 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
 
         var arcana = Assert.Single(mechanics.Competencies!.Entries);
         Assert.Equal(9, arcana.EffectiveValue);
+        Assert.Equal(5, arcana.Ranks);
         Assert.Equal("Knowledge", arcana.Family);
         Assert.Equal(2, arcana.Breakdown!.Count);
 
