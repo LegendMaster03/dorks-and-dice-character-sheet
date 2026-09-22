@@ -57,6 +57,14 @@ export interface RulesInputCharacterHandlers {
     ): void;
 }
 
+export interface KnownSpellCharacterHandlers {
+    openChooser(): void;
+    closeChooser(): void;
+    search(query: string): void;
+    add(conceptKey: string): void;
+    remove(conceptKey: string): void;
+}
+
 export interface FeatCharacterHandlers {
     openChooser(): void;
     closeChooser(): void;
@@ -68,6 +76,7 @@ export interface FeatCharacterHandlers {
 export interface CharacterSheetHandlers {
     structural: StructuralCharacterHandlers;
     feats: FeatCharacterHandlers;
+    spells: KnownSpellCharacterHandlers;
     rules: RulesInputCharacterHandlers;
     routine: RoutineCharacterHandlers;
     selectSection(section: SheetSection): void;
