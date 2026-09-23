@@ -1,10 +1,12 @@
+import type { RecoveryUiState } from "../../app-state.js";
+import type { CharacterRecoveryRequestInput } from "../../character-state-api.js";
 import {
     formatHealthTrack,
     type CharacterMechanicsView,
     type CharacterRecoveryProcedureView,
     type HealthTrackView
 } from "../../ui/character-mechanics.js";
-import { createElement, createSectionCard } from "../../ui/components.js";
+import { createButton, createElement, createInlineState, createSectionCard } from "../../ui/components.js";
 import { renderSourceAttributionDisclosure } from "../../ui/source-attribution.js";
 import { appendSources, normalizeMechanicalLabel } from "../../core/mechanics/mechanic-value.js";
 
@@ -258,6 +260,244 @@ function renderDeathSaveCounter(
 
     counter.append(decrement, count, increment);
     return counter;
+}
+
+export function renderRecoveryContinuation(
+    recovery: RecoveryUiState,
+    procedures: readonly CharacterRecoveryProcedureView[] | undefined,
+    onContinue: ((input: CharacterRecoveryRequestInput) => void) | undefined,
+    onCancel: (() => void) | undefined
+): HTMLElement | null {
+    if (recovery.kind === "closed") return null;
+
+    const panel = createElement("section", "dd-recovery-continuation");
+    panel.setAttribute("data-recovery-continuation", recovery.procedureKey);
+    const procedure = procedures?.find(value => value.procedureKey === recovery.procedureKey);
+    const title = recovery.kind === "continuation"
+        ? recovery.resolution.displayName
+        : procedure?.displayName ?? recovery.procedureKey;
+    panel.append(createElement("strong", "dd-recovery-continuation__title", title));
+
+    if (recovery.kind === "resolving") {
+        panel.append(createInlineState("Resolving recovery…", "loading"));
+        return panel;
+    }
+
+    const actions = createElement("div", "dd-recovery-continuation__actions");
+    const cancel = createButton(
+        "Cancel",
+        "dd-button dd-button--ghost",
+        () => onCancel?.(),
+        onCancel === undefined);
+
+    if (recovery.kind === "error") {
+        panel.append(createInlineState(recovery.message, "error"));
+        actions.append(
+            createButton(
+                "Try Again",
+                "dd-button dd-button--secondary",
+                () => onContinue?.({}),
+                onContinue === undefined),
+            cancel);
+        panel.append(actions);
+        return panel;
+    }
+
+    const resolution = recovery.resolution;
+    panel.setAttribute("data-recovery-status", resolution.status);
+    if (resolution.missingCapabilityKeys.length > 0) {
+        panel.append(createInlineState(
+            "This recovery is not currently applicable. Missing capabilities: "
+                + resolution.missingCapabilityKeys.join(", ")
+                + ".",
+            "warning"));
+        actions.append(cancel);
+        panel.append(actions);
+        return panel;
+    }
+
+    const form = createElement("form", "dd-recovery-continuation__form");
+    const integerInputs = new Map<string, HTMLInputElement>();
+    const booleanInputs = new Map<string, HTMLSelectElement>();
+    const stringInputs = new Map<string, HTMLInputElement>();
+    const choices = new Map<string, HTMLSelectElement>();
+    const rolls = new Map<string, HTMLInputElement>();
+    let unsupportedInput = false;
+    let fieldCount = 0;
+
+    for (const key of resolution.missingInputKeys) {
+        const definition = procedure?.inputs?.find(input => input.key === key);
+        if (definition === undefined) {
+            form.append(createInlineState(
+                "Rules Core requested input '" + key + "' without a projected input definition.",
+                "warning"));
+            unsupportedInput = true;
+            continue;
+        }
+
+        const field = createElement("label", "dd-recovery-continuation__field");
+        field.append(createElement(
+            "span",
+            "dd-recovery-continuation__label",
+            definition.key + " · " + definition.origin));
+        if (definition.valueKind === "integer") {
+            const input = createElement("input", "dd-sheet-screen__input");
+            input.type = "number";
+            input.step = "1";
+            input.min = "-2147483648";
+            input.max = "2147483647";
+            input.required = true;
+            if (definition.defaultInteger !== undefined && definition.defaultInteger !== null) {
+                input.value = String(definition.defaultInteger);
+            }
+            field.append(input);
+            integerInputs.set(key, input);
+        } else if (definition.valueKind === "boolean") {
+            const select = createElement("select", "dd-rule-chooser__input");
+            select.required = true;
+            const placeholder = createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Choose…";
+            select.append(placeholder);
+            for (const [value, label] of [["true", "True"], ["false", "False"]] as const) {
+                const option = createElement("option");
+                option.value = value;
+                option.textContent = label;
+                select.append(option);
+            }
+            field.append(select);
+            booleanInputs.set(key, select);
+        } else if (definition.valueKind === "string") {
+            const input = createElement("input", "dd-sheet-screen__input");
+            input.type = "text";
+            input.required = true;
+            field.append(input);
+            stringInputs.set(key, input);
+        } else {
+            form.append(createInlineState(
+                "Recovery input '" + key + "' uses unsupported value kind '" + definition.valueKind + "'.",
+                "warning"));
+            unsupportedInput = true;
+            continue;
+        }
+        form.append(field);
+        fieldCount++;
+    }
+
+    for (const choice of resolution.pendingChoices) {
+        const field = createElement("label", "dd-recovery-continuation__field");
+        field.append(createElement("span", "dd-recovery-continuation__label", choice.prompt));
+        const select = createElement("select", "dd-rule-chooser__input");
+        select.required = choice.required;
+        const placeholder = createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose…";
+        select.append(placeholder);
+        for (const choiceOption of choice.options) {
+            const option = createElement("option");
+            option.value = choiceOption.key;
+            option.textContent = choiceOption.displayName;
+            select.append(option);
+        }
+        field.append(select);
+        form.append(field);
+        choices.set(choice.key, select);
+        fieldCount++;
+    }
+
+    for (const roll of resolution.pendingRolls) {
+        const field = createElement("label", "dd-recovery-continuation__field");
+        field.append(createElement(
+            "span",
+            "dd-recovery-continuation__label",
+            roll.prompt + " · " + roll.rollKind));
+        const input = createElement("input", "dd-sheet-screen__input");
+        input.type = "number";
+        input.step = "1";
+        input.min = "-2147483648";
+        input.max = "2147483647";
+        input.required = roll.required;
+        field.append(input);
+        form.append(field);
+        rolls.set(roll.key, input);
+        fieldCount++;
+    }
+
+    const submit = createButton(
+        "Continue",
+        "dd-button dd-button--secondary",
+        () => {},
+        unsupportedInput || onContinue === undefined || fieldCount === 0);
+    submit.type = "submit";
+    actions.append(submit, cancel);
+    form.append(actions);
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        if (unsupportedInput || onContinue === undefined || fieldCount === 0) return;
+
+        const next: CharacterRecoveryRequestInput = {};
+        if (integerInputs.size > 0) next.integerInputs = {};
+        for (const [key, input] of integerInputs) {
+            const value = parseInt32(input.value);
+            if (value === null) {
+                input.setCustomValidity("Enter a whole number from -2147483648 through 2147483647.");
+                input.reportValidity();
+                return;
+            }
+            input.setCustomValidity("");
+            next.integerInputs![key] = value;
+        }
+        if (booleanInputs.size > 0) next.booleanInputs = {};
+        for (const [key, select] of booleanInputs) {
+            if (select.value !== "true" && select.value !== "false") {
+                select.reportValidity();
+                return;
+            }
+            next.booleanInputs![key] = select.value === "true";
+        }
+        if (stringInputs.size > 0) next.stringInputs = {};
+        for (const [key, input] of stringInputs) {
+            if (!input.reportValidity()) return;
+            next.stringInputs![key] = input.value;
+        }
+        if (choices.size > 0) next.choices = {};
+        for (const [key, select] of choices) {
+            if (!select.reportValidity()) return;
+            next.choices![key] = select.value;
+        }
+        if (rolls.size > 0) next.rolls = {};
+        for (const [key, input] of rolls) {
+            const value = parseInt32(input.value);
+            if (value === null) {
+                input.setCustomValidity("Enter the roll result as a whole number from -2147483648 through 2147483647.");
+                input.reportValidity();
+                return;
+            }
+            input.setCustomValidity("");
+            next.rolls![key] = value;
+        }
+        onContinue(next);
+    });
+
+    if (fieldCount === 0) {
+        panel.append(createInlineState(
+            "Rules Core returned recovery state '" + resolution.status
+                + "' without a continuation field this UI can supply.",
+            "warning"));
+    }
+    panel.append(form);
+    return panel;
+}
+
+function parseInt32(value: string): number | null {
+    const normalized = value.trim();
+    if (!/^-?\d+$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed)
+        && parsed >= -2147483648
+        && parsed <= 2147483647
+        ? parsed
+        : null;
 }
 
 export function renderHealthMechanicsCard(
