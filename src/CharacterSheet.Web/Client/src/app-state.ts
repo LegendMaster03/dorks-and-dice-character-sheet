@@ -92,6 +92,8 @@ export interface GuidedBuilderUiState {
 }
 
 export type RoutineMutationKind =
+    | "currency-update"
+    | "currency-delete"
     | "profile-update"
     | "health-update"
     | "death-saves-update"

@@ -241,6 +241,10 @@ function renderWorkspace(
                         classLevel)
             },
             routine: {
+                setCurrencyBalance: (currencyKey, amount) =>
+                    void inventoryWorkflow.setCurrency(character.characterId, currencyKey, amount),
+                removeCurrencyBalance: currencyKey =>
+                    void inventoryWorkflow.removeCurrency(character.characterId, currencyKey),
                 setProfile: input =>
                     void profileWorkflow.save(character.characterId, input),
                 setCurrentHitPoints: currentHitPoints =>

@@ -1,6 +1,8 @@
 import {
     addInventoryItemOccurrence,
+    removeCharacterCurrencyBalance,
     removeInventoryItemOccurrence,
+    setCharacterCurrencyBalance,
     updateInventoryItemOccurrence,
     type CharacterInventoryItemOccurrenceStateInput
 } from "../../character-state-api.js";
@@ -22,6 +24,8 @@ export interface InventoryWorkflow {
         input: CharacterInventoryItemOccurrenceStateInput
     ): Promise<void>;
     remove(characterId: string, occurrenceId: string): Promise<void>;
+    setCurrency(characterId: string, currencyKey: string, amount: number): Promise<void>;
+    removeCurrency(characterId: string, currencyKey: string): Promise<void>;
 }
 
 export function createInventoryWorkflow(
@@ -66,6 +70,34 @@ export function createInventoryWorkflow(
         },
 
         search,
+
+        async setCurrency(
+            characterId: string,
+            currencyKey: string,
+            amount: number
+        ): Promise<void> {
+            await routine.mutate(
+                "currency-update",
+                () => setCharacterCurrencyBalance(
+                    environment,
+                    characterId,
+                    currencyKey,
+                    amount),
+                currencyKey);
+        },
+
+        async removeCurrency(
+            characterId: string,
+            currencyKey: string
+        ): Promise<void> {
+            await routine.mutate(
+                "currency-delete",
+                () => removeCharacterCurrencyBalance(
+                    environment,
+                    characterId,
+                    currencyKey),
+                currencyKey);
+        },
 
         async add(characterId: string, conceptKey: string): Promise<void> {
             const changed = await routine.mutate(

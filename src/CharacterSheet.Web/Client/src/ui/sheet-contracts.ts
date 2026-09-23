@@ -19,6 +19,8 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
 }
 
 export interface RoutineCharacterHandlers {
+    setCurrencyBalance(currencyKey: string, amount: number): void;
+    removeCurrencyBalance(currencyKey: string): void;
     setProfile(input: CharacterProfileInput): void;
     setCurrentHitPoints(currentHitPoints: number | null): void;
     setDeathSaves(successes: number, failures: number): void;

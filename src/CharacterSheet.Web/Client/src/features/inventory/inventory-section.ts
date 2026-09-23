@@ -55,6 +55,8 @@ export function renderInventorySection(
         content.append(actions);
     }
 
+    content.append(renderCurrencyBalances(routine, editable, pending, handlers));
+
     if (routine.inventoryChooser.kind === "open" && editable) {
         content.append(renderInventoryChooser(routine, handlers));
     }
@@ -115,6 +117,122 @@ export function renderInventorySection(
     if (list.children.length > 0) content.append(list);
     appendInventoryMechanicsPresentation(content, mechanics);
     return content;
+}
+
+function renderCurrencyBalances(
+    routine: CharacterRoutineUiState,
+    editable: boolean,
+    pending: boolean,
+    handlers: RoutineCharacterHandlers
+): HTMLElement {
+    const section = createElement("section", "dd-inventory-currency");
+    section.append(createElement("h3", "dd-inventory-currency__title", "Currency"));
+    const balances = routine.state?.currencyBalances ?? [];
+
+    if (editable) {
+        const form = createElement("form", "dd-inventory-currency__form");
+        const keyLabel = createElement("label", "dd-sheet-screen__label", "Currency key");
+        const key = createElement("input", "dd-sheet-screen__input");
+        key.type = "text";
+        key.maxLength = 160;
+        key.placeholder = "gp or campaign-scrip";
+        keyLabel.append(key);
+
+        const amountLabel = createElement("label", "dd-sheet-screen__label", "Amount");
+        const amount = createElement("input", "dd-sheet-screen__input");
+        amount.type = "number";
+        amount.step = "1";
+        amount.min = String(Number.MIN_SAFE_INTEGER);
+        amount.max = String(Number.MAX_SAFE_INTEGER);
+        amount.inputMode = "numeric";
+        amount.value = "0";
+        amountLabel.append(amount);
+
+        const save = createElement("button", "dd-button dd-button--secondary", "Set Currency");
+        save.type = "submit";
+        save.disabled = pending;
+        form.append(keyLabel, amountLabel, save);
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            const normalizedKey = key.value.trim();
+            const parsed = parseCurrencyAmount(amount.value);
+            if (normalizedKey.length === 0) {
+                key.setCustomValidity("Currency key is required.");
+                key.reportValidity();
+                return;
+            }
+            key.setCustomValidity("");
+            if (parsed === null) {
+                amount.setCustomValidity("Amount must be a safe whole number.");
+                amount.reportValidity();
+                return;
+            }
+            amount.setCustomValidity("");
+            handlers.setCurrencyBalance(normalizedKey, parsed);
+        });
+        section.append(form);
+    }
+
+    if (balances.length === 0) {
+        section.append(createElement("p", "dd-routine-empty", "No currency balances recorded."));
+        return section;
+    }
+
+    const list = createElement("div", "dd-inventory-currency__list");
+    for (const balance of balances) {
+        const row = createElement("div", "dd-inventory-currency__row");
+        row.setAttribute("data-currency-key", balance.currencyKey);
+        row.append(
+            createElement("strong", "dd-inventory-currency__key", balance.currencyKey),
+            createElement("span", "dd-inventory-currency__amount", String(balance.amount)));
+
+        if (editable) {
+            const input = createElement("input", "dd-sheet-screen__input");
+            input.type = "number";
+            input.step = "1";
+            input.min = String(Number.MIN_SAFE_INTEGER);
+            input.max = String(Number.MAX_SAFE_INTEGER);
+            input.value = String(balance.amount);
+            input.disabled = pending;
+            input.setAttribute("aria-label", `${balance.currencyKey} amount`);
+            const save = createButton(
+                routine.mutation?.kind === "currency-update"
+                    && routine.mutation.entryId === balance.currencyKey
+                    ? "Saving…"
+                    : "Save",
+                "dd-button dd-button--secondary",
+                () => {
+                    const parsed = parseCurrencyAmount(input.value);
+                    if (parsed === null) {
+                        input.setCustomValidity("Amount must be a safe whole number.");
+                        input.reportValidity();
+                        return;
+                    }
+                    input.setCustomValidity("");
+                    handlers.setCurrencyBalance(balance.currencyKey, parsed);
+                },
+                pending);
+            const remove = createButton(
+                routine.mutation?.kind === "currency-delete"
+                    && routine.mutation.entryId === balance.currencyKey
+                    ? "Removing…"
+                    : "Remove",
+                "dd-button dd-button--ghost",
+                () => handlers.removeCurrencyBalance(balance.currencyKey),
+                pending);
+            row.append(input, save, remove);
+        }
+        list.append(row);
+    }
+    section.append(list);
+    return section;
+}
+
+function parseCurrencyAmount(value: string): number | null {
+    const normalized = value.trim();
+    if (!/^-?\d+$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function renderOccurrenceStateSummary(

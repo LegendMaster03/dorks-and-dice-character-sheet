@@ -345,7 +345,8 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
         ...state,
         conditions: state.conditions ?? [],
         rulesInputs: state.rulesInputs ?? [],
-        hitPointGains: state.hitPointGains ?? []
+        hitPointGains: state.hitPointGains ?? [],
+        currencyBalances: state.currencyBalances ?? []
     };
     const references: Record<string, RuleReferenceState> = {};
     for (const occurrence of normalizedState.inventoryItemOccurrences) {

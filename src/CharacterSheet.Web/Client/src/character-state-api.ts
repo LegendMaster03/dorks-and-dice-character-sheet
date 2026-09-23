@@ -158,6 +158,14 @@ export interface CharacterRecoveryResponse {
     state: CharacterStateResponse;
 }
 
+export interface CharacterCurrencyBalanceResponse {
+    id: string;
+    currencyKey: string;
+    amount: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface CharacterProfileResponse {
     alignment: string | null;
     deity: string | null;
@@ -189,12 +197,13 @@ export interface CharacterStateResponse {
     rulesInputs?: CharacterRulesInputStateResponse[];
     hitPointGains?: CharacterHitPointGainStateResponse[];
     profile?: CharacterProfileResponse | null;
+    currencyBalances?: CharacterCurrencyBalanceResponse[];
 }
 
 export function buildCharacterStateBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    resource?: "profile" | "health" | "death-saves" | "inventory" | "notes" | "conditions",
+    resource?: "currency" | "profile" | "health" | "death-saves" | "inventory" | "notes" | "conditions",
     entryId?: string
 ): string {
     let path = `/api/characters/${encodeURIComponent(characterId)}/state`;
@@ -218,6 +227,36 @@ export async function loadCharacterState(
         "GET",
         undefined,
         "Unable to load Character routine state.");
+}
+
+export async function setCharacterCurrencyBalance(
+    environment: HostEnvironment,
+    characterId: string,
+    key: string,
+    amount: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "currency"),
+        "PUT",
+        { key, amount },
+        "Unable to update Character currency.");
+}
+
+export async function removeCharacterCurrencyBalance(
+    environment: HostEnvironment,
+    characterId: string,
+    key: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    const base = buildCharacterStateBackendUrl(environment, characterId, "currency");
+    return await requestState(
+        fetcher,
+        `${base}?key=${encodeURIComponent(key)}`,
+        "DELETE",
+        undefined,
+        "Unable to remove Character currency.");
 }
 
 export async function setCharacterProfile(
