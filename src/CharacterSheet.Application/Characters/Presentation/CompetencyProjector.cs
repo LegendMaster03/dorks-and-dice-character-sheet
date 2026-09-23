@@ -9,7 +9,7 @@ internal static class CompetencyProjector
         IReadOnlyList<RulesCoreMechanicView> competencyMechanics,
         IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey)
     {
-        if (universalCompetencies is { Count: > 0 })
+        if (universalCompetencies is not null)
         {
             return ProjectUniversalCollection(
                 universalCompetencies,
@@ -118,9 +118,15 @@ internal static class CompetencyProjector
             .ToArray();
         var kind = universal.IsFamily
             ? "family"
-            : competencyKinds.Length == 1
-                ? competencyKinds[0]
-                : "competency";
+            : !string.IsNullOrWhiteSpace(universal.FamilyName)
+                ? "specialized-skill"
+                : competencyKinds.Any(value =>
+                    string.Equals(value, "skill", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(value, "specialized-skill", StringComparison.OrdinalIgnoreCase))
+                    ? "skill"
+                    : competencyKinds.Length == 1
+                        ? competencyKinds[0]
+                        : "competency";
 
         var trainedOnly = SingleDistinctBoolean(
             profiles.Select(value => value.TrainedOnly));
