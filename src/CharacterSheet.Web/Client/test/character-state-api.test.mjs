@@ -12,6 +12,7 @@ import {
     setCharacterCurrentHitPoints,
     setCharacterDeathSaves,
     setCharacterHitPointGain,
+    setCharacterProfile,
     setCharacterRulesInput,
     updateCharacterNote,
     updateInventoryItemOccurrence
@@ -43,6 +44,9 @@ test("routine-state API remains behind Character Sheet Tool Host authorization",
         buildCharacterStateBackendUrl(environment, characterId),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state`);
     assert.equal(
+        buildCharacterStateBackendUrl(environment, characterId, "profile"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/profile`);
+    assert.equal(
         buildCharacterStateBackendUrl(environment, characterId, "health"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/health`);
     assert.equal(
@@ -70,6 +74,39 @@ test("routine-state loading uses the coherent state resource", async () => {
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state`,
         "GET"
     ]]);
+});
+
+test("profile mutation sends only Character-authored descriptive state", async () => {
+    const calls = [];
+    const fetcher = async (input, init) => {
+        calls.push({ input: String(input), method: init?.method, body: init?.body });
+        return Response.json(state);
+    };
+    const profile = {
+        alignment: "Neutral",
+        deity: "The Traveler",
+        age: "34",
+        height: null,
+        weight: null,
+        appearance: null,
+        personalityTraits: "Curious",
+        ideals: "Freedom",
+        bonds: null,
+        flaws: null,
+        backstory: "History",
+        alliesAndOrganizations: null,
+        symbol: null
+    };
+
+    await setCharacterProfile(environment, characterId, profile, fetcher);
+
+    assert.equal(calls[0].method, "PUT");
+    assert.equal(
+        calls[0].input,
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/profile`);
+    assert.deepEqual(JSON.parse(calls[0].body), profile);
+    assert.equal("size" in JSON.parse(calls[0].body), false);
+    assert.equal("background" in JSON.parse(calls[0].body), false);
 });
 
 test("routine-state mutations send only Character-owned state inputs and return coherent state", async () => {

@@ -103,8 +103,8 @@ function renderProfileForm(
         control.maxLength = field.maxLength;
         control.value = profile?.[field.key] ?? "";
         control.disabled = pending;
-        if (control instanceof HTMLTextAreaElement) {
-            control.rows = field.rows ?? 4;
+        if (control.tagName === "TEXTAREA") {
+            (control as HTMLTextAreaElement).rows = field.rows ?? 4;
         }
 
         controls.set(field.key, control);

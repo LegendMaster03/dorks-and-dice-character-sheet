@@ -99,6 +99,7 @@ const handlers = {
         setHitPointGain() {}, clearHitPointGain() {}
     },
     routine: {
+        setProfile() {},
         setCurrentHitPoints() {},
         setDeathSaves() {},
         addNote() {}, updateNote() {}, deleteNote() {}, openInventoryChooser() {}, closeInventoryChooser() {},
@@ -163,7 +164,7 @@ test("primary sheet sections expose tab and tabpanel semantics", () => {
     assert.equal(nav.getAttribute("role"), "tablist");
 
     const tabs = byClass(nav, "dd-primary-nav__button");
-    assert.equal(tabs.length, 5);
+    assert.equal(tabs.length, 6);
     const selected = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
     assert.equal(selected.length, 1);
     assert.equal(selected[0].id, "dd-sheet-tab-actions");
@@ -190,7 +191,7 @@ test("primary sheet tabs use roving tabindex and horizontal arrow-key selection"
 
     assert.equal(nav.getAttribute("aria-orientation"), "horizontal");
     assert.equal(tabs[0].tabIndex, 0);
-    assert.deepEqual(tabs.slice(1).map(tab => tab.tabIndex), [-1, -1, -1, -1]);
+    assert.deepEqual(tabs.slice(1).map(tab => tab.tabIndex), [-1, -1, -1, -1, -1]);
     assert.equal(tabs[3].textContent, "Features & Traits");
     assert.equal(tabs[3].getAttribute("data-sheet-section-tab"), "features");
 
@@ -714,6 +715,74 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     assert.equal(byAttribute(rendered, "data-support-scaffold-key", "armor-training").length, 0);
     assert.equal(byAttribute(rendered, "data-sheet-scaffold-key", "armor-class").length, 1);
     assert.equal(byClass(rendered, "dd-health-quick").length, 1);
+});
+
+test("Details renders Character-authored profile without inventing rule-derived identity", () => {
+    const currentRoutine = routine([], {}, true);
+    currentRoutine.state.profile = {
+        alignment: "Neutral",
+        deity: "The Traveler",
+        age: "34",
+        height: "5 ft. 11 in.",
+        weight: "180 lb.",
+        appearance: "Scarred",
+        personalityTraits: "Curious",
+        ideals: "Freedom",
+        bonds: "Old company",
+        flaws: "Impatient",
+        backstory: "A long-form history.",
+        alliesAndOrganizations: "Cartographers Guild",
+        symbol: "Compass rose",
+        createdAt: "now",
+        updatedAt: "now"
+    };
+
+    const rendered = render("details", null, currentRoutine);
+    const text = visibleText(rendered);
+
+    assert.match(text, /Alignment\s+Neutral/);
+    assert.match(text, /Deity\s+The Traveler/);
+    assert.match(text, /Backstory\s+A long-form history/);
+    assert.doesNotMatch(text, /Background|Size|Player Name|Campaign/);
+});
+
+test("Details editing delegates one complete Character-authored profile mutation", () => {
+    let savedProfile = null;
+    const editableRoutine = routine([], {}, false);
+    const profileHandlers = {
+        ...handlers,
+        routine: {
+            ...handlers.routine,
+            setProfile(input) { savedProfile = input; }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        editableRoutine,
+        "details",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        profileHandlers
+    );
+
+    const alignment = byAttribute(rendered, "data-profile-field", "alignment")[0];
+    const deity = byAttribute(rendered, "data-profile-field", "deity")[0];
+    assert.ok(alignment);
+    assert.ok(deity);
+    alignment.value = "Chaotic good";
+    deity.value = "The Traveler";
+
+    const form = byClass(rendered, "dd-profile__form")[0];
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+
+    assert.ok(savedProfile);
+    assert.equal(savedProfile.alignment, "Chaotic good");
+    assert.equal(savedProfile.deity, "The Traveler");
+    assert.equal(savedProfile.backstory, null);
 });
 
 test("Inventory and Notes empty states remain visible and task-oriented", () => {

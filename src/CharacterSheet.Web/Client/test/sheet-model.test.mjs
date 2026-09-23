@@ -146,6 +146,7 @@ test("primary sheet navigation establishes the requested scalable content region
         "Spells",
         "Inventory",
         "Features & Traits",
+        "Details",
         "Notes"
     ]);
 });
