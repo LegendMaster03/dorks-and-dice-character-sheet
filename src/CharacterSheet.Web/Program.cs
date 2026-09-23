@@ -94,6 +94,7 @@ builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAcc
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterStateService>();
+builder.Services.AddScoped<CharacterRecoveryService>();
 builder.Services.AddScoped<CharacterPresentationService>();
 builder.Services.AddHealthChecks();
 
