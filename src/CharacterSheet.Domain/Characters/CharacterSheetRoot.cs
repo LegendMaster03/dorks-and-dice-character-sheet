@@ -533,6 +533,120 @@ public sealed class CharacterSheetRoot
         return entry;
     }
 
+    public void ApplyIntegerStateMutations(
+        IReadOnlyList<CharacterIntegerStateMutation> mutations,
+        DateTimeOffset changedAt)
+    {
+        ArgumentNullException.ThrowIfNull(mutations);
+        if (mutations.Count == 0) return;
+
+        var currentHitPoints = CurrentHitPoints;
+        var deathSaveSuccesses = DeathSaveSuccesses;
+        var deathSaveFailures = DeathSaveFailures;
+        var resourceValues = RulesInputs
+            .Where(value => value.Kind == CharacterRulesInputKind.Resource && value.IntegerValue is not null)
+            .ToDictionary(value => value.Key, value => value.IntegerValue!.Value, StringComparer.Ordinal);
+        var resourceKeysTouched = new HashSet<string>(StringComparer.Ordinal);
+        var hitPointsTouched = false;
+        var deathSavesTouched = false;
+
+        foreach (var mutation in mutations)
+        {
+            switch (mutation.Target)
+            {
+                case CharacterIntegerStateMutationTarget.CurrentHitPoints:
+                    currentHitPoints = ApplyMutation(
+                        currentHitPoints,
+                        mutation,
+                        "Current Hit Points");
+                    hitPointsTouched = true;
+                    break;
+                case CharacterIntegerStateMutationTarget.DeathSaveSuccesses:
+                    deathSaveSuccesses = ApplyMutation(
+                        deathSaveSuccesses,
+                        mutation,
+                        "Death Save successes")
+                        ?? throw new InvalidOperationException("Death Save successes can not be unset.");
+                    ValidateDeathSaveCount(deathSaveSuccesses, nameof(deathSaveSuccesses));
+                    deathSavesTouched = true;
+                    break;
+                case CharacterIntegerStateMutationTarget.DeathSaveFailures:
+                    deathSaveFailures = ApplyMutation(
+                        deathSaveFailures,
+                        mutation,
+                        "Death Save failures")
+                        ?? throw new InvalidOperationException("Death Save failures can not be unset.");
+                    ValidateDeathSaveCount(deathSaveFailures, nameof(deathSaveFailures));
+                    deathSavesTouched = true;
+                    break;
+                case CharacterIntegerStateMutationTarget.Resource:
+                    var resourceKey = CharacterRulesInputKey.Normalize(
+                        mutation.ResourceKey
+                            ?? throw new ArgumentException(
+                                "A resource mutation requires a resource key.",
+                                nameof(mutations)));
+                    resourceValues.TryGetValue(resourceKey, out var currentResourceValue);
+                    var hasResource = resourceValues.ContainsKey(resourceKey);
+                    int? nextResourceValue = ApplyMutation(
+                        hasResource ? currentResourceValue : null,
+                        mutation,
+                        $"Resource '{resourceKey}'");
+                    resourceValues[resourceKey] = nextResourceValue
+                        ?? throw new InvalidOperationException("Character resources can not be unset by an integer mutation.");
+                    resourceKeysTouched.Add(resourceKey);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(mutations),
+                        $"Unsupported Character state mutation target '{mutation.Target}'.");
+            }
+        }
+
+        if (hitPointsTouched)
+        {
+            SetCurrentHitPoints(currentHitPoints, changedAt);
+        }
+        if (deathSavesTouched)
+        {
+            SetDeathSaves(deathSaveSuccesses, deathSaveFailures, changedAt);
+        }
+        foreach (var resourceKey in resourceKeysTouched)
+        {
+            SetRulesInput(
+                CharacterRulesInputKind.Resource,
+                resourceKey,
+                resourceValues[resourceKey],
+                null,
+                null,
+                changedAt);
+        }
+    }
+
+    private static int? ApplyMutation(
+        int? current,
+        CharacterIntegerStateMutation mutation,
+        string targetLabel)
+    {
+        if (mutation.Operation == CharacterIntegerStateMutationOperation.Set)
+        {
+            return mutation.Amount;
+        }
+        if (current is null)
+        {
+            throw new InvalidOperationException(
+                $"{targetLabel} must already have a Character-owned value before it can be adjusted or expended.");
+        }
+
+        return mutation.Operation switch
+        {
+            CharacterIntegerStateMutationOperation.Adjust => checked(current.Value + mutation.Amount),
+            CharacterIntegerStateMutationOperation.Expend => checked(current.Value - mutation.Amount),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mutation),
+                $"Unsupported Character state mutation operation '{mutation.Operation}'.")
+        };
+    }
+
     public void SetCurrentHitPoints(int? currentHitPoints, DateTimeOffset changedAt)
     {
         CurrentHitPoints = currentHitPoints;
