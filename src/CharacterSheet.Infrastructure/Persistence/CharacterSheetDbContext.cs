@@ -15,6 +15,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterConditionOccurrence> CharacterConditions => Set<CharacterConditionOccurrence>();
     public DbSet<CharacterRulesInputState> CharacterRulesInputs => Set<CharacterRulesInputState>();
     public DbSet<CharacterHitPointGainState> CharacterHitPointGains => Set<CharacterHitPointGainState>();
+    public DbSet<CharacterProfileState> CharacterProfiles => Set<CharacterProfileState>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -264,6 +265,46 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         root.HasMany(value => value.HitPointGains)
             .WithOne()
             .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var profile = modelBuilder.Entity<CharacterProfileState>();
+        profile.ToTable("character_profiles");
+        profile.HasKey(value => value.CharacterId);
+        profile.Property(value => value.CharacterId)
+            .ValueGeneratedNever();
+        profile.Property(value => value.Alignment)
+            .HasMaxLength(CharacterProfileState.MaxShortTextLength);
+        profile.Property(value => value.Deity)
+            .HasMaxLength(CharacterProfileState.MaxShortTextLength);
+        profile.Property(value => value.Age)
+            .HasMaxLength(CharacterProfileState.MaxShortTextLength);
+        profile.Property(value => value.Height)
+            .HasMaxLength(CharacterProfileState.MaxShortTextLength);
+        profile.Property(value => value.Weight)
+            .HasMaxLength(CharacterProfileState.MaxShortTextLength);
+        profile.Property(value => value.Appearance)
+            .HasMaxLength(CharacterProfileState.MaxDescriptionLength);
+        profile.Property(value => value.PersonalityTraits)
+            .HasMaxLength(CharacterProfileState.MaxDescriptionLength);
+        profile.Property(value => value.Ideals)
+            .HasMaxLength(CharacterProfileState.MaxDescriptionLength);
+        profile.Property(value => value.Bonds)
+            .HasMaxLength(CharacterProfileState.MaxDescriptionLength);
+        profile.Property(value => value.Flaws)
+            .HasMaxLength(CharacterProfileState.MaxDescriptionLength);
+        profile.Property(value => value.Backstory)
+            .HasMaxLength(CharacterProfileState.MaxLongTextLength);
+        profile.Property(value => value.AlliesAndOrganizations)
+            .HasMaxLength(CharacterProfileState.MaxLongTextLength);
+        profile.Property(value => value.Symbol)
+            .HasMaxLength(CharacterProfileState.MaxDescriptionLength);
+        profile.Property(value => value.CreatedAt)
+            .IsRequired();
+        profile.Property(value => value.UpdatedAt)
+            .IsRequired();
+        root.HasOne(value => value.Profile)
+            .WithOne()
+            .HasForeignKey<CharacterProfileState>(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var processedLifecycleEvent = modelBuilder.Entity<ProcessedLifecycleEvent>();

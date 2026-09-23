@@ -71,6 +71,66 @@ public sealed class CharacterSheetRoot
     public ICollection<CharacterHitPointGainState> HitPointGains { get; private set; } =
         new List<CharacterHitPointGainState>();
 
+    public CharacterProfileState? Profile { get; private set; }
+
+    public CharacterProfileState SetProfile(
+        string? alignment,
+        string? deity,
+        string? age,
+        string? height,
+        string? weight,
+        string? appearance,
+        string? personalityTraits,
+        string? ideals,
+        string? bonds,
+        string? flaws,
+        string? backstory,
+        string? alliesAndOrganizations,
+        string? symbol,
+        DateTimeOffset changedAt)
+    {
+        if (Profile is null)
+        {
+            Profile = new CharacterProfileState(
+                CharacterId,
+                alignment,
+                deity,
+                age,
+                height,
+                weight,
+                appearance,
+                personalityTraits,
+                ideals,
+                bonds,
+                flaws,
+                backstory,
+                alliesAndOrganizations,
+                symbol,
+                changedAt);
+        }
+        else
+        {
+            Profile.Replace(
+                alignment,
+                deity,
+                age,
+                height,
+                weight,
+                appearance,
+                personalityTraits,
+                ideals,
+                bonds,
+                flaws,
+                backstory,
+                alliesAndOrganizations,
+                symbol,
+                changedAt);
+        }
+
+        Touch(changedAt);
+        return Profile;
+    }
+
     public CharacterRulesInputState SetRulesInput(
         CharacterRulesInputKind kind,
         string key,

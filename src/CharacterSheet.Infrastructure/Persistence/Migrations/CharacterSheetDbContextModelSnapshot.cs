@@ -288,6 +288,74 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_hit_point_gains");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterProfileState", b =>
+        {
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<string>("Age")
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.Property<string>("Alignment")
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.Property<string>("AlliesAndOrganizations")
+                .HasMaxLength(20000)
+                .HasColumnType("character varying(20000)");
+
+            b.Property<string>("Appearance")
+                .HasMaxLength(4000)
+                .HasColumnType("character varying(4000)");
+
+            b.Property<string>("Backstory")
+                .HasMaxLength(20000)
+                .HasColumnType("character varying(20000)");
+
+            b.Property<string>("Bonds")
+                .HasMaxLength(4000)
+                .HasColumnType("character varying(4000)");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("Deity")
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.Property<string>("Flaws")
+                .HasMaxLength(4000)
+                .HasColumnType("character varying(4000)");
+
+            b.Property<string>("Height")
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.Property<string>("Ideals")
+                .HasMaxLength(4000)
+                .HasColumnType("character varying(4000)");
+
+            b.Property<string>("PersonalityTraits")
+                .HasMaxLength(4000)
+                .HasColumnType("character varying(4000)");
+
+            b.Property<string>("Symbol")
+                .HasMaxLength(4000)
+                .HasColumnType("character varying(4000)");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("Weight")
+                .HasMaxLength(300)
+                .HasColumnType("character varying(300)");
+
+            b.HasKey("CharacterId");
+
+            b.ToTable("character_profiles");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterRulesInputState", b =>
         {
             b.Property<Guid>("Id")
@@ -455,6 +523,15 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .IsRequired();
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterProfileState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithOne("Profile")
+                .HasForeignKey("CharacterSheet.Domain.Characters.CharacterProfileState", "CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterRulesInputState", b =>
         {
             b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
@@ -473,6 +550,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Navigation("HitPointGains");
             b.Navigation("InventoryItemOccurrences");
             b.Navigation("Notes");
+            b.Navigation("Profile");
             b.Navigation("RulesInputs");
         });
 #pragma warning restore 612, 618
