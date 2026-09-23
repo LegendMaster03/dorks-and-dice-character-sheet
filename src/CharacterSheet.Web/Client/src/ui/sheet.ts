@@ -220,15 +220,16 @@ function renderModeControls(
         return controls;
     }
 
+    const recoveryState = routine.recovery ?? { kind: "closed" as const };
     const recoveryControls = renderRecoveryControls(
         mechanics?.recoveryProcedures,
         false,
-        routine.recovery.kind === "resolving",
+        recoveryState.kind === "resolving",
         handlers.routine.recover);
     if (recoveryControls !== null) controls.append(recoveryControls);
 
     const recoveryContinuation = renderRecoveryContinuation(
-        routine.recovery,
+        recoveryState,
         mechanics?.recoveryProcedures,
         handlers.routine.continueRecovery,
         handlers.routine.cancelRecovery);
