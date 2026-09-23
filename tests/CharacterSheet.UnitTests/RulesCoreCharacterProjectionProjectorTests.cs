@@ -170,6 +170,7 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
             state);
 
         var strength = Assert.Single(mechanics.AbilityValues!);
+        Assert.Equal("strength", strength.Key);
         Assert.Equal(14, strength.EffectiveValue);
         Assert.Equal(2, Assert.Single(strength.RelatedValues!, value => value.Key == "modifier").EffectiveValue);
         Assert.Equal(2, strength.Breakdown!.Count);
@@ -213,6 +214,27 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
         Assert.Equal("spell-points", choice.SelectedValue);
         Assert.Equal(["Spell Slots", "Spell Points"], choice.Options.Select(value => value.DisplayName).ToArray());
         Assert.Equal("Fixture conflict", Assert.Single(mechanics.ProjectionConflicts!).Message);
+    }
+
+    [Fact]
+    public void AbilityProjectionUsesAxisKeysForStandardAndAdditionalAbilities()
+    {
+        var projection = EmptyProjection() with
+        {
+            Mechanics =
+            [
+                Mechanic("ability.strength.score", "ability-score", "Strength Score", 14),
+                Mechanic("ability.honor.score", "ability-score", "Honor Score", 12)
+            ]
+        };
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            null,
+            projection);
+
+        Assert.Equal(
+            ["strength", "honor"],
+            mechanics.AbilityValues!.Select(value => value.Key).ToArray());
     }
 
     [Fact]

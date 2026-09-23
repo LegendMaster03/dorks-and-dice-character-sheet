@@ -5,7 +5,7 @@ export type RenderFunction = (state: Readonly<CharacterSheetAppState>) => void;
 
 export interface CharacterSheetApplication {
     getState(): Readonly<CharacterSheetAppState>;
-    dispatch(action: CharacterSheetAction): void;
+    dispatch(action: CharacterSheetAction, options?: { render?: boolean }): void;
     render(): void;
 }
 
@@ -28,9 +28,9 @@ export function createApplication(
 
     return {
         getState: () => state,
-        dispatch(action: CharacterSheetAction): void {
+        dispatch(action: CharacterSheetAction, options?: { render?: boolean }): void {
             state = reduceAppState(state, action);
-            render();
+            if (options?.render !== false) render();
         },
         render
     };

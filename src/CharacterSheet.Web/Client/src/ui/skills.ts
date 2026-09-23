@@ -106,12 +106,29 @@ function renderCompetencyFamily(
     disclosure.setAttribute("data-skill-family", item.parent.key);
 
     const summary = createElement("summary", "dd-skill-disclosure__summary");
-    summary.append(renderCompetencyRow(item.parent, "standalone", undefined, "span"));
+    const category = createElement("span", "dd-skill-family-summary");
+    category.setAttribute("data-skill-family-summary", item.parent.key);
+    category.append(
+        createElement("span", "dd-skill-family-summary__name", item.parent.label),
+        createElement(
+            "span",
+            "dd-skill-family-summary__count",
+            item.members.length === 0
+                ? "No specialties"
+                : `${item.members.length} ${item.members.length === 1 ? "specialty" : "specialties"}`));
+    summary.append(category);
 
     const body = createElement("div", "dd-skill-disclosure__body dd-skill-family-details");
     const members = createElement("div", "dd-skill-family-members");
-    for (const member of item.members) {
-        members.append(renderStandaloneCompetency(member, control));
+    if (item.members.length === 0) {
+        members.append(createElement(
+            "p",
+            "dd-skill-family-members__empty",
+            "No specialties are available from the current rules projection."));
+    } else {
+        for (const member of item.members) {
+            members.append(renderStandaloneCompetency(member, control));
+        }
     }
     body.append(members);
     disclosure.append(summary, body);

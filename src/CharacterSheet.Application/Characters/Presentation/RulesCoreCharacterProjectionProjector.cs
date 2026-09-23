@@ -145,8 +145,10 @@ internal static class RulesCoreCharacterProjectionProjector
         AddRelated("temporary-score", "Temporary Score", prefix + ".temporary-score");
         AddRelated("temporary-modifier", "Temporary Modifier", prefix + ".temporary-modifier");
 
+        var abilityKey = value.MechanicKey["ability.".Length..^".score".Length];
         return ProjectCalculated(value) with
         {
+            Key = abilityKey,
             RelatedValues = related.Count == 0 ? null : related
         };
 

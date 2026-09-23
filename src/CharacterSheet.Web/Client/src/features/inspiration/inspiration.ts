@@ -6,7 +6,7 @@ export interface InspirationControlOptions {
     current: boolean | undefined;
     readOnly: boolean;
     saving: boolean;
-    onSet(value: boolean): void;
+    onSet(value: boolean): Promise<boolean>;
 }
 
 export function renderInspirationQuickCard(
@@ -22,21 +22,42 @@ export function renderInspirationQuickCard(
         return card;
     }
 
-    card.setAttribute("data-inspiration-state", options.current ? "on" : "off");
+    let current = options.current;
     const toggle = createElement(
         "button",
-        "dd-inspiration__indicator",
-        options.current ? "✓" : "○");
+        "dd-inspiration__indicator");
     toggle.type = "button";
-    toggle.disabled = options.readOnly || options.saving;
     toggle.setAttribute("data-inspiration-toggle", "true");
-    toggle.setAttribute("aria-pressed", options.current ? "true" : "false");
-    toggle.setAttribute(
-        "aria-label",
-        options.readOnly
-            ? `Inspiration ${options.current ? "on" : "off"}.`
-            : `Inspiration ${options.current ? "on" : "off"}. Toggle ${options.current ? "off" : "on"}.`);
-    toggle.addEventListener("click", () => options.onSet(!options.current));
+
+    const syncToggle = (): void => {
+        card.setAttribute("data-inspiration-state", current ? "on" : "off");
+        toggle.textContent = current ? "✓" : "○";
+        toggle.setAttribute("aria-pressed", current ? "true" : "false");
+        toggle.setAttribute(
+            "aria-label",
+            options.readOnly
+                ? `Inspiration ${current ? "on" : "off"}.`
+                : `Inspiration ${current ? "on" : "off"}. Toggle ${current ? "off" : "on"}.`);
+    };
+
+    syncToggle();
+    toggle.disabled = options.readOnly || options.saving;
+    toggle.addEventListener("click", async () => {
+        if (toggle.disabled) return;
+        const next = !current;
+        toggle.disabled = true;
+        const saved = await options.onSet(next);
+        if (saved) {
+            current = next;
+            toggle.removeAttribute?.("data-inspiration-save-error");
+            toggle.title = "";
+            syncToggle();
+        } else {
+            toggle.setAttribute("data-inspiration-save-error", "true");
+            toggle.title = "Inspiration could not be saved.";
+        }
+        toggle.disabled = options.readOnly;
+    });
     card.append(toggle);
     return card;
 }
