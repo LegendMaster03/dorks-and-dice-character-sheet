@@ -11,12 +11,18 @@ import {
 import { resolveRuleConcept } from "../../rules-core-api.js";
 import { requestErrorMessage } from "./request-error.js";
 
+export interface RoutineMutationOptions {
+    render?: boolean;
+    resolveReferences?: boolean;
+}
+
 export interface RoutineStateWorkflow {
     load(characterId: string): Promise<void>;
     mutate(
         kind: RoutineMutationKind,
         operation: () => Promise<CharacterStateResponse>,
-        entryId?: string
+        entryId?: string,
+        options?: RoutineMutationOptions
     ): Promise<boolean>;
     current(): Readonly<CharacterRoutineUiState>;
 }
@@ -164,7 +170,8 @@ export function createRoutineStateWorkflow(
         async mutate(
             kind: RoutineMutationKind,
             operation: () => Promise<CharacterStateResponse>,
-            entryId?: string
+            entryId?: string,
+            options: RoutineMutationOptions = {}
         ): Promise<boolean> {
             const routine = application.getState().routine;
             if (routine.status !== "ready"
@@ -178,20 +185,22 @@ export function createRoutineStateWorkflow(
                 type: "routine-mutation-started",
                 kind,
                 entryId
-            });
+            }, { render: options.render });
             try {
                 const next = await operation();
                 application.dispatch({
                     type: "routine-mutation-succeeded",
                     state: next
-                });
-                await resolveReferences(next);
+                }, { render: options.render });
+                if (options.resolveReferences !== false) {
+                    await resolveReferences(next);
+                }
                 return true;
             } catch (error) {
                 application.dispatch({
                     type: "routine-mutation-failed",
                     message: requestErrorMessage(error)
-                });
+                }, { render: options.render });
                 return false;
             }
         },

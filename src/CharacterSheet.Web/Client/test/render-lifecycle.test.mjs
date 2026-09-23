@@ -13,7 +13,11 @@ test("render lifecycle runs only through explicit render or state dispatch", () 
     assert.deepEqual(revisions, []);
     application.render();
     application.dispatch({ type: "rerender" });
+    application.dispatch({ type: "rerender" }, { render: false });
 
     assert.deepEqual(revisions, [0, 1]);
-    assert.equal(application.getState().renderRevision, 1);
+    assert.equal(application.getState().renderRevision, 2);
+
+    application.render();
+    assert.deepEqual(revisions, [0, 1, 2]);
 });
