@@ -25,6 +25,12 @@ public interface ICharacterStateStore
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> ApplyIntegerStateMutationsAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterIntegerStateMutation> mutations,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> AddInventoryItemOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,
