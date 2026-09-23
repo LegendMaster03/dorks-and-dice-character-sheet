@@ -25,13 +25,13 @@ internal static class CharacterMechanicsProjector
             .ToArray();
 
         var competencies = CompetencyProjector.ProjectCollection(
+            catalog.Competencies,
             competencyMechanics,
             evaluationByKey);
 
-        var competencyNameByConcept = competencyMechanics.ToDictionary(
-            value => value.ConceptKey!,
-            value => value.DisplayName,
-            StringComparer.Ordinal);
+        var competencyNameByConcept = CompetencyProjector.BuildDisplayNamesByConcept(
+            catalog.Competencies,
+            competencyMechanics);
         var checks = CheckProcedureProjector.ProjectChecks(
             catalog.Mechanics,
             competencyNameByConcept,

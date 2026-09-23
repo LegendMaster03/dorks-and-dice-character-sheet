@@ -217,6 +217,106 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
     }
 
     [Fact]
+    public void UniversalCompetencyPresentationUsesImplementationMechanicForValueAndRankState()
+    {
+        var fallback = new CharacterMechanicsPresentationView(
+            Competencies: new CompetencyCollectionPresentationView(
+                [new CompetencyPresentationView(
+                    "competency.arcana",
+                    "Arcana",
+                    "-",
+                    Kind: "skill",
+                    SupportsRanks: true,
+                    MechanicKeys: ["competency.skill.arcana"],
+                    CompatibilityMechanicKeys: ["competency.skill.knowledge-arcana"],
+                    RankInputKey: "skill.arcana")]));
+
+        var projection = EmptyProjection() with
+        {
+            Mechanics =
+            [
+                Mechanic(
+                    "competency.skill.arcana",
+                    "competency",
+                    "Arcana",
+                    9,
+                    contributions:
+                    [
+                        Contribution("ability", "Intelligence", 4),
+                        Contribution("ranks", "Ranks", 5)
+                    ])
+            ]
+        };
+        var state = new CharacterStateView(
+            Guid.NewGuid(),
+            false,
+            null,
+            new CharacterDeathSavesView(0, 0),
+            [],
+            [],
+            [],
+            [
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
+                    CharacterRulesInputKinds.CompetencyRank,
+                    "skill.arcana",
+                    5,
+                    null,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow)
+            ]);
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            fallback,
+            projection,
+            state);
+
+        var arcana = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Equal("competency.arcana", arcana.Key);
+        Assert.Equal(9, arcana.EffectiveValue);
+        Assert.Equal(5, arcana.Ranks);
+        Assert.Equal("skill.arcana", arcana.RankInputKey);
+        Assert.Equal(2, arcana.Breakdown!.Count);
+    }
+
+    [Fact]
+    public void UniversalCompetencyDoesNotChooseArbitrarilyBetweenResolvedImplementations()
+    {
+        var fallback = new CharacterMechanicsPresentationView(
+            Competencies: new CompetencyCollectionPresentationView(
+                [new CompetencyPresentationView(
+                    "competency.alchemy",
+                    "Alchemy",
+                    "-",
+                    Kind: "specialized-skill",
+                    Family: "Craft",
+                    MechanicKeys:
+                    [
+                        "competency.skill.alchemy",
+                        "competency.tool.alchemists-supplies"
+                    ])]));
+
+        var projection = EmptyProjection() with
+        {
+            Mechanics =
+            [
+                Mechanic("competency.skill.alchemy", "competency", "Alchemy Skill", 8),
+                Mechanic("competency.tool.alchemists-supplies", "competency", "Alchemist's Supplies", 5)
+            ]
+        };
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            fallback,
+            projection);
+
+        var alchemy = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Equal("competency.alchemy", alchemy.Key);
+        Assert.Equal("-", alchemy.EffectiveValue);
+        Assert.Null(alchemy.Breakdown);
+    }
+
+    [Fact]
     public void AbilityProjectionUsesAxisKeysForStandardAndAdditionalAbilities()
     {
         var projection = EmptyProjection() with

@@ -187,6 +187,164 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void UniversalCompetencyCatalogCollapsesImplementationsAndPopulatesFamilies()
+    {
+        var craft = Competency(
+            "competency.skill.craft",
+            "skill.craft",
+            "Craft",
+            family: "Craft",
+            isFamily: true);
+        var craftAlchemy = Competency(
+            "competency.skill.craft-alchemy",
+            "skill.craft-alchemy",
+            "Craft (alchemy)",
+            family: "Craft",
+            specialty: "alchemy",
+            competencyKind: "specialized-skill");
+        var alchemyTools = Competency(
+            "competency.tool.alchemists-supplies",
+            "tool.alchemists-supplies",
+            "Alchemist's Supplies",
+            competencyKind: "tool");
+
+        var universal =
+            new RulesCoreUniversalCompetencyView[]
+            {
+                new(
+                    "competency.craft",
+                    "craft",
+                    "Craft",
+                    "Craft",
+                    true,
+                    null,
+                    ["competency.alchemy", "competency.blacksmithing"],
+                    ["competency.skill.craft"],
+                    [],
+                    ["Craft"],
+                    [],
+                    [],
+                    [],
+                    []),
+                new(
+                    "competency.alchemy",
+                    "alchemy",
+                    "Alchemy",
+                    "Craft",
+                    false,
+                    "competency.alchemy.training",
+                    [],
+                    ["competency.skill.craft-alchemy", "competency.tool.alchemists-supplies"],
+                    ["competency.skill.alchemy"],
+                    ["Alchemy", "Craft (alchemy)", "Alchemist's Supplies"],
+                    [],
+                    [
+                        new RulesCoreCompetencyFacetView(
+                            "skill",
+                            [],
+                            true,
+                            true,
+                            true,
+                            ["competency.skill.craft-alchemy"]),
+                        new RulesCoreCompetencyFacetView(
+                            "tool",
+                            [],
+                            false,
+                            false,
+                            true,
+                            ["competency.tool.alchemists-supplies"])
+                    ],
+                    [],
+                    []),
+                new(
+                    "competency.blacksmithing",
+                    "blacksmithing",
+                    "Blacksmithing",
+                    "Craft",
+                    false,
+                    "competency.blacksmithing.training",
+                    [],
+                    [],
+                    ["competency.skill.craft-blacksmithing"],
+                    ["Blacksmithing", "Craft (blacksmithing)"],
+                    [],
+                    [],
+                    [],
+                    [])
+            };
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [craft, craftAlchemy, alchemyTools],
+            universal);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        Assert.NotNull(mechanics.Competencies);
+        Assert.Equal(3, mechanics.Competencies.Entries.Count);
+
+        var family = Assert.Single(
+            mechanics.Competencies.Entries,
+            value => value.Key == "competency.craft");
+        Assert.True(family.IsFamily);
+        Assert.Equal("family", family.Kind);
+        Assert.Equal(
+            ["competency.alchemy", "competency.blacksmithing"],
+            family.ChildCompetencyKeys);
+
+        var alchemy = Assert.Single(
+            mechanics.Competencies.Entries,
+            value => value.Key == "competency.alchemy");
+        Assert.Equal("Alchemy", alchemy.Label);
+        Assert.Equal("specialized-skill", alchemy.Kind);
+        Assert.Equal("Craft", alchemy.Family);
+        Assert.Equal("competency.alchemy.training", alchemy.SharedTrainingKey);
+        Assert.Equal("skill.craft-alchemy", alchemy.RankInputKey);
+        Assert.True(alchemy.SupportsRanks);
+        Assert.Equal(2, alchemy.Facets!.Count);
+        Assert.Equal(
+            ["competency.skill.craft-alchemy", "competency.tool.alchemists-supplies"],
+            alchemy.MechanicKeys);
+        Assert.DoesNotContain(
+            mechanics.Competencies.Entries,
+            value => value.Key == "skill.craft-alchemy"
+                || value.Key == "tool.alchemists-supplies");
+
+        var blacksmithing = Assert.Single(
+            mechanics.Competencies.Entries,
+            value => value.Key == "competency.blacksmithing");
+        Assert.Equal("Blacksmithing", blacksmithing.Label);
+        Assert.Equal("specialized-skill", blacksmithing.Kind);
+        Assert.Equal("Craft", blacksmithing.Family);
+        Assert.Equal("-", blacksmithing.EffectiveValue);
+        Assert.Null(blacksmithing.RankInputKey);
+    }
+
+    [Fact]
+    public void ExplicitEmptyUniversalCompetencyCatalogDoesNotFallBackToSourceShapedRows()
+    {
+        var arcana = Competency(
+            "competency.skill.arcana",
+            "skill.arcana",
+            "Arcana");
+
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [arcana],
+            []);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        Assert.NotNull(mechanics.Competencies);
+        Assert.Empty(mechanics.Competencies.Entries);
+    }
+
+    [Fact]
     public void AdvancementKindDoesNotNeedToMatchResolvedRuleEntityType()
     {
         var occurrenceId = Guid.NewGuid();

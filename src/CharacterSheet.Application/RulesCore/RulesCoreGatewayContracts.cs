@@ -30,7 +30,24 @@ public sealed record RulesCoreMechanicsCatalogView(
     Guid? CampaignId,
     int? RevisionNumber,
     DateTimeOffset? PublishedAt,
-    IReadOnlyList<RulesCoreMechanicView> Mechanics);
+    IReadOnlyList<RulesCoreMechanicView> Mechanics,
+    IReadOnlyList<RulesCoreUniversalCompetencyView>? Competencies = null);
+
+public sealed record RulesCoreUniversalCompetencyView(
+    string SemanticKey,
+    string IdentityKey,
+    string DisplayName,
+    string? FamilyName,
+    bool IsFamily,
+    string? TrainingStateKey,
+    IReadOnlyList<string> ChildCompetencyKeys,
+    IReadOnlyList<string> MechanicKeys,
+    IReadOnlyList<string> CompatibilityMechanicKeys,
+    IReadOnlyList<string> SourceAliases,
+    IReadOnlyList<RulesCoreCompetencyProfileView> Profiles,
+    IReadOnlyList<RulesCoreCompetencyFacetView> Facets,
+    IReadOnlyList<RulesCoreCompetencyRelationshipView> RelatedCompetencies,
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions);
 
 public sealed record RulesCoreMechanicView(
     string MechanicKey,

@@ -118,6 +118,10 @@ export interface CompetencyView extends CalculatedMechanicalValueView {
     isFamily?: boolean;
     facets?: readonly CompetencyFacetView[];
     relatedCompetencies?: readonly RelatedCompetencyView[];
+    childCompetencyKeys?: readonly string[];
+    mechanicKeys?: readonly string[];
+    compatibilityMechanicKeys?: readonly string[];
+    rankInputKey?: string;
 }
 
 export interface CompetencyRelationshipView {
@@ -409,19 +413,22 @@ export function buildCompetencyPresentation(
     }
 
     for (const parent of collection.entries) {
-        if (consumed.has(parent.key)) continue;
+        if (consumed.has(parent.key) || parent.isFamily !== true) continue;
 
         const familyName = normalizedFamilyName(parent.family)
             ?? normalizedFamilyName(parent.label);
         if (familyName === undefined) continue;
 
+        const explicitChildren = parent.childCompetencyKeys === undefined
+            ? undefined
+            : new Set(parent.childCompetencyKeys);
         const members = collection.entries.filter(entry =>
             entry.key !== parent.key
             && !consumed.has(entry.key)
             && entry.isFamily !== true
-            && normalizedFamilyName(entry.family) === familyName);
-        const isFamilyParent = parent.isFamily === true || members.length > 0;
-        if (!isFamilyParent) continue;
+            && (explicitChildren !== undefined
+                ? explicitChildren.has(entry.key)
+                : normalizedFamilyName(entry.family) === familyName));
 
         consumed.add(parent.key);
         for (const member of members) consumed.add(member.key);

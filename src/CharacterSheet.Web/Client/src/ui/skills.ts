@@ -482,8 +482,12 @@ function renderRankEditors(
     section.append(createElement("h4", "dd-skill-detail-section__title", "Ranks"));
 
     for (const competency of editable) {
+        const mutationKey = rankMutationKey(competency);
+        if (mutationKey === undefined) continue;
+
         const row = createElement("div", "dd-skill-rank-editor");
         row.setAttribute("data-competency-rank-editor", competency.key);
+        row.setAttribute("data-competency-rank-input", mutationKey);
         row.append(createElement("span", "dd-skill-rank-editor__label", competency.label));
 
         const input = createElement("input", "dd-sheet-screen__input");
@@ -501,7 +505,7 @@ function renderRankEditors(
 
         const pending = control.savingKey !== null
             && control.savingKey !== undefined;
-        const saving = control.savingKey === competency.key;
+        const saving = control.savingKey === mutationKey;
         const actions = createElement("div", "dd-skill-rank-editor__actions");
         actions.append(createButton(
             saving ? "Saving…" : "Save",
@@ -515,7 +519,7 @@ function renderRankEditors(
                     return;
                 }
                 input.setCustomValidity("");
-                control.onSetRank!(competency.key, parsed);
+                control.onSetRank!(mutationKey, parsed);
             },
             pending));
 
@@ -525,7 +529,7 @@ function renderRankEditors(
             actions.append(createButton(
                 "Clear",
                 "dd-button dd-button--ghost",
-                () => control.onClearRank!(competency.key),
+                () => control.onClearRank!(mutationKey),
                 pending));
         }
 
@@ -541,8 +545,18 @@ function canEditRank(
     control: CompetencyRankControlOptions
 ): boolean {
     return competency.supportsRanks === true
+        && rankMutationKey(competency) !== undefined
         && control.readOnly !== true
         && control.onSetRank !== undefined;
+}
+
+function rankMutationKey(competency: CompetencyView): string | undefined {
+    const explicit = competency.rankInputKey?.trim();
+    if (explicit !== undefined && explicit.length > 0) return explicit;
+
+    return competency.key.startsWith("competency.")
+        ? undefined
+        : competency.key;
 }
 
 function parseRank(value: string): number | null {

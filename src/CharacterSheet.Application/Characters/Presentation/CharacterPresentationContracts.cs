@@ -210,7 +210,15 @@ public sealed record CompetencyPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<RelatedCompetencyPresentationView>? RelatedCompetencies = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<MechanicalContributionPresentationView>? Breakdown = null);
+    IReadOnlyList<MechanicalContributionPresentationView>? Breakdown = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? ChildCompetencyKeys = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? MechanicKeys = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? CompatibilityMechanicKeys = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? RankInputKey = null);
 
 public sealed record CompetencyRelationshipPresentationView(
     string ParentKey,
