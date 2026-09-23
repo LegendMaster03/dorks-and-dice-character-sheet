@@ -260,6 +260,49 @@ export function reduceRoutineState(
         case "condition-chooser-closed":
             routine = { ...routine, conditionChooser: { kind: "closed" } };
             break;
+        case "recovery-started":
+            if (routine.status === "ready"
+                && routine.state !== null
+                && !routine.state.readOnly
+                && routine.recovery.kind !== "resolving") {
+                routine = {
+                    ...routine,
+                    recovery: {
+                        kind: "resolving",
+                        procedureKey: action.procedureKey,
+                        request: action.request
+                    }
+                };
+            }
+            break;
+        case "recovery-continuation":
+            routine = {
+                ...routine,
+                recovery: {
+                    kind: "continuation",
+                    procedureKey: action.procedureKey,
+                    request: action.request,
+                    resolution: action.resolution
+                }
+            };
+            break;
+        case "recovery-succeeded":
+            routine = routineStateFromResponse(action.state);
+            break;
+        case "recovery-failed":
+            routine = {
+                ...routine,
+                recovery: {
+                    kind: "error",
+                    procedureKey: action.procedureKey,
+                    request: action.request,
+                    message: action.message
+                }
+            };
+            break;
+        case "recovery-cancelled":
+            routine = { ...routine, recovery: { kind: "closed" } };
+            break;
         case "routine-mutation-started":
             if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly && routine.mutation === null) {
                 routine = {
@@ -292,6 +335,7 @@ export function createInitialRoutineState(): CharacterRoutineUiState {
         inventoryChooser: { kind: "closed" },
         spellChooser: { kind: "closed" },
         conditionChooser: { kind: "closed" },
+        recovery: { kind: "closed" },
         mutation: null
     };
 }
