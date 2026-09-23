@@ -409,7 +409,7 @@ export function buildCompetencyPresentation(
     }
 
     for (const parent of collection.entries) {
-        if (consumed.has(parent.key)) continue;
+        if (consumed.has(parent.key) || parent.isFamily !== true) continue;
 
         const familyName = normalizedFamilyName(parent.family)
             ?? normalizedFamilyName(parent.label);
@@ -420,8 +420,6 @@ export function buildCompetencyPresentation(
             && !consumed.has(entry.key)
             && entry.isFamily !== true
             && normalizedFamilyName(entry.family) === familyName);
-        const isFamilyParent = parent.isFamily === true || members.length > 0;
-        if (!isFamilyParent) continue;
 
         consumed.add(parent.key);
         for (const member of members) consumed.add(member.key);

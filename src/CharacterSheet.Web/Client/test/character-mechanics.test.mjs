@@ -147,27 +147,29 @@ test("family parents remain family categories even when familyName is absent and
 });
 
 
-test("specialty metadata can recover a family parent when older parent metadata lacks isFamily", () => {
+test("specialty metadata does not promote an ordinary competency into a family parent", () => {
     const items = buildCompetencyPresentation({
         entries: [
-            value("skill.craft", "Craft", "-", { kind: "skill" }),
-            value("skill.craft-blacksmithing", "Craft (blacksmithing)", "+6", {
-                kind: "specialized-skill",
-                family: "craft",
-                specialty: "blacksmithing"
+            value("skill.arcana", "Arcana", "+4", {
+                kind: "skill",
+                family: "Knowledge"
             }),
-            value("skill.arcana", "Arcana", "+4", { kind: "skill" })
+            value("skill.history", "History", "+3", {
+                kind: "skill",
+                family: "Knowledge"
+            }),
+            value("skill.religion", "Religion", "+2", {
+                kind: "skill",
+                family: "Knowledge"
+            })
         ]
     });
 
-    assert.equal(items.length, 2);
-    assert.equal(items[0].kind, "family");
-    assert.equal(items[0].parent.key, "skill.craft");
+    assert.equal(items.length, 3);
+    assert.ok(items.every(item => item.kind === "standalone"));
     assert.deepEqual(
-        items[0].members.map(member => member.key),
-        ["skill.craft-blacksmithing"]);
-    assert.equal(items[1].kind, "standalone");
-    assert.equal(items[1].competency.key, "skill.arcana");
+        items.map(item => item.competency.key),
+        ["skill.arcana", "skill.history", "skill.religion"]);
 });
 
 
