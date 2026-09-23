@@ -146,6 +146,28 @@ public static class CharacterStateEndpointExtensions
             }
         });
 
+        app.MapPost("/api/characters/{characterId:guid}/state/recovery/{procedureKey}", async (
+            Guid characterId,
+            string procedureKey,
+            CharacterRecoveryRequest request,
+            CharacterRecoveryService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToRecoveryApiResult(
+                    await service.ResolveAsync(
+                        characterId,
+                        procedureKey,
+                        request,
+                        cancellationToken));
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPost("/api/characters/{characterId:guid}/state/inventory", async (
             Guid characterId,
             CharacterInventoryItemOccurrenceRequest request,
@@ -357,6 +379,39 @@ public static class CharacterStateEndpointExtensions
             }
         });
     }
+
+    private static IResult ToRecoveryApiResult(CharacterRecoveryResult result) => result.Status switch
+    {
+        CharacterRecoveryAccessStatus.Ready => Results.Ok(new
+        {
+            resolution = result.Resolution,
+            state = result.State
+        }),
+        CharacterRecoveryAccessStatus.UnsupportedConsequence => Results.Json(new
+        {
+            error = result.Message ?? "Recovery uses a Character state consequence this version can not persist safely.",
+            resolution = result.Resolution,
+            state = result.State
+        }, statusCode: StatusCodes.Status422UnprocessableEntity),
+        CharacterRecoveryAccessStatus.NotFoundOrNotOwned => Results.NotFound(new
+        {
+            error = "Character unavailable."
+        }),
+        CharacterRecoveryAccessStatus.ProjectionUnavailable => Results.Json(new
+        {
+            error = result.Message ?? "Rules Core or Site Character projection is unavailable for this request."
+        }, statusCode: StatusCodes.Status503ServiceUnavailable),
+        CharacterRecoveryAccessStatus.Unauthenticated => Results.Unauthorized(),
+        CharacterRecoveryAccessStatus.SheetNotInitialized => Results.NotFound(new
+        {
+            error = "Digital Character Sheet is not initialized."
+        }),
+        CharacterRecoveryAccessStatus.ArchivedReadOnly => Results.Conflict(new
+        {
+            error = "Archived Characters are read-only. Restore the Character through the Site before applying recovery."
+        }),
+        _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+    };
 
     private static IResult ToApiResult(CharacterStateResult result, bool mutating) => result.Status switch
     {
