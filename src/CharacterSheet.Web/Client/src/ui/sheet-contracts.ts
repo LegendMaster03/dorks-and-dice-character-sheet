@@ -19,6 +19,7 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
 }
 
 export interface RoutineCharacterHandlers {
+    setInspiration(inspired: boolean): void;
     setCurrencyBalance(currencyKey: string, amount: number): void;
     removeCurrencyBalance(currencyKey: string): void;
     setProfile(input: CharacterProfileInput): void;

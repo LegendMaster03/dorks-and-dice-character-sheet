@@ -23,6 +23,7 @@ export interface RulesInputWorkflow {
     setChoice(characterId: string, choiceKey: string, value: string): Promise<boolean>;
     clearChoice(characterId: string, choiceKey: string): Promise<boolean>;
     setResource(characterId: string, resourceKey: string, currentValue: number): Promise<boolean>;
+    setBooleanFact(characterId: string, factKey: string, value: boolean): Promise<boolean>;
     setHitPointGain(
         characterId: string,
         advancementOccurrenceId: string,
@@ -99,6 +100,14 @@ export function createRulesInputWorkflow(
                 kind: "resource",
                 key: resourceKey,
                 integerValue: currentValue
+            });
+        },
+
+        setBooleanFact(characterId, factKey, value): Promise<boolean> {
+            return set(characterId, {
+                kind: "booleanFact",
+                key: factKey,
+                booleanValue: value
             });
         },
 

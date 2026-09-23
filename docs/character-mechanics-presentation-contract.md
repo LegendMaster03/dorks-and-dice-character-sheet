@@ -134,7 +134,7 @@ The Character Sheet promotes the Armor Class family to the core-stat region. Pri
 
 ## Inspiration
 
-Inspiration is a promoted quick-stat resource. The backend recognizes Rules Core resource mechanics whose stable identity represents **Inspiration** or **Heroic Inspiration** and projects that value separately from health tracks. The top strip always reserves the Inspiration presentation slot; unavailable state is shown as `-`. The current Character-owned runtime contract does not yet provide an Inspiration mutation operation, so the frontend displays the supplied value but does not invent a toggle or persistence rule.
+Inspiration is a Character-owned boolean runtime fact. The top strip always reserves the Inspiration presentation slot. Once Character routine state is loaded, absence of the fact means **off** and the player can toggle it on or off directly; the value persists through the existing Character boolean-fact state contract under the stable key `inspiration`. Read-only Characters display the state without mutation. While routine state is unavailable, the slot shows `-`. Rules Core may still project Inspiration-related mechanics or provenance, but it does not own this player-controlled on/off state and the frontend does not invent spending, granting, recovery, or automatic reset behavior.
 
 ## Health tracks
 

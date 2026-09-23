@@ -32,6 +32,7 @@ The classification is semantic rather than visual. A concept is complete only wh
 | Nonlethal Damage | Rules Core resource projection + generic Character resource input | **Modeled + displayed** | Same generic resource boundary. |
 | Hit Dice | Rules Core resource projection | **Modeled + displayed** | Projected beside HP; recovery semantics remain Rules Core procedures. |
 | Death Saves | Character runtime state | **Modeled + displayed** | Persisted successes/failures with explicit controls; frontend does not invent consequences. |
+| Inspiration | Character boolean runtime state | **Modeled + displayed** | Player-controlled on/off toggle persists through the generic boolean-fact state contract. No automatic grant, spend, or reset rule is invented. |
 | Armor Class | Rules Core defense projection | **Modeled + displayed** | None. |
 | Touch AC | Rules Core defense projection | **Modeled + displayed** | None. |
 | Flat-Footed AC | Rules Core defense projection | **Modeled + displayed** | None. |

@@ -43,6 +43,7 @@ import {
 } from "../features/abilities/ability-stats.js";
 import { renderCharacterMechanicsSources } from "../core/mechanics/mechanics-sources.js";
 import { renderCoreStats } from "./core-stats.js";
+import { CHARACTER_INSPIRATION_STATE_KEY } from "../features/inspiration/inspiration.js";
 import { renderPrimaryContent } from "./primary-content.js";
 import { renderCombatSummaryBand } from "../features/combat/combat-summary.js";
 import { renderConditionsCard } from "../features/conditions/conditions.js";
@@ -134,6 +135,17 @@ export function renderCharacterWorkspace(
                 || routine.mutation?.kind === "death-saves-update",
             onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints,
             onSetDeathSaves: handlers.routine.setDeathSaves
+        },
+        {
+            current: routine.status === "ready" && routine.state !== null
+                ? (routine.state.rulesInputs ?? []).find(input =>
+                    input.kind === "booleanFact"
+                    && input.key === CHARACTER_INSPIRATION_STATE_KEY)?.booleanValue === true
+                : undefined,
+            readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+            saving: routine.mutation?.kind === "rules-input-update"
+                && routine.mutation.entryId === `booleanFact:${CHARACTER_INSPIRATION_STATE_KEY}`,
+            onSet: handlers.routine.setInspiration
         },
         handlers.structural));
 

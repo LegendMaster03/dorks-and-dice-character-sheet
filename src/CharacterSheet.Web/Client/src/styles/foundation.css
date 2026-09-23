@@ -282,6 +282,16 @@
     line-height: 1;
 }
 
+button.dd-inspiration__indicator:not(:disabled) {
+    cursor: pointer;
+}
+
+button.dd-inspiration__indicator[aria-pressed="true"] {
+    color: var(--dd-sheet-on-accent);
+    background: var(--dd-sheet-accent);
+    border-color: var(--dd-sheet-accent);
+}
+
 .dd-stat--movement,
 .dd-stat--initiative {
     padding: 0.55rem 0.45rem;

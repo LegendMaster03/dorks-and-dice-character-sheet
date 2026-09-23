@@ -99,6 +99,7 @@ const handlers = {
         setHitPointGain() {}, clearHitPointGain() {}
     },
     routine: {
+        setInspiration() {},
         setProfile() {},
         setCurrencyBalance() {},
         removeCurrencyBalance() {},
@@ -453,20 +454,105 @@ test("Character-owned current HP overrides mechanics presentation and is editabl
     assert.equal(byAttribute(card, "data-health-editor", "true").length, 1);
 });
 
-test("top strip reserves Inspiration and renders a supplied resource without inventing state", () => {
-    const empty = render("actions", null);
-    const emptyCard = byClass(empty, "dd-stat--inspiration")[0];
-    assert.ok(emptyCard);
-    assert.equal(emptyCard.getAttribute("data-inspiration-state"), "unavailable");
-    assert.match(visibleText(emptyCard), /Inspiration\s+-/);
+test("Inspiration is a Character-owned boolean the player can toggle at will", () => {
+    const loading = renderCharacterWorkspace(
+        character,
+        builder,
+        { ...routine(), status: "loading", state: null },
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        handlers
+    );
+    const loadingCard = byClass(loading, "dd-stat--inspiration")[0];
+    assert.ok(loadingCard);
+    assert.equal(loadingCard.getAttribute("data-inspiration-state"), "unavailable");
+    assert.match(visibleText(loadingCard), /Inspiration\s+-/);
 
-    const supplied = render("actions", {
-        inspiration: mechanical("resource.heroic-inspiration", "Heroic Inspiration", "1")
-    });
-    const card = byClass(supplied, "dd-stat--inspiration")[0];
-    assert.equal(card.getAttribute("data-inspiration-state"), "resolved");
-    assert.equal(byAttribute(card, "data-mechanic-key", "resource.heroic-inspiration").length, 1);
-    assert.match(visibleText(card), /Inspiration\s+1/);
+    const calls = [];
+    const inspired = routine([], {}, false);
+    inspired.state.rulesInputs = [{
+        id: "44444444-4444-4444-4444-444444444444",
+        kind: "booleanFact",
+        key: "inspiration",
+        integerValue: null,
+        booleanValue: true,
+        textValue: null,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        inspired,
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setInspiration(value) { calls.push(value); }
+            }
+        }
+    );
+    const card = byClass(rendered, "dd-stat--inspiration")[0];
+    const toggle = byAttribute(card, "data-inspiration-toggle", "true")[0];
+    assert.equal(card.getAttribute("data-inspiration-state"), "on");
+    assert.equal(toggle.getAttribute("aria-pressed"), "true");
+    assert.equal(toggle.disabled, false);
+    toggle.dispatchEvent({ type: "click" });
+    assert.deepEqual(calls, [false]);
+
+    const uninspired = routine([], {}, false);
+    uninspired.state.rulesInputs = [];
+    const off = renderCharacterWorkspace(
+        character,
+        builder,
+        uninspired,
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setInspiration(value) { calls.push(value); }
+            }
+        }
+    );
+    const offCard = byClass(off, "dd-stat--inspiration")[0];
+    const offToggle = byAttribute(offCard, "data-inspiration-toggle", "true")[0];
+    assert.equal(offCard.getAttribute("data-inspiration-state"), "off");
+    assert.equal(offToggle.getAttribute("aria-pressed"), "false");
+    offToggle.dispatchEvent({ type: "click" });
+    assert.deepEqual(calls, [false, true]);
+
+    const readonly = renderCharacterWorkspace(
+        character,
+        builder,
+        inspired,
+        "actions",
+        true,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        handlers
+    );
+    assert.equal(
+        byAttribute(readonly, "data-inspiration-toggle", "true")[0].disabled,
+        true);
 });
 
 test("top-row Hit Points card keeps current, max, temporary, and nonlethal values dense and distinct", () => {

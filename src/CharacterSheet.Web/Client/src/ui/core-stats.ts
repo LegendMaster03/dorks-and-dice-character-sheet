@@ -15,7 +15,10 @@ import {
     renderAdditionalAbilityValues
 } from "../features/abilities/ability-stats.js";
 import { renderHealthQuickCard, type HealthControlOptions } from "../features/health/health.js";
-import { renderInspirationQuickCard } from "../features/inspiration/inspiration.js";
+import {
+    renderInspirationQuickCard,
+    type InspirationControlOptions
+} from "../features/inspiration/inspiration.js";
 import { renderMovementValues } from "../features/movement/movement.js";
 import { renderProficiencyQuickCard } from "../features/proficiency/proficiency.js";
 
@@ -25,6 +28,7 @@ export function renderCoreStats(
     readOnly: boolean,
     mechanics: CharacterMechanicsView | null,
     healthControl: HealthControlOptions,
+    inspirationControl: InspirationControlOptions,
     handlers: StructuralCharacterHandlers
 ): HTMLElement {
     const section = createElement("section", "dd-core-stats");
@@ -54,7 +58,7 @@ export function renderCoreStats(
     quickGrid.append(
         renderProficiencyQuickCard(mechanics?.combatFundamentals),
         movement,
-        renderInspirationQuickCard(mechanics?.inspiration),
+        renderInspirationQuickCard(inspirationControl),
         renderHealthQuickCard(mechanics, healthControl)
     );
     section.append(abilityGrid, quickGrid);
