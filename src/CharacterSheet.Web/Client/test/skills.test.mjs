@@ -274,6 +274,50 @@ test("rank-capable competencies expose sparse Character-owned rank editing", () 
     assert.equal(cleared, "skill.arcana");
 });
 
+test("universal competency rank editor persists through its implementation input key", () => {
+    let saved = null;
+    let cleared = null;
+    const card = renderSkillsCard([
+        standalone(competency("competency.arcana", "Arcana", "+9", {
+            ranks: 5,
+            supportsRanks: true,
+            rankInputKey: "skill.arcana"
+        }))
+    ], {
+        readOnly: false,
+        onSetRank(key, ranks) { saved = [key, ranks]; },
+        onClearRank(key) { cleared = key; }
+    });
+
+    const editor = byAttribute(card, "data-competency-rank-editor", "competency.arcana")[0];
+    assert.ok(editor);
+    assert.equal(editor.getAttribute("data-competency-rank-input"), "skill.arcana");
+
+    const input = walk(editor).find(node => node.tagName === "INPUT");
+    input.value = "7";
+    const buttons = walk(editor).filter(node => node.tagName === "BUTTON");
+    buttons.find(button => button.textContent === "Save").dispatch("click");
+    buttons.find(button => button.textContent === "Clear").dispatch("click");
+
+    assert.deepEqual(saved, ["skill.arcana", 7]);
+    assert.equal(cleared, "skill.arcana");
+});
+
+test("semantic competency without an implementation rank key does not expose a rank editor", () => {
+    const card = renderSkillsCard([
+        standalone(competency("competency.blacksmithing", "Blacksmithing", "-", {
+            supportsRanks: true
+        }))
+    ], {
+        readOnly: false,
+        onSetRank() {
+            throw new Error("semantic-only competency must not invent a rank state key");
+        }
+    });
+
+    assert.equal(byClass(card, "dd-skill-rank-editor").length, 0);
+});
+
 test("rank editing is not exposed for competencies that do not support ranks", () => {
     const card = renderSkillsCard([
         standalone(competency("tool.thieves-tools", "Thieves' Tools", "+5", {

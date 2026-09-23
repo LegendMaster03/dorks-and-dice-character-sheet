@@ -186,6 +186,74 @@ public sealed class RulesCoreGatewayContractTests
     }
 
     [Fact]
+    public void CurrentMechanicsCatalogJsonPreservesUniversalCompetencyCatalog()
+    {
+        const string json = """
+        {
+          "scope": "global",
+          "campaignId": null,
+          "revisionNumber": 14,
+          "publishedAt": "2026-09-23T06:40:00Z",
+          "mechanics": [],
+          "competencies": [{
+            "semanticKey": "competency.craft",
+            "identityKey": "craft",
+            "displayName": "Craft",
+            "familyName": "Craft",
+            "isFamily": true,
+            "trainingStateKey": null,
+            "childCompetencyKeys": ["competency.alchemy", "competency.blacksmithing"],
+            "mechanicKeys": ["competency.skill.craft"],
+            "compatibilityMechanicKeys": [],
+            "sourceAliases": ["Craft"],
+            "profiles": [],
+            "facets": [],
+            "relatedCompetencies": [],
+            "sourceAttributions": []
+          }, {
+            "semanticKey": "competency.alchemy",
+            "identityKey": "alchemy",
+            "displayName": "Alchemy",
+            "familyName": "Craft",
+            "isFamily": false,
+            "trainingStateKey": "competency.alchemy.training",
+            "childCompetencyKeys": [],
+            "mechanicKeys": ["competency.skill.craft-alchemy", "competency.tool.alchemists-supplies"],
+            "compatibilityMechanicKeys": ["competency.skill.alchemy"],
+            "sourceAliases": ["Alchemy", "Craft (alchemy)", "Alchemist's Supplies"],
+            "profiles": [],
+            "facets": [{
+              "facetType": "skill",
+              "profileSourceEntityRevisionIds": [],
+              "supportsRanks": true,
+              "supportsClassSkillState": true,
+              "supportsTrainingState": true,
+              "mechanicKeys": ["competency.skill.craft-alchemy"]
+            }],
+            "relatedCompetencies": [],
+            "sourceAttributions": []
+          }]
+        }
+        """;
+
+        var catalog = JsonSerializer.Deserialize<RulesCoreMechanicsCatalogView>(json, JsonOptions);
+
+        Assert.NotNull(catalog);
+        Assert.NotNull(catalog.Competencies);
+        var craft = Assert.Single(catalog.Competencies, value => value.SemanticKey == "competency.craft");
+        Assert.True(craft.IsFamily);
+        Assert.Equal(["competency.alchemy", "competency.blacksmithing"], craft.ChildCompetencyKeys);
+
+        var alchemy = Assert.Single(catalog.Competencies, value => value.SemanticKey == "competency.alchemy");
+        Assert.Equal("competency.alchemy.training", alchemy.TrainingStateKey);
+        Assert.Equal(
+            ["competency.skill.craft-alchemy", "competency.tool.alchemists-supplies"],
+            alchemy.MechanicKeys);
+        Assert.Equal(["competency.skill.alchemy"], alchemy.CompatibilityMechanicKeys);
+        Assert.True(Assert.Single(alchemy.Facets).SupportsRanks);
+    }
+
+    [Fact]
     public void CurrentCharacterSupportJsonPreservesRecoveryProcedureMetadata()
     {
         const string json = """

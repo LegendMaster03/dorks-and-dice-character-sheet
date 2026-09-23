@@ -173,6 +173,36 @@ test("specialty metadata does not promote an ordinary competency into a family p
 });
 
 
+test("explicit family child keys are authoritative over matching family labels", () => {
+    const items = buildCompetencyPresentation({
+        entries: [
+            value("competency.craft", "Craft", "-", {
+                isFamily: true,
+                family: "Craft",
+                childCompetencyKeys: ["competency.alchemy"]
+            }),
+            value("competency.alchemy", "Alchemy", "-", {
+                family: "Craft",
+                specialty: "Alchemy"
+            }),
+            value("competency.unreviewed", "Unreviewed", "-", {
+                family: "Craft",
+                specialty: "Unreviewed"
+            })
+        ]
+    });
+
+    assert.equal(items.length, 2);
+    assert.equal(items[0].kind, "family");
+    assert.equal(items[0].parent.key, "competency.craft");
+    assert.deepEqual(
+        items[0].members.map(member => member.key),
+        ["competency.alchemy"]);
+    assert.equal(items[1].kind, "standalone");
+    assert.equal(items[1].competency.key, "competency.unreviewed");
+});
+
+
 test("composite presentation inherits a unanimous component governing ability for display", () => {
     const items = buildCompetencyPresentation({
         entries: [
