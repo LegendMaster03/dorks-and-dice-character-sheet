@@ -127,12 +127,11 @@ test("effective Ability values join standard Ability cards only by the supplied 
 });
 
 
-test("family parents remain family categories even when no specialty rows are available", () => {
+test("family parents remain family categories even when familyName is absent and no specialty rows are available", () => {
     const items = buildCompetencyPresentation({
         entries: [
             value("skill.craft", "Craft", "-", {
                 kind: "skill",
-                family: "Craft",
                 isFamily: true
             }),
             value("skill.arcana", "Arcana", "+4", { kind: "skill" })
@@ -143,6 +142,30 @@ test("family parents remain family categories even when no specialty rows are av
     assert.equal(items[0].kind, "family");
     assert.equal(items[0].parent.key, "skill.craft");
     assert.deepEqual(items[0].members, []);
+    assert.equal(items[1].kind, "standalone");
+    assert.equal(items[1].competency.key, "skill.arcana");
+});
+
+
+test("specialty metadata can recover a family parent when older parent metadata lacks isFamily", () => {
+    const items = buildCompetencyPresentation({
+        entries: [
+            value("skill.craft", "Craft", "-", { kind: "skill" }),
+            value("skill.craft-blacksmithing", "Craft (blacksmithing)", "+6", {
+                kind: "specialized-skill",
+                family: "craft",
+                specialty: "blacksmithing"
+            }),
+            value("skill.arcana", "Arcana", "+4", { kind: "skill" })
+        ]
+    });
+
+    assert.equal(items.length, 2);
+    assert.equal(items[0].kind, "family");
+    assert.equal(items[0].parent.key, "skill.craft");
+    assert.deepEqual(
+        items[0].members.map(member => member.key),
+        ["skill.craft-blacksmithing"]);
     assert.equal(items[1].kind, "standalone");
     assert.equal(items[1].competency.key, "skill.arcana");
 });

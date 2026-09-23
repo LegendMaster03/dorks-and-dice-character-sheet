@@ -409,15 +409,20 @@ export function buildCompetencyPresentation(
     }
 
     for (const parent of collection.entries) {
-        if (consumed.has(parent.key) || parent.isFamily !== true) continue;
-        const familyName = parent.family?.trim();
-        if (familyName === undefined || familyName.length === 0) continue;
+        if (consumed.has(parent.key)) continue;
+
+        const familyName = normalizedFamilyName(parent.family)
+            ?? normalizedFamilyName(parent.label);
+        if (familyName === undefined) continue;
 
         const members = collection.entries.filter(entry =>
             entry.key !== parent.key
             && !consumed.has(entry.key)
             && entry.isFamily !== true
-            && entry.family?.trim() === familyName);
+            && normalizedFamilyName(entry.family) === familyName);
+        const isFamilyParent = parent.isFamily === true || members.length > 0;
+        if (!isFamilyParent) continue;
+
         consumed.add(parent.key);
         for (const member of members) consumed.add(member.key);
         groups.set(parent.key, {
@@ -439,6 +444,13 @@ export function buildCompetencyPresentation(
         }
     }
     return result;
+}
+
+function normalizedFamilyName(value: string | undefined): string | undefined {
+    const normalized = value?.trim().toLowerCase();
+    return normalized === undefined || normalized.length === 0
+        ? undefined
+        : normalized;
 }
 
 function withConsensusGoverningAbility(
