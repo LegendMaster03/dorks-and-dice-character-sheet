@@ -318,8 +318,88 @@ public sealed class CharacterPresentationProjectorTests
         Assert.Equal("Blacksmithing", blacksmithing.Label);
         Assert.Equal("specialized-skill", blacksmithing.Kind);
         Assert.Equal("Craft", blacksmithing.Family);
+        Assert.Equal("intelligence", blacksmithing.GoverningAbility);
         Assert.Equal("-", blacksmithing.EffectiveValue);
         Assert.Null(blacksmithing.RankInputKey);
+    }
+
+    [Fact]
+    public void UniversalCompetencyGoverningAbilitiesNormalizeAliasesAndPreserveRealConflicts()
+    {
+        var animalHandlingLegacy = Competency(
+            "competency.skill.handle-animal",
+            "skill.handle-animal",
+            "Handle Animal",
+            governingAbility: "cha");
+        var animalHandlingModern = Competency(
+            "competency.skill.animal-handling",
+            "skill.animal-handling",
+            "Animal Handling",
+            governingAbility: "wisdom");
+        var medicineLegacy = Competency(
+            "competency.skill.heal",
+            "skill.heal",
+            "Heal",
+            governingAbility: "wis");
+        var medicineModern = Competency(
+            "competency.skill.medicine",
+            "skill.medicine",
+            "Medicine",
+            governingAbility: "wisdom");
+
+        var universal =
+            new RulesCoreUniversalCompetencyView[]
+            {
+                new(
+                    "competency.animal-handling",
+                    "animal-handling",
+                    "Animal Handling",
+                    null,
+                    false,
+                    "competency.animal-handling.training",
+                    [],
+                    ["competency.skill.handle-animal", "competency.skill.animal-handling"],
+                    [],
+                    ["Handle Animal", "Animal Handling"],
+                    [],
+                    [],
+                    [],
+                    []),
+                new(
+                    "competency.medicine",
+                    "medicine",
+                    "Medicine",
+                    null,
+                    false,
+                    "competency.medicine.training",
+                    [],
+                    ["competency.skill.heal", "competency.skill.medicine"],
+                    [],
+                    ["Heal", "Medicine"],
+                    [],
+                    [],
+                    [],
+                    [])
+            };
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [animalHandlingLegacy, animalHandlingModern, medicineLegacy, medicineModern],
+            universal);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        var animalHandling = Assert.Single(
+            mechanics.Competencies!.Entries,
+            value => value.Key == "competency.animal-handling");
+        Assert.Equal("charisma / wisdom", animalHandling.GoverningAbility);
+
+        var medicine = Assert.Single(
+            mechanics.Competencies.Entries,
+            value => value.Key == "competency.medicine");
+        Assert.Equal("wisdom", medicine.GoverningAbility);
     }
 
     [Fact]
@@ -830,13 +910,14 @@ public sealed class CharacterPresentationProjectorTests
         string? specialty = null,
         IReadOnlyList<RulesCoreMechanicRelationshipView>? relationships = null,
         string competencyKind = "skill",
-        bool isFamily = false)
+        bool isFamily = false,
+        string governingAbility = "intelligence")
     {
         var definition = new RulesCoreCompetencyDefinitionView(
             competencyKind,
             family,
             specialty,
-            "intelligence",
+            governingAbility,
             true,
             true,
             true,

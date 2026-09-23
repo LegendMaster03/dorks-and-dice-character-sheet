@@ -66,11 +66,30 @@ internal static class CompetencyProjector
             }
         }
 
+        var familyGoverningAbilityByName = universalCompetencies
+            .Where(value => value.IsFamily)
+            .Select(value => new
+            {
+                value.DisplayName,
+                GoverningAbility = ResolveGoverningAbility(
+                    value,
+                    FindImplementations(value, mechanicByKey))
+            })
+            .Where(value => !string.IsNullOrWhiteSpace(value.GoverningAbility))
+            .GroupBy(value => value.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First().GoverningAbility!,
+                StringComparer.OrdinalIgnoreCase);
+
         var entries = universalCompetencies
             .Select(value => ProjectUniversalCompetency(
                 value,
                 mechanicByKey,
-                evaluationByKey))
+                evaluationByKey,
+                value.FamilyName is null
+                    ? null
+                    : familyGoverningAbilityByName.GetValueOrDefault(value.FamilyName)))
             .ToArray();
 
         var relationships = competencyMechanics
@@ -94,13 +113,10 @@ internal static class CompetencyProjector
     private static CompetencyPresentationView ProjectUniversalCompetency(
         RulesCoreUniversalCompetencyView universal,
         IReadOnlyDictionary<string, RulesCoreMechanicView> mechanicByKey,
-        IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey)
+        IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey,
+        string? familyGoverningAbility)
     {
-        var implementations = universal.MechanicKeys
-            .Select(key => mechanicByKey.GetValueOrDefault(key))
-            .Where(value => value is not null)
-            .Cast<RulesCoreMechanicView>()
-            .ToArray();
+        var implementations = FindImplementations(universal, mechanicByKey);
         var evaluations = implementations
             .Select(value => evaluationByKey.GetValueOrDefault(value.MechanicKey))
             .Where(value => value is not null)
@@ -109,8 +125,8 @@ internal static class CompetencyProjector
         var evaluation = evaluations.Length == 1 ? evaluations[0] : null;
 
         var profiles = universal.Profiles;
-        var governingAbility = SingleDistinct(
-            profiles.Select(value => value.GoverningAbilityKey));
+        var governingAbility = ResolveGoverningAbility(universal, implementations)
+            ?? familyGoverningAbility;
         var competencyKinds = profiles
             .Select(value => value.CompetencyKind)
             .Concat(implementations
@@ -181,6 +197,65 @@ internal static class CompetencyProjector
                 : universal.CompatibilityMechanicKeys,
             RankInputKey: ResolveRankInputKey(universal, mechanicByKey));
     }
+
+    private static RulesCoreMechanicView[] FindImplementations(
+        RulesCoreUniversalCompetencyView universal,
+        IReadOnlyDictionary<string, RulesCoreMechanicView> mechanicByKey) =>
+        universal.MechanicKeys
+            .Select(key => mechanicByKey.GetValueOrDefault(key))
+            .Where(value => value is not null)
+            .Cast<RulesCoreMechanicView>()
+            .ToArray();
+
+    private static string? ResolveGoverningAbility(
+        RulesCoreUniversalCompetencyView universal,
+        IReadOnlyList<RulesCoreMechanicView> implementations)
+    {
+        var abilities = universal.Profiles
+            .Select(value => value.GoverningAbilityKey)
+            .Concat(implementations.Select(value => value.Competency?.GoverningAbilityKey))
+            .Concat(implementations
+                .Where(value => value.Competency is not null)
+                .SelectMany(value => value.Competency!.Profiles)
+                .Select(value => value.GoverningAbilityKey))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Cast<string>()
+            .Select(NormalizeAbilityKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(AbilityOrder)
+            .ThenBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        return abilities.Length == 0
+            ? null
+            : string.Join(" / ", abilities);
+    }
+
+    private static string NormalizeAbilityKey(string ability)
+    {
+        var normalized = ability.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "str" or "strength" => "strength",
+            "dex" or "dexterity" => "dexterity",
+            "con" or "constitution" => "constitution",
+            "int" or "intelligence" => "intelligence",
+            "wis" or "wisdom" => "wisdom",
+            "cha" or "charisma" => "charisma",
+            _ => normalized
+        };
+    }
+
+    private static int AbilityOrder(string ability) => ability switch
+    {
+        "strength" => 0,
+        "dexterity" => 1,
+        "constitution" => 2,
+        "intelligence" => 3,
+        "wisdom" => 4,
+        "charisma" => 5,
+        _ => int.MaxValue
+    };
 
     private static string? ResolveRankInputKey(
         RulesCoreUniversalCompetencyView universal,
@@ -370,16 +445,6 @@ internal static class CompetencyProjector
                 components,
                 relationship.Composition,
                 relationship.EffectiveResolutionKind);
-    }
-
-    private static string? SingleDistinct(IEnumerable<string?> values)
-    {
-        var distinct = values
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Cast<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return distinct.Length == 1 ? distinct[0] : null;
     }
 
     private static bool? SingleDistinctBoolean(IEnumerable<bool?> values)
