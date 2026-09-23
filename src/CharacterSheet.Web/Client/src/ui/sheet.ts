@@ -16,7 +16,7 @@ import {
     buildCompetencyPresentation,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
-import { renderRecoveryControls } from "../features/health/health.js";
+import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
 import {
@@ -89,8 +89,8 @@ export function renderCharacterWorkspace(
             sheetMode,
             guidedBuilder,
             mechanics,
-            handlers,
-            routine.mutation?.kind === "health-update"));
+            routine,
+            handlers));
     }
     if (readOnly) {
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
@@ -203,8 +203,8 @@ function renderModeControls(
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
     mechanics: CharacterMechanicsView | null,
-    handlers: CharacterSheetHandlers,
-    recoverySaving: boolean
+    routine: CharacterRoutineUiState,
+    handlers: CharacterSheetHandlers
 ): HTMLElement {
     const controls = createElement("div", "dd-sheet-mode-bar");
     controls.setAttribute("role", "group");
@@ -223,9 +223,16 @@ function renderModeControls(
     const recoveryControls = renderRecoveryControls(
         mechanics?.recoveryProcedures,
         false,
-        recoverySaving,
+        routine.recovery.kind === "resolving",
         handlers.routine.recover);
     if (recoveryControls !== null) controls.append(recoveryControls);
+
+    const recoveryContinuation = renderRecoveryContinuation(
+        routine.recovery,
+        mechanics?.recoveryProcedures,
+        handlers.routine.continueRecovery,
+        handlers.routine.cancelRecovery);
+    if (recoveryContinuation !== null) controls.append(recoveryContinuation);
 
     const configuration = createElement("div", "dd-sheet-mode-bar__configuration");
     const editing = sheetMode === "edit";
