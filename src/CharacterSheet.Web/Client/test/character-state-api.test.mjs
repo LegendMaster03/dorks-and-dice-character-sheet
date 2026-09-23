@@ -5,10 +5,12 @@ import {
     addInventoryItemOccurrence,
     buildCharacterStateBackendUrl,
     loadCharacterState,
+    removeCharacterCurrencyBalance,
     removeCharacterHitPointGain,
     removeCharacterNote,
     removeCharacterRulesInput,
     removeInventoryItemOccurrence,
+    setCharacterCurrencyBalance,
     setCharacterCurrentHitPoints,
     setCharacterDeathSaves,
     setCharacterHitPointGain,
@@ -43,6 +45,9 @@ test("routine-state API remains behind Character Sheet Tool Host authorization",
     assert.equal(
         buildCharacterStateBackendUrl(environment, characterId),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state`);
+    assert.equal(
+        buildCharacterStateBackendUrl(environment, characterId, "currency"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/currency`);
     assert.equal(
         buildCharacterStateBackendUrl(environment, characterId, "profile"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/profile`);
@@ -107,6 +112,38 @@ test("profile mutation sends only Character-authored descriptive state", async (
     assert.deepEqual(JSON.parse(calls[0].body), profile);
     assert.equal("size" in JSON.parse(calls[0].body), false);
     assert.equal("background" in JSON.parse(calls[0].body), false);
+});
+
+
+test("currency mutations preserve arbitrary Character-owned denominations", async () => {
+    const calls = [];
+    const fetcher = async (input, init) => {
+        calls.push({ input: String(input), method: init?.method, body: init?.body });
+        return Response.json(state);
+    };
+
+    await setCharacterCurrencyBalance(
+        environment,
+        characterId,
+        "campaign-scrip",
+        -7,
+        fetcher);
+    await removeCharacterCurrencyBalance(
+        environment,
+        characterId,
+        "campaign-scrip",
+        fetcher);
+
+    assert.equal(
+        calls[0].input,
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/currency`);
+    assert.equal(calls[0].method, "PUT");
+    assert.deepEqual(JSON.parse(calls[0].body), { key: "campaign-scrip", amount: -7 });
+    assert.equal(
+        calls[1].input,
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/currency?key=campaign-scrip`);
+    assert.equal(calls[1].method, "DELETE");
+    assert.equal(calls[1].body, undefined);
 });
 
 test("routine-state mutations send only Character-owned state inputs and return coherent state", async () => {

@@ -1,89 +1,100 @@
 # Official-sheet completeness audit
 
-This audit maps the useful union of the 3e, 3.5e, 5e, and 5.5e Character Sheet requirements onto the current Character Sheet architecture.
+This audit maps the useful union of the official 3e, 3.5e, 5e, and 5.5e Character Sheet concepts onto the current Character Sheet architecture after the Rules Core character-projection merge.
 
-The classification is about semantic ownership, not merely whether a label can be drawn in the browser. A concept is not considered complete when the only possible storage location is Notes or when the frontend would have to invent rules arithmetic.
+The classification is semantic rather than visual. A concept is complete only when the correct owning system has a durable contract and the normal sheet can consume it without inventing rules arithmetic or source semantics.
 
 ## Status key
 
-- **Modeled + displayed**: the semantic contract and normal presentation both exist.
-- **Modeled, presentation incomplete**: a semantic source exists, but the normal sheet does not yet give all supplied data an appropriate home.
-- **Presentation-ready, source incomplete**: the presentation contract can preserve the concept, but the current backend/Rules Core bridge does not yet supply the required state or breakdown.
-- **Missing semantic model**: a proper owning contract must be designed before implementation.
+- **Modeled + displayed**: the owning contract and normal presentation both exist.
+- **Modeled, source-dependent**: Character Sheet can preserve/render the concept, but authoritative Rules Core data is required for a concrete value.
+- **Modeled, presentation partial**: durable state/projection exists, but some normal editing or progressive detail remains incomplete.
+- **Upstream contract required**: Site or Rules Core owns the missing semantic information.
+- **Character semantic model required**: Character Sheet owns the concept but does not yet have a durable model.
 
-## Gap matrix
+## Current gap matrix
 
-| Official-sheet concept | Current ownership / source | Status after this pass | Follow-up boundary |
+| Official-sheet concept | Current ownership / source | Current status | Merge boundary / follow-up |
 | --- | --- | --- | --- |
-| Character name | Site Character projection | Modeled + displayed | None for the name itself. |
-| Player Name | None | Missing semantic model | Decide whether Site account identity, Character metadata, or an explicit authored field owns it. |
-| Background | None as a Character selection/profile | Missing semantic model | Add a semantic Background selection/profile contract rather than a plain header string. |
-| Alignment | None | Missing semantic model | Character metadata or rules-backed selection, depending on campaign rules. |
-| Deity | None | Missing semantic model | Character details/profile; retain rules provenance if a rules source grants constraints. |
-| XP | No Character-owned progression value | Missing semantic model | Advancement/progression contract must distinguish XP from levels, ranks, tiers, and other progression. |
-| Size | No authoritative Character projection | Missing semantic model | Rules-derived Character mechanic/profile value. |
-| Campaign name | Site projection supplies Campaign IDs only | Missing upstream display data | Site must project a display-safe Campaign name; the frontend must not expose or reinterpret raw IDs. |
-| Effective Ability score/modifier | Rules mechanics presentation shape exists | Presentation/source dependent | Continue to use backend-supplied effective values only. |
-| 3.x temporary Ability Score / Modifier | No distinct temporary-effect state | Missing semantic model | Rules/effect projection must identify temporary state distinctly from base and effective values. |
-| Current HP | Character runtime state | Modeled + displayed | Existing behavior retained. |
-| Maximum HP | Rules mechanics projection | Modeled + displayed when supplied | Existing behavior retained. |
-| Temporary HP | Rules resource projection | Modeled + displayed when supplied | A mutation contract is still required before editing it. |
-| Nonlethal Damage | Rules resource projection | Modeled + displayed when supplied | A Character-owned mutation contract is still required before editing it. |
-| Hit Dice | Rules resource projection | Modeled + displayed when supplied | This pass recognizes the backend identity as a `hit-dice` presentation role and promotes it beside HP without calculating it. |
-| Death Saves | Character runtime state | Modeled + displayed | This pass persists successes/failures (0-3 each) and exposes runtime controls. No automatic reset or edition-specific consequence is invented. |
-| Armor Class | Rules defense projection | Modeled + displayed | Existing compact shield retained. |
-| Touch AC | Rules defense projection | Modeled + displayed | Existing compact secondary value retained. |
-| Flat-Footed AC | Rules defense projection | Modeled + displayed | Existing compact secondary value retained. |
-| AC contribution breakdown | Generic breakdown/related-value presentation contract | Presentation-ready, source incomplete | This pass adds an AC Details surface and server presentation fields. Rules Core/bridge still must supply authoritative contribution data; the frontend never reconstructs armor/Dexterity/size/etc. |
-| Initiative breakdown | Generic calculated-value shape supports breakdown, compact Initiative surface does not expose it yet | Modeled, presentation incomplete | Add the same progressive detail pattern when authoritative breakdown data is supplied. |
-| Saving Throw breakdown | Saving Throw presentation now has generic breakdown/related-value fields | Presentation-ready, source incomplete | Populate from authoritative evaluation data; existing save renderer already supports progressive mechanical details on the client. |
-| Miss Chance | Arbitrary defense values can be preserved | Modeled + displayed when supplied | This pass places non-promoted defenses such as Miss Chance under **More defenses**, not in another permanent card. |
-| Damage Reduction | Rules defense projection | Modeled + displayed | Existing Defenses card retained. |
-| Spell Resistance | Rules defense projection | Modeled + displayed | Existing Defenses card retained. |
-| Resistances / Immunities / Vulnerabilities | Rules mechanics projection | Modeled + displayed | Existing Defenses card retained. |
-| Alchemy (3e skill) | No Character-side named reconciliation | Rules Core responsibility | Preserve as a competency identity/provenanced relationship in Rules Core. Do not substitute Alchemist's Supplies. |
-| Pick Pocket | No Character-side named reconciliation | Rules Core responsibility | Reconcile through competency relationships/provenance (for example with Sleight of Hand) without erasing historical identity. |
-| Wilderness Lore | No Character-side named reconciliation | Rules Core responsibility | Reconcile through competency relationships/provenance (for example with Survival) without erasing historical identity. |
-| Languages | Generic training/proficiency and non-skill competency presentation | Modeled + displayed when supplied | Rules Core must supply language entries through one of the supported semantic collections; the frontend already preserves all supplied rows. |
-| Inventory item occurrence | Character runtime ownership + Rules Core item identity | Modeled + displayed | Existing duplicate-occurrence identity retained. |
-| Quantity / stacks | None | Missing semantic model | Character inventory occurrence state. |
-| Equipped / carried state | None | Missing semantic model | Character inventory occurrence state; derived AC/load remains Rules Core/backend work. |
-| Armor / shield equipped relationship | Item definitions exist, usage state does not | Missing semantic model | Inventory/equipment subsystem. |
-| Ammunition state/count | None | Missing semantic model | Character inventory/resource state, not arbitrary item metadata. |
-| Currency / coins | None | Missing semantic model | Dedicated Character inventory currency state. |
-| Attunement | None | Missing semantic model | Character item-occurrence usage state with rules validation outside the frontend. |
-| Encumbrance/load | Client projection shape exists; production backend does not currently supply a complete inventory mechanics projection | Presentation-ready, source incomplete | Backend derives carried amount/status from Character inventory state and Rules Core definitions. |
-| Manual Feats | Character advancement occurrences | Modeled + displayed | Existing behavior retained. |
-| Class/Subclass/Species granted Features & Traits | Advancement selections exist, granted-feature projection does not | Missing semantic projection | Rules Core should project grants from effective Character selections; do not copy granted feature prose/state into Character storage. |
-| Spellcasting metadata | Client presentation shape exists | Presentation-ready, source incomplete | Current production backend does not expose a complete spellcasting projection. |
-| Actual spells | None | Missing semantic model | Add spell identity/selection projection and Character-owned choices where applicable. |
-| Spell slots/resources | None as complete Character runtime contract | Missing semantic model | Rules Core defines resource model; Character state owns mutable consumption. Support slots, spell points, Pact Magic, and future systems without frontend formulas. |
-| Prepared/known state | None | Missing semantic model | Model only where the active rules configuration needs it. The project's house rules remove prepared-spell restrictions; do not hard-code stock 5e preparation behavior. |
-| Pact Magic | No complete spell-resource contract | Missing semantic model | Must remain a valid resource system alongside slots/spell points rather than being filtered out. |
-| Appearance / age / height / weight | None | Missing semantic model | Character Details/Profile data. |
-| Personality Traits / Ideals / Bonds / Flaws | None | Missing semantic model | Character Details/Profile data, not Notes. |
-| Backstory | Notes are not a semantic substitute | Missing semantic model | Character Details/Profile long-form field. |
-| Allies & Organizations / Symbol | None | Missing semantic model | Character Details/Profile structured data. |
+| Character name | Site Character projection | **Modeled + displayed** | None. |
+| Player Name | Site/account or explicit Character attribution | **Upstream contract required** | Do not infer account identity or duplicate Site identity. |
+| Background | Rules Core concept identity; Character owns selection | **Upstream contract required** | Rules Core currently catalogs backgrounds and defines the ownership boundary, but the Character projection does not yet expose a dedicated background-selection contract. Do not reduce Background to freeform profile text. |
+| Alignment | Rules Core identity when rules-defined; authored profile currently exists | **Modeled, presentation partial** | Current profile can preserve/display authored text, but it is not a canonical Rules Core concept selection. Future Rules Core identity selection should supersede/validate the authored fallback when applicable. |
+| Deity | Rules Core identity when rules-defined; authored profile currently exists | **Modeled, presentation partial** | Same boundary as Alignment. Preserve current authored text without pretending it is canonical rule identity. |
+| XP | Character-owned mutable advancement state | **Character semantic model required** | Rules Core now explicitly assigns current XP to Character state. A generalized progression-value contract is still needed; do not assume every ruleset uses XP. |
+| Size | Rules Core `character.size-category` metadata projection | **Modeled + displayed** | Multi-size source choices remain Rules Core choices; Character Sheet renders the projected result generically. |
+| Campaign name | Site projection | **Upstream contract required** | Site currently supplies Campaign IDs, not a display-safe Campaign name. Raw IDs must not be promoted as identity text. |
+| Effective Ability score/modifier | Rules Core Character projection | **Modeled + displayed** | Frontend renders authoritative effective values only. |
+| 3.x ordinary/temporary Ability Score and Modifier | Rules Core related ability mechanics | **Modeled, source-dependent** | Character Sheet already preserves `ordinary-score`, `ordinary-modifier`, `temporary-score`, and `temporary-modifier` when Rules Core supplies them. |
+| Current HP | Character runtime state | **Modeled + displayed** | Persisted and editable. |
+| Maximum HP | Rules Core projection | **Modeled + displayed** | Source-derived. |
+| Temporary HP | Rules Core resource projection + generic Character resource input | **Modeled + displayed** | Mutable resource state is transported generically; exact availability/recovery remains Rules Core-defined. |
+| Nonlethal Damage | Rules Core resource projection + generic Character resource input | **Modeled + displayed** | Same generic resource boundary. |
+| Hit Dice | Rules Core resource projection | **Modeled + displayed** | Projected beside HP; recovery semantics remain Rules Core procedures. |
+| Death Saves | Character runtime state | **Modeled + displayed** | Persisted successes/failures with explicit controls; frontend does not invent consequences. |
+| Armor Class | Rules Core defense projection | **Modeled + displayed** | None. |
+| Touch AC | Rules Core defense projection | **Modeled + displayed** | None. |
+| Flat-Footed AC | Rules Core defense projection | **Modeled + displayed** | None. |
+| AC contribution breakdown | Generic Rules Core contribution projection | **Modeled, source-dependent** | Details UI renders arbitrary authoritative contributions/provenance. |
+| Initiative breakdown | Generic calculated-value contract | **Modeled, presentation partial** | Scalar Initiative is displayed; the compact Initiative surface can still adopt the same progressive-details treatment when useful. |
+| Saving Throw breakdown | Rules Core contribution projection | **Modeled + displayed** | Generic mechanical details preserve authoritative contributions/provenance. |
+| Miss Chance | Rules Core defense projection | **Modeled + displayed** | Preserved under More defenses when supplied. |
+| Damage Reduction | Rules Core defense projection | **Modeled + displayed** | None. |
+| Spell Resistance | Rules Core defense projection | **Modeled + displayed** | None. |
+| Resistances / Immunities / Vulnerabilities | Rules Core projection | **Modeled + displayed** | None. |
+| 3e/3.5e competency identities including Alchemy, Pick Pocket, Wilderness Lore | Rules Core competency concepts/relationships | **Modeled, source-dependent** | Character Sheet consumes canonical competency rows and does not hard-code edition aliases. |
+| Craft / Perform families and specialties | Rules Core competency family/facet metadata | **Modeled + displayed** | Character Sheet supports grouped/faceted competencies and shared training semantics generically. |
+| Languages | Rules Core qualification/training projection | **Modeled, source-dependent** | Generic training/proficiency surfaces already preserve supplied language knowledge. |
+| Inventory item occurrence | Character state + Rules Core item identity | **Modeled + displayed** | Duplicate occurrences remain distinct. |
+| Quantity / stacks | Character inventory occurrence state | **Modeled + displayed** | Persisted and editable. |
+| Carried / equipped state | Character inventory occurrence state | **Modeled + displayed** | Rules-derived load/AC effects remain Rules Core work. |
+| Container relationship | Character inventory occurrence state | **Modeled + displayed** | Occurrences can reference another occurrence as container. |
+| Armor / shield equipped relationship | Character equipped occurrence + Rules Core item identity | **Modeled, source-dependent** | Character supplies equipped concepts; Rules Core determines mechanical consequences. |
+| Ammunition count | Character item occurrence quantity + Rules Core ammunition identity | **Modeled + displayed** | A separate ammunition counter is unnecessary for ordinary ammunition items; quantity is the runtime count. Rules-specific ammunition behavior remains Rules Core. |
+| Currency / coins | Character currency balances | **Modeled + displayed** | Arbitrary normalized currency keys and signed balances; no frontend conversion ratios, fixed denominations, coin weight, or campaign assumptions. |
+| Attunement | Character inventory occurrence state | **Modeled + displayed** | Rules validation/consequences remain Rules Core. |
+| Encumbrance/load | Rules Core inventory mechanics projection | **Modeled, source-dependent** | Character passes item/carried/equipped state; frontend renders projected load/status without formulas. |
+| Manual Feats | Character advancement occurrences | **Modeled + displayed** | Existing catalog-backed workflow retained. |
+| Class/Subclass/Species granted Features & Traits | Rules Core feature projection | **Modeled + displayed** | Rules-derived grants are projected with source/provenance rather than copied into Character storage. |
+| Spellcasting metadata | Rules Core spellcasting projection | **Modeled + displayed** | Save DC, spell attack, resource system, and projected resources are consumed generically. |
+| Known spells | Character Rules input + Rules Core spell identity | **Modeled + displayed** | Catalog-backed add/remove workflow exists. |
+| Spell slots / spell points / Pact Magic | Rules Core resource systems + Character resource inputs | **Modeled + displayed** | Standard slots/spell points and Pact Magic remain distinct. Character Sheet does not calculate resource progression. |
+| Prepared spell restriction | Rules Core policy | **Modeled, source-dependent** | Dorks & Dice can remove stock preparation restrictions without frontend hard-coding; future effective rules can project different policy. |
+| Appearance / age / height / weight | Character profile | **Modeled + displayed** | Authored Character data. |
+| Personality Traits / Ideals / Bonds / Flaws | Character profile | **Modeled + displayed** | Authored Character data. |
+| Backstory | Character profile | **Modeled + displayed** | Authored long-form Character data. |
+| Allies & Organizations / Symbol | Character profile | **Modeled + displayed** | Authored Character data. |
+| Recovery / rests | Rules Core recovery procedures + Character consequence persistence | **Modeled + displayed** | Generic continuation supports declared choices, rolls, and consequences; no hard-coded Short/Long Rest algorithm. |
 
-## Implementation included in this pass
+## What this branch now establishes
 
-1. Persist Death Save successes and failures as Character-owned runtime state with database migration, API mutation, authorization/read-only behavior, and regression coverage.
-2. Keep Death Saves visible beside HP and provide persisted increment/decrement/reset controls. The UI does not decide what happens at three successes or failures.
-3. Recognize backend-supplied Hit Dice as a health/resource presentation role and show it in the HP area. Character Sheet does not calculate Hit Dice.
-4. Add progressive AC details that render arbitrary supplied contribution labels, related values, and provenance instead of a hard-coded 3.x formula.
-5. Preserve arbitrary non-promoted defense mechanics under **More defenses**, providing a natural home for Miss Chance and future defense values without recreating an `Other Defensive Mechanics` card.
-6. Extend server presentation records for Defense and Saving Throw breakdown/related-value data so authoritative future bridge data is not blocked by the Character Sheet API shape.
+1. A generalized Rules Core -> Character Sheet projection path for abilities, saves, defenses, combat, movement, competencies, character metadata, inventory mechanics, actions, spellcasting, features, choices, conflicts, and recovery.
+2. Character-owned rules inputs for choices, competency ranks, training, class-skill state, known spells, resources, integer/boolean/string facts, advancement levels, and per-level HP gains.
+3. Persisted runtime health state including current HP and Death Saves, plus rule-driven recovery consequence application.
+4. Rich inventory occurrence state: quantity, carried/equipped/attuned flags, containers, Rules Core item identity, and generic currency balances.
+5. Character Details/Profile state for player-authored biography fields, plus generic display of Rules Core Character metadata such as Size.
+6. Cross-edition competency presentation that preserves historical identities and supports family/facet/shared-proficiency relationships rather than flattening them into a single edition.
+7. No frontend formulas for edition rules, currency conversion, encumbrance, AC, spell progression, recovery, or other rules-owned calculations.
 
-## Deliberately deferred
+## Remaining blockers before full official-sheet semantic completeness
 
-Identity/biography, rich inventory/equipment state, granted Features & Traits, and full spell state require new semantic contracts and often coordination with Site or Rules Core. They are not implemented as Notes, opaque JSON, arbitrary item metadata, or frontend-only state in this pass.
+The remaining gaps are now narrow and have explicit owners:
 
-The current Rules Core evaluation API also does not provide a general named contribution breakdown for standard scalar defenses. The AC Details surface is therefore ready to display authoritative components, but this branch does not manufacture an AC breakdown from known 3.x categories or reverse-engineer one from a final value.
+- **Site:** Player Name semantics and a display-safe Campaign name.
+- **Rules Core:** a concrete Character projection/selection contract for rules-defined Background, Alignment, and Deity identities. The ownership boundary is documented in Rules Core, but Character Sheet should not invent the missing projection.
+- **Character Sheet:** generalized mutable progression state for values such as current XP. This should not hard-code XP as universal because non-XP progression systems must remain possible.
+- **Presentation polish:** Initiative can expose projected contribution details using the same progressive-disclosure pattern already used elsewhere.
+
+These are not reasons to reintroduce edition-specific fields or arithmetic into the Character Sheet frontend.
+
+## Merge-readiness interpretation
+
+This branch is suitable for progress evaluation once validation is green. It closes the large Character Sheet-owned backend cycle and leaves remaining cross-repository semantics explicitly identified rather than hidden behind placeholder strings or Notes.
+
+The branch should not be described as final official-sheet completeness until the Site identity/display contracts, Rules Core identity-selection projection, and generalized Character progression value are completed.
 
 ## Reference-sheet verification
 
-The official fifth-edition Character Sheet was checked for the first-page play-state fields (including Hit Dice, Death Saves, equipment/currency, languages, and identity metadata), second-page biography/organization fields, and third-page spellcasting resource/list structure:
+The official fifth-edition Character Sheet was used to verify first-page play-state fields, second-page biography/organization fields, and third-page spellcasting structure. The 3e/3.5e-specific fields remain cross-edition project requirements and are handled through Rules Core provenance/reconciliation rather than hard-coded edition modes.
 
 - Wizards of the Coast, *D&D 5e Character Sheets*: https://media.wizards.com/2020/dnd/downloads/dnd_5e_charactersheets.pdf
-
-The 3.x-specific requirements in this audit are treated as cross-edition project requirements and remain subject to Rules Core reconciliation/provenance rather than being hard-coded by name in the Character Sheet frontend.

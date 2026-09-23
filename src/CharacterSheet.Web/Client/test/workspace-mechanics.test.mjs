@@ -100,6 +100,8 @@ const handlers = {
     },
     routine: {
         setProfile() {},
+        setCurrencyBalance() {},
+        removeCurrencyBalance() {},
         setCurrentHitPoints() {},
         setDeathSaves() {},
         addNote() {}, updateNote() {}, deleteNote() {}, openInventoryChooser() {}, closeInventoryChooser() {},
@@ -1554,4 +1556,80 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
     assert.match(visibleText(initiativeCard), /Grapple/);
     assert.equal(byClass(rendered, "dd-defense-card").length, 0);
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 0);
+});
+
+
+test("Inventory currency stays denomination-agnostic and rejects unsafe browser integers", () => {
+    const calls = [];
+    const currentRoutine = routine([], {}, false);
+    currentRoutine.state.currencyBalances = [{
+        id: "33333333-3333-3333-3333-333333333333",
+        currencyKey: "campaign-scrip",
+        amount: -7,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        currentRoutine,
+        "inventory",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setCurrencyBalance(key, amount) { calls.push(["set", key, amount]); },
+                removeCurrencyBalance(key) { calls.push(["remove", key]); }
+            }
+        }
+    );
+
+    const section = byClass(rendered, "dd-inventory-currency")[0];
+    assert.ok(section);
+    assert.match(visibleText(section), /campaign-scrip\s+-7/);
+    assert.doesNotMatch(visibleText(section), /Copper|Silver|Electrum|Gold|Platinum/);
+
+    const existing = byAttribute(section, "data-currency-key", "campaign-scrip")[0];
+    const existingInput = byTag(existing, "input")[0];
+    const existingButtons = byTag(existing, "button");
+    existingInput.value = "42";
+    existingButtons.find(button => button.textContent === "Save").onclick();
+    existingButtons.find(button => button.textContent === "Remove").onclick();
+
+    const form = byTag(section, "form")[0];
+    const inputs = byTag(form, "input");
+    inputs[0].value = "gp";
+    inputs[1].value = String(Number.MAX_SAFE_INTEGER + 1);
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.deepEqual(calls, [
+        ["set", "campaign-scrip", 42],
+        ["remove", "campaign-scrip"]
+    ]);
+
+    inputs[0].value = "campaign-scrip";
+    inputs[1].value = "-125";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.deepEqual(calls.at(-1), ["set", "campaign-scrip", -125]);
+
+    const readonly = renderCharacterWorkspace(
+        character,
+        builder,
+        currentRoutine,
+        "inventory",
+        true,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        handlers
+    );
+    const readonlySection = byClass(readonly, "dd-inventory-currency")[0];
+    assert.match(visibleText(readonlySection), /campaign-scrip\s+-7/);
+    assert.equal(byTag(readonlySection, "form").length, 0);
 });
