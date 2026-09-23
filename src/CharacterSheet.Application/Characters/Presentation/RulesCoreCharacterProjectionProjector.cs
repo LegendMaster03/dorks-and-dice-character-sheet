@@ -499,14 +499,11 @@ internal static class RulesCoreCharacterProjectionProjector
                 group => group.Last().IntegerValue!.Value,
                 StringComparer.Ordinal);
 
-        var projectedByConcept = projectedMechanics
+        var projectedByMechanicKey = projectedMechanics
             .Where(value => string.Equals(value.Kind, "competency", StringComparison.Ordinal))
-            .Where(value => value.MechanicKey.StartsWith("competency.", StringComparison.Ordinal))
-            .ToDictionary(
-                value => value.MechanicKey["competency.".Length..],
-                StringComparer.Ordinal);
+            .ToDictionary(value => value.MechanicKey, StringComparer.Ordinal);
 
-        if (projectedByConcept.Count == 0)
+        if (projectedByMechanicKey.Count == 0)
         {
             return fallback;
         }
@@ -515,23 +512,88 @@ internal static class RulesCoreCharacterProjectionProjector
         {
             Entries = fallback.Entries.Select(entry =>
             {
-                if (!projectedByConcept.TryGetValue(entry.Key, out var projected))
+                var mechanicKeys = (entry.MechanicKeys ?? [])
+                    .Concat(entry.CompatibilityMechanicKeys ?? [])
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                if (mechanicKeys.Length == 0 && !entry.Key.StartsWith("competency.", StringComparison.Ordinal))
+                {
+                    mechanicKeys = [$"competency.{entry.Key}"];
+                }
+
+                var projected = mechanicKeys
+                    .Select(key => projectedByMechanicKey.GetValueOrDefault(key))
+                    .Where(value => value is not null)
+                    .Cast<RulesCoreCharacterResolvedMechanicView>()
+                    .OrderBy(value => ProjectionPriority(value.State))
+                    .ThenBy(value => value.MechanicKey, StringComparer.Ordinal)
+                    .FirstOrDefault();
+
+                var rankInputKeys = new List<string>();
+                if (!string.IsNullOrWhiteSpace(entry.RankInputKey))
+                {
+                    rankInputKeys.Add(entry.RankInputKey);
+                }
+                foreach (var key in mechanicKeys)
+                {
+                    var conceptKey = ConceptKeyFromCompetencyMechanicKey(key);
+                    if (conceptKey is not null)
+                    {
+                        rankInputKeys.Add(conceptKey);
+                    }
+                }
+                if (!entry.Key.StartsWith("competency.", StringComparison.Ordinal))
+                {
+                    rankInputKeys.Add(entry.Key);
+                }
+
+                int? ranks = null;
+                foreach (var key in rankInputKeys.Distinct(StringComparer.Ordinal))
+                {
+                    if (rankByConcept.TryGetValue(key, out var value))
+                    {
+                        ranks = value;
+                        break;
+                    }
+                }
+
+                if (projected is null && ranks is null)
                 {
                     return entry;
                 }
 
                 return entry with
                 {
-                    EffectiveValue = EffectiveValue(projected),
-                    Ranks = rankByConcept.TryGetValue(entry.Key, out var ranks)
-                        ? ranks
-                        : entry.Ranks,
-                    SourceAttributions = SourceAttributionMapper.Map(projected.Provenance)
-                        ?? entry.SourceAttributions,
-                    Breakdown = ProjectContributions(projected.Contributions)
+                    EffectiveValue = projected is null
+                        ? entry.EffectiveValue
+                        : EffectiveValue(projected),
+                    Ranks = ranks ?? entry.Ranks,
+                    SourceAttributions = projected is null
+                        ? entry.SourceAttributions
+                        : SourceAttributionMapper.Map(projected.Provenance)
+                            ?? entry.SourceAttributions,
+                    Breakdown = projected is null
+                        ? entry.Breakdown
+                        : ProjectContributions(projected.Contributions)
                 };
             }).ToArray()
         };
+    }
+
+    private static int ProjectionPriority(string state) =>
+        string.Equals(state, "resolved", StringComparison.OrdinalIgnoreCase)
+            ? 0
+            : string.Equals(state, "applicable-unresolved", StringComparison.OrdinalIgnoreCase)
+                ? 1
+                : 2;
+
+    private static string? ConceptKeyFromCompetencyMechanicKey(string mechanicKey)
+    {
+        const string prefix = "competency.";
+        return mechanicKey.StartsWith(prefix, StringComparison.Ordinal)
+            && mechanicKey.Length > prefix.Length
+                ? mechanicKey[prefix.Length..]
+                : null;
     }
 
     private static IReadOnlyList<MechanicalContributionPresentationView>? ProjectContributions(
