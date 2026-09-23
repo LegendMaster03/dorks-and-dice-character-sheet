@@ -242,7 +242,14 @@ function renderWorkspace(
             },
             routine: {
                 setInspiration: inspired =>
-                    void rulesInputWorkflow.setBooleanFact(character.characterId, "inspiration", inspired),
+                    rulesInputWorkflow.setBooleanFact(
+                        character.characterId,
+                        "inspiration",
+                        inspired,
+                        {
+                            refreshPresentation: false,
+                            renderMutation: false
+                        }),
                 setCurrencyBalance: (currencyKey, amount) =>
                     void inventoryWorkflow.setCurrency(character.characterId, currencyKey, amount),
                 removeCurrencyBalance: currencyKey =>

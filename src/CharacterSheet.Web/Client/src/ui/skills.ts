@@ -103,10 +103,20 @@ function renderCompetencyFamily(
     control: CompetencyRankControlOptions
 ): HTMLElement {
     const disclosure = createElement("details", "dd-skill-disclosure dd-skill-disclosure--family");
-    disclosure.setAttribute("data-skill-family", item.parent.key);
+    disclosure.setAttribute("data-skill-family", item.key);
 
     const summary = createElement("summary", "dd-skill-disclosure__summary");
-    summary.append(renderCompetencyRow(item.parent, "standalone", undefined, "span"));
+    const row = createElement("span", "dd-skill-row dd-skill-row--family");
+    row.setAttribute("data-skill-role", "family");
+    row.append(
+        createElement("span", "dd-skill-row__training", ""),
+        createElement("span", "dd-skill-row__ability", ""),
+        createElement("span", "dd-skill-row__name", item.label),
+        createElement(
+            "span",
+            "dd-skill-row__value",
+            `${item.members.length} ${item.members.length === 1 ? "specialty" : "specialties"}`));
+    summary.append(row);
 
     const body = createElement("div", "dd-skill-disclosure__body dd-skill-family-details");
     const members = createElement("div", "dd-skill-family-members");
@@ -147,16 +157,17 @@ function competencySearchText(item: CompetencyPresentationItem): string {
     const competencies = item.kind === "standalone"
         ? [item.competency]
         : item.kind === "family"
-            ? [item.parent, ...item.members]
+            ? [...(item.parent === undefined ? [] : [item.parent]), ...item.members]
             : [item.parent, ...item.components];
-    return competencies
+    const labels = item.kind === "family" ? [item.label] : [];
+    return [...labels, ...competencies
         .flatMap(value => [
             value.label,
             value.governingAbility,
             value.training,
             value.family,
             value.specialty
-        ])
+        ])]
         .filter((value): value is string => value !== undefined && value.trim().length > 0)
         .join(" ")
         .toLowerCase();

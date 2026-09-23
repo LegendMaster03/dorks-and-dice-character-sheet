@@ -186,9 +186,9 @@ Ranks, final modifiers, class-skill effects, trained-only rules, and Armor Check
 
 ### Specialty competencies
 
-Specialized entries are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. A Rules Core entry marked `isFamily: true` may be rendered as an expandable family row containing the independently addressable entries whose supplied `family` value matches that family. The family grouping is taxonomy only: each specialized child keeps its own value, ranks, class-skill state, training state, and other supplied mechanics.
+Specialized entries are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. Organizational families are expandable categories, not synthetic skills. If Rules Core supplies an explicit `isFamily: true` parent, Character Sheet uses its identity for the category. If no separate parent concept exists, specialized competencies sharing the same authoritative `family` metadata are grouped under a presentation-only category derived from that metadata. Each specialized child keeps its own value, ranks, class-skill state, training state, and other supplied mechanics.
 
-The frontend does not identify specialties, parse names such as `Craft (...)`, or maintain a hard-coded list of family names. Family nesting is driven only by the authoritative competency metadata. This is distinct from composite relationships, which represent explicit mechanical composition rather than taxonomy.
+The frontend does not identify specialties, parse names such as `Craft (...)`, or maintain a hard-coded list of family names. Only entries explicitly classified as `specialized-skill` participate in implicit family grouping, so ordinary reconciliation metadata such as historical Knowledge ancestry is not turned back into a family UI. This is distinct from composite relationships, which represent explicit mechanical composition rather than taxonomy.
 
 ### Composite relationships
 

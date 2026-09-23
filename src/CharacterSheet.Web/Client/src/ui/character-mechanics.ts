@@ -131,7 +131,9 @@ export type CompetencyPresentationItem =
     | { kind: "standalone"; competency: CompetencyView }
     | {
         kind: "family";
-        parent: CompetencyView;
+        key: string;
+        label: string;
+        parent?: CompetencyView;
         members: readonly [CompetencyView, ...CompetencyView[]];
     }
     | {
@@ -408,24 +410,70 @@ export function buildCompetencyPresentation(
         });
     }
 
+    const groupedFamilyNames = new Set<string>();
     for (const parent of collection.entries) {
         if (consumed.has(parent.key) || parent.isFamily !== true) continue;
         const familyName = parent.family?.trim();
         if (familyName === undefined || familyName.length === 0) continue;
 
+        const normalizedFamilyName = normalizeCompetencyFamilyName(familyName);
         const members = collection.entries.filter(entry =>
             entry.key !== parent.key
             && !consumed.has(entry.key)
             && entry.isFamily !== true
-            && entry.family?.trim() === familyName);
+            && entry.kind === "specialized-skill"
+            && normalizeCompetencyFamilyName(entry.family) === normalizedFamilyName);
         if (members.length === 0) continue;
 
         consumed.add(parent.key);
         for (const member of members) consumed.add(member.key);
+        groupedFamilyNames.add(normalizedFamilyName);
         groups.set(parent.key, {
             kind: "family",
+            key: parent.key,
+            label: familyName,
             parent,
             members: members as [CompetencyView, ...CompetencyView[]]
+        });
+    }
+
+    const syntheticFamilies = new Map<string, {
+        label: string;
+        members: CompetencyView[];
+    }>();
+    for (const entry of collection.entries) {
+        if (consumed.has(entry.key)
+            || entry.isFamily === true
+            || entry.kind !== "specialized-skill") {
+            continue;
+        }
+
+        const familyName = entry.family?.trim();
+        if (familyName === undefined || familyName.length === 0) continue;
+        const normalizedFamilyName = normalizeCompetencyFamilyName(familyName);
+        if (groupedFamilyNames.has(normalizedFamilyName)) continue;
+
+        const family = syntheticFamilies.get(normalizedFamilyName);
+        if (family === undefined) {
+            syntheticFamilies.set(normalizedFamilyName, {
+                label: familyName,
+                members: [entry]
+            });
+        } else {
+            family.members.push(entry);
+        }
+    }
+
+    for (const [normalizedFamilyName, family] of syntheticFamilies) {
+        const [anchor, ...rest] = family.members;
+        if (anchor === undefined) continue;
+        const members = [anchor, ...rest] as [CompetencyView, ...CompetencyView[]];
+        for (const member of members) consumed.add(member.key);
+        groups.set(anchor.key, {
+            kind: "family",
+            key: `family:${normalizedFamilyName}`,
+            label: family.label,
+            members
         });
     }
 
@@ -441,6 +489,10 @@ export function buildCompetencyPresentation(
         }
     }
     return result;
+}
+
+function normalizeCompetencyFamilyName(value: string | undefined): string {
+    return value?.trim().toLowerCase() ?? "";
 }
 
 function withConsensusGoverningAbility(

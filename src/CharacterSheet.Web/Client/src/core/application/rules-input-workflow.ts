@@ -10,10 +10,16 @@ import type { HostEnvironment } from "../../host-environment.js";
 import type { RoutineStateWorkflow } from "./routine-state-workflow.js";
 import type { PresentationWorkflow } from "./presentation-workflow.js";
 
+export interface RulesInputMutationOptions {
+    refreshPresentation?: boolean;
+    renderMutation?: boolean;
+}
+
 export interface RulesInputWorkflow {
     set(
         characterId: string,
-        input: CharacterRulesInputStateInput
+        input: CharacterRulesInputStateInput,
+        options?: RulesInputMutationOptions
     ): Promise<boolean>;
     remove(
         characterId: string,
@@ -23,7 +29,12 @@ export interface RulesInputWorkflow {
     setChoice(characterId: string, choiceKey: string, value: string): Promise<boolean>;
     clearChoice(characterId: string, choiceKey: string): Promise<boolean>;
     setResource(characterId: string, resourceKey: string, currentValue: number): Promise<boolean>;
-    setBooleanFact(characterId: string, factKey: string, value: boolean): Promise<boolean>;
+    setBooleanFact(
+        characterId: string,
+        factKey: string,
+        value: boolean,
+        options?: RulesInputMutationOptions
+    ): Promise<boolean>;
     setHitPointGain(
         characterId: string,
         advancementOccurrenceId: string,
@@ -42,14 +53,19 @@ export function createRulesInputWorkflow(
     presentation: PresentationWorkflow,
     environment: HostEnvironment
 ): RulesInputWorkflow {
-    async function refresh(characterId: string, changed: boolean): Promise<boolean> {
-        if (changed) await presentation.load(characterId);
+    async function refresh(
+        characterId: string,
+        changed: boolean,
+        refreshPresentation = true
+    ): Promise<boolean> {
+        if (changed && refreshPresentation) await presentation.load(characterId);
         return changed;
     }
 
     async function set(
         characterId: string,
-        input: CharacterRulesInputStateInput
+        input: CharacterRulesInputStateInput,
+        options: RulesInputMutationOptions = {}
     ): Promise<boolean> {
         return await refresh(
             characterId,
@@ -59,7 +75,9 @@ export function createRulesInputWorkflow(
                     environment,
                     characterId,
                     input),
-                `${input.kind}:${input.key}`));
+                `${input.kind}:${input.key}`,
+                options.renderMutation ?? true),
+            options.refreshPresentation ?? true);
     }
 
     async function remove(
@@ -103,12 +121,12 @@ export function createRulesInputWorkflow(
             });
         },
 
-        setBooleanFact(characterId, factKey, value): Promise<boolean> {
+        setBooleanFact(characterId, factKey, value, options): Promise<boolean> {
             return set(characterId, {
                 kind: "booleanFact",
                 key: factKey,
                 booleanValue: value
-            });
+            }, options);
         },
 
         async setHitPointGain(

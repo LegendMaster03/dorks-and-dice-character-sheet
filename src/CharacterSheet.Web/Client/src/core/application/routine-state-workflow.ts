@@ -16,7 +16,8 @@ export interface RoutineStateWorkflow {
     mutate(
         kind: RoutineMutationKind,
         operation: () => Promise<CharacterStateResponse>,
-        entryId?: string
+        entryId?: string,
+        renderMutation?: boolean
     ): Promise<boolean>;
     current(): Readonly<CharacterRoutineUiState>;
 }
@@ -164,7 +165,8 @@ export function createRoutineStateWorkflow(
         async mutate(
             kind: RoutineMutationKind,
             operation: () => Promise<CharacterStateResponse>,
-            entryId?: string
+            entryId?: string,
+            renderMutation = true
         ): Promise<boolean> {
             const routine = application.getState().routine;
             if (routine.status !== "ready"
@@ -178,20 +180,20 @@ export function createRoutineStateWorkflow(
                 type: "routine-mutation-started",
                 kind,
                 entryId
-            });
+            }, renderMutation);
             try {
                 const next = await operation();
                 application.dispatch({
                     type: "routine-mutation-succeeded",
                     state: next
-                });
+                }, renderMutation);
                 await resolveReferences(next);
                 return true;
             } catch (error) {
                 application.dispatch({
                     type: "routine-mutation-failed",
                     message: requestErrorMessage(error)
-                });
+                }, renderMutation);
                 return false;
             }
         },

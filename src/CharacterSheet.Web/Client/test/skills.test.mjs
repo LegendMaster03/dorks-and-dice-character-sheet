@@ -149,7 +149,9 @@ test("Rules Core family metadata adds a nested specialty disclosure without chan
     assert.equal(presentation.length, 2);
     const family = presentation.find(item => item.kind === "family");
     assert.ok(family);
-    assert.equal(family.parent.key, "family.artisan");
+    assert.equal(family.key, "family.artisan");
+    assert.equal(family.label, "artisan");
+    assert.equal(family.parent?.key, "family.artisan");
     assert.deepEqual(family.members.map(member => member.key), ["specialty.glass"]);
 
     const card = renderSkillsCard(presentation);
@@ -159,6 +161,51 @@ test("Rules Core family metadata adds a nested specialty disclosure without chan
     assert.equal(byAttribute(familyDisclosure, "data-skill-id", "specialty.glass").length, 1);
     assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 0);
     assert.equal(byAttribute(card, "data-skill-id", "navigation").length, 1);
+});
+
+
+test("specialized competency metadata forms an organizational family without a fake parent skill", () => {
+    const presentation = buildCompetencyPresentation({
+        entries: [
+            competency("skill.craft-alchemy", "Alchemy", "+5", {
+                kind: "specialized-skill",
+                family: "Craft",
+                specialty: "alchemy"
+            }),
+            competency("skill.craft-smithing", "Blacksmithing", "+7", {
+                kind: "specialized-skill",
+                family: "Craft",
+                specialty: "blacksmithing"
+            }),
+            competency("arcana", "Arcana", "+4", {
+                kind: "skill",
+                family: "Knowledge"
+            })
+        ],
+        relationships: []
+    });
+
+    const family = presentation.find(item => item.kind === "family");
+    assert.ok(family);
+    assert.equal(family.key, "family:craft");
+    assert.equal(family.label, "Craft");
+    assert.equal(family.parent, undefined);
+    assert.deepEqual(
+        family.members.map(member => member.key),
+        ["skill.craft-alchemy", "skill.craft-smithing"]);
+
+    const standalone = presentation.find(item =>
+        item.kind === "standalone" && item.competency.key === "arcana");
+    assert.ok(standalone);
+
+    const card = renderSkillsCard(presentation);
+    const disclosure = byAttribute(card, "data-skill-family", "family:craft")[0];
+    assert.ok(disclosure);
+    assert.match(visibleText(disclosure), /Craft/);
+    assert.match(visibleText(disclosure), /2 specialties/);
+    assert.equal(byAttribute(disclosure, "data-skill-id", "skill.craft-alchemy").length, 1);
+    assert.equal(byAttribute(disclosure, "data-skill-id", "skill.craft-smithing").length, 1);
+    assert.equal(byAttribute(disclosure, "data-skill-role", "family").length, 1);
 });
 
 test("composite competency supports arbitrary component counts and preserves hierarchy", () => {

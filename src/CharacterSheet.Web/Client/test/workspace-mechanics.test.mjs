@@ -454,7 +454,7 @@ test("Character-owned current HP overrides mechanics presentation and is editabl
     assert.equal(byAttribute(card, "data-health-editor", "true").length, 1);
 });
 
-test("Inspiration is a Character-owned boolean the player can toggle at will", () => {
+test("Inspiration is a Character-owned boolean the player can toggle at will without rebuilding the sheet", async () => {
     const loading = renderCharacterWorkspace(
         character,
         builder,
@@ -499,7 +499,7 @@ test("Inspiration is a Character-owned boolean the player can toggle at will", (
             ...handlers,
             routine: {
                 ...handlers.routine,
-                setInspiration(value) { calls.push(value); }
+                async setInspiration(value) { calls.push(value); return true; }
             }
         }
     );
@@ -509,7 +509,10 @@ test("Inspiration is a Character-owned boolean the player can toggle at will", (
     assert.equal(toggle.getAttribute("aria-pressed"), "true");
     assert.equal(toggle.disabled, false);
     toggle.dispatchEvent({ type: "click" });
+    await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(calls, [false]);
+    assert.equal(card.getAttribute("data-inspiration-state"), "off");
+    assert.equal(toggle.getAttribute("aria-pressed"), "false");
 
     const uninspired = routine([], {}, false);
     uninspired.state.rulesInputs = [];
@@ -536,7 +539,10 @@ test("Inspiration is a Character-owned boolean the player can toggle at will", (
     assert.equal(offCard.getAttribute("data-inspiration-state"), "off");
     assert.equal(offToggle.getAttribute("aria-pressed"), "false");
     offToggle.dispatchEvent({ type: "click" });
+    await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(calls, [false, true]);
+    assert.equal(offCard.getAttribute("data-inspiration-state"), "on");
+    assert.equal(offToggle.getAttribute("aria-pressed"), "true");
 
     const readonly = renderCharacterWorkspace(
         character,
