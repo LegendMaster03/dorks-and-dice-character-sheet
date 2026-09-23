@@ -1599,8 +1599,8 @@ test("Inventory currency stays denomination-agnostic and rejects unsafe browser 
     const existingInput = byTag(existing, "input")[0];
     const existingButtons = byTag(existing, "button");
     existingInput.value = "42";
-    existingButtons.find(button => button.textContent === "Save").onclick();
-    existingButtons.find(button => button.textContent === "Remove").onclick();
+    existingButtons.find(button => button.textContent === "Save").dispatchEvent({ type: "click" });
+    existingButtons.find(button => button.textContent === "Remove").dispatchEvent({ type: "click" });
 
     const form = byTag(section, "form")[0];
     const inputs = byTag(form, "input");
