@@ -102,6 +102,62 @@ export interface CharacterConditionCreateInput extends CharacterConditionStateIn
     conceptKey?: string | null;
 }
 
+export interface CharacterRecoveryChoiceOptionResponse {
+    key: string;
+    displayName: string;
+    value?: string | null;
+}
+
+export interface CharacterRecoveryChoiceResponse {
+    key: string;
+    prompt: string;
+    required: boolean;
+    options: CharacterRecoveryChoiceOptionResponse[];
+}
+
+export interface CharacterRecoveryRollResponse {
+    key: string;
+    rollKind: string;
+    prompt: string;
+    required: boolean;
+    mechanicKey?: string | null;
+}
+
+export interface CharacterRecoveryEffectResponse {
+    effectKey: string;
+    targetKind: string;
+    targetKey: string;
+    operation: string;
+    amount?: number | null;
+    value?: string | null;
+    referenceKey?: string | null;
+}
+
+export interface CharacterRecoveryResolutionResponse {
+    procedureKey: string;
+    displayName: string;
+    presentationRole?: string | null;
+    status: string;
+    missingCapabilityKeys: string[];
+    missingInputKeys: string[];
+    pendingChoices: CharacterRecoveryChoiceResponse[];
+    pendingRolls: CharacterRecoveryRollResponse[];
+    consequences: CharacterRecoveryEffectResponse[];
+}
+
+export interface CharacterRecoveryRequestInput {
+    integerInputs?: Record<string, number>;
+    booleanInputs?: Record<string, boolean>;
+    stringInputs?: Record<string, string>;
+    choices?: Record<string, string>;
+    rolls?: Record<string, number>;
+}
+
+export interface CharacterRecoveryResponse {
+    resolution: CharacterRecoveryResolutionResponse;
+    state: CharacterStateResponse;
+}
+
 export interface CharacterStateResponse {
     characterId: string;
     readOnly: boolean;
@@ -239,6 +295,33 @@ export async function removeCharacterHitPointGain(
         "DELETE",
         undefined,
         "Unable to clear Character hit point gain.");
+}
+
+export async function resolveCharacterRecovery(
+    environment: HostEnvironment,
+    characterId: string,
+    procedureKey: string,
+    input: CharacterRecoveryRequestInput = {},
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterRecoveryResponse> {
+    const response = await fetcher(
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/recovery/${encodeURIComponent(procedureKey)}`),
+        {
+            method: "POST",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(input)
+        });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to resolve Character recovery."),
+            response.status);
+    }
+    return await response.json() as CharacterRecoveryResponse;
 }
 
 export async function addInventoryItemOccurrence(
