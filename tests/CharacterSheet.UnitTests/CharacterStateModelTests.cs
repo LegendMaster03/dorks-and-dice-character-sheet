@@ -6,6 +6,55 @@ namespace CharacterSheet.UnitTests;
 public sealed class CharacterStateModelTests
 {
     [Fact]
+    public void ProfileStateIsCharacterOwnedFlexibleAndNormalizesBlankFields()
+    {
+        var root = Root();
+        var now = DateTimeOffset.UtcNow;
+
+        var profile = root.SetProfile(
+            "  Unaligned by choice  ",
+            "  The Traveler  ",
+            "  34  ",
+            "  5 ft. 11 in.  ",
+            "  180 lb.  ",
+            "  Scar over the left eyebrow.  ",
+            "  Curious.  ",
+            "  Freedom.  ",
+            "  Old adventuring company.  ",
+            "  Impatient.  ",
+            "  A long-form history.  ",
+            "  The Cartographers Guild.  ",
+            "  Silver compass rose.  ",
+            now);
+
+        Assert.Equal("Unaligned by choice", profile.Alignment);
+        Assert.Equal("The Traveler", profile.Deity);
+        Assert.Equal("34", profile.Age);
+        Assert.Equal("A long-form history.", profile.Backstory);
+
+        var updated = root.SetProfile(
+            null, "   ", null, null, null, null, null, null, null, null, null, null, null,
+            now.AddMinutes(1));
+
+        Assert.Same(profile, updated);
+        Assert.Null(updated.Alignment);
+        Assert.Null(updated.Deity);
+        Assert.Null(updated.Backstory);
+        Assert.Equal(now.AddMinutes(1), updated.UpdatedAt);
+    }
+
+    [Fact]
+    public void ProfileStateEnforcesOnlyTechnicalTextBounds()
+    {
+        var root = Root();
+
+        Assert.Throws<ArgumentException>(() => root.SetProfile(
+            new string('a', CharacterProfileState.MaxShortTextLength + 1),
+            null, null, null, null, null, null, null, null, null, null, null, null,
+            DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
     public void CurrentHitPointsAreCharacterOwnedAndPermitNegativeEditionSpecificState()
     {
         var root = Root();

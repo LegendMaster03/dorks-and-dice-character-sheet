@@ -118,6 +118,54 @@ public sealed class CharacterStatePersistenceTests
     }
 
     [Fact]
+    public async Task CharacterProfilePersistsAndCascadesWithCharacterRoot()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+
+        await using (var firstContext = new CharacterSheetDbContext(options))
+        {
+            await firstContext.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
+            await new PostgresCharacterStateStore(firstContext).SetProfileAsync(
+                characterId,
+                "Chaotic good",
+                "The Traveler",
+                "34",
+                "5 ft. 11 in.",
+                "180 lb.",
+                "Scar over the left eyebrow.",
+                "Curious",
+                "Freedom",
+                "Old adventuring company",
+                "Impatient",
+                "A long-form history.",
+                "The Cartographers Guild",
+                "Silver compass rose",
+                DateTimeOffset.UtcNow);
+        }
+
+        await using (var secondContext = new CharacterSheetDbContext(options))
+        {
+            var state = await new PostgresCharacterStateStore(secondContext).GetAsync(characterId);
+            Assert.NotNull(state?.Profile);
+            Assert.Equal("Chaotic good", state.Profile.Alignment);
+            Assert.Equal("The Traveler", state.Profile.Deity);
+            Assert.Equal("A long-form history.", state.Profile.Backstory);
+
+            await secondContext.CharacterSheets
+                .Where(value => value.CharacterId == characterId)
+                .ExecuteDeleteAsync();
+        }
+
+        await using (var thirdContext = new CharacterSheetDbContext(options))
+        {
+            Assert.Equal(0, await thirdContext.CharacterProfiles.CountAsync());
+        }
+    }
+
+    [Fact]
     public async Task RulesInputsAndHitPointGainsPersistAcrossDbContextRecreation()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();

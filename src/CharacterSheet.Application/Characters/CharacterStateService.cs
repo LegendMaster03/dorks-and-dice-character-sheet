@@ -79,6 +79,23 @@ public sealed record CharacterConditionOccurrenceView(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public sealed record CharacterProfileView(
+    string? Alignment,
+    string? Deity,
+    string? Age,
+    string? Height,
+    string? Weight,
+    string? Appearance,
+    string? PersonalityTraits,
+    string? Ideals,
+    string? Bonds,
+    string? Flaws,
+    string? Backstory,
+    string? AlliesAndOrganizations,
+    string? Symbol,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record CharacterStateView(
     Guid CharacterId,
     bool ReadOnly,
@@ -88,7 +105,8 @@ public sealed record CharacterStateView(
     IReadOnlyList<CharacterNoteView> Notes,
     IReadOnlyList<CharacterConditionOccurrenceView> Conditions,
     IReadOnlyList<CharacterRulesInputStateView>? RulesInputs = null,
-    IReadOnlyList<CharacterHitPointGainStateView>? HitPointGains = null);
+    IReadOnlyList<CharacterHitPointGainStateView>? HitPointGains = null,
+    CharacterProfileView? Profile = null);
 
 public sealed record CharacterStateResult(
     CharacterStateAccessStatus Status,
@@ -122,6 +140,43 @@ public sealed class CharacterStateService(
 
         return Ready(root, access.Character!);
     }
+
+    public Task<CharacterStateResult> SetProfileAsync(
+        Guid characterId,
+        string? alignment,
+        string? deity,
+        string? age,
+        string? height,
+        string? weight,
+        string? appearance,
+        string? personalityTraits,
+        string? ideals,
+        string? bonds,
+        string? flaws,
+        string? backstory,
+        string? alliesAndOrganizations,
+        string? symbol,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.SetProfileAsync(
+                characterId,
+                alignment,
+                deity,
+                age,
+                height,
+                weight,
+                appearance,
+                personalityTraits,
+                ideals,
+                bonds,
+                flaws,
+                backstory,
+                alliesAndOrganizations,
+                symbol,
+                changedAt,
+                token),
+            cancellationToken);
 
     public Task<CharacterStateResult> SetCurrentHitPointsAsync(
         Guid characterId,
@@ -507,7 +562,25 @@ public sealed class CharacterStateService(
                     value.HitDieValue,
                     value.CreatedAt,
                     value.UpdatedAt))
-                .ToArray());
+                .ToArray(),
+            root.Profile is null
+                ? null
+                : new CharacterProfileView(
+                    root.Profile.Alignment,
+                    root.Profile.Deity,
+                    root.Profile.Age,
+                    root.Profile.Height,
+                    root.Profile.Weight,
+                    root.Profile.Appearance,
+                    root.Profile.PersonalityTraits,
+                    root.Profile.Ideals,
+                    root.Profile.Bonds,
+                    root.Profile.Flaws,
+                    root.Profile.Backstory,
+                    root.Profile.AlliesAndOrganizations,
+                    root.Profile.Symbol,
+                    root.Profile.CreatedAt,
+                    root.Profile.UpdatedAt));
     private static CharacterRulesInputKind ParseRulesInputKind(string value) =>
         value?.Trim() switch
         {

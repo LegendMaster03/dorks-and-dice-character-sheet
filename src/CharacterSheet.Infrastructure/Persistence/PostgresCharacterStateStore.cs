@@ -13,6 +13,46 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         BuildQuery(tracking: false)
             .SingleOrDefaultAsync(value => value.CharacterId == characterId, cancellationToken);
 
+    public async Task<CharacterSheetRoot?> SetProfileAsync(
+        Guid characterId,
+        string? alignment,
+        string? deity,
+        string? age,
+        string? height,
+        string? weight,
+        string? appearance,
+        string? personalityTraits,
+        string? ideals,
+        string? bonds,
+        string? flaws,
+        string? backstory,
+        string? alliesAndOrganizations,
+        string? symbol,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        root.SetProfile(
+            alignment,
+            deity,
+            age,
+            height,
+            weight,
+            appearance,
+            personalityTraits,
+            ideals,
+            bonds,
+            flaws,
+            backstory,
+            alliesAndOrganizations,
+            symbol,
+            changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> SetCurrentHitPointsAsync(
         Guid characterId,
         int? currentHitPoints,
@@ -312,6 +352,7 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
     private IQueryable<CharacterSheetRoot> BuildQuery(bool tracking)
     {
         var query = dbContext.CharacterSheets
+            .Include(value => value.Profile)
             .Include(value => value.InventoryItemOccurrences)
             .Include(value => value.Notes)
             .Include(value => value.Conditions)

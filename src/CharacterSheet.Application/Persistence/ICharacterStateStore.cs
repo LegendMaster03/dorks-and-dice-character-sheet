@@ -12,6 +12,24 @@ public interface ICharacterStateStore
         Guid characterId,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> SetProfileAsync(
+        Guid characterId,
+        string? alignment,
+        string? deity,
+        string? age,
+        string? height,
+        string? weight,
+        string? appearance,
+        string? personalityTraits,
+        string? ideals,
+        string? bonds,
+        string? flaws,
+        string? backstory,
+        string? alliesAndOrganizations,
+        string? symbol,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> SetCurrentHitPointsAsync(
         Guid characterId,
         int? currentHitPoints,

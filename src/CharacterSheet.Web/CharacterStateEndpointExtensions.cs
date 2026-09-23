@@ -14,6 +14,39 @@ public static class CharacterStateEndpointExtensions
                 await service.GetAsync(characterId, cancellationToken),
                 mutating: false));
 
+        app.MapPut("/api/characters/{characterId:guid}/state/profile", async (
+            Guid characterId,
+            CharacterProfileRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetProfileAsync(
+                        characterId,
+                        request.Alignment,
+                        request.Deity,
+                        request.Age,
+                        request.Height,
+                        request.Weight,
+                        request.Appearance,
+                        request.PersonalityTraits,
+                        request.Ideals,
+                        request.Bonds,
+                        request.Flaws,
+                        request.Backstory,
+                        request.AlliesAndOrganizations,
+                        request.Symbol,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPut("/api/characters/{characterId:guid}/state/health", async (
             Guid characterId,
             CharacterHealthRequest request,
@@ -440,6 +473,21 @@ public static class CharacterStateEndpointExtensions
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
     };
 }
+
+public sealed record CharacterProfileRequest(
+    string? Alignment,
+    string? Deity,
+    string? Age,
+    string? Height,
+    string? Weight,
+    string? Appearance,
+    string? PersonalityTraits,
+    string? Ideals,
+    string? Bonds,
+    string? Flaws,
+    string? Backstory,
+    string? AlliesAndOrganizations,
+    string? Symbol);
 
 public sealed record CharacterRulesInputStateRequest(
     string Kind,
