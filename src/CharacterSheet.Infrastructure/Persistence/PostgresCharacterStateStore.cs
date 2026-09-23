@@ -48,6 +48,19 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> ApplyIntegerStateMutationsAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterIntegerStateMutation> mutations,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.ApplyIntegerStateMutations(mutations, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> AddInventoryItemOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,
