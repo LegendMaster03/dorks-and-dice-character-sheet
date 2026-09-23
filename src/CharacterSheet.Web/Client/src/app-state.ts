@@ -5,7 +5,11 @@ import type {
 } from "./builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "./character-api.js";
 import type { CharacterPresentationResponse } from "./character-presentation-api.js";
-import type { CharacterStateResponse } from "./character-state-api.js";
+import type {
+    CharacterRecoveryRequestInput,
+    CharacterRecoveryResolutionResponse,
+    CharacterStateResponse
+} from "./character-state-api.js";
 import type { RuleReferenceState } from "./builder-rules.js";
 import type { ResolvedRuleCatalogItem } from "./rules-core-api.js";
 import type { CharacterSheetRoute } from "./routes.js";
@@ -134,6 +138,26 @@ export type ConditionChooserState =
         message?: string;
     };
 
+export type RecoveryUiState =
+    | { kind: "closed" }
+    | {
+        kind: "resolving";
+        procedureKey: string;
+        request: CharacterRecoveryRequestInput;
+    }
+    | {
+        kind: "continuation";
+        procedureKey: string;
+        request: CharacterRecoveryRequestInput;
+        resolution: CharacterRecoveryResolutionResponse;
+    }
+    | {
+        kind: "error";
+        procedureKey: string;
+        request: CharacterRecoveryRequestInput;
+        message: string;
+    };
+
 export interface CharacterRoutineUiState {
     status: "idle" | "loading" | "ready" | "error";
     state: CharacterStateResponse | null;
@@ -142,6 +166,7 @@ export interface CharacterRoutineUiState {
     inventoryChooser: InventoryChooserState;
     spellChooser: SpellChooserState;
     conditionChooser: ConditionChooserState;
+    recovery: RecoveryUiState;
     mutation: { kind: RoutineMutationKind; entryId?: string } | null;
     mutationError?: string;
 }
@@ -223,6 +248,11 @@ export type CharacterSheetAction =
     | { type: "condition-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
     | { type: "condition-chooser-load-failed"; query: string; message: string }
     | { type: "condition-chooser-closed" }
+    | { type: "recovery-started"; procedureKey: string; request: CharacterRecoveryRequestInput }
+    | { type: "recovery-continuation"; procedureKey: string; request: CharacterRecoveryRequestInput; resolution: CharacterRecoveryResolutionResponse }
+    | { type: "recovery-succeeded"; state: CharacterStateResponse }
+    | { type: "recovery-failed"; procedureKey: string; request: CharacterRecoveryRequestInput; message: string }
+    | { type: "recovery-cancelled" }
     | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
     | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
     | { type: "routine-mutation-failed"; message: string }
