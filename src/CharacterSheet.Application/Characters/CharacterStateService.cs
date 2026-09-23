@@ -151,6 +151,19 @@ public sealed class CharacterStateService(
                 token),
             cancellationToken);
 
+    public Task<CharacterStateResult> ApplyIntegerStateMutationsAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterIntegerStateMutation> mutations,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.ApplyIntegerStateMutationsAsync(
+                characterId,
+                mutations,
+                changedAt,
+                token),
+            cancellationToken);
+
     public Task<CharacterStateResult> AddInventoryItemOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,
