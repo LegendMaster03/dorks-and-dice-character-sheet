@@ -324,6 +324,63 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void UniversalCompetencyMechanicsContractIsAuthoritativeForPresentation()
+    {
+        var source = Competency(
+            "competency.skill.example",
+            "skill.example",
+            "Example",
+            governingAbility: "charisma");
+
+        var universal = new RulesCoreUniversalCompetencyView(
+            "competency.example",
+            "example",
+            "Example",
+            null,
+            false,
+            "competency.example.training",
+            [],
+            ["competency.skill.example"],
+            [],
+            ["Example"],
+            [],
+            [],
+            [],
+            [],
+            new RulesCoreUniversalCompetencyMechanicsView(
+                new RulesCoreUniversalGoverningAbilityView(
+                    "fixed",
+                    "wis",
+                    ["wisdom"]),
+                SupportsRanks: true,
+                SupportsClassSkillState: false,
+                SupportsTrainingState: true,
+                TrainedOnly: false,
+                ArmorCheckPenaltyApplies: false,
+                EvaluationProfileKeys: ["ranked-skill"],
+                EvaluationKinds: ["competency-profile"],
+                CanEvaluate: true));
+
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [source],
+            [universal]);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        var example = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Equal("wisdom", example.GoverningAbility);
+        Assert.True(example.SupportsRanks);
+        Assert.False(example.SupportsClassSkillState);
+        Assert.True(example.SupportsTrainingState);
+        Assert.False(example.TrainedOnly);
+        Assert.False(example.ArmorCheckPenalty?.Applies);
+    }
+
+    [Fact]
     public void UniversalCompetencyGoverningAbilitiesNormalizeAliasesAndPreserveRealConflicts()
     {
         var animalHandlingLegacy = Competency(

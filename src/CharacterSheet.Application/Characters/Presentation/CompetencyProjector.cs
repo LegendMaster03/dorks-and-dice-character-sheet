@@ -125,7 +125,8 @@ internal static class CompetencyProjector
         var evaluation = evaluations.Length == 1 ? evaluations[0] : null;
 
         var profiles = universal.Profiles;
-        var governingAbility = ResolveGoverningAbility(universal, implementations)
+        var governingAbility = ResolveUniversalGoverningAbility(universal.Mechanics?.GoverningAbility)
+            ?? ResolveGoverningAbility(universal, implementations)
             ?? familyGoverningAbility;
         var competencyKinds = profiles
             .Select(value => value.CompetencyKind)
@@ -147,20 +148,23 @@ internal static class CompetencyProjector
                         ? competencyKinds[0]
                         : "competency";
 
-        var trainedOnly = SingleDistinctBoolean(
-            profiles.Select(value => value.TrainedOnly));
-        var armorCheckPenalty = SingleDistinctBoolean(
-            profiles.Select(value => value.ArmorCheckPenaltyApplies));
+        var trainedOnly = universal.Mechanics?.TrainedOnly
+            ?? SingleDistinctBoolean(profiles.Select(value => value.TrainedOnly));
+        var armorCheckPenalty = universal.Mechanics?.ArmorCheckPenaltyApplies
+            ?? SingleDistinctBoolean(profiles.Select(value => value.ArmorCheckPenaltyApplies));
         var supportsRanks = !universal.IsFamily
-            && (profiles.Any(value => value.SupportsRanks)
-                || universal.Facets.Any(value => value.SupportsRanks));
+            && (universal.Mechanics?.SupportsRanks
+                ?? (profiles.Any(value => value.SupportsRanks)
+                    || universal.Facets.Any(value => value.SupportsRanks)));
         var supportsClassSkillState = !universal.IsFamily
-            && (profiles.Any(value => value.SupportsClassSkillState)
-                || universal.Facets.Any(value => value.SupportsClassSkillState));
+            && (universal.Mechanics?.SupportsClassSkillState
+                ?? (profiles.Any(value => value.SupportsClassSkillState)
+                    || universal.Facets.Any(value => value.SupportsClassSkillState)));
         var supportsTrainingState = !universal.IsFamily
-            && (profiles.Any(value => value.SupportsTrainingState)
-                || universal.Facets.Any(value => value.SupportsTrainingState)
-                || !string.IsNullOrWhiteSpace(universal.TrainingStateKey));
+            && (universal.Mechanics?.SupportsTrainingState
+                ?? (profiles.Any(value => value.SupportsTrainingState)
+                    || universal.Facets.Any(value => value.SupportsTrainingState)
+                    || !string.IsNullOrWhiteSpace(universal.TrainingStateKey)));
 
         return new CompetencyPresentationView(
             universal.SemanticKey,
@@ -196,6 +200,40 @@ internal static class CompetencyProjector
                 ? null
                 : universal.CompatibilityMechanicKeys,
             RankInputKey: ResolveRankInputKey(universal, mechanicByKey));
+    }
+
+    private static string? ResolveUniversalGoverningAbility(
+        RulesCoreUniversalGoverningAbilityView? governingAbility)
+    {
+        if (governingAbility is null
+            || string.Equals(
+                governingAbility.ResolutionKind,
+                "none",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (string.Equals(
+                governingAbility.ResolutionKind,
+                "fixed",
+                StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(governingAbility.FixedAbilityKey))
+        {
+            return NormalizeAbilityKey(governingAbility.FixedAbilityKey);
+        }
+
+        var abilities = governingAbility.AbilityKeys
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(NormalizeAbilityKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(AbilityOrder)
+            .ThenBy(value => value, StringComparer.Ordinal)
+            .ToArray();
+
+        return abilities.Length == 0
+            ? null
+            : string.Join(" / ", abilities);
     }
 
     private static RulesCoreMechanicView[] FindImplementations(

@@ -47,7 +47,24 @@ public sealed record RulesCoreUniversalCompetencyView(
     IReadOnlyList<RulesCoreCompetencyProfileView> Profiles,
     IReadOnlyList<RulesCoreCompetencyFacetView> Facets,
     IReadOnlyList<RulesCoreCompetencyRelationshipView> RelatedCompetencies,
-    IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions);
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions,
+    RulesCoreUniversalCompetencyMechanicsView? Mechanics = null);
+
+public sealed record RulesCoreUniversalGoverningAbilityView(
+    string ResolutionKind,
+    string? FixedAbilityKey,
+    IReadOnlyList<string> AbilityKeys);
+
+public sealed record RulesCoreUniversalCompetencyMechanicsView(
+    RulesCoreUniversalGoverningAbilityView GoverningAbility,
+    bool SupportsRanks,
+    bool SupportsClassSkillState,
+    bool SupportsTrainingState,
+    bool? TrainedOnly,
+    bool? ArmorCheckPenaltyApplies,
+    IReadOnlyList<string> EvaluationProfileKeys,
+    IReadOnlyList<string> EvaluationKinds,
+    bool CanEvaluate);
 
 public sealed record RulesCoreMechanicView(
     string MechanicKey,
@@ -152,7 +169,8 @@ public sealed record RulesCoreCompetencyProfileView(
     string? IdentityKey = null,
     string? IdentityName = null,
     string? SharedTrainingKey = null,
-    IReadOnlyList<RulesCoreCompetencyRelationshipView>? RelatedCompetencies = null);
+    IReadOnlyList<RulesCoreCompetencyRelationshipView>? RelatedCompetencies = null,
+    string ProfileOrigin = "source");
 
 public sealed record RulesCoreCompetencyDefinitionView(
     string CompetencyKind,
