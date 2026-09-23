@@ -6,6 +6,27 @@ namespace CharacterSheet.UnitTests;
 public sealed class CharacterStateModelTests
 {
     [Fact]
+    public void CurrencyBalancesAreGenericCharacterOwnedStateWithoutDenominationRules()
+    {
+        var root = Root();
+        var now = DateTimeOffset.UtcNow;
+
+        var gold = root.SetCurrencyBalance("  GP  ", 125, now);
+        Assert.Equal("gp", gold.CurrencyKey);
+        Assert.Equal(125, gold.Amount);
+
+        var updated = root.SetCurrencyBalance("gp", -10, now.AddMinutes(1));
+        Assert.Same(gold, updated);
+        Assert.Equal(-10, updated.Amount);
+
+        root.SetCurrencyBalance("third-party-scrip", 7, now.AddMinutes(2));
+        Assert.Equal(2, root.CurrencyBalances.Count);
+        Assert.True(root.RemoveCurrencyBalance("GP", now.AddMinutes(3)));
+        Assert.Single(root.CurrencyBalances);
+        Assert.False(root.RemoveCurrencyBalance("gp", now.AddMinutes(4)));
+    }
+
+    [Fact]
     public void ProfileStateIsCharacterOwnedFlexibleAndNormalizesBlankFields()
     {
         var root = Root();

@@ -79,6 +79,13 @@ public sealed record CharacterConditionOccurrenceView(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public sealed record CharacterCurrencyBalanceView(
+    Guid Id,
+    string CurrencyKey,
+    long Amount,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record CharacterProfileView(
     string? Alignment,
     string? Deity,
@@ -106,7 +113,8 @@ public sealed record CharacterStateView(
     IReadOnlyList<CharacterConditionOccurrenceView> Conditions,
     IReadOnlyList<CharacterRulesInputStateView>? RulesInputs = null,
     IReadOnlyList<CharacterHitPointGainStateView>? HitPointGains = null,
-    CharacterProfileView? Profile = null);
+    CharacterProfileView? Profile = null,
+    IReadOnlyList<CharacterCurrencyBalanceView>? CurrencyBalances = null);
 
 public sealed record CharacterStateResult(
     CharacterStateAccessStatus Status,
@@ -140,6 +148,34 @@ public sealed class CharacterStateService(
 
         return Ready(root, access.Character!);
     }
+
+    public Task<CharacterStateResult> SetCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        long amount,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.SetCurrencyBalanceAsync(
+                characterId,
+                currencyKey,
+                amount,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> RemoveCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.RemoveCurrencyBalanceAsync(
+                characterId,
+                currencyKey,
+                changedAt,
+                token),
+            cancellationToken);
 
     public Task<CharacterStateResult> SetProfileAsync(
         Guid characterId,
@@ -580,7 +616,16 @@ public sealed class CharacterStateService(
                     root.Profile.AlliesAndOrganizations,
                     root.Profile.Symbol,
                     root.Profile.CreatedAt,
-                    root.Profile.UpdatedAt));
+                    root.Profile.UpdatedAt),
+            root.CurrencyBalances
+                .OrderBy(value => value.CurrencyKey, StringComparer.Ordinal)
+                .Select(value => new CharacterCurrencyBalanceView(
+                    value.Id,
+                    value.CurrencyKey,
+                    value.Amount,
+                    value.CreatedAt,
+                    value.UpdatedAt))
+                .ToArray());
     private static CharacterRulesInputKind ParseRulesInputKind(string value) =>
         value?.Trim() switch
         {

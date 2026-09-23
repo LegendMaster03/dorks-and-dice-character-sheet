@@ -13,6 +13,35 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         BuildQuery(tracking: false)
             .SingleOrDefaultAsync(value => value.CharacterId == characterId, cancellationToken);
 
+    public async Task<CharacterSheetRoot?> SetCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        long amount,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        root.SetCurrencyBalance(currencyKey, amount, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        root.RemoveCurrencyBalance(currencyKey, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> SetProfileAsync(
         Guid characterId,
         string? alignment,
@@ -353,6 +382,7 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
     {
         var query = dbContext.CharacterSheets
             .Include(value => value.Profile)
+            .Include(value => value.CurrencyBalances)
             .Include(value => value.InventoryItemOccurrences)
             .Include(value => value.Notes)
             .Include(value => value.Conditions)

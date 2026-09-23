@@ -45,6 +45,18 @@ public sealed class CharacterStateWorkflowTests
             Assert.Empty(view.Conditions);
         }
 
+        using (var setCurrency = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/currency",
+                   new { key = "GP", amount = 125L }))
+        {
+            Assert.Equal(HttpStatusCode.OK, setCurrency.StatusCode);
+            var view = await setCurrency.Content.ReadFromJsonAsync<CharacterStateView>();
+            var balance = Assert.Single(view!.CurrencyBalances!);
+            Assert.Equal("gp", balance.CurrencyKey);
+            Assert.Equal(125, balance.Amount);
+        }
+
         using (var setProfile = await factory.SendHostedAsync(
                    HttpMethod.Put,
                    $"/api/characters/{characterId:D}/state/profile",
@@ -199,6 +211,7 @@ public sealed class CharacterStateWorkflowTests
         var persisted = await verify.Content.ReadFromJsonAsync<CharacterStateView>();
         Assert.NotNull(persisted);
         Assert.Equal("A long-form history.", persisted.Profile?.Backstory);
+        Assert.Equal(125, Assert.Single(persisted.CurrencyBalances!).Amount);
         Assert.Equal(-4, persisted.CurrentHitPoints);
         Assert.Equal(2, persisted.DeathSaves.Successes);
         Assert.Equal(1, persisted.DeathSaves.Failures);
@@ -263,6 +276,14 @@ public sealed class CharacterStateWorkflowTests
             Assert.True(view.ReadOnly);
             Assert.Equal(itemId, Assert.Single(view.InventoryItemOccurrences).Id);
             Assert.Equal(noteId, Assert.Single(view.Notes).Id);
+        }
+
+        using (var currency = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/currency",
+                   new { key = "gp", amount = 5L }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, currency.StatusCode);
         }
 
         using (var profile = await factory.SendHostedAsync(

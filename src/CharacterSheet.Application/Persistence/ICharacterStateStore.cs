@@ -12,6 +12,19 @@ public interface ICharacterStateStore
         Guid characterId,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> SetCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        long amount,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<CharacterSheetRoot?> RemoveCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> SetProfileAsync(
         Guid characterId,
         string? alignment,

@@ -14,6 +14,49 @@ public static class CharacterStateEndpointExtensions
                 await service.GetAsync(characterId, cancellationToken),
                 mutating: false));
 
+        app.MapPut("/api/characters/{characterId:guid}/state/currency", async (
+            Guid characterId,
+            CharacterCurrencyBalanceRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetCurrencyBalanceAsync(
+                        characterId,
+                        request.Key,
+                        request.Amount,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapDelete("/api/characters/{characterId:guid}/state/currency", async (
+            Guid characterId,
+            string key,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.RemoveCurrencyBalanceAsync(
+                        characterId,
+                        key,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPut("/api/characters/{characterId:guid}/state/profile", async (
             Guid characterId,
             CharacterProfileRequest request,
@@ -473,6 +516,8 @@ public static class CharacterStateEndpointExtensions
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
     };
 }
+
+public sealed record CharacterCurrencyBalanceRequest(string Key, long Amount);
 
 public sealed record CharacterProfileRequest(
     string? Alignment,

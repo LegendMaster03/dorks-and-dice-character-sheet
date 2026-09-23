@@ -118,6 +118,57 @@ public sealed class CharacterStatePersistenceTests
     }
 
     [Fact]
+    public async Task CurrencyBalancesPersistWithoutApplyingConversionRules()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+
+        await using (var firstContext = new CharacterSheetDbContext(options))
+        {
+            await firstContext.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
+            var stateStore = new PostgresCharacterStateStore(firstContext);
+            await stateStore.SetCurrencyBalanceAsync(
+                characterId,
+                "GP",
+                125,
+                DateTimeOffset.UtcNow);
+            await stateStore.SetCurrencyBalanceAsync(
+                characterId,
+                "third-party-scrip",
+                -4,
+                DateTimeOffset.UtcNow.AddSeconds(1));
+        }
+
+        await using (var secondContext = new CharacterSheetDbContext(options))
+        {
+            var stateStore = new PostgresCharacterStateStore(secondContext);
+            var state = await stateStore.GetAsync(characterId);
+            Assert.NotNull(state);
+            Assert.Equal(2, state.CurrencyBalances.Count);
+            Assert.Contains(state.CurrencyBalances, value =>
+                value.CurrencyKey == "gp" && value.Amount == 125);
+            Assert.Contains(state.CurrencyBalances, value =>
+                value.CurrencyKey == "third-party-scrip" && value.Amount == -4);
+
+            await stateStore.RemoveCurrencyBalanceAsync(
+                characterId,
+                "gp",
+                DateTimeOffset.UtcNow.AddMinutes(1));
+        }
+
+        await using (var thirdContext = new CharacterSheetDbContext(options))
+        {
+            var state = await new PostgresCharacterStateStore(thirdContext).GetAsync(characterId);
+            Assert.NotNull(state);
+            var remaining = Assert.Single(state.CurrencyBalances);
+            Assert.Equal("third-party-scrip", remaining.CurrencyKey);
+            Assert.Equal(-4, remaining.Amount);
+        }
+    }
+
+    [Fact]
     public async Task CharacterProfilePersistsAndCascadesWithCharacterRoot()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
