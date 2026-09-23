@@ -354,6 +354,29 @@ public sealed class CharacterPresentationWorkflowTests
             return Task.FromResult(SupportProjection);
         }
 
+        public Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
+            string procedureKey,
+            RulesCoreCharacterRecoveryResolutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            return Task.FromResult(new RulesCoreCharacterRecoveryResolutionView(
+                "global",
+                null,
+                1,
+                DateTimeOffset.UtcNow,
+                procedureKey,
+                procedureKey,
+                null,
+                "resolved",
+                [],
+                [],
+                [],
+                [],
+                [],
+                []));
+        }
+
         public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
             RulesCoreCharacterRulesProjectionRequest request,
             CancellationToken cancellationToken = default)
