@@ -23,6 +23,7 @@ import { createAdvancementWorkflow } from "./features/advancement/advancement-wo
 import { createAbilityWorkflow } from "./features/abilities/ability-workflow.js";
 import { createFeatWorkflow } from "./features/features/feat-workflow.js";
 import { createHealthWorkflow } from "./features/health/health-workflow.js";
+import { createRecoveryWorkflow } from "./features/health/recovery-workflow.js";
 import { createInventoryWorkflow } from "./features/inventory/inventory-workflow.js";
 import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
@@ -243,6 +244,11 @@ function renderWorkspace(
                     void healthWorkflow.setCurrentHitPoints(character.characterId, currentHitPoints),
                 setDeathSaves: (successes, failures) =>
                     void healthWorkflow.setDeathSaves(character.characterId, successes, failures),
+                recover: procedureKey =>
+                    void recoveryWorkflow.begin(character.characterId, procedureKey),
+                continueRecovery: input =>
+                    void recoveryWorkflow.continue(character.characterId, input),
+                cancelRecovery: () => recoveryWorkflow.cancel(),
                 addNote: content => void notesWorkflow.add(character.characterId, content),
                 updateNote: (noteId, content) => void notesWorkflow.update(character.characterId, noteId, content),
                 deleteNote: noteId => void notesWorkflow.remove(character.characterId, noteId),
@@ -378,6 +384,10 @@ const featWorkflow = createFeatWorkflow(
     presentationWorkflow,
     environment);
 const healthWorkflow = createHealthWorkflow(routineStateWorkflow, environment);
+const recoveryWorkflow = createRecoveryWorkflow(
+    application,
+    presentationWorkflow,
+    environment);
 const rulesInputWorkflow = createRulesInputWorkflow(
     routineStateWorkflow,
     presentationWorkflow,
