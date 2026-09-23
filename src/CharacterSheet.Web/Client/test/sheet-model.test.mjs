@@ -346,7 +346,9 @@ test("desktop top stats stretch to a shared height and Movement uses a disclosur
 });
 
 test("skill rows use stable single-line columns for proficiency, stat, name, and modifier", () => {
-    assert.match(css, /\.dd-skill-row\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1\.15rem\s+1\.4rem\s+minmax\(0,\s*1fr\)\s+max-content/s);
+    assert.match(css, /\.dd-skill-row\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1\.15rem\s+max-content\s+minmax\(0,\s*1fr\)\s+max-content/s);
+    assert.match(css, /\.dd-skill-family-summary__indicator\s*\{/s);
+    assert.match(css, /\.dd-skill-disclosure--family\[open\]\s+\.dd-skill-family-summary__indicator\s*\{[^}]*transform:\s*rotate\(90deg\)/s);
     assert.doesNotMatch(mechanicsCssSource, /\.dd-skill-row\s*\{/);
     assert.doesNotMatch(css, /grid-template-columns:\s*1\.8rem\s+2\.15rem/);
     assert.doesNotMatch(css, /minmax\(2\.1rem,\s*max-content\)/);
