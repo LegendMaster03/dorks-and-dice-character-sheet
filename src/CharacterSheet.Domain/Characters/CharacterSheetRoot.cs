@@ -73,6 +73,46 @@ public sealed class CharacterSheetRoot
 
     public CharacterProfileState? Profile { get; private set; }
 
+    public ICollection<CharacterCurrencyBalance> CurrencyBalances { get; private set; } =
+        new List<CharacterCurrencyBalance>();
+
+    public CharacterCurrencyBalance SetCurrencyBalance(
+        string currencyKey,
+        long amount,
+        DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterCurrencyBalance.NormalizeKey(currencyKey);
+        var balance = CurrencyBalances.SingleOrDefault(value => value.CurrencyKey == normalizedKey);
+        if (balance is null)
+        {
+            balance = new CharacterCurrencyBalance(
+                Guid.NewGuid(),
+                CharacterId,
+                normalizedKey,
+                amount,
+                changedAt);
+            CurrencyBalances.Add(balance);
+        }
+        else
+        {
+            balance.ReplaceAmount(amount, changedAt);
+        }
+
+        Touch(changedAt);
+        return balance;
+    }
+
+    public bool RemoveCurrencyBalance(string currencyKey, DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterCurrencyBalance.NormalizeKey(currencyKey);
+        var balance = CurrencyBalances.SingleOrDefault(value => value.CurrencyKey == normalizedKey);
+        if (balance is null) return false;
+
+        CurrencyBalances.Remove(balance);
+        Touch(changedAt);
+        return true;
+    }
+
     public CharacterProfileState SetProfile(
         string? alignment,
         string? deity,

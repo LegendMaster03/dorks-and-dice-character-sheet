@@ -16,6 +16,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterRulesInputState> CharacterRulesInputs => Set<CharacterRulesInputState>();
     public DbSet<CharacterHitPointGainState> CharacterHitPointGains => Set<CharacterHitPointGainState>();
     public DbSet<CharacterProfileState> CharacterProfiles => Set<CharacterProfileState>();
+    public DbSet<CharacterCurrencyBalance> CharacterCurrencyBalances => Set<CharacterCurrencyBalance>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -263,6 +264,23 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             value.ClassLevel
         }).IsUnique();
         root.HasMany(value => value.HitPointGains)
+            .WithOne()
+            .HasForeignKey(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var currency = modelBuilder.Entity<CharacterCurrencyBalance>();
+        currency.ToTable("character_currency_balances");
+        currency.HasKey(value => value.Id);
+        currency.Property(value => value.Id).ValueGeneratedNever();
+        currency.Property(value => value.CharacterId).ValueGeneratedNever().IsRequired();
+        currency.Property(value => value.CurrencyKey)
+            .HasMaxLength(CharacterCurrencyBalance.MaxKeyLength)
+            .IsRequired();
+        currency.Property(value => value.Amount).IsRequired();
+        currency.Property(value => value.CreatedAt).IsRequired();
+        currency.Property(value => value.UpdatedAt).IsRequired();
+        currency.HasIndex(value => new { value.CharacterId, value.CurrencyKey }).IsUnique();
+        root.HasMany(value => value.CurrencyBalances)
             .WithOne()
             .HasForeignKey(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);

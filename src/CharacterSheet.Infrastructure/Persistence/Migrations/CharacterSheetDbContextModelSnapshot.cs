@@ -225,6 +225,36 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_conditions");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterCurrencyBalance", b =>
+        {
+            b.Property<Guid>("Id")
+                .HasColumnType("uuid");
+
+            b.Property<long>("Amount")
+                .HasColumnType("bigint");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("CurrencyKey")
+                .IsRequired()
+                .HasMaxLength(160)
+                .HasColumnType("character varying(160)");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CharacterId", "CurrencyKey")
+                .IsUnique();
+
+            b.ToTable("character_currency_balances");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>
         {
             b.Property<Guid>("Id")
@@ -487,6 +517,15 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .IsRequired();
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterCurrencyBalance", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithMany("CurrencyBalances")
+                .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterFoundationalRuleSelection", b =>
         {
             b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
@@ -546,6 +585,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Navigation("AdvancementEntries");
             b.Navigation("BaseAbilityScoreInputs");
             b.Navigation("Conditions");
+            b.Navigation("CurrencyBalances");
             b.Navigation("FoundationalSelections");
             b.Navigation("HitPointGains");
             b.Navigation("InventoryItemOccurrences");
