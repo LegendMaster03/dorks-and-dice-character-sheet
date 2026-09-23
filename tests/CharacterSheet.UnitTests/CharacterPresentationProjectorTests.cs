@@ -394,7 +394,7 @@ public sealed class CharacterPresentationProjectorTests
         var animalHandling = Assert.Single(
             mechanics.Competencies!.Entries,
             value => value.Key == "competency.animal-handling");
-        Assert.Equal("charisma / wisdom", animalHandling.GoverningAbility);
+        Assert.Equal("wisdom / charisma", animalHandling.GoverningAbility);
 
         var medicine = Assert.Single(
             mechanics.Competencies.Entries,
