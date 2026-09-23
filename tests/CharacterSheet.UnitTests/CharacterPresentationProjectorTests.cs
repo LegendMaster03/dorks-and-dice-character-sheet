@@ -405,6 +405,59 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void UniversalCompetencyMechanicsCanAuthoritativelyDeclareNoGoverningAbility()
+    {
+        var source = Competency(
+            "competency.skill.example",
+            "skill.example",
+            "Example",
+            governingAbility: "charisma");
+
+        var universal = new RulesCoreUniversalCompetencyView(
+            "competency.example",
+            "example",
+            "Example",
+            null,
+            false,
+            "competency.example.training",
+            [],
+            ["competency.skill.example"],
+            [],
+            ["Example"],
+            [],
+            [],
+            [],
+            [],
+            new RulesCoreUniversalCompetencyMechanicsView(
+                new RulesCoreUniversalGoverningAbilityView(
+                    "none",
+                    null,
+                    []),
+                SupportsRanks: false,
+                SupportsClassSkillState: false,
+                SupportsTrainingState: true,
+                TrainedOnly: null,
+                ArmorCheckPenaltyApplies: null,
+                EvaluationProfileKeys: [],
+                EvaluationKinds: [],
+                CanEvaluate: false));
+
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [source],
+            [universal]);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        var example = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Null(example.GoverningAbility);
+        Assert.False(example.SupportsRanks);
+    }
+
+    [Fact]
     public void UniversalCompetencyGoverningAbilitiesNormalizeAliasesAndPreserveRealConflicts()
     {
         var animalHandlingLegacy = Competency(

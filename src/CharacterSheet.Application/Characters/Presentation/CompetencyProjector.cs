@@ -105,8 +105,9 @@ internal static class CompetencyProjector
         var evaluation = evaluations.Length == 1 ? evaluations[0] : null;
 
         var profiles = universal.Profiles;
-        var governingAbility = ResolveUniversalGoverningAbility(universal.Mechanics?.GoverningAbility)
-            ?? ResolveGoverningAbility(universal, implementations);
+        var governingAbility = universal.Mechanics is null
+            ? ResolveGoverningAbility(universal, implementations)
+            : ResolveUniversalGoverningAbility(universal.Mechanics.GoverningAbility);
         var competencyKinds = profiles
             .Select(value => value.CompetencyKind)
             .Concat(implementations
