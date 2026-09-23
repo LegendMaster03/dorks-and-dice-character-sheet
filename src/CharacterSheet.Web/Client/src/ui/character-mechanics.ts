@@ -284,6 +284,14 @@ export interface CharacterRuleChoiceView {
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
+export interface CharacterRecoveryInputView {
+    key: string;
+    valueKind: string;
+    origin: string;
+    required: boolean;
+    defaultInteger?: number | null;
+}
+
 export interface CharacterRecoveryProcedureView {
     procedureKey: string;
     displayName: string;
@@ -295,6 +303,7 @@ export interface CharacterRecoveryProcedureView {
     requiresResourceExpenditure?: boolean;
     requiresOtherRuntimeFacts?: boolean;
     missingCapabilityKeys?: readonly string[];
+    inputs?: readonly CharacterRecoveryInputView[];
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
