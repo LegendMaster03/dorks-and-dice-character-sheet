@@ -375,6 +375,7 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
         inventoryChooser: { kind: "closed" },
         spellChooser: { kind: "closed" },
         conditionChooser: { kind: "closed" },
+        recovery: { kind: "closed" },
         mutation: null
     };
 }
