@@ -132,7 +132,7 @@ export type CompetencyPresentationItem =
     | {
         kind: "family";
         parent: CompetencyView;
-        members: readonly [CompetencyView, ...CompetencyView[]];
+        members: readonly CompetencyView[];
     }
     | {
         kind: "composite";
@@ -418,14 +418,12 @@ export function buildCompetencyPresentation(
             && !consumed.has(entry.key)
             && entry.isFamily !== true
             && entry.family?.trim() === familyName);
-        if (members.length === 0) continue;
-
         consumed.add(parent.key);
         for (const member of members) consumed.add(member.key);
         groups.set(parent.key, {
             kind: "family",
             parent,
-            members: members as [CompetencyView, ...CompetencyView[]]
+            members
         });
     }
 

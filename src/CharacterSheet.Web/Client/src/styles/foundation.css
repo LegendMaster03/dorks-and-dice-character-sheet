@@ -729,6 +729,38 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
     border-radius: var(--dd-sheet-radius-sm);
 }
 
+.dd-skill-family-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: 0.45rem;
+    align-items: center;
+    min-width: 0;
+    min-height: 1.3rem;
+    padding: 0.06rem 0.4rem;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-skill-family-summary__name {
+    overflow: hidden;
+    font-size: 0.69rem;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dd-skill-family-summary__count,
+.dd-skill-family-members__empty {
+    color: var(--dd-sheet-muted);
+    font-size: 0.58rem;
+}
+
+.dd-skill-family-members__empty {
+    margin: 0;
+}
+
 .dd-skill-family-members {
     display: grid;
     gap: 0.12rem;

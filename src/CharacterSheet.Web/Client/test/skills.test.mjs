@@ -155,11 +155,34 @@ test("Rules Core family metadata adds a nested specialty disclosure without chan
     const card = renderSkillsCard(presentation);
     const familyDisclosure = byAttribute(card, "data-skill-family", "family.artisan")[0];
     assert.ok(familyDisclosure);
+    assert.equal(byAttribute(familyDisclosure, "data-skill-family-summary", "family.artisan").length, 1);
+    assert.equal(byAttribute(familyDisclosure, "data-skill-id", "family.artisan").length, 0);
     assert.equal(byClass(familyDisclosure, "dd-skill-family-members").length, 1);
     assert.equal(byAttribute(familyDisclosure, "data-skill-id", "specialty.glass").length, 1);
     assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 0);
     assert.equal(byAttribute(card, "data-skill-id", "navigation").length, 1);
 });
+
+test("family category without projected specialties does not render as an ordinary skill row", () => {
+    const presentation = buildCompetencyPresentation({
+        entries: [
+            competency("skill.craft", "Craft", "-", {
+                kind: "skill",
+                family: "Craft",
+                isFamily: true
+            })
+        ]
+    });
+
+    const card = renderSkillsCard(presentation);
+    const familyDisclosure = byAttribute(card, "data-skill-family", "skill.craft")[0];
+    assert.ok(familyDisclosure);
+    assert.equal(byAttribute(card, "data-skill-id", "skill.craft").length, 0);
+    assert.equal(byAttribute(card, "data-skill-family-summary", "skill.craft").length, 1);
+    assert.match(visibleText(familyDisclosure), /Craft/);
+    assert.match(visibleText(familyDisclosure), /No specialties/);
+});
+
 
 test("composite competency supports arbitrary component counts and preserves hierarchy", () => {
     const card = renderSkillsCard([
