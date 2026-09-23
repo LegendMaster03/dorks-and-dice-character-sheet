@@ -158,6 +158,26 @@ export interface CharacterRecoveryResponse {
     state: CharacterStateResponse;
 }
 
+export interface CharacterProfileResponse {
+    alignment: string | null;
+    deity: string | null;
+    age: string | null;
+    height: string | null;
+    weight: string | null;
+    appearance: string | null;
+    personalityTraits: string | null;
+    ideals: string | null;
+    bonds: string | null;
+    flaws: string | null;
+    backstory: string | null;
+    alliesAndOrganizations: string | null;
+    symbol: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type CharacterProfileInput = Omit<CharacterProfileResponse, "createdAt" | "updatedAt">;
+
 export interface CharacterStateResponse {
     characterId: string;
     readOnly: boolean;
@@ -168,12 +188,13 @@ export interface CharacterStateResponse {
     conditions: CharacterConditionOccurrenceResponse[];
     rulesInputs?: CharacterRulesInputStateResponse[];
     hitPointGains?: CharacterHitPointGainStateResponse[];
+    profile?: CharacterProfileResponse | null;
 }
 
 export function buildCharacterStateBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    resource?: "health" | "death-saves" | "inventory" | "notes" | "conditions",
+    resource?: "profile" | "health" | "death-saves" | "inventory" | "notes" | "conditions",
     entryId?: string
 ): string {
     let path = `/api/characters/${encodeURIComponent(characterId)}/state`;
@@ -197,6 +218,20 @@ export async function loadCharacterState(
         "GET",
         undefined,
         "Unable to load Character routine state.");
+}
+
+export async function setCharacterProfile(
+    environment: HostEnvironment,
+    characterId: string,
+    profile: CharacterProfileInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "profile"),
+        "PUT",
+        profile,
+        "Unable to update Character details.");
 }
 
 export async function setCharacterCurrentHitPoints(

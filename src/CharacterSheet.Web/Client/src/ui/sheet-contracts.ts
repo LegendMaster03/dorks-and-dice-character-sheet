@@ -6,6 +6,7 @@ import type { CharacterAbilityKey } from "../builder-api.js";
 import type {
     CharacterConditionStateInput,
     CharacterInventoryItemOccurrenceStateInput,
+    CharacterProfileInput,
     CharacterRecoveryRequestInput
 } from "../character-state-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
@@ -18,6 +19,7 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
 }
 
 export interface RoutineCharacterHandlers {
+    setProfile(input: CharacterProfileInput): void;
     setCurrentHitPoints(currentHitPoints: number | null): void;
     setDeathSaves(successes: number, failures: number): void;
     addNote(content: string): void;

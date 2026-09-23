@@ -15,6 +15,7 @@ import { renderFeaturesSection } from "../features/features/features-section.js"
 import { renderInventorySection } from "../features/inventory/inventory-section.js";
 import { renderNotesSection } from "../features/notes/notes-section.js";
 import { renderKnownSpellsSection } from "../features/spells/known-spells.js";
+import { renderProfileSection } from "../features/profile/profile-section.js";
 
 export function renderPrimaryContent(
     activeSection: SheetSection,
@@ -78,6 +79,9 @@ export function renderPrimaryContent(
     panel.append(createElement("h2", "dd-primary-content__title", definition.label));
 
     switch (definition.id) {
+        case "details":
+            panel.append(renderProfileSection(routine, readOnly, handlers.routine));
+            break;
         case "notes":
             panel.append(renderNotesSection(routine, readOnly, handlers.routine));
             break;

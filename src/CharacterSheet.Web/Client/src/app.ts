@@ -23,6 +23,7 @@ import { createAdvancementWorkflow } from "./features/advancement/advancement-wo
 import { createAbilityWorkflow } from "./features/abilities/ability-workflow.js";
 import { createFeatWorkflow } from "./features/features/feat-workflow.js";
 import { createHealthWorkflow } from "./features/health/health-workflow.js";
+import { createProfileWorkflow } from "./features/profile/profile-workflow.js";
 import { createRecoveryWorkflow } from "./features/health/recovery-workflow.js";
 import { createInventoryWorkflow } from "./features/inventory/inventory-workflow.js";
 import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
@@ -240,6 +241,8 @@ function renderWorkspace(
                         classLevel)
             },
             routine: {
+                setProfile: input =>
+                    void profileWorkflow.save(character.characterId, input),
                 setCurrentHitPoints: currentHitPoints =>
                     void healthWorkflow.setCurrentHitPoints(character.characterId, currentHitPoints),
                 setDeathSaves: (successes, failures) =>
@@ -384,6 +387,7 @@ const featWorkflow = createFeatWorkflow(
     presentationWorkflow,
     environment);
 const healthWorkflow = createHealthWorkflow(routineStateWorkflow, environment);
+const profileWorkflow = createProfileWorkflow(routineStateWorkflow, environment);
 const recoveryWorkflow = createRecoveryWorkflow(
     application,
     presentationWorkflow,

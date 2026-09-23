@@ -92,6 +92,7 @@ export interface GuidedBuilderUiState {
 }
 
 export type RoutineMutationKind =
+    | "profile-update"
     | "health-update"
     | "death-saves-update"
     | "note-add"
