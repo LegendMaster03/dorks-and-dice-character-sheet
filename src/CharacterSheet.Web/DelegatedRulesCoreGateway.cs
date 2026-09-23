@@ -92,6 +92,23 @@ public sealed class DelegatedRulesCoreGateway(
             cancellationToken);
     }
 
+    public Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
+        string procedureKey,
+        RulesCoreCharacterRecoveryResolutionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(procedureKey))
+        {
+            throw new ArgumentException("Recovery procedure key can not be blank.", nameof(procedureKey));
+        }
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterRecoveryResolutionView>(
+            HttpMethod.Post,
+            $"/api/rules/mechanics/recovery/{Uri.EscapeDataString(procedureKey.Trim())}/resolve",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
     public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
         RulesCoreCharacterRulesProjectionRequest request,
         CancellationToken cancellationToken = default)
