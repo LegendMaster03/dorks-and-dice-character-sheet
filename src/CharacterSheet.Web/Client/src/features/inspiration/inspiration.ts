@@ -46,10 +46,10 @@ export function renderInspirationQuickCard(
         toggle.disabled = true;
         card.setAttribute("data-inspiration-saving", "true");
         const saved = await options.onSet(next);
-        card.removeAttribute("data-inspiration-saving");
+        card.setAttribute("data-inspiration-saving", "false");
         if (saved) {
             current = next;
-            card.removeAttribute("data-inspiration-error");
+            card.setAttribute("data-inspiration-error", "false");
             applyState();
         } else {
             card.setAttribute("data-inspiration-error", "true");
