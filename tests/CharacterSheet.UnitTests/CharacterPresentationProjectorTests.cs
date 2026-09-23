@@ -289,6 +289,7 @@ public sealed class CharacterPresentationProjectorTests
             mechanics.Competencies.Entries,
             value => value.Key == "competency.craft");
         Assert.True(family.IsFamily);
+        Assert.Equal("family", family.Kind);
         Assert.Equal(
             ["competency.alchemy", "competency.blacksmithing"],
             family.ChildCompetencyKeys);
@@ -297,6 +298,7 @@ public sealed class CharacterPresentationProjectorTests
             mechanics.Competencies.Entries,
             value => value.Key == "competency.alchemy");
         Assert.Equal("Alchemy", alchemy.Label);
+        Assert.Equal("specialized-skill", alchemy.Kind);
         Assert.Equal("Craft", alchemy.Family);
         Assert.Equal("competency.alchemy.training", alchemy.SharedTrainingKey);
         Assert.Equal("skill.craft-alchemy", alchemy.RankInputKey);
@@ -314,9 +316,32 @@ public sealed class CharacterPresentationProjectorTests
             mechanics.Competencies.Entries,
             value => value.Key == "competency.blacksmithing");
         Assert.Equal("Blacksmithing", blacksmithing.Label);
+        Assert.Equal("specialized-skill", blacksmithing.Kind);
         Assert.Equal("Craft", blacksmithing.Family);
         Assert.Equal("-", blacksmithing.EffectiveValue);
         Assert.Null(blacksmithing.RankInputKey);
+    }
+
+    [Fact]
+    public void ExplicitEmptyUniversalCompetencyCatalogDoesNotFallBackToSourceShapedRows()
+    {
+        var arcana = Competency(
+            "competency.skill.arcana",
+            "skill.arcana",
+            "Arcana");
+
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [arcana],
+            []);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        Assert.NotNull(mechanics.Competencies);
+        Assert.Empty(mechanics.Competencies.Entries);
     }
 
     [Fact]
