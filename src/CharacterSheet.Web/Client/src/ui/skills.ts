@@ -108,7 +108,10 @@ function renderCompetencyFamily(
     const summary = createElement("summary", "dd-skill-disclosure__summary");
     const category = createElement("span", "dd-skill-family-summary");
     category.setAttribute("data-skill-family-summary", item.parent.key);
+    const indicator = createElement("span", "dd-skill-family-summary__indicator", "▸");
+    indicator.setAttribute("aria-hidden", "true");
     category.append(
+        indicator,
         createElement("span", "dd-skill-family-summary__name", item.parent.label),
         createElement(
             "span",
@@ -602,8 +605,12 @@ function hasCompetencyDetails(competency: CompetencyView): boolean {
 }
 
 function abbreviateAbility(ability: string): string {
-    const normalized = ability.trim();
-    return normalized.slice(0, 3).toUpperCase();
+    return ability
+        .split(/\s*\/\s*/)
+        .map(value => value.trim())
+        .filter(value => value.length > 0)
+        .map(value => value.slice(0, 3).toUpperCase())
+        .join("/");
 }
 
 function formatRelationshipToken(value: string): string {

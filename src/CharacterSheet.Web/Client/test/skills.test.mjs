@@ -118,6 +118,18 @@ test("skill rows use one aligned line: proficiency, governing stat, name, then m
     assert.equal(rowChildren[3].textContent, "+7");
 });
 
+test("skill rows abbreviate multiple governing abilities without dropping the tag", () => {
+    const card = renderSkillsCard([
+        standalone(competency("animal-handling", "Animal Handling", "-", {
+            governingAbility: "charisma / wisdom"
+        }))
+    ]);
+
+    const row = byAttribute(card, "data-skill-id", "animal-handling")[0];
+    assert.ok(row);
+    assert.equal(row.children[1].textContent, "CHA/WIS");
+});
+
 test("standalone competency renders as one ordinary row", () => {
     const card = renderSkillsCard([standalone(competency("navigation", "Navigation", "+7"))]);
     assert.equal(byClass(card, "dd-skill-row--standalone").length, 1);
@@ -156,6 +168,10 @@ test("Rules Core family metadata adds a nested specialty disclosure without chan
     const familyDisclosure = byAttribute(card, "data-skill-family", "family.artisan")[0];
     assert.ok(familyDisclosure);
     assert.equal(byAttribute(familyDisclosure, "data-skill-family-summary", "family.artisan").length, 1);
+    const indicator = byClass(familyDisclosure, "dd-skill-family-summary__indicator")[0];
+    assert.ok(indicator);
+    assert.equal(indicator.textContent, "▸");
+    assert.equal(indicator.getAttribute("aria-hidden"), "true");
     assert.equal(byAttribute(familyDisclosure, "data-skill-id", "family.artisan").length, 0);
     assert.equal(byClass(familyDisclosure, "dd-skill-family-members").length, 1);
     assert.equal(byAttribute(familyDisclosure, "data-skill-id", "specialty.glass").length, 1);
