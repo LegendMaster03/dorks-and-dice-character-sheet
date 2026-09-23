@@ -5,7 +5,8 @@ import type {
 import type { CharacterAbilityKey } from "../builder-api.js";
 import type {
     CharacterConditionStateInput,
-    CharacterInventoryItemOccurrenceStateInput
+    CharacterInventoryItemOccurrenceStateInput,
+    CharacterRecoveryRequestInput
 } from "../character-state-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
@@ -39,6 +40,8 @@ export interface RoutineCharacterHandlers {
     updateCondition(conditionId: string, input: CharacterConditionStateInput): void;
     removeCondition(conditionId: string): void;
     recover?(procedureKey: string): void;
+    continueRecovery?(input: CharacterRecoveryRequestInput): void;
+    cancelRecovery?(): void;
 }
 
 export interface RulesInputCharacterHandlers {
