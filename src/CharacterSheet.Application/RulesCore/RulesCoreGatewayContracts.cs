@@ -222,6 +222,39 @@ public sealed record RulesCoreCharacterSupportProjectionView(
     DateTimeOffset? PublishedAt,
     IReadOnlyList<RulesCoreCharacterRecoveryProcedureView> RecoveryProcedures);
 
+public sealed record RulesCoreCharacterRecoveryResolutionRequest(
+    Dictionary<string, int>? IntegerInputs = null,
+    Dictionary<string, bool>? BooleanInputs = null,
+    Dictionary<string, string>? StringInputs = null,
+    IReadOnlyList<string>? CapabilityKeys = null,
+    Dictionary<string, string>? Choices = null,
+    Dictionary<string, int>? Rolls = null);
+
+public sealed record RulesCoreCharacterRecoveryEffectView(
+    string EffectKey,
+    string TargetKind,
+    string TargetKey,
+    string Operation,
+    int? Amount,
+    string? Value,
+    string? ReferenceKey);
+
+public sealed record RulesCoreCharacterRecoveryResolutionView(
+    string Scope,
+    Guid? CampaignId,
+    int? RevisionNumber,
+    DateTimeOffset? PublishedAt,
+    string ProcedureKey,
+    string DisplayName,
+    string? PresentationRole,
+    string Status,
+    IReadOnlyList<string> MissingCapabilityKeys,
+    IReadOnlyList<string> MissingInputKeys,
+    IReadOnlyList<RulesCoreCharacterRecoveryChoiceView> PendingChoices,
+    IReadOnlyList<RulesCoreCharacterRecoveryRollView> PendingRolls,
+    IReadOnlyList<RulesCoreCharacterRecoveryEffectView> Consequences,
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions);
+
 public sealed record RulesCoreMechanicEvaluationRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     Dictionary<string, int>? IntegerInputs = null,
@@ -280,6 +313,11 @@ public interface IRulesCoreGateway
 
     Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
         RulesCoreCharacterSupportProjectionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
+        string procedureKey,
+        RulesCoreCharacterRecoveryResolutionRequest request,
         CancellationToken cancellationToken = default);
 
     Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
