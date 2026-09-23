@@ -530,7 +530,7 @@ test("Inspiration is a Character-owned boolean the player can toggle at will wit
             ...handlers,
             routine: {
                 ...handlers.routine,
-                setInspiration(value) { calls.push(value); }
+                async setInspiration(value) { calls.push(value); return true; }
             }
         }
     );
