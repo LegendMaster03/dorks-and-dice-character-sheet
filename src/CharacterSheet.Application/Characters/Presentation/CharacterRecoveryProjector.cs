@@ -26,6 +26,14 @@ internal static class CharacterRecoveryProjector
                 value.MissingCapabilityKeys.Count == 0
                     ? null
                     : value.MissingCapabilityKeys,
+                value.Inputs.Count == 0
+                    ? null
+                    : value.Inputs.Select(input => new CharacterRecoveryInputPresentationView(
+                        input.Key,
+                        input.ValueKind,
+                        input.Origin,
+                        input.Required,
+                        input.DefaultInteger)).ToArray(),
                 SourceAttributionMapper.Map(value.SourceAttributions)))
             .ToArray();
 
