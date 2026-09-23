@@ -101,9 +101,12 @@ internal static class CompetencyProjector
             .Where(value => value is not null)
             .Cast<RulesCoreMechanicView>()
             .ToArray();
-        var evaluation = implementations
+        var evaluations = implementations
             .Select(value => evaluationByKey.GetValueOrDefault(value.MechanicKey))
-            .FirstOrDefault(value => value is not null);
+            .Where(value => value is not null)
+            .Cast<RulesCoreMechanicEvaluationView>()
+            .ToArray();
+        var evaluation = evaluations.Length == 1 ? evaluations[0] : null;
 
         var profiles = universal.Profiles;
         var governingAbility = SingleDistinct(

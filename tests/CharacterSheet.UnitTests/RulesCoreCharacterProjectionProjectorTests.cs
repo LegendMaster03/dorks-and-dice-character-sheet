@@ -281,6 +281,42 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
     }
 
     [Fact]
+    public void UniversalCompetencyDoesNotChooseArbitrarilyBetweenResolvedImplementations()
+    {
+        var fallback = new CharacterMechanicsPresentationView(
+            Competencies: new CompetencyCollectionPresentationView(
+                [new CompetencyPresentationView(
+                    "competency.alchemy",
+                    "Alchemy",
+                    "-",
+                    Kind: "specialized-skill",
+                    Family: "Craft",
+                    MechanicKeys:
+                    [
+                        "competency.skill.alchemy",
+                        "competency.tool.alchemists-supplies"
+                    ])]));
+
+        var projection = EmptyProjection() with
+        {
+            Mechanics =
+            [
+                Mechanic("competency.skill.alchemy", "competency", "Alchemy Skill", 8),
+                Mechanic("competency.tool.alchemists-supplies", "competency", "Alchemist's Supplies", 5)
+            ]
+        };
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            fallback,
+            projection);
+
+        var alchemy = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Equal("competency.alchemy", alchemy.Key);
+        Assert.Equal("-", alchemy.EffectiveValue);
+        Assert.Null(alchemy.Breakdown);
+    }
+
+    [Fact]
     public void AbilityProjectionUsesAxisKeysForStandardAndAdditionalAbilities()
     {
         var projection = EmptyProjection() with

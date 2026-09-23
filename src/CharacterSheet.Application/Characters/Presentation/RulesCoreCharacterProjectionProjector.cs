@@ -521,13 +521,23 @@ internal static class RulesCoreCharacterProjectionProjector
                     mechanicKeys = [$"competency.{entry.Key}"];
                 }
 
-                var projected = mechanicKeys
+                var projectedCandidates = mechanicKeys
                     .Select(key => projectedByMechanicKey.GetValueOrDefault(key))
                     .Where(value => value is not null)
                     .Cast<RulesCoreCharacterResolvedMechanicView>()
-                    .OrderBy(value => ProjectionPriority(value.State))
-                    .ThenBy(value => value.MechanicKey, StringComparer.Ordinal)
-                    .FirstOrDefault();
+                    .ToArray();
+                RulesCoreCharacterResolvedMechanicView? projected = null;
+                if (projectedCandidates.Length > 0)
+                {
+                    var bestPriority = projectedCandidates.Min(value => ProjectionPriority(value.State));
+                    var best = projectedCandidates
+                        .Where(value => ProjectionPriority(value.State) == bestPriority)
+                        .ToArray();
+                    if (best.Length == 1)
+                    {
+                        projected = best[0];
+                    }
+                }
 
                 var rankInputKeys = new List<string>();
                 if (!string.IsNullOrWhiteSpace(entry.RankInputKey))
