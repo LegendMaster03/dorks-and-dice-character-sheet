@@ -3,6 +3,8 @@ import type {
     CharacterProfileInput,
     CharacterProfileResponse
 } from "../../character-state-api.js";
+import { renderMechanicalValue } from "../../core/mechanics/mechanic-value.js";
+import type { CalculatedMechanicalValueView } from "../../ui/character-mechanics.js";
 import {
     createButton,
     createElement,
@@ -39,7 +41,8 @@ const PROFILE_FIELDS: readonly ProfileField[] = [
 export function renderProfileSection(
     routine: CharacterRoutineUiState,
     readOnly: boolean,
-    handlers: RoutineCharacterHandlers
+    handlers: RoutineCharacterHandlers,
+    ruleMetadata: readonly CalculatedMechanicalValueView[] | undefined
 ): HTMLElement {
     const content = createElement("div", "dd-routine-section dd-profile");
 
@@ -52,6 +55,17 @@ export function renderProfileSection(
             routine.message ?? "Character details are unavailable.",
             "error"));
         return content;
+    }
+
+    if (ruleMetadata?.length) {
+        const rules = createElement("section", "dd-profile__rules");
+        rules.append(createElement("h3", "dd-primary-content__subtitle", "Rules-derived details"));
+        const grid = createElement("div", "dd-profile__grid");
+        for (const value of ruleMetadata) {
+            grid.append(renderMechanicalValue(value, true));
+        }
+        rules.append(grid);
+        content.append(rules);
     }
 
     const profile = routine.state.profile ?? null;

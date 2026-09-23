@@ -717,6 +717,25 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     assert.equal(byClass(rendered, "dd-health-quick").length, 1);
 });
 
+test("Details renders Rules Core character metadata generically with calculation detail", () => {
+    const rendered = render("details", {
+        characterMetadata: [{
+            key: "character.size-category",
+            label: "Size",
+            effectiveValue: "Medium",
+            sourceAttributions: [{
+                key: "fixture",
+                label: "Fixture Rules"
+            }]
+        }]
+    });
+    const size = byAttribute(rendered, "data-mechanic-key", "character.size-category")[0];
+
+    assert.ok(size);
+    assert.match(visibleText(size), /Size\s+Medium/);
+    assert.match(visibleText(size), /Details/);
+});
+
 test("Details renders Character-authored profile without inventing rule-derived identity", () => {
     const currentRoutine = routine([], {}, true);
     currentRoutine.state.profile = {

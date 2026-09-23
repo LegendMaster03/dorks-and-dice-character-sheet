@@ -80,7 +80,11 @@ export function renderPrimaryContent(
 
     switch (definition.id) {
         case "details":
-            panel.append(renderProfileSection(routine, readOnly, handlers.routine));
+            panel.append(renderProfileSection(
+                routine,
+                readOnly,
+                handlers.routine,
+                mechanics?.characterMetadata));
             break;
         case "notes":
             panel.append(renderNotesSection(routine, readOnly, handlers.routine));
