@@ -41,6 +41,101 @@ public sealed class CharacterStateModelTests
     }
 
     [Fact]
+    public void IntegerStateMutationBatchValidatesBeforeApplyingAnyChange()
+    {
+        var root = Root();
+        var now = DateTimeOffset.UtcNow;
+        root.SetCurrentHitPoints(10, now);
+        root.SetDeathSaves(1, 0, now);
+        root.SetRulesInput(
+            CharacterRulesInputKind.Resource,
+            "resource.focus",
+            5,
+            null,
+            null,
+            now);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.ApplyIntegerStateMutations(
+                [
+                    new CharacterIntegerStateMutation(
+                        CharacterIntegerStateMutationTarget.CurrentHitPoints,
+                        CharacterIntegerStateMutationOperation.Adjust,
+                        4),
+                    new CharacterIntegerStateMutation(
+                        CharacterIntegerStateMutationTarget.Resource,
+                        CharacterIntegerStateMutationOperation.Expend,
+                        2,
+                        "resource.focus"),
+                    new CharacterIntegerStateMutation(
+                        CharacterIntegerStateMutationTarget.DeathSaveFailures,
+                        CharacterIntegerStateMutationOperation.Set,
+                        4)
+                ],
+                now.AddMinutes(1)));
+
+        Assert.Equal(10, root.CurrentHitPoints);
+        Assert.Equal(0, root.DeathSaveFailures);
+        Assert.Equal(
+            5,
+            Assert.Single(
+                root.RulesInputs,
+                value => value.Kind == CharacterRulesInputKind.Resource
+                    && value.Key == "resource.focus").IntegerValue);
+    }
+
+    [Fact]
+    public void IntegerStateMutationBatchSupportsAdjustExpendAndSetWithoutInventingMissingValues()
+    {
+        var root = Root();
+        var now = DateTimeOffset.UtcNow;
+        root.SetCurrentHitPoints(10, now);
+        root.SetRulesInput(
+            CharacterRulesInputKind.Resource,
+            "resource.focus",
+            5,
+            null,
+            null,
+            now);
+
+        root.ApplyIntegerStateMutations(
+            [
+                new CharacterIntegerStateMutation(
+                    CharacterIntegerStateMutationTarget.CurrentHitPoints,
+                    CharacterIntegerStateMutationOperation.Adjust,
+                    4),
+                new CharacterIntegerStateMutation(
+                    CharacterIntegerStateMutationTarget.Resource,
+                    CharacterIntegerStateMutationOperation.Expend,
+                    2,
+                    "resource.focus"),
+                new CharacterIntegerStateMutation(
+                    CharacterIntegerStateMutationTarget.DeathSaveSuccesses,
+                    CharacterIntegerStateMutationOperation.Set,
+                    0)
+            ],
+            now.AddMinutes(1));
+
+        Assert.Equal(14, root.CurrentHitPoints);
+        Assert.Equal(0, root.DeathSaveSuccesses);
+        Assert.Equal(
+            3,
+            Assert.Single(
+                root.RulesInputs,
+                value => value.Kind == CharacterRulesInputKind.Resource
+                    && value.Key == "resource.focus").IntegerValue);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            root.ApplyIntegerStateMutations(
+                [new CharacterIntegerStateMutation(
+                    CharacterIntegerStateMutationTarget.Resource,
+                    CharacterIntegerStateMutationOperation.Adjust,
+                    1,
+                    "resource.missing")],
+                now.AddMinutes(2)));
+    }
+
+    [Fact]
     public void InventoryOccurrencesUseStableConceptKeysAndPermitDuplicates()
     {
         var root = Root();
