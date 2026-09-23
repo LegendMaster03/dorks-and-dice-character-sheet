@@ -207,6 +207,14 @@ public sealed class CharacterPresentationProjectorTests
             "tool.alchemists-supplies",
             "Alchemist's Supplies",
             competencyKind: "tool");
+        var blacksmithingMechanic = Competency(
+            "competency.blacksmithing",
+            "competency.blacksmithing",
+            "Blacksmithing",
+            family: "Craft",
+            specialty: "Blacksmithing",
+            competencyKind: "specialized-skill",
+            governingAbility: "intelligence");
 
         var universal =
             new RulesCoreUniversalCompetencyView[]
@@ -264,20 +272,33 @@ public sealed class CharacterPresentationProjectorTests
                     false,
                     "competency.blacksmithing.training",
                     [],
-                    [],
+                    ["competency.blacksmithing"],
                     ["competency.skill.craft-blacksmithing"],
                     ["Blacksmithing", "Craft (blacksmithing)"],
                     [],
                     [],
                     [],
-                    [])
+                    [],
+                    new RulesCoreUniversalCompetencyMechanicsView(
+                        new RulesCoreUniversalGoverningAbilityView(
+                            "fixed",
+                            "intelligence",
+                            ["intelligence"]),
+                        SupportsRanks: true,
+                        SupportsClassSkillState: true,
+                        SupportsTrainingState: true,
+                        TrainedOnly: false,
+                        ArmorCheckPenaltyApplies: false,
+                        EvaluationProfileKeys: ["ranked-skill"],
+                        EvaluationKinds: ["competency-profile"],
+                        CanEvaluate: true))
             };
         var catalog = new RulesCoreMechanicsCatalogView(
             "global",
             null,
             1,
             Now,
-            [craft, craftAlchemy, alchemyTools],
+            [craft, craftAlchemy, alchemyTools, blacksmithingMechanic],
             universal);
 
         var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
@@ -318,8 +339,201 @@ public sealed class CharacterPresentationProjectorTests
         Assert.Equal("Blacksmithing", blacksmithing.Label);
         Assert.Equal("specialized-skill", blacksmithing.Kind);
         Assert.Equal("Craft", blacksmithing.Family);
+        Assert.Equal("intelligence", blacksmithing.GoverningAbility);
         Assert.Equal("-", blacksmithing.EffectiveValue);
-        Assert.Null(blacksmithing.RankInputKey);
+        Assert.True(blacksmithing.SupportsRanks);
+        Assert.True(blacksmithing.SupportsClassSkillState);
+        Assert.True(blacksmithing.SupportsTrainingState);
+        Assert.Equal("competency.blacksmithing", blacksmithing.RankInputKey);
+    }
+
+    [Fact]
+    public void UniversalCompetencyMechanicsContractIsAuthoritativeForPresentation()
+    {
+        var source = Competency(
+            "competency.skill.example",
+            "skill.example",
+            "Example",
+            governingAbility: "charisma");
+
+        var universal = new RulesCoreUniversalCompetencyView(
+            "competency.example",
+            "example",
+            "Example",
+            null,
+            false,
+            "competency.example.training",
+            [],
+            ["competency.skill.example"],
+            [],
+            ["Example"],
+            [],
+            [],
+            [],
+            [],
+            new RulesCoreUniversalCompetencyMechanicsView(
+                new RulesCoreUniversalGoverningAbilityView(
+                    "fixed",
+                    "wis",
+                    ["wisdom"]),
+                SupportsRanks: true,
+                SupportsClassSkillState: false,
+                SupportsTrainingState: true,
+                TrainedOnly: false,
+                ArmorCheckPenaltyApplies: false,
+                EvaluationProfileKeys: ["ranked-skill"],
+                EvaluationKinds: ["competency-profile"],
+                CanEvaluate: true));
+
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [source],
+            [universal]);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        var example = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Equal("wisdom", example.GoverningAbility);
+        Assert.True(example.SupportsRanks);
+        Assert.False(example.SupportsClassSkillState);
+        Assert.True(example.SupportsTrainingState);
+        Assert.False(example.TrainedOnly);
+        Assert.False(example.ArmorCheckPenalty?.Applies);
+    }
+
+    [Fact]
+    public void UniversalCompetencyMechanicsCanAuthoritativelyDeclareNoGoverningAbility()
+    {
+        var source = Competency(
+            "competency.skill.example",
+            "skill.example",
+            "Example",
+            governingAbility: "charisma");
+
+        var universal = new RulesCoreUniversalCompetencyView(
+            "competency.example",
+            "example",
+            "Example",
+            null,
+            false,
+            "competency.example.training",
+            [],
+            ["competency.skill.example"],
+            [],
+            ["Example"],
+            [],
+            [],
+            [],
+            [],
+            new RulesCoreUniversalCompetencyMechanicsView(
+                new RulesCoreUniversalGoverningAbilityView(
+                    "none",
+                    null,
+                    []),
+                SupportsRanks: false,
+                SupportsClassSkillState: false,
+                SupportsTrainingState: true,
+                TrainedOnly: null,
+                ArmorCheckPenaltyApplies: null,
+                EvaluationProfileKeys: [],
+                EvaluationKinds: [],
+                CanEvaluate: false));
+
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [source],
+            [universal]);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        var example = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Null(example.GoverningAbility);
+        Assert.False(example.SupportsRanks);
+    }
+
+    [Fact]
+    public void UniversalCompetencyGoverningAbilitiesNormalizeAliasesAndPreserveRealConflicts()
+    {
+        var animalHandlingLegacy = Competency(
+            "competency.skill.handle-animal",
+            "skill.handle-animal",
+            "Handle Animal",
+            governingAbility: "cha");
+        var animalHandlingModern = Competency(
+            "competency.skill.animal-handling",
+            "skill.animal-handling",
+            "Animal Handling",
+            governingAbility: "wisdom");
+        var medicineLegacy = Competency(
+            "competency.skill.heal",
+            "skill.heal",
+            "Heal",
+            governingAbility: "wis");
+        var medicineModern = Competency(
+            "competency.skill.medicine",
+            "skill.medicine",
+            "Medicine",
+            governingAbility: "wisdom");
+
+        var universal =
+            new RulesCoreUniversalCompetencyView[]
+            {
+                new(
+                    "competency.animal-handling",
+                    "animal-handling",
+                    "Animal Handling",
+                    null,
+                    false,
+                    "competency.animal-handling.training",
+                    [],
+                    ["competency.skill.handle-animal", "competency.skill.animal-handling"],
+                    [],
+                    ["Handle Animal", "Animal Handling"],
+                    [],
+                    [],
+                    [],
+                    []),
+                new(
+                    "competency.medicine",
+                    "medicine",
+                    "Medicine",
+                    null,
+                    false,
+                    "competency.medicine.training",
+                    [],
+                    ["competency.skill.heal", "competency.skill.medicine"],
+                    [],
+                    ["Heal", "Medicine"],
+                    [],
+                    [],
+                    [],
+                    [])
+            };
+        var catalog = new RulesCoreMechanicsCatalogView(
+            "global",
+            null,
+            1,
+            Now,
+            [animalHandlingLegacy, animalHandlingModern, medicineLegacy, medicineModern],
+            universal);
+
+        var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
+
+        var animalHandling = Assert.Single(
+            mechanics.Competencies!.Entries,
+            value => value.Key == "competency.animal-handling");
+        Assert.Equal("wisdom / charisma", animalHandling.GoverningAbility);
+
+        var medicine = Assert.Single(
+            mechanics.Competencies.Entries,
+            value => value.Key == "competency.medicine");
+        Assert.Equal("wisdom", medicine.GoverningAbility);
     }
 
     [Fact]
@@ -830,13 +1044,14 @@ public sealed class CharacterPresentationProjectorTests
         string? specialty = null,
         IReadOnlyList<RulesCoreMechanicRelationshipView>? relationships = null,
         string competencyKind = "skill",
-        bool isFamily = false)
+        bool isFamily = false,
+        string governingAbility = "intelligence")
     {
         var definition = new RulesCoreCompetencyDefinitionView(
             competencyKind,
             family,
             specialty,
-            "intelligence",
+            governingAbility,
             true,
             true,
             true,

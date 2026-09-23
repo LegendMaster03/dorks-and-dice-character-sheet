@@ -209,7 +209,8 @@ public sealed class RulesCoreGatewayContractTests
             "profiles": [],
             "facets": [],
             "relatedCompetencies": [],
-            "sourceAttributions": []
+            "sourceAttributions": [],
+            "mechanics": null
           }, {
             "semanticKey": "competency.alchemy",
             "identityKey": "alchemy",
@@ -231,7 +232,22 @@ public sealed class RulesCoreGatewayContractTests
               "mechanicKeys": ["competency.skill.craft-alchemy"]
             }],
             "relatedCompetencies": [],
-            "sourceAttributions": []
+            "sourceAttributions": [],
+            "mechanics": {
+              "governingAbility": {
+                "resolutionKind": "fixed",
+                "fixedAbilityKey": "intelligence",
+                "abilityKeys": ["intelligence"]
+              },
+              "supportsRanks": true,
+              "supportsClassSkillState": true,
+              "supportsTrainingState": true,
+              "trainedOnly": false,
+              "armorCheckPenaltyApplies": false,
+              "evaluationProfileKeys": ["ranked-skill"],
+              "evaluationKinds": ["competency-profile"],
+              "canEvaluate": true
+            }
           }]
         }
         """;
@@ -251,6 +267,16 @@ public sealed class RulesCoreGatewayContractTests
             alchemy.MechanicKeys);
         Assert.Equal(["competency.skill.alchemy"], alchemy.CompatibilityMechanicKeys);
         Assert.True(Assert.Single(alchemy.Facets).SupportsRanks);
+        Assert.NotNull(alchemy.Mechanics);
+        Assert.Equal("fixed", alchemy.Mechanics.GoverningAbility.ResolutionKind);
+        Assert.Equal("intelligence", alchemy.Mechanics.GoverningAbility.FixedAbilityKey);
+        Assert.Equal(["intelligence"], alchemy.Mechanics.GoverningAbility.AbilityKeys);
+        Assert.True(alchemy.Mechanics.SupportsRanks);
+        Assert.True(alchemy.Mechanics.SupportsClassSkillState);
+        Assert.True(alchemy.Mechanics.SupportsTrainingState);
+        Assert.False(alchemy.Mechanics.TrainedOnly);
+        Assert.False(alchemy.Mechanics.ArmorCheckPenaltyApplies);
+        Assert.True(alchemy.Mechanics.CanEvaluate);
     }
 
     [Fact]
