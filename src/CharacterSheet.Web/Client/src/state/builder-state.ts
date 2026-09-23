@@ -34,7 +34,10 @@ export function reduceBuilderState(
                 build: null,
                 message: action.message,
                 chooser: { kind: "closed" },
-                saving: null
+                saving: null,
+                savingAbility: null,
+                savingAdvancementLevel: null,
+                savingFeat: null
             };
             break;
         case "rule-reference-resolved": {
@@ -145,6 +148,40 @@ export function reduceBuilderState(
                 abilitySaveError: { abilityKey: action.abilityKey, message: action.message }
             };
             break;
+        case "advancement-level-save-started":
+            if (builder.status === "ready"
+                && builder.build !== null
+                && !builder.build.readOnly
+                && builder.saving === null
+                && builder.savingAbility === null
+                && builder.savingAdvancementLevel === null
+                && builder.savingFeat === null) {
+                builder = {
+                    ...builder,
+                    savingAdvancementLevel: action.occurrenceId,
+                    advancementLevelSaveError: undefined
+                };
+            }
+            break;
+        case "advancement-level-saved":
+            builder = builderStateFromBuild(
+                {
+                    ...builder,
+                    savingAdvancementLevel: null,
+                    advancementLevelSaveError: undefined
+                },
+                action.build);
+            break;
+        case "advancement-level-save-failed":
+            builder = {
+                ...builder,
+                savingAdvancementLevel: null,
+                advancementLevelSaveError: {
+                    occurrenceId: action.occurrenceId,
+                    message: action.message
+                }
+            };
+            break;
         case "feat-reference-resolved": {
             const occurrence = builder.build?.progressionEntries.find(value =>
                 value.id === action.occurrenceId && value.kind === "feat");
@@ -226,6 +263,7 @@ export function reduceBuilderState(
                 && !builder.build.readOnly
                 && builder.saving === null
                 && builder.savingAbility === null
+                && builder.savingAdvancementLevel === null
                 && builder.savingFeat === null) {
                 builder = {
                     ...builder,
@@ -264,6 +302,7 @@ export function createInitialBuilderState(): CharacterBuilderUiState {
         chooser: { kind: "closed" },
         saving: null,
         savingAbility: null,
+        savingAdvancementLevel: null,
         featReferences: {},
         featChooser: { kind: "closed" },
         savingFeat: null
@@ -287,6 +326,8 @@ function builderStateFromBuild(
         saving: null,
         saveError: undefined,
         savingAbility: null,
+        savingAdvancementLevel: null,
+        advancementLevelSaveError: undefined,
         abilitySaveError: undefined,
         featReferences: Object.fromEntries(
             build.progressionEntries

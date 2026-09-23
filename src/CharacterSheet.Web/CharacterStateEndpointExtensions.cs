@@ -14,6 +14,82 @@ public static class CharacterStateEndpointExtensions
                 await service.GetAsync(characterId, cancellationToken),
                 mutating: false));
 
+        app.MapPut("/api/characters/{characterId:guid}/state/currency", async (
+            Guid characterId,
+            CharacterCurrencyBalanceRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetCurrencyBalanceAsync(
+                        characterId,
+                        request.Key,
+                        request.Amount,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapDelete("/api/characters/{characterId:guid}/state/currency", async (
+            Guid characterId,
+            string key,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.RemoveCurrencyBalanceAsync(
+                        characterId,
+                        key,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPut("/api/characters/{characterId:guid}/state/profile", async (
+            Guid characterId,
+            CharacterProfileRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetProfileAsync(
+                        characterId,
+                        request.Alignment,
+                        request.Deity,
+                        request.Age,
+                        request.Height,
+                        request.Weight,
+                        request.Appearance,
+                        request.PersonalityTraits,
+                        request.Ideals,
+                        request.Bonds,
+                        request.Flaws,
+                        request.Backstory,
+                        request.AlliesAndOrganizations,
+                        request.Symbol,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPut("/api/characters/{characterId:guid}/state/health", async (
             Guid characterId,
             CharacterHealthRequest request,
@@ -25,6 +101,148 @@ public static class CharacterStateEndpointExtensions
                     request.CurrentHitPoints,
                     cancellationToken),
                 mutating: true));
+
+        app.MapPut("/api/characters/{characterId:guid}/state/death-saves", async (
+            Guid characterId,
+            CharacterDeathSavesRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetDeathSavesAsync(
+                        characterId,
+                        request.Successes,
+                        request.Failures,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentOutOfRangeException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPut("/api/characters/{characterId:guid}/state/rules-inputs", async (
+            Guid characterId,
+            CharacterRulesInputStateRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetRulesInputAsync(
+                        characterId,
+                        request.Kind,
+                        request.Key,
+                        request.IntegerValue,
+                        request.BooleanValue,
+                        request.TextValue,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapDelete("/api/characters/{characterId:guid}/state/rules-inputs/{kind}", async (
+            Guid characterId,
+            string kind,
+            string key,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.RemoveRulesInputAsync(
+                        characterId,
+                        kind,
+                        key,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPut("/api/characters/{characterId:guid}/state/hit-point-gains/{advancementOccurrenceId:guid}/{classLevel:int}", async (
+            Guid characterId,
+            Guid advancementOccurrenceId,
+            int classLevel,
+            CharacterHitPointGainRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetHitPointGainAsync(
+                        characterId,
+                        advancementOccurrenceId,
+                        classLevel,
+                        request.HitDieValue,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException
+                or InvalidOperationException)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapDelete("/api/characters/{characterId:guid}/state/hit-point-gains/{advancementOccurrenceId:guid}/{classLevel:int}", async (
+            Guid characterId,
+            Guid advancementOccurrenceId,
+            int classLevel,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.RemoveHitPointGainAsync(
+                        characterId,
+                        advancementOccurrenceId,
+                        classLevel,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPost("/api/characters/{characterId:guid}/state/recovery/{procedureKey}", async (
+            Guid characterId,
+            string procedureKey,
+            CharacterRecoveryRequest request,
+            CharacterRecoveryService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToRecoveryApiResult(
+                    await service.ResolveAsync(
+                        characterId,
+                        procedureKey,
+                        request,
+                        cancellationToken));
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
 
         app.MapPost("/api/characters/{characterId:guid}/state/inventory", async (
             Guid characterId,
@@ -42,6 +260,35 @@ public static class CharacterStateEndpointExtensions
                     mutating: true);
             }
             catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPut("/api/characters/{characterId:guid}/state/inventory/{occurrenceId:guid}", async (
+            Guid characterId,
+            Guid occurrenceId,
+            CharacterInventoryItemOccurrenceStateRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.UpdateInventoryItemOccurrenceAsync(
+                        characterId,
+                        occurrenceId,
+                        request.Quantity,
+                        request.IsCarried,
+                        request.IsEquipped,
+                        request.IsAttuned,
+                        request.ContainerOccurrenceId,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException
+                or InvalidOperationException)
             {
                 return Results.BadRequest(new { error = exception.Message });
             }
@@ -209,6 +456,39 @@ public static class CharacterStateEndpointExtensions
         });
     }
 
+    private static IResult ToRecoveryApiResult(CharacterRecoveryResult result) => result.Status switch
+    {
+        CharacterRecoveryAccessStatus.Ready => Results.Ok(new
+        {
+            resolution = result.Resolution,
+            state = result.State
+        }),
+        CharacterRecoveryAccessStatus.UnsupportedConsequence => Results.Json(new
+        {
+            error = result.Message ?? "Recovery uses a Character state consequence this version can not persist safely.",
+            resolution = result.Resolution,
+            state = result.State
+        }, statusCode: StatusCodes.Status422UnprocessableEntity),
+        CharacterRecoveryAccessStatus.NotFoundOrNotOwned => Results.NotFound(new
+        {
+            error = "Character unavailable."
+        }),
+        CharacterRecoveryAccessStatus.ProjectionUnavailable => Results.Json(new
+        {
+            error = result.Message ?? "Rules Core or Site Character projection is unavailable for this request."
+        }, statusCode: StatusCodes.Status503ServiceUnavailable),
+        CharacterRecoveryAccessStatus.Unauthenticated => Results.Unauthorized(),
+        CharacterRecoveryAccessStatus.SheetNotInitialized => Results.NotFound(new
+        {
+            error = "Digital Character Sheet is not initialized."
+        }),
+        CharacterRecoveryAccessStatus.ArchivedReadOnly => Results.Conflict(new
+        {
+            error = "Archived Characters are read-only. Restore the Character through the Site before applying recovery."
+        }),
+        _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+    };
+
     private static IResult ToApiResult(CharacterStateResult result, bool mutating) => result.Status switch
     {
         CharacterStateAccessStatus.Ready => Results.Ok(result.View),
@@ -237,11 +517,46 @@ public static class CharacterStateEndpointExtensions
     };
 }
 
+public sealed record CharacterCurrencyBalanceRequest(string Key, long Amount);
+
+public sealed record CharacterProfileRequest(
+    string? Alignment,
+    string? Deity,
+    string? Age,
+    string? Height,
+    string? Weight,
+    string? Appearance,
+    string? PersonalityTraits,
+    string? Ideals,
+    string? Bonds,
+    string? Flaws,
+    string? Backstory,
+    string? AlliesAndOrganizations,
+    string? Symbol);
+
+public sealed record CharacterRulesInputStateRequest(
+    string Kind,
+    string Key,
+    int? IntegerValue,
+    bool? BooleanValue,
+    string? TextValue);
+
+public sealed record CharacterHitPointGainRequest(int HitDieValue);
+
 public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
+
+public sealed record CharacterInventoryItemOccurrenceStateRequest(
+    int Quantity,
+    bool IsCarried,
+    bool IsEquipped,
+    bool IsAttuned,
+    Guid? ContainerOccurrenceId);
 
 public sealed record CharacterNoteRequest(string Content);
 
 public sealed record CharacterHealthRequest(int? CurrentHitPoints);
+
+public sealed record CharacterDeathSavesRequest(int Successes, int Failures);
 
 public sealed record CharacterConditionCreateRequest(
     string? ConceptKey,

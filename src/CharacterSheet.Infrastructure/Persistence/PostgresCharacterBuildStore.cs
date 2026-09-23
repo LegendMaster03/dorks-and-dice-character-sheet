@@ -151,6 +151,24 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> SetAdvancementLevelAsync(
+        Guid characterId,
+        Guid advancementEntryId,
+        int level,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.SetAdvancementLevel(advancementEntryId, level, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> AddFeatOccurrenceAsync(
         Guid characterId,
         string ruleConceptKey,
@@ -197,6 +215,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
             .Include(value => value.FoundationalSelections)
             .Include(value => value.BaseAbilityScoreInputs)
             .Include(value => value.AdvancementEntries)
+            .Include(value => value.HitPointGains)
             .AsQueryable();
         return tracking ? query : query.AsNoTracking();
     }

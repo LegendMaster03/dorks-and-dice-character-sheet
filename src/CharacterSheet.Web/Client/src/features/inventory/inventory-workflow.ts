@@ -1,6 +1,10 @@
 import {
     addInventoryItemOccurrence,
-    removeInventoryItemOccurrence
+    removeCharacterCurrencyBalance,
+    removeInventoryItemOccurrence,
+    setCharacterCurrencyBalance,
+    updateInventoryItemOccurrence,
+    type CharacterInventoryItemOccurrenceStateInput
 } from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
@@ -14,7 +18,14 @@ export interface InventoryWorkflow {
     closeChooser(): void;
     search(query: string): Promise<void>;
     add(characterId: string, conceptKey: string): Promise<void>;
+    update(
+        characterId: string,
+        occurrenceId: string,
+        input: CharacterInventoryItemOccurrenceStateInput
+    ): Promise<void>;
     remove(characterId: string, occurrenceId: string): Promise<void>;
+    setCurrency(characterId: string, currencyKey: string, amount: number): Promise<void>;
+    removeCurrency(characterId: string, currencyKey: string): Promise<void>;
 }
 
 export function createInventoryWorkflow(
@@ -60,6 +71,34 @@ export function createInventoryWorkflow(
 
         search,
 
+        async setCurrency(
+            characterId: string,
+            currencyKey: string,
+            amount: number
+        ): Promise<void> {
+            await routine.mutate(
+                "currency-update",
+                () => setCharacterCurrencyBalance(
+                    environment,
+                    characterId,
+                    currencyKey,
+                    amount),
+                currencyKey);
+        },
+
+        async removeCurrency(
+            characterId: string,
+            currencyKey: string
+        ): Promise<void> {
+            await routine.mutate(
+                "currency-delete",
+                () => removeCharacterCurrencyBalance(
+                    environment,
+                    characterId,
+                    currencyKey),
+                currencyKey);
+        },
+
         async add(characterId: string, conceptKey: string): Promise<void> {
             const changed = await routine.mutate(
                 "inventory-add",
@@ -67,6 +106,22 @@ export function createInventoryWorkflow(
                     environment,
                     characterId,
                     conceptKey));
+            if (changed) await presentation.load(characterId);
+        },
+
+        async update(
+            characterId: string,
+            occurrenceId: string,
+            input: CharacterInventoryItemOccurrenceStateInput
+        ): Promise<void> {
+            const changed = await routine.mutate(
+                "inventory-update",
+                () => updateInventoryItemOccurrence(
+                    environment,
+                    characterId,
+                    occurrenceId,
+                    input),
+                occurrenceId);
             if (changed) await presentation.load(characterId);
         },
 

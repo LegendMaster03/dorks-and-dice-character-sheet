@@ -9,7 +9,7 @@ import { getStartingClassEntry } from "../builder-rules.js";
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 
-export type SheetSection = "actions" | "spells" | "inventory" | "features" | "notes";
+export type SheetSection = "actions" | "spells" | "inventory" | "features" | "details" | "notes";
 
 export interface SheetSectionDefinition {
     id: SheetSection;
@@ -42,6 +42,12 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
         label: "Features & Traits",
         emptyTitle: "No feats yet",
         emptyMessage: "Added feats appear here. Other granted features are not available in the sheet yet."
+    },
+    {
+        id: "details",
+        label: "Details",
+        emptyTitle: "No Character details yet",
+        emptyMessage: "Character-authored profile details appear here."
     },
     {
         id: "notes",
@@ -175,6 +181,7 @@ export interface AbilityScoreActionPolicy {
 export function hasPendingBuildMutation(builder: CharacterBuilderUiState): boolean {
     return builder.saving !== null
         || builder.savingAbility !== null
+        || builder.savingAdvancementLevel != null
         || builder.savingFeat !== null;
 }
 

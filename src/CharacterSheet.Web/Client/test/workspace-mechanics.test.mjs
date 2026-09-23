@@ -81,6 +81,7 @@ const builder = {
     chooser: { kind: "closed" },
     saving: null,
     savingAbility: null,
+    savingAdvancementLevel: null,
     featReferences: {},
     featChooser: { kind: "closed" },
     savingFeat: null
@@ -89,22 +90,48 @@ const guidedBuilder = { open: false, activeSection: "species", returnSheetMode: 
 const handlers = {
     structural: {
         openChooser() {}, clearChoice() {}, submitChooserSearch() {}, closeChooser() {}, saveChoice() {},
-        setBaseAbilityScore() {}, clearBaseAbilityScore() {}
+        setAdvancementLevel() {}, setBaseAbilityScore() {}, clearBaseAbilityScore() {}
     },
     feats: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
+    spells: { openChooser() {}, closeChooser() {}, search() {}, add() {}, remove() {} },
+    rules: {
+        setChoice() {}, clearChoice() {}, setResource() {},
+        setHitPointGain() {}, clearHitPointGain() {}
+    },
     routine: {
+        setInspiration() {},
+        setProfile() {},
+        setCurrencyBalance() {},
+        removeCurrencyBalance() {},
         setCurrentHitPoints() {},
+        setDeathSaves() {},
         addNote() {}, updateNote() {}, deleteNote() {}, openInventoryChooser() {}, closeInventoryChooser() {},
         searchInventory() {}, addInventoryItem() {}, removeInventoryItem() {}
     },
     selectSection() {}, enterEditMode() {}, leaveEditMode() {}, openGuidedBuilder() {},
     closeGuidedBuilder() {}, selectGuidedBuilderSection() {}
 };
-const routine = (occurrences = [], references = {}, readOnly = true, currentHitPoints = null) => ({
+const routine = (
+    occurrences = [],
+    references = {},
+    readOnly = true,
+    currentHitPoints = null,
+    deathSaves = { successes: 0, failures: 0 }
+) => ({
     status: "ready",
-    state: { characterId, readOnly, currentHitPoints, inventoryItemOccurrences: occurrences, notes: [] },
+    state: {
+        characterId,
+        readOnly,
+        currentHitPoints,
+        deathSaves,
+        inventoryItemOccurrences: occurrences,
+        notes: [],
+        conditions: []
+    },
     references,
     inventoryChooser: { kind: "closed" },
+    spellChooser: { kind: "closed" },
+    conditionChooser: { kind: "closed" },
     mutation: null
 });
 const mechanical = (key, label, formattedValue, extra = {}) => ({
@@ -140,7 +167,7 @@ test("primary sheet sections expose tab and tabpanel semantics", () => {
     assert.equal(nav.getAttribute("role"), "tablist");
 
     const tabs = byClass(nav, "dd-primary-nav__button");
-    assert.equal(tabs.length, 5);
+    assert.equal(tabs.length, 6);
     const selected = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
     assert.equal(selected.length, 1);
     assert.equal(selected[0].id, "dd-sheet-tab-actions");
@@ -167,7 +194,7 @@ test("primary sheet tabs use roving tabindex and horizontal arrow-key selection"
 
     assert.equal(nav.getAttribute("aria-orientation"), "horizontal");
     assert.equal(tabs[0].tabIndex, 0);
-    assert.deepEqual(tabs.slice(1).map(tab => tab.tabIndex), [-1, -1, -1, -1]);
+    assert.deepEqual(tabs.slice(1).map(tab => tab.tabIndex), [-1, -1, -1, -1, -1]);
     assert.equal(tabs[3].textContent, "Features & Traits");
     assert.equal(tabs[3].getAttribute("data-sheet-section-tab"), "features");
 
@@ -311,7 +338,7 @@ test("workspace consumes supplied saving throws, competencies, combat, actions, 
     assert.equal(byAttribute(rendered, "data-procedure-key", "field").length, 1);
 });
 
-test("rest actions live in the top control bar rather than the Hit Points card", () => {
+test("Rules Core recovery actions live in the top control bar rather than the Hit Points card", () => {
     const editableBuilder = {
         ...builder,
         status: "ready",
@@ -325,6 +352,7 @@ test("rest actions live in the top control bar rather than the Hit Points card",
         }
     };
     const activeRoutine = routine([], {}, false, 10);
+    const recoveryCalls = [];
     const rendered = renderCharacterWorkspace(
         character,
         editableBuilder,
@@ -334,12 +362,28 @@ test("rest actions live in the top control bar rather than the Hit Points card",
         "view",
         guidedBuilder,
         null,
-        { healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 20 }] },
+        {
+            healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 20 }],
+            recoveryProcedures: [
+                {
+                    procedureKey: "recovery.short.fixture",
+                    displayName: "Short Rest",
+                    presentationRole: "short-rest",
+                    applicabilityState: "applicable"
+                },
+                {
+                    procedureKey: "recovery.long.fixture",
+                    displayName: "Long Rest",
+                    presentationRole: "long-rest",
+                    applicabilityState: "applicable"
+                }
+            ]
+        },
         {
             ...handlers,
             routine: {
                 ...handlers.routine,
-                rest() {}
+                recover(key) { recoveryCalls.push(key); }
             }
         }
     );
@@ -348,10 +392,43 @@ test("rest actions live in the top control bar rather than the Hit Points card",
     const healthCard = byClass(rendered, "dd-health-quick")[0];
     assert.ok(modeBar);
     assert.ok(healthCard);
-    assert.equal(byAttribute(modeBar, "data-rest-action", "short").length, 1);
-    assert.equal(byAttribute(modeBar, "data-rest-action", "long").length, 1);
-    assert.equal(byAttribute(healthCard, "data-rest-action", "short").length, 0);
-    assert.equal(byAttribute(healthCard, "data-rest-action", "long").length, 0);
+    const shortRest = byAttribute(modeBar, "data-recovery-procedure", "recovery.short.fixture")[0];
+    const longRest = byAttribute(modeBar, "data-recovery-procedure", "recovery.long.fixture")[0];
+    assert.ok(shortRest);
+    assert.ok(longRest);
+    assert.equal(byAttribute(healthCard, "data-recovery-procedure", "recovery.short.fixture").length, 0);
+    shortRest.onclick();
+    longRest.onclick();
+    assert.deepEqual(recoveryCalls, ["recovery.short.fixture", "recovery.long.fixture"]);
+});
+
+test("sheet does not invent rest buttons when Rules Core supplies no recovery procedures", () => {
+    const editableBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        editableBuilder,
+        routine([], {}, false, 10),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        { healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 20 }] },
+        handlers
+    );
+    const modeBar = byClass(rendered, "dd-sheet-mode-bar")[0];
+    assert.equal(byClass(modeBar, "dd-rest-button").length, 0);
 });
 
 test("Character-owned current HP overrides mechanics presentation and is editable for active Characters", () => {
@@ -377,20 +454,105 @@ test("Character-owned current HP overrides mechanics presentation and is editabl
     assert.equal(byAttribute(card, "data-health-editor", "true").length, 1);
 });
 
-test("top strip reserves Inspiration and renders a supplied resource without inventing state", () => {
-    const empty = render("actions", null);
-    const emptyCard = byClass(empty, "dd-stat--inspiration")[0];
-    assert.ok(emptyCard);
-    assert.equal(emptyCard.getAttribute("data-inspiration-state"), "unavailable");
-    assert.match(visibleText(emptyCard), /Inspiration\s+-/);
+test("Inspiration is a Character-owned boolean the player can toggle at will", () => {
+    const loading = renderCharacterWorkspace(
+        character,
+        builder,
+        { ...routine(), status: "loading", state: null },
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        handlers
+    );
+    const loadingCard = byClass(loading, "dd-stat--inspiration")[0];
+    assert.ok(loadingCard);
+    assert.equal(loadingCard.getAttribute("data-inspiration-state"), "unavailable");
+    assert.match(visibleText(loadingCard), /Inspiration\s+-/);
 
-    const supplied = render("actions", {
-        inspiration: mechanical("resource.heroic-inspiration", "Heroic Inspiration", "1")
-    });
-    const card = byClass(supplied, "dd-stat--inspiration")[0];
-    assert.equal(card.getAttribute("data-inspiration-state"), "resolved");
-    assert.equal(byAttribute(card, "data-mechanic-key", "resource.heroic-inspiration").length, 1);
-    assert.match(visibleText(card), /Inspiration\s+1/);
+    const calls = [];
+    const inspired = routine([], {}, false);
+    inspired.state.rulesInputs = [{
+        id: "44444444-4444-4444-4444-444444444444",
+        kind: "booleanFact",
+        key: "inspiration",
+        integerValue: null,
+        booleanValue: true,
+        textValue: null,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        inspired,
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setInspiration(value) { calls.push(value); }
+            }
+        }
+    );
+    const card = byClass(rendered, "dd-stat--inspiration")[0];
+    const toggle = byAttribute(card, "data-inspiration-toggle", "true")[0];
+    assert.equal(card.getAttribute("data-inspiration-state"), "on");
+    assert.equal(toggle.getAttribute("aria-pressed"), "true");
+    assert.equal(toggle.disabled, false);
+    toggle.dispatchEvent({ type: "click" });
+    assert.deepEqual(calls, [false]);
+
+    const uninspired = routine([], {}, false);
+    uninspired.state.rulesInputs = [];
+    const off = renderCharacterWorkspace(
+        character,
+        builder,
+        uninspired,
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setInspiration(value) { calls.push(value); }
+            }
+        }
+    );
+    const offCard = byClass(off, "dd-stat--inspiration")[0];
+    const offToggle = byAttribute(offCard, "data-inspiration-toggle", "true")[0];
+    assert.equal(offCard.getAttribute("data-inspiration-state"), "off");
+    assert.equal(offToggle.getAttribute("aria-pressed"), "false");
+    offToggle.dispatchEvent({ type: "click" });
+    assert.deepEqual(calls, [false, true]);
+
+    const readonly = renderCharacterWorkspace(
+        character,
+        builder,
+        inspired,
+        "actions",
+        true,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        handlers
+    );
+    assert.equal(
+        byAttribute(readonly, "data-inspiration-toggle", "true")[0].disabled,
+        true);
 });
 
 test("top-row Hit Points card keeps current, max, temporary, and nonlethal values dense and distinct", () => {
@@ -398,7 +560,8 @@ test("top-row Hit Points card keeps current, max, temporary, and nonlethal value
         healthTracks: [
             { key: "hp", label: "Hit Points", role: "hit-points", current: 21, maximum: 30 },
             { key: "temp", label: "Temporary HP", role: "temporary-hit-points", current: 5 },
-            { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 3 }
+            { key: "nonlethal", label: "Nonlethal Damage", role: "nonlethal-damage", current: 3 },
+            { key: "resource.hit-dice", label: "Hit Dice", role: "hit-dice", current: 2, maximum: 4 }
         ]
     });
     const card = byClass(rendered, "dd-health-quick")[0];
@@ -407,6 +570,8 @@ test("top-row Hit Points card keeps current, max, temporary, and nonlethal value
     assert.match(visibleText(card), /Max\s+30/);
     assert.match(visibleText(card), /Temporary HP\s+5/);
     assert.match(visibleText(card), /Nonlethal Damage\s+3/);
+    assert.match(visibleText(card), /Hit Dice\s+2 \/ 4/);
+    assert.match(visibleText(card), /Death Saves\s+S 0 • F 0/);
     assert.equal(byAttribute(card, "data-health-track-key", "hp").length, 2);
     assert.equal(byAttribute(card, "data-health-track-key", "temp").length, 1);
     assert.equal(byAttribute(card, "data-health-track-key", "nonlethal").length, 1);
@@ -462,14 +627,61 @@ test("top-row Hit Points tracker exposes D&D Beyond-style Heal and Damage contro
     assert.match(visibleText(card), /Nonlethal Damage\s+2/);
 });
 
+test("Death Saves remain visible and editable through persisted runtime handlers", () => {
+    const saved = [];
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        routine([], {}, false, 18, { successes: 1, failures: 2 }),
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        {
+            healthTracks: [
+                { key: "hp", label: "Hit Points", role: "hit-points", maximum: 30 },
+                { key: "resource.hit-dice", label: "Hit Dice", role: "hit-dice", current: 3, maximum: 5 }
+            ]
+        },
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setDeathSaves(successes, failures) { saved.push([successes, failures]); }
+            }
+        }
+    );
+
+    const card = byClass(rendered, "dd-health-quick")[0];
+    assert.match(visibleText(card), /Hit Dice\s+3 \/ 5/);
+    assert.match(visibleText(card), /Death Saves\s+S 1 • F 2/);
+    assert.equal(byAttribute(card, "data-death-saves-editor", "true").length, 1);
+
+    byAttribute(card, "data-death-save-action", "success-increment")[0].onclick();
+    assert.deepEqual(saved.at(-1), [2, 2]);
+
+    byAttribute(card, "data-death-save-action", "failure-decrement")[0].onclick();
+    assert.deepEqual(saved.at(-1), [1, 1]);
+
+    byAttribute(card, "data-death-save-action", "reset")[0].onclick();
+    assert.deepEqual(saved.at(-1), [0, 0]);
+});
+
 test("workspace promotes Armor Class beside Initiative and keeps all non-AC defenses in one combat-band card", () => {
     const rendered = render("actions", {
         defenses: {
             primaryKey: "defense.ac",
             values: [
-                mechanical("defense.ac", "Armor Class", "18"),
+                mechanical("defense.ac", "Armor Class", "18", {
+                    breakdown: [
+                        mechanical("armor", "Armor", "6"),
+                        mechanical("dexterity", "Dexterity", "2")
+                    ]
+                }),
                 mechanical("defense.ac.touch", "Touch Armor Class", "13"),
                 mechanical("defense.ac.flat-footed", "Flat-Footed Armor Class", "15"),
+                mechanical("defense.miss-chance", "Miss Chance", "20%"),
                 mechanical("defense.damage-reduction", "Damage Reduction", "5 / magic"),
                 mechanical("defense.spell-resistance", "Spell Resistance", "17")
             ]
@@ -485,6 +697,9 @@ test("workspace promotes Armor Class beside Initiative and keeps all non-AC defe
     assert.match(visibleText(acCard), /18/);
     assert.match(visibleText(acCard), /13/);
     assert.match(visibleText(acCard), /15/);
+    assert.match(visibleText(acCard), /Details/);
+    assert.match(visibleText(acCard), /Armor\s+6/);
+    assert.match(visibleText(acCard), /Dexterity\s+2/);
 
     const defense = byClass(rendered, "dd-combat-band__defenses")[0];
     assert.ok(defense);
@@ -494,6 +709,8 @@ test("workspace promotes Armor Class beside Initiative and keeps all non-AC defe
     assert.match(visibleText(defense), /Vulnerabilities/);
     assert.match(visibleText(defense), /Damage Reduction\s+5 \/ magic/);
     assert.match(visibleText(defense), /Spell Resistance\s+17/);
+    assert.match(visibleText(defense), /More defenses/);
+    assert.match(visibleText(defense), /Miss Chance\s+20%/);
     assert.equal(byClass(rendered, "dd-defense-card").length, 0);
 });
 
@@ -588,6 +805,93 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     assert.equal(byClass(rendered, "dd-health-quick").length, 1);
 });
 
+test("Details renders Rules Core character metadata generically with calculation detail", () => {
+    const rendered = render("details", {
+        characterMetadata: [{
+            key: "character.size-category",
+            label: "Size",
+            effectiveValue: "Medium",
+            sourceAttributions: [{
+                key: "fixture",
+                label: "Fixture Rules"
+            }]
+        }]
+    });
+    const size = byAttribute(rendered, "data-mechanic-key", "character.size-category")[0];
+
+    assert.ok(size);
+    assert.match(visibleText(size), /Size\s+Medium/);
+    assert.match(visibleText(size), /Details/);
+});
+
+test("Details renders Character-authored profile without inventing rule-derived identity", () => {
+    const currentRoutine = routine([], {}, true);
+    currentRoutine.state.profile = {
+        alignment: "Neutral",
+        deity: "The Traveler",
+        age: "34",
+        height: "5 ft. 11 in.",
+        weight: "180 lb.",
+        appearance: "Scarred",
+        personalityTraits: "Curious",
+        ideals: "Freedom",
+        bonds: "Old company",
+        flaws: "Impatient",
+        backstory: "A long-form history.",
+        alliesAndOrganizations: "Cartographers Guild",
+        symbol: "Compass rose",
+        createdAt: "now",
+        updatedAt: "now"
+    };
+
+    const rendered = render("details", null, currentRoutine);
+    const text = visibleText(rendered);
+
+    assert.match(text, /Alignment\s+Neutral/);
+    assert.match(text, /Deity\s+The Traveler/);
+    assert.match(text, /Backstory\s+A long-form history/);
+    assert.doesNotMatch(text, /Background|Size|Player Name|Campaign/);
+});
+
+test("Details editing delegates one complete Character-authored profile mutation", () => {
+    let savedProfile = null;
+    const editableRoutine = routine([], {}, false);
+    const profileHandlers = {
+        ...handlers,
+        routine: {
+            ...handlers.routine,
+            setProfile(input) { savedProfile = input; }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        editableRoutine,
+        "details",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        profileHandlers
+    );
+
+    const alignment = byAttribute(rendered, "data-profile-field", "alignment")[0];
+    const deity = byAttribute(rendered, "data-profile-field", "deity")[0];
+    assert.ok(alignment);
+    assert.ok(deity);
+    alignment.value = "Chaotic good";
+    deity.value = "The Traveler";
+
+    const form = byClass(rendered, "dd-profile__form")[0];
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+
+    assert.ok(savedProfile);
+    assert.equal(savedProfile.alignment, "Chaotic good");
+    assert.equal(savedProfile.deity, "The Traveler");
+    assert.equal(savedProfile.backstory, null);
+});
+
 test("Inventory and Notes empty states remain visible and task-oriented", () => {
     const inventory = render("inventory", null);
     assert.match(visibleText(inventory), /No items have been added/);
@@ -680,22 +984,309 @@ test("Inventory carrying, components, procedures, and crafting render only when 
     assert.doesNotMatch(visibleText(sparse), /Carrying & Load/);
 });
 
-test("spellcasting profiles render only when supplied", () => {
+test("Known Spells renders Character-owned spell concepts and delegates add/remove without prepared state", () => {
+    let removed = null;
+    const knownSpellId = "known-spell-input";
+    const currentRoutine = routine([], {
+        [knownSpellId]: resolvedItem("spell.magic-missile", "Magic Missile")
+    }, false);
+    currentRoutine.state.rulesInputs = [{
+        id: knownSpellId,
+        kind: "knownSpell",
+        key: "spell.magic-missile",
+        integerValue: null,
+        booleanValue: null,
+        textValue: null,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+    currentRoutine.references[knownSpellId] = {
+        status: "resolved",
+        conceptKey: "spell.magic-missile",
+        rule: {
+            ...resolvedItem("spell.magic-missile", "Magic Missile").rule,
+            entityType: "spell"
+        }
+    };
+
+    const spellHandlers = {
+        ...handlers,
+        spells: {
+            ...handlers.spells,
+            remove(conceptKey) { removed = conceptKey; }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        currentRoutine,
+        "spells",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        { spellcastingProfiles: [] },
+        spellHandlers
+    );
+
+    const spell = byAttribute(rendered, "data-known-spell-key", "spell.magic-missile")[0];
+    assert.ok(spell);
+    assert.match(visibleText(spell), /Magic Missile/);
+    assert.doesNotMatch(visibleText(rendered), /Prepared Spells/i);
+    const remove = byTag(spell, "button").find(button => button.textContent === "Remove");
+    assert.ok(remove);
+    remove.dispatchEvent({ type: "click" });
+    assert.equal(removed, "spell.magic-missile");
+});
+
+test("spellcasting profiles keep independent resource systems and runtime resources", () => {
     const supplied = render("spells", {
         spellcastingProfiles: [{
             key: "wizard",
             label: "Wizard Spellcasting",
             castingAbility: "Intelligence",
+            resourceSystem: { key: "resource-system", label: "Resource System", value: "spell-points" },
+            resources: [{
+                key: "resource.spell-points",
+                label: "Spell Points",
+                state: "resolved",
+                current: 8,
+                maximum: 14
+            }],
             saveDc: mechanical("dc", "Save DC", "16")
+        }, {
+            key: "warlock",
+            label: "Warlock Pact Magic",
+            castingAbility: "Charisma",
+            resourceSystem: { key: "resource-system", label: "Resource System", value: "pact-magic" },
+            resources: [{
+                key: "resource.pact-slot.warlock.level-3",
+                label: "Pact Slots",
+                state: "resolved",
+                current: 1,
+                maximum: 2
+            }]
         }]
     });
     assert.equal(byAttribute(supplied, "data-spellcasting-profile-key", "wizard").length, 1);
+    assert.equal(byAttribute(supplied, "data-spellcasting-profile-key", "warlock").length, 1);
     assert.match(visibleText(supplied), /Wizard Spellcasting/);
+    assert.match(visibleText(supplied), /Spell Points 8 \/ 14/);
+    assert.match(visibleText(supplied), /Warlock Pact Magic/);
+    assert.match(visibleText(supplied), /Pact Slots 1 \/ 2/);
 
     const unavailable = render("spells", null);
     assert.equal(byAttribute(unavailable, "data-spellcasting-state", "unavailable").length, 1);
-    assert.doesNotMatch(visibleText(unavailable), /Resolved spellcasting profiles are not available/);
     assert.equal(byClass(unavailable, "dd-spellcasting-profile").length, 0);
+});
+
+test("spellcasting resource editor persists the backend resource key and current value", () => {
+    let saved = null;
+    const resourceHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            setResource(resourceKey, currentValue) { saved = [resourceKey, currentValue]; }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        routine([], {}, false),
+        "spells",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        {
+            spellcastingProfiles: [{
+                key: "wizard",
+                label: "Wizard Spellcasting",
+                resourceSystem: { key: "resource-system", label: "Resource System", value: "spell-points" },
+                resources: [{
+                    key: "resource.spell-points",
+                    label: "Spell Points",
+                    state: "resolved",
+                    current: 8,
+                    maximum: 14
+                }]
+            }]
+        },
+        resourceHandlers
+    );
+
+    const resource = byAttribute(rendered, "data-spellcasting-resource-key", "resource.spell-points")[0];
+    assert.ok(resource);
+    const input = byTag(resource, "input")[0];
+    input.value = "6";
+    const save = byTag(resource, "button").find(button => button.textContent === "Set");
+    assert.ok(save);
+    save.dispatchEvent({ type: "click" });
+    assert.deepEqual(saved, ["resource.spell-points", 6]);
+});
+
+test("guided advancement exposes one raw hit-die outcome per owned Class level", () => {
+    let saved = null;
+    const hpHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            setHitPointGain(occurrenceId, classLevel, hitDieValue) {
+                saved = [occurrenceId, classLevel, hitDieValue];
+            }
+        }
+    };
+    const configuredBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: [{
+                id: "fighter-entry",
+                ordinal: 0,
+                kind: "class",
+                ruleConceptKey: "class.fighter",
+                parentAdvancementEntryId: null,
+                createdAt: "now",
+                updatedAt: "now",
+                level: 2
+            }]
+        }
+    };
+    const openGuided = { open: true, activeSection: "advancement", returnSheetMode: "view" };
+    const currentRoutine = routine([], {}, false);
+    currentRoutine.state.hitPointGains = [{
+        id: "gain-one",
+        advancementOccurrenceId: "fighter-entry",
+        classLevel: 1,
+        hitDieValue: 10,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+
+    const rendered = renderCharacterWorkspace(
+        character,
+        configuredBuilder,
+        currentRoutine,
+        "actions",
+        false,
+        "view",
+        openGuided,
+        {
+            occurrences: [{
+                occurrenceId: "fighter-entry",
+                conceptKey: "class.fighter",
+                kind: "class",
+                displayName: "Fighter",
+                progression: { label: "Level", value: 2, formattedValue: "Level 2" }
+            }]
+        },
+        {},
+        hpHandlers
+    );
+
+    assert.equal(byAttribute(rendered, "data-hit-point-gain-key", "fighter-entry:1").length, 1);
+    const levelTwo = byAttribute(rendered, "data-hit-point-gain-key", "fighter-entry:2")[0];
+    assert.ok(levelTwo);
+    const input = byTag(levelTwo, "input")[0];
+    input.value = "7";
+    const save = byTag(levelTwo, "button").find(button => button.textContent === "Save");
+    assert.ok(save);
+    save.dispatchEvent({ type: "click" });
+    assert.deepEqual(saved, ["fighter-entry", 2, 7]);
+});
+
+test("Features & Traits renders Rules Core-granted features without replacing Character-owned Feats", () => {
+    const supplied = render("features", {
+        features: [{
+            key: "feature.second-wind",
+            label: "Second Wind",
+            kind: "class-feature",
+            state: "resolved",
+            sourceConceptKey: "class.fighter",
+            grantingSourceKind: "class",
+            acquisitionLevel: 1,
+            effects: [{ key: "effect", label: "Resource", value: "Second Wind use" }]
+        }]
+    });
+    assert.equal(byAttribute(supplied, "data-feature-key", "feature.second-wind").length, 1);
+    assert.match(visibleText(supplied), /Second Wind/);
+    assert.match(visibleText(supplied), /Level 1/);
+    assert.match(visibleText(supplied), /class\.fighter/);
+    assert.match(visibleText(supplied), /Resource: Second Wind use/);
+});
+
+test("Guided Setup renders Rules Core choices and delegates the selected value without interpreting it", () => {
+    let saved = null;
+    const choiceHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            setChoice(choiceKey, value) { saved = [choiceKey, value]; }
+        }
+    };
+    const configuredBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
+    const openGuided = { open: true, activeSection: "review", returnSheetMode: "view" };
+    const rendered = renderCharacterWorkspace(
+        character,
+        configuredBuilder,
+        routine([], {}, false),
+        "actions",
+        false,
+        "view",
+        openGuided,
+        null,
+        {
+            ruleChoices: [{
+                choiceKey: "spellcasting.resource-system",
+                groupKey: "spellcasting",
+                displayName: "Spellcasting Resource System",
+                kind: "single-select",
+                state: "choice-required",
+                options: [
+                    { value: "spell-slots", displayName: "Spell Slots" },
+                    { value: "spell-points", displayName: "Spell Points" }
+                ]
+            }],
+            projectionConflicts: [{
+                conflictKey: "conflict.fixture",
+                kind: "fixture",
+                message: "Choose one resource system.",
+                relatedMechanicKeys: [],
+                relatedConceptKeys: []
+            }]
+        },
+        choiceHandlers
+    );
+
+    const choice = byAttribute(rendered, "data-rule-choice-key", "spellcasting.resource-system")[0];
+    assert.ok(choice);
+    assert.match(visibleText(choice), /Spellcasting Resource System/);
+    assert.match(visibleText(choice), /Spell Slots/);
+    assert.match(visibleText(choice), /Spell Points/);
+    assert.equal(byAttribute(rendered, "data-rule-conflict-key", "conflict.fixture").length, 1);
+
+    const select = byTag(choice, "select")[0];
+    select.value = "spell-points";
+    const choose = byTag(choice, "button").find(button => button.textContent === "Choose");
+    assert.ok(choose);
+    choose.dispatchEvent({ type: "click" });
+    assert.deepEqual(saved, ["spellcasting.resource-system", "spell-points"]);
 });
 
 test("production consumes backend advancement and mechanics projections instead of hard-coded nulls", async () => {
@@ -930,10 +1521,15 @@ test("workspace renders specialized, composite, independent, and unconfigured co
                 mechanical("skill.stealth", "Stealth", "-", { kind: "skill" }),
                 mechanical("skill.hide", "Hide", "-", { kind: "skill", governingAbility: "dexterity" }),
                 mechanical("skill.move-silently", "Move Silently", "-", { kind: "skill" }),
-                mechanical("skill.knowledge-planes", "Knowledge (the planes)", "-", {
+                mechanical("skill.craft", "Craft", "-", {
                     kind: "skill",
-                    family: "Knowledge",
-                    specialty: "the planes",
+                    family: "Craft",
+                    isFamily: true
+                }),
+                mechanical("skill.craft-alchemy", "Craft (Alchemy)", "-", {
+                    kind: "specialized-skill",
+                    family: "Craft",
+                    specialty: "alchemy",
                     supportsRanks: true,
                     supportsClassSkillState: true,
                     supportsTrainingState: true,
@@ -956,12 +1552,15 @@ test("workspace renders specialized, composite, independent, and unconfigured co
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.hide")[0].getAttribute("data-skill-role"), "component");
     assert.equal(byAttribute(rendered, "data-skill-id", "skill.move-silently")[0].getAttribute("data-skill-role"), "component");
 
-    const specialtyRow = byAttribute(rendered, "data-skill-id", "skill.knowledge-planes")[0];
-    const specialty = byAttribute(rendered, "data-skill-disclosure", "skill.knowledge-planes")[0];
+    const family = byAttribute(rendered, "data-skill-family", "skill.craft")[0];
+    const specialtyRow = byAttribute(rendered, "data-skill-id", "skill.craft-alchemy")[0];
+    const specialty = byAttribute(rendered, "data-skill-disclosure", "skill.craft-alchemy")[0];
+    assert.ok(family);
     assert.ok(specialty);
-    assert.match(visibleText(specialtyRow), /Knowledge \(the planes\)/);
-    assert.match(visibleText(specialty), /Family\s+Knowledge/);
-    assert.match(visibleText(specialty), /Specialty\s+the planes/);
+    assert.match(visibleText(family), /Craft/);
+    assert.match(visibleText(specialtyRow), /Craft \(Alchemy\)/);
+    assert.match(visibleText(specialty), /Family\s+Craft/);
+    assert.match(visibleText(specialty), /Specialty\s+alchemy/);
     assert.match(visibleText(specialty), /Ranks\s+-/);
     assert.match(visibleText(specialty), /Training\s+-/);
     assert.match(visibleText(specialty), /Class skill\s+-/);
@@ -1043,4 +1642,80 @@ test("workspace renders backend-supplied 3.x saving throws, defenses, combat, an
     assert.match(visibleText(initiativeCard), /Grapple/);
     assert.equal(byClass(rendered, "dd-defense-card").length, 0);
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 0);
+});
+
+
+test("Inventory currency stays denomination-agnostic and rejects unsafe browser integers", () => {
+    const calls = [];
+    const currentRoutine = routine([], {}, false);
+    currentRoutine.state.currencyBalances = [{
+        id: "33333333-3333-3333-3333-333333333333",
+        currencyKey: "campaign-scrip",
+        amount: -7,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        currentRoutine,
+        "inventory",
+        false,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        {
+            ...handlers,
+            routine: {
+                ...handlers.routine,
+                setCurrencyBalance(key, amount) { calls.push(["set", key, amount]); },
+                removeCurrencyBalance(key) { calls.push(["remove", key]); }
+            }
+        }
+    );
+
+    const section = byClass(rendered, "dd-inventory-currency")[0];
+    assert.ok(section);
+    assert.match(visibleText(section), /campaign-scrip\s+-7/);
+    assert.doesNotMatch(visibleText(section), /Copper|Silver|Electrum|Gold|Platinum/);
+
+    const existing = byAttribute(section, "data-currency-key", "campaign-scrip")[0];
+    const existingInput = byTag(existing, "input")[0];
+    const existingButtons = byTag(existing, "button");
+    existingInput.value = "42";
+    existingButtons.find(button => button.textContent === "Save").dispatchEvent({ type: "click" });
+    existingButtons.find(button => button.textContent === "Remove").dispatchEvent({ type: "click" });
+
+    const form = byTag(section, "form")[0];
+    const inputs = byTag(form, "input");
+    inputs[0].value = "gp";
+    inputs[1].value = String(Number.MAX_SAFE_INTEGER + 1);
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.deepEqual(calls, [
+        ["set", "campaign-scrip", 42],
+        ["remove", "campaign-scrip"]
+    ]);
+
+    inputs[0].value = "campaign-scrip";
+    inputs[1].value = "-125";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.deepEqual(calls.at(-1), ["set", "campaign-scrip", -125]);
+
+    const readonly = renderCharacterWorkspace(
+        character,
+        builder,
+        currentRoutine,
+        "inventory",
+        true,
+        "view",
+        guidedBuilder,
+        null,
+        null,
+        handlers
+    );
+    const readonlySection = byClass(readonly, "dd-inventory-currency")[0];
+    assert.match(visibleText(readonlySection), /campaign-scrip\s+-7/);
+    assert.equal(byTag(readonlySection, "form").length, 0);
 });

@@ -95,6 +95,21 @@ public sealed record RulesCoreMechanicCheckView(
     RulesCoreCheckAbilityView Ability,
     RulesCoreCheckCompetencyView Competency);
 
+public sealed record RulesCoreCompetencyRelationshipView(
+    string Kind,
+    string TargetType,
+    string TargetName,
+    string? Scope,
+    bool SharesTrainingState);
+
+public sealed record RulesCoreCompetencyFacetView(
+    string FacetType,
+    IReadOnlyList<Guid> ProfileSourceEntityRevisionIds,
+    bool SupportsRanks,
+    bool SupportsClassSkillState,
+    bool SupportsTrainingState,
+    IReadOnlyList<string>? MechanicKeys = null);
+
 public sealed record RulesCoreCompetencyProfileView(
     Guid SourceEntityRevisionId,
     string ProfileKey,
@@ -113,7 +128,14 @@ public sealed record RulesCoreCompetencyProfileView(
     bool CanEvaluate,
     IReadOnlyList<RulesCoreMechanicInputView> Inputs,
     IReadOnlyList<RulesCoreMechanicBooleanRequirementView> BooleanRequirements,
-    string? GameEdition);
+    string? GameEdition,
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView>? SourceAttributions = null,
+    string? FacetType = null,
+    bool IsFamily = false,
+    string? IdentityKey = null,
+    string? IdentityName = null,
+    string? SharedTrainingKey = null,
+    IReadOnlyList<RulesCoreCompetencyRelationshipView>? RelatedCompetencies = null);
 
 public sealed record RulesCoreCompetencyDefinitionView(
     string CompetencyKind,
@@ -126,7 +148,13 @@ public sealed record RulesCoreCompetencyDefinitionView(
     bool? TrainedOnly,
     bool? ArmorCheckPenaltyApplies,
     Guid? DefaultProfileSourceEntityRevisionId,
-    IReadOnlyList<RulesCoreCompetencyProfileView> Profiles);
+    IReadOnlyList<RulesCoreCompetencyProfileView> Profiles,
+    string? IdentityKey = null,
+    string? IdentityName = null,
+    string? SharedTrainingKey = null,
+    bool IsFamily = false,
+    IReadOnlyList<RulesCoreCompetencyFacetView>? Facets = null,
+    IReadOnlyList<RulesCoreCompetencyRelationshipView>? RelatedCompetencies = null);
 
 public sealed record RulesCoreMechanicSourceAttributionView(
     string? PackageKey,
@@ -144,6 +172,88 @@ public sealed record RulesCoreMechanicSourceAttributionView(
     string? ReferenceUri,
     bool PresentationRequired,
     bool ReferenceLinkRequired);
+
+public sealed record RulesCoreCharacterSupportProjectionRequest(
+    IReadOnlyList<string>? CapabilityKeys = null);
+
+public sealed record RulesCoreCharacterRecoveryRuntimeRequirementsView(
+    bool RequiresCharacterState,
+    bool RequiresPlayerChoices,
+    bool RequiresRolls,
+    bool RequiresResourceExpenditure,
+    bool RequiresOtherRuntimeFacts);
+
+public sealed record RulesCoreCharacterRecoveryChoiceOptionView(
+    string Key,
+    string DisplayName,
+    string? Value);
+
+public sealed record RulesCoreCharacterRecoveryChoiceView(
+    string Key,
+    string Prompt,
+    bool Required,
+    IReadOnlyList<RulesCoreCharacterRecoveryChoiceOptionView> Options);
+
+public sealed record RulesCoreCharacterRecoveryRollView(
+    string Key,
+    string RollKind,
+    string Prompt,
+    bool Required,
+    string? MechanicKey);
+
+public sealed record RulesCoreCharacterRecoveryProcedureView(
+    string ProcedureKey,
+    string DisplayName,
+    string? PresentationRole,
+    bool IsAvailableUnderRuleset,
+    string ApplicabilityState,
+    RulesCoreMechanicApplicabilityView Applicability,
+    IReadOnlyList<string> MissingCapabilityKeys,
+    IReadOnlyList<RulesCoreMechanicInputView> Inputs,
+    IReadOnlyList<RulesCoreCharacterRecoveryChoiceView> Choices,
+    IReadOnlyList<RulesCoreCharacterRecoveryRollView> Rolls,
+    RulesCoreCharacterRecoveryRuntimeRequirementsView RuntimeRequirements,
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions);
+
+public sealed record RulesCoreCharacterSupportProjectionView(
+    string Scope,
+    Guid? CampaignId,
+    int? RevisionNumber,
+    DateTimeOffset? PublishedAt,
+    IReadOnlyList<RulesCoreCharacterRecoveryProcedureView> RecoveryProcedures);
+
+public sealed record RulesCoreCharacterRecoveryResolutionRequest(
+    Dictionary<string, int>? IntegerInputs = null,
+    Dictionary<string, bool>? BooleanInputs = null,
+    Dictionary<string, string>? StringInputs = null,
+    IReadOnlyList<string>? CapabilityKeys = null,
+    Dictionary<string, string>? Choices = null,
+    Dictionary<string, int>? Rolls = null);
+
+public sealed record RulesCoreCharacterRecoveryEffectView(
+    string EffectKey,
+    string TargetKind,
+    string TargetKey,
+    string Operation,
+    int? Amount,
+    string? Value,
+    string? ReferenceKey);
+
+public sealed record RulesCoreCharacterRecoveryResolutionView(
+    string Scope,
+    Guid? CampaignId,
+    int? RevisionNumber,
+    DateTimeOffset? PublishedAt,
+    string ProcedureKey,
+    string DisplayName,
+    string? PresentationRole,
+    string Status,
+    IReadOnlyList<string> MissingCapabilityKeys,
+    IReadOnlyList<string> MissingInputKeys,
+    IReadOnlyList<RulesCoreCharacterRecoveryChoiceView> PendingChoices,
+    IReadOnlyList<RulesCoreCharacterRecoveryRollView> PendingRolls,
+    IReadOnlyList<RulesCoreCharacterRecoveryEffectView> Consequences,
+    IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions);
 
 public sealed record RulesCoreMechanicEvaluationRequest(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -199,5 +309,23 @@ public interface IRulesCoreGateway
 
     Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
         RulesCoreMechanicsBatchEvaluationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
+        RulesCoreCharacterSupportProjectionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
+        string procedureKey,
+        RulesCoreCharacterRecoveryResolutionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
+        RulesCoreCharacterRulesProjectionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
+        Guid campaignId,
+        RulesCoreCharacterRulesProjectionRequest request,
         CancellationToken cancellationToken = default);
 }

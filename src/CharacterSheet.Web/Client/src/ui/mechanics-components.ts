@@ -24,9 +24,9 @@ export {
     adjustCurrentHitPoints,
     renderHealthQuickCard,
     renderHealthMechanicsCard,
-    renderRestControls,
-    type HealthControlOptions,
-    type RestKind
+    renderRecoveryContinuation,
+    renderRecoveryControls,
+    type HealthControlOptions
 } from "../features/health/health.js";
 export {
     renderMovementValues

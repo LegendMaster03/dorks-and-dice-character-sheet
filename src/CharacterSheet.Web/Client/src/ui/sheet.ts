@@ -16,11 +16,13 @@ import {
     buildCompetencyPresentation,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
-import { renderRestControls } from "../features/health/health.js";
+import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
+import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
 import {
     createButton,
     createElement,
+    createInlineState,
     createSectionCard
 } from "./components.js";
 import { renderSkillsCard } from "./skills.js";
@@ -41,6 +43,7 @@ import {
 } from "../features/abilities/ability-stats.js";
 import { renderCharacterMechanicsSources } from "../core/mechanics/mechanics-sources.js";
 import { renderCoreStats } from "./core-stats.js";
+import { CHARACTER_INSPIRATION_STATE_KEY } from "../features/inspiration/inspiration.js";
 import { renderPrimaryContent } from "./primary-content.js";
 import { renderCombatSummaryBand } from "../features/combat/combat-summary.js";
 import { renderConditionsCard } from "../features/conditions/conditions.js";
@@ -72,21 +75,37 @@ export function renderCharacterWorkspace(
 
     shell.append(renderCharacterHeader(character, builder, forceReadOnly, advancement));
     if (advancement !== null && advancement.occurrences.length > 0) {
-        shell.append(renderAdvancementDetails(advancement));
+        const advancementEditing = structuralEditing
+            || (guidedBuilder.open
+                && editable
+                && guidedBuilder.activeSection === "advancement");
+        shell.append(renderAdvancementDetails(
+            advancement,
+            builder,
+            advancementEditing,
+            handlers.structural));
     }
     if (editable) {
         shell.append(renderModeControls(
             sheetMode,
             guidedBuilder,
-            handlers,
-            routine.mutation?.kind === "health-update"));
+            mechanics,
+            routine,
+            handlers));
     }
     if (readOnly) {
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
     }
 
     if (guidedBuilder.open && editable) {
-        shell.append(renderGuidedBuilder(character.characterId, builder, guidedBuilder, handlers));
+        shell.append(renderGuidedBuilder(
+            character.characterId,
+            builder,
+            routine,
+            guidedBuilder,
+            advancement,
+            mechanics,
+            handlers));
         return shell;
     }
 
@@ -108,9 +127,25 @@ export function renderCharacterWorkspace(
                 && routine.state?.currentHitPoints !== null
                 ? routine.state?.currentHitPoints
                 : undefined,
+            deathSaves: routine.status === "ready"
+                ? routine.state?.deathSaves
+                : undefined,
             readOnly: readOnly || routine.status !== "ready" || routine.state === null,
-            saving: routine.mutation?.kind === "health-update",
-            onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints
+            saving: routine.mutation?.kind === "health-update"
+                || routine.mutation?.kind === "death-saves-update",
+            onSetCurrentHitPoints: handlers.routine.setCurrentHitPoints,
+            onSetDeathSaves: handlers.routine.setDeathSaves
+        },
+        {
+            current: routine.status === "ready" && routine.state !== null
+                ? (routine.state.rulesInputs ?? []).find(input =>
+                    input.kind === "booleanFact"
+                    && input.key === CHARACTER_INSPIRATION_STATE_KEY)?.booleanValue === true
+                : undefined,
+            readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+            saving: routine.mutation?.kind === "rules-input-update"
+                && routine.mutation.entryId === `booleanFact:${CHARACTER_INSPIRATION_STATE_KEY}`,
+            onSet: handlers.routine.setInspiration
         },
         handlers.structural));
 
@@ -132,7 +167,20 @@ export function renderCharacterWorkspace(
 
     const skillsColumn = createElement("aside", "dd-sheet__skills");
     skillsColumn.setAttribute("aria-label", "Skills and competencies");
-    skillsColumn.append(renderSkillsCard(competencyPresentation));
+    skillsColumn.append(renderSkillsCard(
+        competencyPresentation,
+        {
+            readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+            savingKey: routine.mutation?.kind === "rules-input-update"
+                && routine.mutation.entryId?.startsWith("competencyRank:")
+                ? routine.mutation.entryId.slice("competencyRank:".length)
+                : routine.mutation?.kind === "rules-input-delete"
+                    && routine.mutation.entryId?.startsWith("competencyRank:")
+                    ? routine.mutation.entryId.slice("competencyRank:".length)
+                    : null,
+            onSetRank: handlers.rules.setCompetencyRank,
+            onClearRank: handlers.rules.clearCompetencyRank
+        }));
 
     const stage = createElement("div", "dd-sheet__stage");
     stage.append(renderCombatSummaryBand(
@@ -166,8 +214,9 @@ export function renderCharacterWorkspace(
 function renderModeControls(
     sheetMode: SheetMode,
     guidedBuilder: GuidedBuilderUiState,
-    handlers: CharacterSheetHandlers,
-    restSaving: boolean
+    mechanics: CharacterMechanicsView | null,
+    routine: CharacterRoutineUiState,
+    handlers: CharacterSheetHandlers
 ): HTMLElement {
     const controls = createElement("div", "dd-sheet-mode-bar");
     controls.setAttribute("role", "group");
@@ -183,10 +232,20 @@ function renderModeControls(
         return controls;
     }
 
-    controls.append(renderRestControls(
+    const recoveryState = routine.recovery ?? { kind: "closed" as const };
+    const recoveryControls = renderRecoveryControls(
+        mechanics?.recoveryProcedures,
         false,
-        restSaving,
-        handlers.routine.rest));
+        recoveryState.kind === "resolving",
+        handlers.routine.recover);
+    if (recoveryControls !== null) controls.append(recoveryControls);
+
+    const recoveryContinuation = renderRecoveryContinuation(
+        recoveryState,
+        mechanics?.recoveryProcedures,
+        handlers.routine.continueRecovery,
+        handlers.routine.cancelRecovery);
+    if (recoveryContinuation !== null) controls.append(recoveryContinuation);
 
     const configuration = createElement("div", "dd-sheet-mode-bar__configuration");
     const editing = sheetMode === "edit";
@@ -210,7 +269,10 @@ function renderModeControls(
 function renderGuidedBuilder(
     characterId: string,
     builder: CharacterBuilderUiState,
+    routine: CharacterRoutineUiState,
     guidedBuilder: GuidedBuilderUiState,
+    advancement: CharacterAdvancementView | null,
+    mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers
 ): HTMLElement {
     const container = createElement("section", "dd-guided-builder");
@@ -262,6 +324,12 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Advancement", choices: ["startingClass", "subclass"] }));
+            const hitPointGains = renderHitPointGainEditors(
+                advancement?.occurrences ?? [],
+                routine,
+                false,
+                handlers.rules);
+            if (hitPointGains !== null) panel.append(hitPointGains);
             break;
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");
@@ -299,6 +367,11 @@ function renderGuidedBuilder(
                 list.append(item);
             }
             review.append(list);
+            const rulesChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers);
+            if (rulesChoices !== null) review.append(rulesChoices);
             panel.append(review);
             break;
         }
@@ -306,6 +379,124 @@ function renderGuidedBuilder(
 
     container.append(panel);
     return container;
+}
+
+function renderRulesChoices(
+    mechanics: CharacterMechanicsView | null,
+    routine: CharacterRoutineUiState,
+    handlers: CharacterSheetHandlers
+): HTMLElement | null {
+    if (mechanics === null) {
+        return null;
+    }
+
+    const choices = mechanics.ruleChoices ?? [];
+    const conflicts = mechanics.projectionConflicts ?? [];
+    if (choices.length === 0 && conflicts.length === 0) {
+        return null;
+    }
+
+    const section = createElement("section", "dd-guided-builder__rules");
+    section.append(createElement(
+        "h3",
+        "dd-guided-builder__subheading",
+        "Rules Choices"));
+
+    const pending = routine.mutation?.kind === "rules-input-update"
+        || routine.mutation?.kind === "rules-input-delete";
+
+    for (const choice of choices) {
+        const card = createElement("article", "dd-build-choice");
+        card.setAttribute("data-rule-choice-key", choice.choiceKey);
+        card.setAttribute("data-rule-choice-state", choice.state);
+        card.append(createElement("h4", "dd-build-choice__label", choice.displayName));
+
+        const selectedOption = choice.options.find(option =>
+            option.value === choice.selectedValue);
+        const selectedLabel = selectedOption?.displayName
+            ?? choice.selectedValue
+            ?? "Not selected";
+        card.append(createElement(
+            "p",
+            "dd-build-choice__value",
+            selectedLabel));
+
+        const metadata = [
+            choice.kind,
+            choice.sourceConceptKey
+        ].filter((value): value is string =>
+            value !== undefined && value.trim().length > 0);
+        if (metadata.length > 0) {
+            card.append(createElement(
+                "p",
+                "dd-build-choice__detail",
+                metadata.join(" • ")));
+        }
+
+        if (choice.options.length > 0) {
+            const controls = createElement("div", "dd-build-choice__actions");
+            const select = createElement("select", "dd-rule-chooser__input");
+            select.setAttribute("aria-label", choice.displayName);
+
+            const placeholder = createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Choose…";
+            select.append(placeholder);
+
+            for (const option of choice.options) {
+                const element = createElement("option");
+                element.value = option.value;
+                element.textContent = option.displayName;
+                if (option.value === choice.selectedValue) {
+                    element.selected = true;
+                }
+                select.append(element);
+            }
+            select.value = choice.selectedValue ?? "";
+
+            controls.append(
+                select,
+                createButton(
+                    choice.selectedValue === undefined ? "Choose" : "Replace",
+                    "dd-button dd-button--secondary",
+                    () => {
+                        if (select.value.length > 0) {
+                            handlers.rules.setChoice(choice.choiceKey, select.value);
+                        }
+                    },
+                    pending));
+            if (choice.selectedValue !== undefined) {
+                controls.append(createButton(
+                    "Clear",
+                    "dd-button dd-button--ghost",
+                    () => handlers.rules.clearChoice(choice.choiceKey),
+                    pending));
+            }
+            card.append(controls);
+        } else if (choice.selectedValue === undefined) {
+            card.append(createInlineState(
+                "Rules Core requires this choice but did not provide selectable options.",
+                "warning"));
+        }
+
+        section.append(card);
+    }
+
+    if (conflicts.length > 0) {
+        const conflictSection = createElement("section", "dd-guided-builder__conflicts");
+        conflictSection.append(createElement(
+            "h3",
+            "dd-guided-builder__subheading",
+            "Rules Conflicts"));
+        for (const conflict of conflicts) {
+            const item = createInlineState(conflict.message, "warning");
+            item.setAttribute("data-rule-conflict-key", conflict.conflictKey);
+            conflictSection.append(item);
+        }
+        section.append(conflictSection);
+    }
+
+    return section;
 }
 
 function guidedStatusLabel(status: ReturnType<typeof getGuidedBuilderSectionStates>[number]["status"]): string {

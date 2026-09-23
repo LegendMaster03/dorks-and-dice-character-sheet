@@ -5,10 +5,63 @@ import {
 } from "./character-api.js";
 import type { HostEnvironment } from "./host-environment.js";
 
+export type CharacterRulesInputKind =
+    | "choice"
+    | "competencyRank"
+    | "training"
+    | "classSkill"
+    | "knownSpell"
+    | "resource"
+    | "integerFact"
+    | "booleanFact"
+    | "stringFact";
+
+export interface CharacterRulesInputStateResponse {
+    id: string;
+    kind: CharacterRulesInputKind;
+    key: string;
+    integerValue: number | null;
+    booleanValue: boolean | null;
+    textValue: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CharacterRulesInputStateInput {
+    kind: CharacterRulesInputKind;
+    key: string;
+    integerValue?: number | null;
+    booleanValue?: boolean | null;
+    textValue?: string | null;
+}
+
+export interface CharacterHitPointGainStateResponse {
+    id: string;
+    advancementOccurrenceId: string;
+    classLevel: number;
+    hitDieValue: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface CharacterInventoryItemOccurrenceResponse {
     id: string;
     ruleConceptKey: string;
     createdAt: string;
+    quantity: number;
+    isCarried: boolean;
+    isEquipped: boolean;
+    isAttuned: boolean;
+    containerOccurrenceId: string | null;
+    updatedAt: string;
+}
+
+export interface CharacterInventoryItemOccurrenceStateInput {
+    quantity: number;
+    isCarried: boolean;
+    isEquipped: boolean;
+    isAttuned: boolean;
+    containerOccurrenceId?: string | null;
 }
 
 export interface CharacterNoteResponse {
@@ -16,6 +69,11 @@ export interface CharacterNoteResponse {
     content: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface CharacterDeathSavesResponse {
+    successes: number;
+    failures: number;
 }
 
 export interface CharacterConditionOccurrenceResponse {
@@ -44,19 +102,108 @@ export interface CharacterConditionCreateInput extends CharacterConditionStateIn
     conceptKey?: string | null;
 }
 
+export interface CharacterRecoveryChoiceOptionResponse {
+    key: string;
+    displayName: string;
+    value?: string | null;
+}
+
+export interface CharacterRecoveryChoiceResponse {
+    key: string;
+    prompt: string;
+    required: boolean;
+    options: CharacterRecoveryChoiceOptionResponse[];
+}
+
+export interface CharacterRecoveryRollResponse {
+    key: string;
+    rollKind: string;
+    prompt: string;
+    required: boolean;
+    mechanicKey?: string | null;
+}
+
+export interface CharacterRecoveryEffectResponse {
+    effectKey: string;
+    targetKind: string;
+    targetKey: string;
+    operation: string;
+    amount?: number | null;
+    value?: string | null;
+    referenceKey?: string | null;
+}
+
+export interface CharacterRecoveryResolutionResponse {
+    procedureKey: string;
+    displayName: string;
+    presentationRole?: string | null;
+    status: string;
+    missingCapabilityKeys: string[];
+    missingInputKeys: string[];
+    pendingChoices: CharacterRecoveryChoiceResponse[];
+    pendingRolls: CharacterRecoveryRollResponse[];
+    consequences: CharacterRecoveryEffectResponse[];
+}
+
+export interface CharacterRecoveryRequestInput {
+    integerInputs?: Record<string, number>;
+    booleanInputs?: Record<string, boolean>;
+    stringInputs?: Record<string, string>;
+    choices?: Record<string, string>;
+    rolls?: Record<string, number>;
+}
+
+export interface CharacterRecoveryResponse {
+    resolution: CharacterRecoveryResolutionResponse;
+    state: CharacterStateResponse;
+}
+
+export interface CharacterCurrencyBalanceResponse {
+    id: string;
+    currencyKey: string;
+    amount: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CharacterProfileResponse {
+    alignment: string | null;
+    deity: string | null;
+    age: string | null;
+    height: string | null;
+    weight: string | null;
+    appearance: string | null;
+    personalityTraits: string | null;
+    ideals: string | null;
+    bonds: string | null;
+    flaws: string | null;
+    backstory: string | null;
+    alliesAndOrganizations: string | null;
+    symbol: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type CharacterProfileInput = Omit<CharacterProfileResponse, "createdAt" | "updatedAt">;
+
 export interface CharacterStateResponse {
     characterId: string;
     readOnly: boolean;
     currentHitPoints: number | null;
+    deathSaves: CharacterDeathSavesResponse;
     inventoryItemOccurrences: CharacterInventoryItemOccurrenceResponse[];
     notes: CharacterNoteResponse[];
     conditions: CharacterConditionOccurrenceResponse[];
+    rulesInputs?: CharacterRulesInputStateResponse[];
+    hitPointGains?: CharacterHitPointGainStateResponse[];
+    profile?: CharacterProfileResponse | null;
+    currencyBalances?: CharacterCurrencyBalanceResponse[];
 }
 
 export function buildCharacterStateBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    resource?: "health" | "inventory" | "notes" | "conditions",
+    resource?: "currency" | "profile" | "health" | "death-saves" | "inventory" | "notes" | "conditions",
     entryId?: string
 ): string {
     let path = `/api/characters/${encodeURIComponent(characterId)}/state`;
@@ -82,6 +229,50 @@ export async function loadCharacterState(
         "Unable to load Character routine state.");
 }
 
+export async function setCharacterCurrencyBalance(
+    environment: HostEnvironment,
+    characterId: string,
+    key: string,
+    amount: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "currency"),
+        "PUT",
+        { key, amount },
+        "Unable to update Character currency.");
+}
+
+export async function removeCharacterCurrencyBalance(
+    environment: HostEnvironment,
+    characterId: string,
+    key: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    const base = buildCharacterStateBackendUrl(environment, characterId, "currency");
+    return await requestState(
+        fetcher,
+        `${base}?key=${encodeURIComponent(key)}`,
+        "DELETE",
+        undefined,
+        "Unable to remove Character currency.");
+}
+
+export async function setCharacterProfile(
+    environment: HostEnvironment,
+    characterId: string,
+    profile: CharacterProfileInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "profile"),
+        "PUT",
+        profile,
+        "Unable to update Character details.");
+}
+
 export async function setCharacterCurrentHitPoints(
     environment: HostEnvironment,
     characterId: string,
@@ -96,6 +287,117 @@ export async function setCharacterCurrentHitPoints(
         "Unable to update Character hit points.");
 }
 
+export async function setCharacterDeathSaves(
+    environment: HostEnvironment,
+    characterId: string,
+    successes: number,
+    failures: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "death-saves"),
+        "PUT",
+        { successes, failures },
+        "Unable to update Character death saves.");
+}
+
+export async function setCharacterRulesInput(
+    environment: HostEnvironment,
+    characterId: string,
+    input: CharacterRulesInputStateInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/rules-inputs`),
+        "PUT",
+        input,
+        "Unable to update Character rules input.");
+}
+
+export async function removeCharacterRulesInput(
+    environment: HostEnvironment,
+    characterId: string,
+    kind: CharacterRulesInputKind,
+    key: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    const base = `/api/characters/${encodeURIComponent(characterId)}/state/rules-inputs/${encodeURIComponent(kind)}`;
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `${base}?key=${encodeURIComponent(key)}`),
+        "DELETE",
+        undefined,
+        "Unable to clear Character rules input.");
+}
+
+export async function setCharacterHitPointGain(
+    environment: HostEnvironment,
+    characterId: string,
+    advancementOccurrenceId: string,
+    classLevel: number,
+    hitDieValue: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/hit-point-gains/${encodeURIComponent(advancementOccurrenceId)}/${classLevel}`),
+        "PUT",
+        { hitDieValue },
+        "Unable to update Character hit point gain.");
+}
+
+export async function removeCharacterHitPointGain(
+    environment: HostEnvironment,
+    characterId: string,
+    advancementOccurrenceId: string,
+    classLevel: number,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/hit-point-gains/${encodeURIComponent(advancementOccurrenceId)}/${classLevel}`),
+        "DELETE",
+        undefined,
+        "Unable to clear Character hit point gain.");
+}
+
+export async function resolveCharacterRecovery(
+    environment: HostEnvironment,
+    characterId: string,
+    procedureKey: string,
+    input: CharacterRecoveryRequestInput = {},
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterRecoveryResponse> {
+    const response = await fetcher(
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/recovery/${encodeURIComponent(procedureKey)}`),
+        {
+            method: "POST",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(input)
+        });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to resolve Character recovery."),
+            response.status);
+    }
+    return await response.json() as CharacterRecoveryResponse;
+}
+
 export async function addInventoryItemOccurrence(
     environment: HostEnvironment,
     characterId: string,
@@ -108,6 +410,21 @@ export async function addInventoryItemOccurrence(
         "POST",
         { conceptKey },
         "Unable to add inventory item.");
+}
+
+export async function updateInventoryItemOccurrence(
+    environment: HostEnvironment,
+    characterId: string,
+    occurrenceId: string,
+    input: CharacterInventoryItemOccurrenceStateInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "inventory", occurrenceId),
+        "PUT",
+        input,
+        "Unable to update inventory item.");
 }
 
 export async function removeInventoryItemOccurrence(

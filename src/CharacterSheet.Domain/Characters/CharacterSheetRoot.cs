@@ -43,6 +43,10 @@ public sealed class CharacterSheetRoot
 
     public int? CurrentHitPoints { get; private set; }
 
+    public int DeathSaveSuccesses { get; private set; }
+
+    public int DeathSaveFailures { get; private set; }
+
     public ICollection<CharacterFoundationalRuleSelection> FoundationalSelections { get; private set; } =
         new List<CharacterFoundationalRuleSelection>();
 
@@ -60,6 +64,235 @@ public sealed class CharacterSheetRoot
 
     public ICollection<CharacterConditionOccurrence> Conditions { get; private set; } =
         new List<CharacterConditionOccurrence>();
+
+    public ICollection<CharacterRulesInputState> RulesInputs { get; private set; } =
+        new List<CharacterRulesInputState>();
+
+    public ICollection<CharacterHitPointGainState> HitPointGains { get; private set; } =
+        new List<CharacterHitPointGainState>();
+
+    public CharacterProfileState? Profile { get; private set; }
+
+    public ICollection<CharacterCurrencyBalance> CurrencyBalances { get; private set; } =
+        new List<CharacterCurrencyBalance>();
+
+    public CharacterCurrencyBalance SetCurrencyBalance(
+        string currencyKey,
+        long amount,
+        DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterCurrencyBalance.NormalizeKey(currencyKey);
+        var balance = CurrencyBalances.SingleOrDefault(value => value.CurrencyKey == normalizedKey);
+        if (balance is null)
+        {
+            balance = new CharacterCurrencyBalance(
+                Guid.NewGuid(),
+                CharacterId,
+                normalizedKey,
+                amount,
+                changedAt);
+            CurrencyBalances.Add(balance);
+        }
+        else
+        {
+            balance.ReplaceAmount(amount, changedAt);
+        }
+
+        Touch(changedAt);
+        return balance;
+    }
+
+    public bool RemoveCurrencyBalance(string currencyKey, DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterCurrencyBalance.NormalizeKey(currencyKey);
+        var balance = CurrencyBalances.SingleOrDefault(value => value.CurrencyKey == normalizedKey);
+        if (balance is null) return false;
+
+        CurrencyBalances.Remove(balance);
+        Touch(changedAt);
+        return true;
+    }
+
+    public CharacterProfileState SetProfile(
+        string? alignment,
+        string? deity,
+        string? age,
+        string? height,
+        string? weight,
+        string? appearance,
+        string? personalityTraits,
+        string? ideals,
+        string? bonds,
+        string? flaws,
+        string? backstory,
+        string? alliesAndOrganizations,
+        string? symbol,
+        DateTimeOffset changedAt)
+    {
+        if (Profile is null)
+        {
+            Profile = new CharacterProfileState(
+                CharacterId,
+                alignment,
+                deity,
+                age,
+                height,
+                weight,
+                appearance,
+                personalityTraits,
+                ideals,
+                bonds,
+                flaws,
+                backstory,
+                alliesAndOrganizations,
+                symbol,
+                changedAt);
+        }
+        else
+        {
+            Profile.Replace(
+                alignment,
+                deity,
+                age,
+                height,
+                weight,
+                appearance,
+                personalityTraits,
+                ideals,
+                bonds,
+                flaws,
+                backstory,
+                alliesAndOrganizations,
+                symbol,
+                changedAt);
+        }
+
+        Touch(changedAt);
+        return Profile;
+    }
+
+    public CharacterRulesInputState SetRulesInput(
+        CharacterRulesInputKind kind,
+        string key,
+        int? integerValue,
+        bool? booleanValue,
+        string? textValue,
+        DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterRulesInputKey.Normalize(key);
+        var input = RulesInputs.SingleOrDefault(value =>
+            value.Kind == kind && value.Key == normalizedKey);
+        if (input is null)
+        {
+            input = new CharacterRulesInputState(
+                Guid.NewGuid(),
+                CharacterId,
+                kind,
+                normalizedKey,
+                integerValue,
+                booleanValue,
+                textValue,
+                changedAt);
+            RulesInputs.Add(input);
+        }
+        else
+        {
+            input.Replace(integerValue, booleanValue, textValue, changedAt);
+        }
+
+        Touch(changedAt);
+        return input;
+    }
+
+    public bool RemoveRulesInput(
+        CharacterRulesInputKind kind,
+        string key,
+        DateTimeOffset changedAt)
+    {
+        var normalizedKey = CharacterRulesInputKey.Normalize(key);
+        var input = RulesInputs.SingleOrDefault(value =>
+            value.Kind == kind && value.Key == normalizedKey);
+        if (input is null)
+        {
+            return false;
+        }
+
+        RulesInputs.Remove(input);
+        Touch(changedAt);
+        return true;
+    }
+
+    public CharacterHitPointGainState SetHitPointGain(
+        Guid advancementOccurrenceId,
+        int classLevel,
+        int hitDieValue,
+        DateTimeOffset changedAt)
+    {
+        var advancement = AdvancementEntries.SingleOrDefault(value =>
+            value.Id == advancementOccurrenceId)
+            ?? throw new KeyNotFoundException("Character advancement entry was not found.");
+        if (advancement.Kind is not CharacterAdvancementKind.Class
+            and not CharacterAdvancementKind.PrestigeClass)
+        {
+            throw new InvalidOperationException(
+                "Hit point gains must belong to a Class or Prestige Class advancement occurrence.");
+        }
+        if (classLevel <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classLevel), "Class level must be positive.");
+        }
+        if (advancement.Level is not int advancementLevel || classLevel > advancementLevel)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(classLevel),
+                "Hit point gain level can not exceed the advancement occurrence level.");
+        }
+
+        var gain = HitPointGains.SingleOrDefault(value =>
+            value.AdvancementOccurrenceId == advancementOccurrenceId
+            && value.ClassLevel == classLevel);
+        if (gain is null)
+        {
+            gain = new CharacterHitPointGainState(
+                Guid.NewGuid(),
+                CharacterId,
+                advancementOccurrenceId,
+                classLevel,
+                hitDieValue,
+                changedAt);
+            HitPointGains.Add(gain);
+        }
+        else
+        {
+            gain.ReplaceValue(hitDieValue, changedAt);
+        }
+
+        Touch(changedAt);
+        return gain;
+    }
+
+    public bool RemoveHitPointGain(
+        Guid advancementOccurrenceId,
+        int classLevel,
+        DateTimeOffset changedAt)
+    {
+        if (classLevel <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(classLevel), "Class level must be positive.");
+        }
+
+        var gain = HitPointGains.SingleOrDefault(value =>
+            value.AdvancementOccurrenceId == advancementOccurrenceId
+            && value.ClassLevel == classLevel);
+        if (gain is null)
+        {
+            return false;
+        }
+
+        HitPointGains.Remove(gain);
+        Touch(changedAt);
+        return true;
+    }
 
     public CharacterFoundationalRuleSelection SetFoundationalSelection(
         CharacterFoundationalSelectionCategory category,
@@ -163,7 +396,8 @@ public sealed class CharacterSheetRoot
                 normalizedConceptKey,
                 0,
                 null,
-                changedAt);
+                changedAt,
+                level: 1);
             AdvancementEntries.Add(entry);
         }
         else
@@ -171,6 +405,7 @@ public sealed class CharacterSheetRoot
             if (!string.Equals(entry.RuleConceptKey, normalizedConceptKey, StringComparison.Ordinal))
             {
                 RemoveSubclassChildren(entry.Id);
+                RemoveHitPointGainsForAdvancement(entry.Id);
             }
             entry.ReplaceRule(normalizedConceptKey, changedAt);
         }
@@ -194,6 +429,7 @@ public sealed class CharacterSheetRoot
         }
 
         RemoveSubclassChildren(entry.Id);
+        RemoveHitPointGainsForAdvancement(entry.Id);
         AdvancementEntries.Remove(entry);
         Touch(changedAt);
         return true;
@@ -354,16 +590,187 @@ public sealed class CharacterSheetRoot
             CharacterRuleReference.NormalizeConceptKey(ruleConceptKey),
             ordinal,
             parentAdvancementEntryId,
-            createdAt);
+            createdAt,
+            level: kind is CharacterAdvancementKind.Class or CharacterAdvancementKind.PrestigeClass
+                ? 1
+                : null);
         AdvancementEntries.Add(entry);
         Touch(createdAt);
         return entry;
+    }
+
+    public CharacterAdvancementEntry SetAdvancementLevel(
+        Guid advancementEntryId,
+        int level,
+        DateTimeOffset changedAt)
+    {
+        if (advancementEntryId == Guid.Empty)
+        {
+            throw new ArgumentException("Advancement entry ID can not be empty.", nameof(advancementEntryId));
+        }
+
+        var entry = AdvancementEntries.SingleOrDefault(value => value.Id == advancementEntryId)
+            ?? throw new KeyNotFoundException("Character advancement entry was not found.");
+
+        if (entry.Kind is not CharacterAdvancementKind.Class
+            and not CharacterAdvancementKind.PrestigeClass)
+        {
+            throw new InvalidOperationException(
+                "Only Class and Prestige Class advancement occurrences own an independent level.");
+        }
+
+        entry.SetLevel(level, changedAt);
+        foreach (var staleGain in HitPointGains
+            .Where(value =>
+                value.AdvancementOccurrenceId == advancementEntryId
+                && value.ClassLevel > level)
+            .ToArray())
+        {
+            HitPointGains.Remove(staleGain);
+        }
+
+        Touch(changedAt);
+        return entry;
+    }
+
+    public void ApplyIntegerStateMutations(
+        IReadOnlyList<CharacterIntegerStateMutation> mutations,
+        DateTimeOffset changedAt)
+    {
+        ArgumentNullException.ThrowIfNull(mutations);
+        if (mutations.Count == 0) return;
+
+        var currentHitPoints = CurrentHitPoints;
+        var deathSaveSuccesses = DeathSaveSuccesses;
+        var deathSaveFailures = DeathSaveFailures;
+        var resourceValues = RulesInputs
+            .Where(value => value.Kind == CharacterRulesInputKind.Resource && value.IntegerValue is not null)
+            .ToDictionary(value => value.Key, value => value.IntegerValue!.Value, StringComparer.Ordinal);
+        var resourceKeysTouched = new HashSet<string>(StringComparer.Ordinal);
+        var hitPointsTouched = false;
+        var deathSavesTouched = false;
+
+        foreach (var mutation in mutations)
+        {
+            switch (mutation.Target)
+            {
+                case CharacterIntegerStateMutationTarget.CurrentHitPoints:
+                    currentHitPoints = ApplyMutation(
+                        currentHitPoints,
+                        mutation,
+                        "Current Hit Points");
+                    hitPointsTouched = true;
+                    break;
+                case CharacterIntegerStateMutationTarget.DeathSaveSuccesses:
+                    deathSaveSuccesses = ApplyMutation(
+                        deathSaveSuccesses,
+                        mutation,
+                        "Death Save successes")
+                        ?? throw new InvalidOperationException("Death Save successes can not be unset.");
+                    ValidateDeathSaveCount(deathSaveSuccesses, nameof(deathSaveSuccesses));
+                    deathSavesTouched = true;
+                    break;
+                case CharacterIntegerStateMutationTarget.DeathSaveFailures:
+                    deathSaveFailures = ApplyMutation(
+                        deathSaveFailures,
+                        mutation,
+                        "Death Save failures")
+                        ?? throw new InvalidOperationException("Death Save failures can not be unset.");
+                    ValidateDeathSaveCount(deathSaveFailures, nameof(deathSaveFailures));
+                    deathSavesTouched = true;
+                    break;
+                case CharacterIntegerStateMutationTarget.Resource:
+                    var resourceKey = CharacterRulesInputKey.Normalize(
+                        mutation.ResourceKey
+                            ?? throw new ArgumentException(
+                                "A resource mutation requires a resource key.",
+                                nameof(mutations)));
+                    resourceValues.TryGetValue(resourceKey, out var currentResourceValue);
+                    var hasResource = resourceValues.ContainsKey(resourceKey);
+                    int? nextResourceValue = ApplyMutation(
+                        hasResource ? currentResourceValue : null,
+                        mutation,
+                        $"Resource '{resourceKey}'");
+                    resourceValues[resourceKey] = nextResourceValue
+                        ?? throw new InvalidOperationException("Character resources can not be unset by an integer mutation.");
+                    resourceKeysTouched.Add(resourceKey);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(mutations),
+                        $"Unsupported Character state mutation target '{mutation.Target}'.");
+            }
+        }
+
+        if (hitPointsTouched)
+        {
+            SetCurrentHitPoints(currentHitPoints, changedAt);
+        }
+        if (deathSavesTouched)
+        {
+            SetDeathSaves(deathSaveSuccesses, deathSaveFailures, changedAt);
+        }
+        foreach (var resourceKey in resourceKeysTouched)
+        {
+            SetRulesInput(
+                CharacterRulesInputKind.Resource,
+                resourceKey,
+                resourceValues[resourceKey],
+                null,
+                null,
+                changedAt);
+        }
+    }
+
+    private static int? ApplyMutation(
+        int? current,
+        CharacterIntegerStateMutation mutation,
+        string targetLabel)
+    {
+        if (mutation.Operation == CharacterIntegerStateMutationOperation.Set)
+        {
+            return mutation.Amount;
+        }
+        if (current is null)
+        {
+            throw new InvalidOperationException(
+                $"{targetLabel} must already have a Character-owned value before it can be adjusted or expended.");
+        }
+
+        return mutation.Operation switch
+        {
+            CharacterIntegerStateMutationOperation.Adjust => checked(current.Value + mutation.Amount),
+            CharacterIntegerStateMutationOperation.Expend => checked(current.Value - mutation.Amount),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mutation),
+                $"Unsupported Character state mutation operation '{mutation.Operation}'.")
+        };
     }
 
     public void SetCurrentHitPoints(int? currentHitPoints, DateTimeOffset changedAt)
     {
         CurrentHitPoints = currentHitPoints;
         Touch(changedAt);
+    }
+
+    public void SetDeathSaves(int successes, int failures, DateTimeOffset changedAt)
+    {
+        ValidateDeathSaveCount(successes, nameof(successes));
+        ValidateDeathSaveCount(failures, nameof(failures));
+
+        DeathSaveSuccesses = successes;
+        DeathSaveFailures = failures;
+        Touch(changedAt);
+    }
+
+    private static void ValidateDeathSaveCount(int value, string parameterName)
+    {
+        if (value is < 0 or > 3)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                "Death save successes and failures must be between 0 and 3.");
+        }
     }
 
     public CharacterInventoryItemOccurrence AddInventoryItemOccurrence(
@@ -397,9 +804,76 @@ public sealed class CharacterSheetRoot
             return false;
         }
 
+        foreach (var child in InventoryItemOccurrences.Where(
+            value => value.ContainerOccurrenceId == occurrence.Id))
+        {
+            child.ReplaceState(
+                child.Quantity,
+                child.IsCarried,
+                child.IsEquipped,
+                child.IsAttuned,
+                null,
+                changedAt);
+        }
+
         InventoryItemOccurrences.Remove(occurrence);
         Touch(changedAt);
         return true;
+    }
+
+    public CharacterInventoryItemOccurrence UpdateInventoryItemOccurrence(
+        Guid occurrenceId,
+        int quantity,
+        bool isCarried,
+        bool isEquipped,
+        bool isAttuned,
+        Guid? containerOccurrenceId,
+        DateTimeOffset changedAt)
+    {
+        if (occurrenceId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Inventory occurrence ID can not be empty.",
+                nameof(occurrenceId));
+        }
+
+        var occurrence = InventoryItemOccurrences.SingleOrDefault(value => value.Id == occurrenceId)
+            ?? throw new KeyNotFoundException("Inventory occurrence was not found.");
+
+        if (containerOccurrenceId is Guid containerId)
+        {
+            var container = InventoryItemOccurrences.SingleOrDefault(value => value.Id == containerId)
+                ?? throw new KeyNotFoundException("Inventory container occurrence was not found.");
+            if (container.CharacterId != CharacterId)
+            {
+                throw new InvalidOperationException(
+                    "Inventory container must belong to the same Character.");
+            }
+
+            var cursor = container;
+            while (cursor.ContainerOccurrenceId is Guid parentId)
+            {
+                if (parentId == occurrence.Id)
+                {
+                    throw new InvalidOperationException(
+                        "Inventory containers can not form a cycle.");
+                }
+
+                cursor = InventoryItemOccurrences.SingleOrDefault(value => value.Id == parentId)
+                    ?? throw new InvalidOperationException(
+                        "Inventory container hierarchy contains an unavailable occurrence.");
+            }
+        }
+
+        occurrence.ReplaceState(
+            quantity,
+            isCarried,
+            isEquipped,
+            isAttuned,
+            containerOccurrenceId,
+            changedAt);
+        Touch(changedAt);
+        return occurrence;
     }
 
     public CharacterNote AddNote(string content, DateTimeOffset createdAt)
@@ -535,6 +1009,16 @@ public sealed class CharacterSheetRoot
             throw new InvalidOperationException("Subclass parent must be a Class advancement entry for the same Character.");
         }
         return parent;
+    }
+
+    private void RemoveHitPointGainsForAdvancement(Guid advancementEntryId)
+    {
+        foreach (var gain in HitPointGains
+            .Where(value => value.AdvancementOccurrenceId == advancementEntryId)
+            .ToArray())
+        {
+            HitPointGains.Remove(gain);
+        }
     }
 
     private void RemoveSubclassChildren(Guid classAdvancementEntryId)

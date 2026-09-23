@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
@@ -18,10 +19,18 @@ public sealed record CharacterPresentationResult(
 
 public sealed record CharacterPresentationView(
     CharacterAdvancementPresentationView Advancement,
-    CharacterMechanicsPresentationView? Mechanics);
+    CharacterMechanicsPresentationView? Mechanics,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    RulesCoreCharacterRulesProjectionView? RuleProjection = null);
 
 public sealed record CharacterAdvancementPresentationView(
     IReadOnlyList<AdvancementOccurrencePresentationView> Occurrences);
+
+public sealed record AdvancementProgressionPresentationView(
+    string Label,
+    object Value,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? FormattedValue = null);
 
 public sealed record AdvancementOccurrencePresentationView(
     Guid OccurrenceId,
@@ -30,6 +39,8 @@ public sealed record AdvancementOccurrencePresentationView(
     string DisplayName,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? KindLabel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    AdvancementProgressionPresentationView? Progression = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     Guid? ParentOccurrenceId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -67,7 +78,11 @@ public sealed record MechanicalContributionPresentationView(
     string Label,
     object EffectiveValue,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? FormattedValue = null);
+    string? FormattedValue = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Unit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
 public sealed record RelatedMechanicalValuePresentationView(
     string Key,
@@ -83,9 +98,15 @@ public sealed record SavingThrowPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? FormattedValue = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Unit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? GoverningAbility = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Training = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<MechanicalContributionPresentationView>? Breakdown = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RelatedMechanicalValuePresentationView>? RelatedValues = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
@@ -96,7 +117,13 @@ public sealed record DefensePresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? FormattedValue = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Unit = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Role = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<MechanicalContributionPresentationView>? Breakdown = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RelatedMechanicalValuePresentationView>? RelatedValues = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
@@ -121,6 +148,22 @@ public sealed record HealthTrackPresentationView(
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
 public sealed record ArmorCheckPenaltyPresentationView(bool Applies);
+
+public sealed record CompetencyFacetPresentationView(
+    string FacetType,
+    bool SupportsRanks,
+    bool SupportsClassSkillState,
+    bool SupportsTrainingState,
+    IReadOnlyList<string>? MechanicKeys = null);
+
+public sealed record RelatedCompetencyPresentationView(
+    string Kind,
+    string TargetType,
+    string TargetName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Scope = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool SharesTrainingState = false);
 
 public sealed record CompetencyPresentationView(
     string Key,
@@ -153,7 +196,21 @@ public sealed record CompetencyPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     bool? SupportsTrainingState = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? IdentityKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? IdentityName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SharedTrainingKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool IsFamily = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CompetencyFacetPresentationView>? Facets = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<RelatedCompetencyPresentationView>? RelatedCompetencies = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<MechanicalContributionPresentationView>? Breakdown = null);
 
 public sealed record CompetencyRelationshipPresentationView(
     string ParentKey,
@@ -199,6 +256,147 @@ public sealed record CharacterProcedurePresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     bool Supplemental = false);
 
+public sealed record ActionAttackPresentationView(
+    string Key,
+    string Name,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ActionType = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CalculatedMechanicalValuePresentationView? AttackOrCheck = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Damage = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? DamageType = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Range = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Reach = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Target = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? Notes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record ItemOccurrenceMechanicsPresentationView(
+    Guid OccurrenceId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? Values = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<DisplayFieldPresentationView>? Facts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record InventoryMechanicsPresentationView(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<ItemOccurrenceMechanicsPresentationView>? ItemOccurrences = null);
+
+public sealed record CharacterFeaturePresentationView(
+    string Key,
+    string Label,
+    string Kind,
+    string State,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourceConceptKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? GrantingSourceKind = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? AcquisitionLevel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<DisplayFieldPresentationView>? Effects = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record SpellcastingResourcePresentationView(
+    string Key,
+    string Label,
+    string State,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? Current = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? Maximum = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? RecoveryProcedureKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record SpellcastingProfilePresentationView(
+    string Key,
+    string Label,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? CastingSource = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? CastingAbility = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CalculatedMechanicalValuePresentationView? SaveDc = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CalculatedMechanicalValuePresentationView? SpellAttack = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DisplayFieldPresentationView? ResourceSystem = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SpellcastingResourcePresentationView>? Resources = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<DisplayFieldPresentationView>? Metadata = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record CharacterRuleChoiceOptionPresentationView(
+    string Value,
+    string DisplayName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ConceptKey = null);
+
+public sealed record CharacterRuleChoicePresentationView(
+    string ChoiceKey,
+    string GroupKey,
+    string DisplayName,
+    string Kind,
+    string State,
+    IReadOnlyList<CharacterRuleChoiceOptionPresentationView> Options,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SelectedValue = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourceConceptKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record CharacterRecoveryInputPresentationView(
+    string Key,
+    string ValueKind,
+    string Origin,
+    bool Required,
+    int? DefaultInteger = null);
+
+public sealed record CharacterRecoveryProcedurePresentationView(
+    string ProcedureKey,
+    string DisplayName,
+    string ApplicabilityState,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PresentationRole = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresCharacterState = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresPlayerChoices = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresRolls = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresResourceExpenditure = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool RequiresOtherRuntimeFacts = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? MissingCapabilityKeys = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterRecoveryInputPresentationView>? Inputs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
+
+public sealed record CharacterProjectionConflictPresentationView(
+    string ConflictKey,
+    string Kind,
+    string Message,
+    IReadOnlyList<string> RelatedMechanicKeys,
+    IReadOnlyList<string> RelatedConceptKeys);
+
 public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CalculatedMechanicalValuePresentationView>? AbilityValues = null,
@@ -231,4 +429,20 @@ public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CharacterProcedurePresentationView>? Procedures = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CalculatedMechanicalValuePresentationView>? Movement = null);
+    InventoryMechanicsPresentationView? Inventory = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? Movement = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<ActionAttackPresentationView>? Actions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SpellcastingProfilePresentationView>? SpellcastingProfiles = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterFeaturePresentationView>? Features = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CalculatedMechanicalValuePresentationView>? CharacterMetadata = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterRuleChoicePresentationView>? RuleChoices = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterProjectionConflictPresentationView>? ProjectionConflicts = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterRecoveryProcedurePresentationView>? RecoveryProcedures = null);

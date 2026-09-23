@@ -38,9 +38,50 @@ public sealed class CharacterStateWorkflowTests
             Assert.NotNull(view);
             Assert.False(view.ReadOnly);
             Assert.Null(view.CurrentHitPoints);
+            Assert.Equal(0, view.DeathSaves.Successes);
+            Assert.Equal(0, view.DeathSaves.Failures);
             Assert.Empty(view.InventoryItemOccurrences);
             Assert.Empty(view.Notes);
             Assert.Empty(view.Conditions);
+        }
+
+        using (var setCurrency = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/currency",
+                   new { key = "GP", amount = 125L }))
+        {
+            Assert.Equal(HttpStatusCode.OK, setCurrency.StatusCode);
+            var view = await setCurrency.Content.ReadFromJsonAsync<CharacterStateView>();
+            var balance = Assert.Single(view!.CurrencyBalances!);
+            Assert.Equal("gp", balance.CurrencyKey);
+            Assert.Equal(125, balance.Amount);
+        }
+
+        using (var setProfile = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/profile",
+                   new
+                   {
+                       alignment = "Neutral",
+                       deity = "The Traveler",
+                       age = "34",
+                       height = "5 ft. 11 in.",
+                       weight = "180 lb.",
+                       appearance = "Scarred",
+                       personalityTraits = "Curious",
+                       ideals = "Freedom",
+                       bonds = "Old company",
+                       flaws = "Impatient",
+                       backstory = "A long-form history.",
+                       alliesAndOrganizations = "Cartographers Guild",
+                       symbol = "Compass rose"
+                   }))
+        {
+            Assert.Equal(HttpStatusCode.OK, setProfile.StatusCode);
+            var view = await setProfile.Content.ReadFromJsonAsync<CharacterStateView>();
+            Assert.NotNull(view?.Profile);
+            Assert.Equal("Neutral", view.Profile.Alignment);
+            Assert.Equal("The Traveler", view.Profile.Deity);
         }
 
         using (var setHealth = await factory.SendHostedAsync(
@@ -52,6 +93,26 @@ public sealed class CharacterStateWorkflowTests
             var view = await setHealth.Content.ReadFromJsonAsync<CharacterStateView>();
             Assert.NotNull(view);
             Assert.Equal(-4, view.CurrentHitPoints);
+        }
+
+        using (var setDeathSaves = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/death-saves",
+                   new { successes = 2, failures = 1 }))
+        {
+            Assert.Equal(HttpStatusCode.OK, setDeathSaves.StatusCode);
+            var view = await setDeathSaves.Content.ReadFromJsonAsync<CharacterStateView>();
+            Assert.NotNull(view);
+            Assert.Equal(2, view.DeathSaves.Successes);
+            Assert.Equal(1, view.DeathSaves.Failures);
+        }
+
+        using (var invalidDeathSaves = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/death-saves",
+                   new { successes = 4, failures = 0 }))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, invalidDeathSaves.StatusCode);
         }
 
         Guid firstItemId;
@@ -149,7 +210,11 @@ public sealed class CharacterStateWorkflowTests
         Assert.Equal(HttpStatusCode.OK, verify.StatusCode);
         var persisted = await verify.Content.ReadFromJsonAsync<CharacterStateView>();
         Assert.NotNull(persisted);
+        Assert.Equal("A long-form history.", persisted.Profile?.Backstory);
+        Assert.Equal(125, Assert.Single(persisted.CurrencyBalances!).Amount);
         Assert.Equal(-4, persisted.CurrentHitPoints);
+        Assert.Equal(2, persisted.DeathSaves.Successes);
+        Assert.Equal(1, persisted.DeathSaves.Failures);
         Assert.Single(persisted.InventoryItemOccurrences);
         Assert.Equal("Updated", Assert.Single(persisted.Notes).Content);
         var persistedCondition = Assert.Single(persisted.Conditions);
@@ -213,12 +278,51 @@ public sealed class CharacterStateWorkflowTests
             Assert.Equal(noteId, Assert.Single(view.Notes).Id);
         }
 
+        using (var currency = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/currency",
+                   new { key = "gp", amount = 5L }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, currency.StatusCode);
+        }
+
+        using (var profile = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/profile",
+                   new
+                   {
+                       alignment = "Neutral",
+                       deity = (string?)null,
+                       age = (string?)null,
+                       height = (string?)null,
+                       weight = (string?)null,
+                       appearance = (string?)null,
+                       personalityTraits = (string?)null,
+                       ideals = (string?)null,
+                       bonds = (string?)null,
+                       flaws = (string?)null,
+                       backstory = (string?)null,
+                       alliesAndOrganizations = (string?)null,
+                       symbol = (string?)null
+                   }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, profile.StatusCode);
+        }
+
         using (var health = await factory.SendHostedAsync(
                    HttpMethod.Put,
                    $"/api/characters/{characterId:D}/state/health",
                    new { currentHitPoints = 10 }))
         {
             Assert.Equal(HttpStatusCode.Conflict, health.StatusCode);
+        }
+
+        using (var deathSaves = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/death-saves",
+                   new { successes = 1, failures = 0 }))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, deathSaves.StatusCode);
         }
 
         using (var add = await factory.SendHostedAsync(
@@ -299,6 +403,14 @@ public sealed class CharacterStateWorkflowTests
                    new { currentHitPoints = 10 }))
         {
             Assert.Equal(HttpStatusCode.NotFound, health.StatusCode);
+        }
+
+        using (var deathSaves = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/state/death-saves",
+                   new { successes = 1, failures = 0 }))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, deathSaves.StatusCode);
         }
 
         using (var inventory = await factory.SendHostedAsync(

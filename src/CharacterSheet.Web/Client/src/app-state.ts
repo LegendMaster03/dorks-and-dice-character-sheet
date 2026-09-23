@@ -5,7 +5,11 @@ import type {
 } from "./builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "./character-api.js";
 import type { CharacterPresentationResponse } from "./character-presentation-api.js";
-import type { CharacterStateResponse } from "./character-state-api.js";
+import type {
+    CharacterRecoveryRequestInput,
+    CharacterRecoveryResolutionResponse,
+    CharacterStateResponse
+} from "./character-state-api.js";
 import type { RuleReferenceState } from "./builder-rules.js";
 import type { ResolvedRuleCatalogItem } from "./rules-core-api.js";
 import type { CharacterSheetRoute } from "./routes.js";
@@ -64,6 +68,11 @@ export interface CharacterBuilderUiState {
     saving: CharacterBuilderChoice | null;
     saveError?: string;
     savingAbility: CharacterAbilityKey | null;
+    savingAdvancementLevel: string | null;
+    advancementLevelSaveError?: {
+        occurrenceId: string;
+        message: string;
+    };
     abilitySaveError?: {
         abilityKey: CharacterAbilityKey;
         message: string;
@@ -83,17 +92,36 @@ export interface GuidedBuilderUiState {
 }
 
 export type RoutineMutationKind =
+    | "currency-update"
+    | "currency-delete"
+    | "profile-update"
     | "health-update"
+    | "death-saves-update"
     | "note-add"
     | "note-update"
     | "note-delete"
     | "inventory-add"
+    | "inventory-update"
     | "inventory-delete"
+    | "rules-input-update"
+    | "rules-input-delete"
+    | "hit-point-gain-update"
+    | "hit-point-gain-delete"
     | "condition-add"
     | "condition-update"
     | "condition-delete";
 
 export type InventoryChooserState =
+    | { kind: "closed" }
+    | {
+        kind: "open";
+        query: string;
+        status: "idle" | "loading" | "ready" | "error";
+        results: ResolvedRuleCatalogItem[];
+        message?: string;
+    };
+
+export type SpellChooserState =
     | { kind: "closed" }
     | {
         kind: "open";
@@ -113,13 +141,35 @@ export type ConditionChooserState =
         message?: string;
     };
 
+export type RecoveryUiState =
+    | { kind: "closed" }
+    | {
+        kind: "resolving";
+        procedureKey: string;
+        request: CharacterRecoveryRequestInput;
+    }
+    | {
+        kind: "continuation";
+        procedureKey: string;
+        request: CharacterRecoveryRequestInput;
+        resolution: CharacterRecoveryResolutionResponse;
+    }
+    | {
+        kind: "error";
+        procedureKey: string;
+        request: CharacterRecoveryRequestInput;
+        message: string;
+    };
+
 export interface CharacterRoutineUiState {
     status: "idle" | "loading" | "ready" | "error";
     state: CharacterStateResponse | null;
     message?: string;
     references: Record<string, RuleReferenceState>;
     inventoryChooser: InventoryChooserState;
+    spellChooser: SpellChooserState;
     conditionChooser: ConditionChooserState;
+    recovery: RecoveryUiState;
     mutation: { kind: RoutineMutationKind; entryId?: string } | null;
     mutationError?: string;
 }
@@ -166,6 +216,9 @@ export type CharacterSheetAction =
     | { type: "ability-save-started"; abilityKey: CharacterAbilityKey }
     | { type: "ability-saved"; build: CharacterBuildResponse }
     | { type: "ability-save-failed"; abilityKey: CharacterAbilityKey; message: string }
+    | { type: "advancement-level-save-started"; occurrenceId: string }
+    | { type: "advancement-level-saved"; build: CharacterBuildResponse }
+    | { type: "advancement-level-save-failed"; occurrenceId: string; message: string }
     | { type: "feat-reference-resolved"; occurrenceId: string; conceptKey: string; reference: RuleReferenceState }
     | { type: "feat-chooser-opened" }
     | { type: "feat-chooser-query-changed"; query: string }
@@ -186,12 +239,23 @@ export type CharacterSheetAction =
     | { type: "inventory-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
     | { type: "inventory-chooser-load-failed"; query: string; message: string }
     | { type: "inventory-chooser-closed" }
+    | { type: "spell-chooser-opened" }
+    | { type: "spell-chooser-query-changed"; query: string }
+    | { type: "spell-chooser-load-started"; query: string }
+    | { type: "spell-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "spell-chooser-load-failed"; query: string; message: string }
+    | { type: "spell-chooser-closed" }
     | { type: "condition-chooser-opened" }
     | { type: "condition-chooser-query-changed"; query: string }
     | { type: "condition-chooser-load-started"; query: string }
     | { type: "condition-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
     | { type: "condition-chooser-load-failed"; query: string; message: string }
     | { type: "condition-chooser-closed" }
+    | { type: "recovery-started"; procedureKey: string; request: CharacterRecoveryRequestInput }
+    | { type: "recovery-continuation"; procedureKey: string; request: CharacterRecoveryRequestInput; resolution: CharacterRecoveryResolutionResponse }
+    | { type: "recovery-succeeded"; state: CharacterStateResponse }
+    | { type: "recovery-failed"; procedureKey: string; request: CharacterRecoveryRequestInput; message: string }
+    | { type: "recovery-cancelled" }
     | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
     | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
     | { type: "routine-mutation-failed"; message: string }

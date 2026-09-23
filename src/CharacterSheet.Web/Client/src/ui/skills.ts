@@ -3,10 +3,20 @@ import {
     type CompetencyPresentationItem,
     type CompetencyView
 } from "./character-mechanics.js";
-import { createElement, createSectionCard } from "./components.js";
+import { createButton, createElement, createSectionCard } from "./components.js";
 import { renderSourceAttributionDisclosure } from "./source-attribution.js";
 
-export function renderSkillsCard(items: readonly CompetencyPresentationItem[] | null): HTMLElement {
+export interface CompetencyRankControlOptions {
+    readOnly?: boolean;
+    savingKey?: string | null;
+    onSetRank?: (competencyKey: string, ranks: number) => void;
+    onClearRank?: (competencyKey: string) => void;
+}
+
+export function renderSkillsCard(
+    items: readonly CompetencyPresentationItem[] | null,
+    control: CompetencyRankControlOptions = {}
+): HTMLElement {
     const card = createSectionCard("Skills & Competencies", "dd-support-card dd-skills-card");
 
     if (items === null) {
@@ -31,8 +41,10 @@ export function renderSkillsCard(items: readonly CompetencyPresentationItem[] | 
     const list = createElement("div", "dd-skill-list");
     const renderedItems = items.map((item, index) => {
         const element = item.kind === "standalone"
-            ? renderStandaloneCompetency(item.competency)
-            : renderCompositeCompetency(item, index);
+            ? renderStandaloneCompetency(item.competency, control)
+            : item.kind === "family"
+                ? renderCompetencyFamily(item, control)
+                : renderCompositeCompetency(item, index, control);
         list.append(element);
         return {
             element,
@@ -69,8 +81,12 @@ function renderUnavailableSkillValue(): HTMLElement {
     return list;
 }
 
-function renderStandaloneCompetency(competency: CompetencyView): HTMLElement {
-    if (!hasCompetencyDetails(competency)) {
+function renderStandaloneCompetency(
+    competency: CompetencyView,
+    control: CompetencyRankControlOptions
+): HTMLElement {
+    if (!hasCompetencyDetails(competency)
+        && !canEditRank(competency, control)) {
         return renderCompetencyRow(competency, "standalone");
     }
 
@@ -78,13 +94,34 @@ function renderStandaloneCompetency(competency: CompetencyView): HTMLElement {
     disclosure.setAttribute("data-skill-disclosure", competency.key);
     const summary = createElement("summary", "dd-skill-disclosure__summary");
     summary.append(renderCompetencyRow(competency, "standalone", undefined, "span"));
-    disclosure.append(summary, renderCompetencyDetailsBody(competency));
+    disclosure.append(summary, renderCompetencyDetailsBody(competency, control));
+    return disclosure;
+}
+
+function renderCompetencyFamily(
+    item: Extract<CompetencyPresentationItem, { kind: "family" }>,
+    control: CompetencyRankControlOptions
+): HTMLElement {
+    const disclosure = createElement("details", "dd-skill-disclosure dd-skill-disclosure--family");
+    disclosure.setAttribute("data-skill-family", item.parent.key);
+
+    const summary = createElement("summary", "dd-skill-disclosure__summary");
+    summary.append(renderCompetencyRow(item.parent, "standalone", undefined, "span"));
+
+    const body = createElement("div", "dd-skill-disclosure__body dd-skill-family-details");
+    const members = createElement("div", "dd-skill-family-members");
+    for (const member of item.members) {
+        members.append(renderStandaloneCompetency(member, control));
+    }
+    body.append(members);
+    disclosure.append(summary, body);
     return disclosure;
 }
 
 function renderCompositeCompetency(
     item: Extract<CompetencyPresentationItem, { kind: "composite" }>,
-    index: number
+    index: number,
+    control: CompetencyRankControlOptions
 ): HTMLElement {
     const disclosure = createElement("details", "dd-skill-disclosure dd-skill-disclosure--composite");
     disclosure.setAttribute("data-composite-skill", item.parent.key);
@@ -102,14 +139,16 @@ function renderCompositeCompetency(
     }
     summary.append(group);
 
-    disclosure.append(summary, renderCompositeDetails(item));
+    disclosure.append(summary, renderCompositeDetails(item, control));
     return disclosure;
 }
 
 function competencySearchText(item: CompetencyPresentationItem): string {
     const competencies = item.kind === "standalone"
         ? [item.competency]
-        : [item.parent, ...item.components];
+        : item.kind === "family"
+            ? [item.parent, ...item.members]
+            : [item.parent, ...item.components];
     return competencies
         .flatMap(value => [
             value.label,
@@ -231,7 +270,8 @@ function abbreviateTrainingState(training: string): string {
 }
 
 function renderCompositeDetails(
-    item: Extract<CompetencyPresentationItem, { kind: "composite" }>
+    item: Extract<CompetencyPresentationItem, { kind: "composite" }>,
+    control: CompetencyRankControlOptions
 ): HTMLElement {
     const body = createElement("div", "dd-skill-disclosure__body dd-skill-composite-details");
 
@@ -269,6 +309,9 @@ function renderCompositeDetails(
         section.append(list);
         body.append(section);
     }
+
+    const rankEditors = renderRankEditors(competencies, control);
+    if (rankEditors !== null) body.append(rankEditors);
 
     const sources = renderSourceAttributionDisclosure(collectCompetencySources(competencies));
     if (sources !== null) body.append(sources);
@@ -341,9 +384,14 @@ function collectCompetencySources(
     return [...byKey.values()];
 }
 
-function renderCompetencyDetailsBody(competency: CompetencyView): HTMLElement {
+function renderCompetencyDetailsBody(
+    competency: CompetencyView,
+    control: CompetencyRankControlOptions
+): HTMLElement {
     const body = createElement("div", "dd-skill-disclosure__body");
     body.append(renderCompetencyDetailContent(competency));
+    const rankEditors = renderRankEditors([competency], control);
+    if (rankEditors !== null) body.append(rankEditors);
     return body;
 }
 
@@ -403,6 +451,92 @@ function renderCompetencyDetailContent(competency: CompetencyView): HTMLElement 
     const sources = renderSourceAttributionDisclosure(competency.sourceAttributions);
     if (sources !== null) content.append(sources);
     return content;
+}
+
+function renderRankEditors(
+    competencies: readonly CompetencyView[],
+    control: CompetencyRankControlOptions
+): HTMLElement | null {
+    const editable = competencies.filter(competency =>
+        canEditRank(competency, control));
+    if (editable.length === 0) return null;
+
+    const section = createElement("section", "dd-skill-detail-section dd-skill-rank-editors");
+    section.append(createElement("h4", "dd-skill-detail-section__title", "Ranks"));
+
+    for (const competency of editable) {
+        const row = createElement("div", "dd-skill-rank-editor");
+        row.setAttribute("data-competency-rank-editor", competency.key);
+        row.append(createElement("span", "dd-skill-rank-editor__label", competency.label));
+
+        const input = createElement("input", "dd-sheet-screen__input");
+        input.type = "number";
+        input.step = "1";
+        input.min = "0";
+        input.max = "2147483647";
+        input.inputMode = "numeric";
+        input.value = typeof competency.ranks === "number"
+            && Number.isSafeInteger(competency.ranks)
+            ? String(competency.ranks)
+            : "";
+        input.setAttribute("aria-label", `${competency.label} ranks`);
+        input.addEventListener("input", () => input.setCustomValidity(""));
+
+        const pending = control.savingKey !== null
+            && control.savingKey !== undefined;
+        const saving = control.savingKey === competency.key;
+        const actions = createElement("div", "dd-skill-rank-editor__actions");
+        actions.append(createButton(
+            saving ? "Saving…" : "Save",
+            "dd-button dd-button--secondary",
+            () => {
+                const parsed = parseRank(input.value);
+                if (parsed === null) {
+                    input.setCustomValidity(
+                        "Ranks must be a whole number from 0 through 2147483647.");
+                    input.reportValidity();
+                    return;
+                }
+                input.setCustomValidity("");
+                control.onSetRank!(competency.key, parsed);
+            },
+            pending));
+
+        if (typeof competency.ranks === "number"
+            && Number.isSafeInteger(competency.ranks)
+            && control.onClearRank !== undefined) {
+            actions.append(createButton(
+                "Clear",
+                "dd-button dd-button--ghost",
+                () => control.onClearRank!(competency.key),
+                pending));
+        }
+
+        row.append(input, actions);
+        section.append(row);
+    }
+
+    return section;
+}
+
+function canEditRank(
+    competency: CompetencyView,
+    control: CompetencyRankControlOptions
+): boolean {
+    return competency.supportsRanks === true
+        && control.readOnly !== true
+        && control.onSetRank !== undefined;
+}
+
+function parseRank(value: string): number | null {
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed)
+        && parsed >= 0
+        && parsed <= 2147483647
+        ? parsed
+        : null;
 }
 
 function hasCompetencyMechanicalDetails(competency: CompetencyView): boolean {

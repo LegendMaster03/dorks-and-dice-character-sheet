@@ -16,15 +16,19 @@ import { renderCharacterHeader, renderCharacterWorkspace } from "./ui/sheet.js";
 import type { SheetSection } from "./ui/sheet-model.js";
 import { createPresentationWorkflow } from "./core/application/presentation-workflow.js";
 import { createRoutineStateWorkflow } from "./core/application/routine-state-workflow.js";
+import { createRulesInputWorkflow } from "./core/application/rules-input-workflow.js";
 import { createBuildStateWorkflow } from "./core/application/build-state-workflow.js";
 import { requestErrorMessage } from "./core/application/request-error.js";
 import { createAdvancementWorkflow } from "./features/advancement/advancement-workflow.js";
 import { createAbilityWorkflow } from "./features/abilities/ability-workflow.js";
 import { createFeatWorkflow } from "./features/features/feat-workflow.js";
 import { createHealthWorkflow } from "./features/health/health-workflow.js";
+import { createProfileWorkflow } from "./features/profile/profile-workflow.js";
+import { createRecoveryWorkflow } from "./features/health/recovery-workflow.js";
 import { createInventoryWorkflow } from "./features/inventory/inventory-workflow.js";
 import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
+import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -185,6 +189,8 @@ function renderWorkspace(
                 submitChooserSearch: (target, query) => void advancementWorkflow.search(target, query),
                 closeChooser: () => advancementWorkflow.closeChooser(),
                 saveChoice: (target, conceptKey) => void advancementWorkflow.save(character.characterId, target, conceptKey),
+                setAdvancementLevel: (occurrenceId, level) =>
+                    void advancementWorkflow.setLevel(character.characterId, occurrenceId, level),
                 setBaseAbilityScore: (abilityKey, score) =>
                     void abilityWorkflow.save(character.characterId, abilityKey, score),
                 clearBaseAbilityScore: abilityKey =>
@@ -197,9 +203,61 @@ function renderWorkspace(
                 add: conceptKey => void featWorkflow.add(character.characterId, conceptKey),
                 remove: occurrenceId => void featWorkflow.remove(character.characterId, occurrenceId)
             },
+            spells: {
+                openChooser: () => knownSpellWorkflow.openChooser(),
+                closeChooser: () => knownSpellWorkflow.closeChooser(),
+                search: query => void knownSpellWorkflow.search(query),
+                add: conceptKey => void knownSpellWorkflow.add(character.characterId, conceptKey),
+                remove: conceptKey => void knownSpellWorkflow.remove(character.characterId, conceptKey)
+            },
+            rules: {
+                setChoice: (choiceKey, value) =>
+                    void rulesInputWorkflow.setChoice(character.characterId, choiceKey, value),
+                clearChoice: choiceKey =>
+                    void rulesInputWorkflow.clearChoice(character.characterId, choiceKey),
+                setResource: (resourceKey, currentValue) =>
+                    void rulesInputWorkflow.setResource(character.characterId, resourceKey, currentValue),
+                setCompetencyRank: (competencyKey, ranks) =>
+                    void rulesInputWorkflow.set(character.characterId, {
+                        kind: "competencyRank",
+                        key: competencyKey,
+                        integerValue: ranks
+                    }),
+                clearCompetencyRank: competencyKey =>
+                    void rulesInputWorkflow.remove(
+                        character.characterId,
+                        "competencyRank",
+                        competencyKey),
+                setHitPointGain: (advancementOccurrenceId, classLevel, hitDieValue) =>
+                    void rulesInputWorkflow.setHitPointGain(
+                        character.characterId,
+                        advancementOccurrenceId,
+                        classLevel,
+                        hitDieValue),
+                clearHitPointGain: (advancementOccurrenceId, classLevel) =>
+                    void rulesInputWorkflow.clearHitPointGain(
+                        character.characterId,
+                        advancementOccurrenceId,
+                        classLevel)
+            },
             routine: {
+                setInspiration: inspired =>
+                    void rulesInputWorkflow.setBooleanFact(character.characterId, "inspiration", inspired),
+                setCurrencyBalance: (currencyKey, amount) =>
+                    void inventoryWorkflow.setCurrency(character.characterId, currencyKey, amount),
+                removeCurrencyBalance: currencyKey =>
+                    void inventoryWorkflow.removeCurrency(character.characterId, currencyKey),
+                setProfile: input =>
+                    void profileWorkflow.save(character.characterId, input),
                 setCurrentHitPoints: currentHitPoints =>
                     void healthWorkflow.setCurrentHitPoints(character.characterId, currentHitPoints),
+                setDeathSaves: (successes, failures) =>
+                    void healthWorkflow.setDeathSaves(character.characterId, successes, failures),
+                recover: procedureKey =>
+                    void recoveryWorkflow.begin(character.characterId, procedureKey),
+                continueRecovery: input =>
+                    void recoveryWorkflow.continue(character.characterId, input),
+                cancelRecovery: () => recoveryWorkflow.cancel(),
                 addNote: content => void notesWorkflow.add(character.characterId, content),
                 updateNote: (noteId, content) => void notesWorkflow.update(character.characterId, noteId, content),
                 deleteNote: noteId => void notesWorkflow.remove(character.characterId, noteId),
@@ -207,6 +265,8 @@ function renderWorkspace(
                 closeInventoryChooser: () => inventoryWorkflow.closeChooser(),
                 searchInventory: query => void inventoryWorkflow.search(query),
                 addInventoryItem: conceptKey => void inventoryWorkflow.add(character.characterId, conceptKey),
+                updateInventoryItem: (occurrenceId, input) =>
+                    void inventoryWorkflow.update(character.characterId, occurrenceId, input),
                 removeInventoryItem: occurrenceId => void inventoryWorkflow.remove(character.characterId, occurrenceId),
                 openConditionChooser: () => conditionsWorkflow.openChooser(),
                 closeConditionChooser: () => conditionsWorkflow.closeChooser(),
@@ -333,6 +393,19 @@ const featWorkflow = createFeatWorkflow(
     presentationWorkflow,
     environment);
 const healthWorkflow = createHealthWorkflow(routineStateWorkflow, environment);
+const profileWorkflow = createProfileWorkflow(routineStateWorkflow, environment);
+const recoveryWorkflow = createRecoveryWorkflow(
+    application,
+    presentationWorkflow,
+    environment);
+const rulesInputWorkflow = createRulesInputWorkflow(
+    routineStateWorkflow,
+    presentationWorkflow,
+    environment);
+const knownSpellWorkflow = createKnownSpellWorkflow(
+    application,
+    rulesInputWorkflow,
+    environment);
 const inventoryWorkflow = createInventoryWorkflow(
     application,
     routineStateWorkflow,

@@ -61,6 +61,234 @@ public sealed class CharacterPresentationWorkflowTests
     }
 
     [Fact]
+    public async Task RecoverySupportUsesResolvedCharacterCapabilitiesAndProjectsProcedures()
+    {
+        using var factory = new PresentationFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            characterId, "Recovery", "Active", null, []));
+        using var initialize = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/sheet");
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+
+        factory.Gateway.ProjectionCapabilities =
+        [
+            new RulesCoreCharacterCapabilityView(
+                "recovery.short-rest",
+                "Short Rest",
+                [],
+                new RulesCoreCharacterMechanicProvenanceView([], [], []))
+        ];
+        factory.Gateway.SupportProjection = new RulesCoreCharacterSupportProjectionView(
+            "global",
+            null,
+            1,
+            DateTimeOffset.UtcNow,
+            [
+                new RulesCoreCharacterRecoveryProcedureView(
+                    "recovery.short-rest",
+                    "Catch Breath",
+                    "short-rest",
+                    true,
+                    "applicable",
+                    new RulesCoreMechanicApplicabilityView(
+                        "capability",
+                        true,
+                        ["recovery.short-rest"],
+                        null),
+                    [],
+                    [],
+                    [],
+                    [],
+                    new RulesCoreCharacterRecoveryRuntimeRequirementsView(
+                        true,
+                        false,
+                        false,
+                        false,
+                        false),
+                    [])
+            ]);
+
+        using var response = await factory.SendHostedAsync(
+            HttpMethod.Get,
+            $"/api/characters/{characterId:D}/presentation");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var recovery = Assert.Single(json.RootElement.GetProperty("mechanics")
+            .GetProperty("recoveryProcedures").EnumerateArray().ToArray());
+        Assert.Equal("recovery.short-rest", recovery.GetProperty("procedureKey").GetString());
+        Assert.Equal("Catch Breath", recovery.GetProperty("displayName").GetString());
+        Assert.Equal("short-rest", recovery.GetProperty("presentationRole").GetString());
+        Assert.Equal(
+            ["recovery.short-rest"],
+            factory.Gateway.LastSupportCapabilityKeys);
+    }
+
+    [Fact]
+    public async Task RecoveryEndpointAppliesResolvedCharacterOwnedConsequences()
+    {
+        using var factory = new PresentationFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            characterId, "Recovery", "Active", null, []));
+        using var initialize = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/sheet");
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+        using var health = await factory.SendHostedAsync(
+            HttpMethod.Put,
+            $"/api/characters/{characterId:D}/state/health",
+            new { currentHitPoints = 10 });
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+        using var resource = await factory.SendHostedAsync(
+            HttpMethod.Put,
+            $"/api/characters/{characterId:D}/state/rules-inputs",
+            new
+            {
+                kind = "resource",
+                key = "resource.focus",
+                integerValue = 5,
+                booleanValue = (bool?)null,
+                textValue = (string?)null
+            });
+        Assert.Equal(HttpStatusCode.OK, resource.StatusCode);
+
+        factory.Gateway.RecoveryResolution = new RulesCoreCharacterRecoveryResolutionView(
+            "global",
+            null,
+            1,
+            DateTimeOffset.UtcNow,
+            "recovery.fixture",
+            "Fixture Recovery",
+            "short-rest",
+            "resolved",
+            [],
+            [],
+            [],
+            [],
+            [
+                new RulesCoreCharacterRecoveryEffectView(
+                    "heal", "resource", "hit-points", "adjust", 4, null, null),
+                new RulesCoreCharacterRecoveryEffectView(
+                    "spend", "resource", "resource.focus", "expend", 2, null, null),
+                new RulesCoreCharacterRecoveryEffectView(
+                    "reset-failures", "resource", "resource.death-save.failures", "set", 0, null, null)
+            ],
+            []);
+
+        using var response = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/state/recovery/recovery.fixture",
+            new { });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("resolved", json.RootElement.GetProperty("resolution").GetProperty("status").GetString());
+        var state = json.RootElement.GetProperty("state");
+        Assert.Equal(14, state.GetProperty("currentHitPoints").GetInt32());
+        var focus = Assert.Single(
+            state.GetProperty("rulesInputs").EnumerateArray()
+                .Where(value => value.GetProperty("kind").GetString() == "resource"
+                    && value.GetProperty("key").GetString() == "resource.focus"));
+        Assert.Equal(3, focus.GetProperty("integerValue").GetInt32());
+    }
+
+    [Fact]
+    public async Task UnsupportedRecoveryConsequenceDoesNotPartiallyMutateCharacterState()
+    {
+        using var factory = new PresentationFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            characterId, "Recovery", "Active", null, []));
+        using var initialize = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/sheet");
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+        using var health = await factory.SendHostedAsync(
+            HttpMethod.Put,
+            $"/api/characters/{characterId:D}/state/health",
+            new { currentHitPoints = 10 });
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+
+        factory.Gateway.RecoveryResolution = new RulesCoreCharacterRecoveryResolutionView(
+            "global",
+            null,
+            1,
+            DateTimeOffset.UtcNow,
+            "recovery.fixture",
+            "Fixture Recovery",
+            null,
+            "resolved",
+            [],
+            [],
+            [],
+            [],
+            [
+                new RulesCoreCharacterRecoveryEffectView(
+                    "heal", "resource", "hit-points", "adjust", 4, null, null),
+                new RulesCoreCharacterRecoveryEffectView(
+                    "unsupported", "condition", "condition.prone", "set", 0, null, null)
+            ],
+            []);
+
+        using var response = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/state/recovery/recovery.fixture",
+            new { });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+
+        using var stateResponse = await factory.SendHostedAsync(
+            HttpMethod.Get,
+            $"/api/characters/{characterId:D}/state");
+        Assert.Equal(HttpStatusCode.OK, stateResponse.StatusCode);
+        using var stateJson = JsonDocument.Parse(await stateResponse.Content.ReadAsStringAsync());
+        Assert.Equal(10, stateJson.RootElement.GetProperty("currentHitPoints").GetInt32());
+    }
+
+    [Fact]
+    public async Task RecoveryContinuationReturnsPendingRulesCoreStateWithoutMutation()
+    {
+        using var factory = new PresentationFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            characterId, "Recovery", "Active", null, []));
+        using var initialize = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/sheet");
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+
+        factory.Gateway.RecoveryResolution = new RulesCoreCharacterRecoveryResolutionView(
+            "global",
+            null,
+            1,
+            DateTimeOffset.UtcNow,
+            "recovery.fixture",
+            "Fixture Recovery",
+            null,
+            "choice-required",
+            [],
+            [],
+            [new RulesCoreCharacterRecoveryChoiceView(
+                "resource",
+                "Choose resource",
+                true,
+                [new RulesCoreCharacterRecoveryChoiceOptionView(
+                    "focus", "Focus", "resource.focus")])],
+            [],
+            [],
+            []);
+
+        using var response = await factory.SendHostedAsync(
+            HttpMethod.Post,
+            $"/api/characters/{characterId:D}/state/recovery/recovery.fixture",
+            new { });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("choice-required", json.RootElement.GetProperty("resolution").GetProperty("status").GetString());
+        Assert.Equal(1, json.RootElement.GetProperty("resolution").GetProperty("pendingChoices").GetArrayLength());
+    }
+
+    [Fact]
     public async Task UninitializedAndUnauthorizedCharactersRemainUnavailable()
     {
         using var factory = new PresentationFactory();
@@ -240,11 +468,19 @@ public sealed class CharacterPresentationWorkflowTests
     {
         public bool Throw { get; set; }
         public bool GlobalMechanicsRequested { get; private set; }
-        public bool CampaignMechanicsRequested => false;
+        public bool GlobalCharacterProjectionRequested { get; private set; }
+        public Guid? CharacterProjectionCampaignId { get; private set; }
+        public bool CampaignMechanicsRequested => CharacterProjectionCampaignId is not null;
         public Dictionary<string, RulesCoreResolvedRuleSummaryView> ResolvedRules { get; } =
             new(StringComparer.Ordinal);
         public RulesCoreMechanicsCatalogView Catalog { get; set; } =
             new("global", null, 1, DateTimeOffset.UtcNow, []);
+        public IReadOnlyList<RulesCoreCharacterCapabilityView> ProjectionCapabilities { get; set; } = [];
+        public RulesCoreCharacterSupportProjectionView SupportProjection { get; set; } =
+            new("global", null, 1, DateTimeOffset.UtcNow, []);
+        public RulesCoreCharacterRecoveryResolutionView? RecoveryResolution { get; set; }
+        public IReadOnlyList<string>? LastSupportCapabilityKeys { get; private set; }
+        public RulesCoreCharacterRecoveryResolutionRequest? LastRecoveryRequest { get; private set; }
 
         public Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
             IReadOnlyCollection<string> conceptKeys,
@@ -273,5 +509,85 @@ public sealed class CharacterPresentationWorkflowTests
             return Task.FromResult(new RulesCoreMechanicsBatchEvaluationView(
                 "global", null, 1, DateTimeOffset.UtcNow, []));
         }
+
+        public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
+            RulesCoreCharacterSupportProjectionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            LastSupportCapabilityKeys = request.CapabilityKeys;
+            return Task.FromResult(SupportProjection);
+        }
+
+        public Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
+            string procedureKey,
+            RulesCoreCharacterRecoveryResolutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            LastRecoveryRequest = request;
+            return Task.FromResult(RecoveryResolution ?? new RulesCoreCharacterRecoveryResolutionView(
+                "global",
+                null,
+                1,
+                DateTimeOffset.UtcNow,
+                procedureKey,
+                procedureKey,
+                null,
+                "resolved",
+                [],
+                [],
+                [],
+                [],
+                [],
+                []));
+        }
+
+        public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
+            RulesCoreCharacterRulesProjectionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            GlobalCharacterProjectionRequested = true;
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            return Task.FromResult(EmptyProjection("global", null) with
+            {
+                Capabilities = ProjectionCapabilities
+            });
+        }
+
+        public Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
+            Guid campaignId,
+            RulesCoreCharacterRulesProjectionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            CharacterProjectionCampaignId = campaignId;
+            if (Throw) throw new RulesCoreGatewayException("test outage");
+            return Task.FromResult(EmptyProjection("campaign", campaignId));
+        }
+
+        private static RulesCoreCharacterRulesProjectionView EmptyProjection(
+            string scope,
+            Guid? campaignId) =>
+            new(
+                scope,
+                campaignId,
+                1,
+                DateTimeOffset.UtcNow,
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                []);
+
     }
 }

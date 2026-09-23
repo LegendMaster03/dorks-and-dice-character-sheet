@@ -48,6 +48,62 @@ public sealed class CharacterPresentationProjectorTests
     }
 
     [Fact]
+    public void AdvancementProjectsOwnedLevelsAndSubclassUsesParentClassLevel()
+    {
+        var parentId = Guid.NewGuid();
+        var subclassId = Guid.NewGuid();
+        var prestigeId = Guid.NewGuid();
+        var build = Build(
+            new CharacterAdvancementEntryView(
+                parentId,
+                0,
+                CharacterBuildAdvancementKinds.Class,
+                "class:wizard",
+                null,
+                Now,
+                Now,
+                7),
+            new CharacterAdvancementEntryView(
+                subclassId,
+                null,
+                CharacterBuildAdvancementKinds.Subclass,
+                "subclass:evocation",
+                parentId,
+                Now,
+                Now),
+            new CharacterAdvancementEntryView(
+                prestigeId,
+                8,
+                CharacterBuildAdvancementKinds.PrestigeClass,
+                "prestige:loremaster",
+                null,
+                Now,
+                Now,
+                3));
+        var resolved = new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal)
+        {
+            ["class:wizard"] = Rule("class:wizard", "class", "Wizard"),
+            ["subclass:evocation"] = Rule("subclass:evocation", "subclass", "Evocation"),
+            ["prestige:loremaster"] = Rule("prestige:loremaster", "class", "Loremaster")
+        };
+
+        var projected = CharacterPresentationProjector.ProjectAdvancement(build, resolved);
+
+        var wizard = Assert.Single(projected.Occurrences, value => value.OccurrenceId == parentId);
+        Assert.Equal("Level", wizard.Progression!.Label);
+        Assert.Equal(7, wizard.Progression.Value);
+        Assert.Equal("Level 7", wizard.Progression.FormattedValue);
+
+        var subclass = Assert.Single(projected.Occurrences, value => value.OccurrenceId == subclassId);
+        Assert.Equal("Parent Level", subclass.Progression!.Label);
+        Assert.Equal(7, subclass.Progression.Value);
+        Assert.Equal("Parent Level 7", subclass.Progression.FormattedValue);
+
+        var prestige = Assert.Single(projected.Occurrences, value => value.OccurrenceId == prestigeId);
+        Assert.Equal(3, prestige.Progression!.Value);
+    }
+
+    [Fact]
     public void CompetencyProjectionUsesConceptIdentityMetadataAndOnlyEffectiveDeriveParentRelationships()
     {
         var hide = Competency(
@@ -69,12 +125,19 @@ public sealed class CharacterPresentationProjectorTests
             ]);
         var move = Competency("competency.skill.move-silently", "skill.move-silently", "Move Silently");
         var stealth = Competency("competency.skill.stealth", "skill.stealth", "Stealth");
-        var knowledge = Competency(
-            "competency.skill.knowledge-planes",
-            "skill.knowledge-planes",
-            "Knowledge (the planes)",
-            family: "Knowledge",
-            specialty: "the planes");
+        var craft = Competency(
+            "competency.skill.craft",
+            "skill.craft",
+            "Craft",
+            family: "Craft",
+            isFamily: true);
+        var craftAlchemy = Competency(
+            "competency.skill.craft-alchemy",
+            "skill.craft-alchemy",
+            "Craft (Alchemy)",
+            family: "Craft",
+            specialty: "alchemy",
+            competencyKind: "specialized-skill");
         var independent = Competency(
             "competency.skill.perception",
             "skill.perception",
@@ -91,16 +154,21 @@ public sealed class CharacterPresentationProjectorTests
                     true,
                     [])
             ]);
-        var catalog = Catalog(hide, move, stealth, knowledge, independent);
+        var catalog = Catalog(hide, move, stealth, craft, craftAlchemy, independent);
 
         var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
 
         Assert.NotNull(mechanics.Competencies);
         var entries = mechanics.Competencies.Entries;
-        var specialized = Assert.Single(entries, value => value.Key == "skill.knowledge-planes");
+        var family = Assert.Single(entries, value => value.Key == "skill.craft");
+        Assert.True(family.IsFamily);
+        Assert.Equal("Craft", family.Family);
+        var specialized = Assert.Single(entries, value => value.Key == "skill.craft-alchemy");
         Assert.Equal("-", specialized.EffectiveValue);
-        Assert.Equal("Knowledge", specialized.Family);
-        Assert.Equal("the planes", specialized.Specialty);
+        Assert.False(specialized.IsFamily);
+        Assert.Equal("specialized-skill", specialized.Kind);
+        Assert.Equal("Craft", specialized.Family);
+        Assert.Equal("alchemy", specialized.Specialty);
         Assert.Equal("intelligence", specialized.GoverningAbility);
         Assert.True(specialized.SupportsRanks);
         Assert.True(specialized.SupportsClassSkillState);
@@ -318,7 +386,8 @@ public sealed class CharacterPresentationProjectorTests
                 UnevaluatedMechanic("defense.damage-reduction", "defense", "Damage Reduction", "none", false),
                 UnevaluatedMechanic("combat.base-attack-bonus", "combat-value", "Base Attack Bonus"),
                 UnevaluatedMechanic("combat.grapple", "combat-value", "Grapple Modifier"),
-                UnevaluatedMechanic("resource.nonlethal-damage", "resource", "Nonlethal Damage")),
+                UnevaluatedMechanic("resource.nonlethal-damage", "resource", "Nonlethal Damage"),
+                UnevaluatedMechanic("resource.hit-dice", "resource", "Hit Dice")),
             null);
 
         Assert.Equal(
@@ -331,10 +400,20 @@ public sealed class CharacterPresentationProjectorTests
             mechanics.CombatFundamentals!.Select(value => value.Key).ToArray());
         Assert.All(mechanics.CombatFundamentals, value => Assert.Equal("-", value.EffectiveValue));
 
-        var nonlethal = Assert.Single(mechanics.HealthTracks!);
-        Assert.Equal("resource.nonlethal-damage", nonlethal.Key);
-        Assert.Equal("nonlethal-damage", nonlethal.Role);
-        Assert.Equal("-", nonlethal.Current);
+        Assert.Collection(
+            mechanics.HealthTracks!,
+            nonlethal =>
+            {
+                Assert.Equal("resource.nonlethal-damage", nonlethal.Key);
+                Assert.Equal("nonlethal-damage", nonlethal.Role);
+                Assert.Equal("-", nonlethal.Current);
+            },
+            hitDice =>
+            {
+                Assert.Equal("resource.hit-dice", hitDice.Key);
+                Assert.Equal("hit-dice", hitDice.Role);
+                Assert.Equal("-", hitDice.Current);
+            });
     }
 
     [Fact]
@@ -591,10 +670,12 @@ public sealed class CharacterPresentationProjectorTests
         string displayName,
         string? family = null,
         string? specialty = null,
-        IReadOnlyList<RulesCoreMechanicRelationshipView>? relationships = null)
+        IReadOnlyList<RulesCoreMechanicRelationshipView>? relationships = null,
+        string competencyKind = "skill",
+        bool isFamily = false)
     {
         var definition = new RulesCoreCompetencyDefinitionView(
-            "skill",
+            competencyKind,
             family,
             specialty,
             "intelligence",
@@ -604,7 +685,8 @@ public sealed class CharacterPresentationProjectorTests
             true,
             true,
             null,
-            []);
+            [],
+            IsFamily: isFamily);
         return new RulesCoreMechanicView(
             mechanicKey,
             "competency",

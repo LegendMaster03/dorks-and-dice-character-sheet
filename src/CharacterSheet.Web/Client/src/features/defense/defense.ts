@@ -1,12 +1,15 @@
 import {
     formatMechanicalValue,
+    hasMechanicalDetails,
     type CalculatedMechanicalValueView,
     type CharacterMechanicsView
 } from "../../ui/character-mechanics.js";
 import { createElement, createSectionCard } from "../../ui/components.js";
 import { renderSplitStat } from "../../ui/split-stat.js";
 import {
+    appendSources,
     findScaffoldValue,
+    renderFacts,
     renderMechanicalScaffold,
     type MechanicalScaffoldSlot
 } from "../../core/mechanics/mechanic-value.js";
@@ -99,7 +102,47 @@ export function renderArmorClassCombatCard(
     );
     layout.append(shield, secondary);
     card.append(layout);
+
+    const details = renderArmorClassDetails([primary, touch, flatFooted]);
+    if (details !== null) card.append(details);
     return card;
+}
+
+function renderArmorClassDetails(
+    values: readonly (CalculatedMechanicalValueView | undefined)[]
+): HTMLElement | null {
+    const detailed = values.filter(
+        (value): value is CalculatedMechanicalValueView =>
+            value !== undefined && hasMechanicalDetails(value));
+    if (detailed.length === 0) return null;
+
+    const disclosure = createElement("details", "dd-combat-ac__details");
+    disclosure.append(createElement(
+        "summary",
+        "dd-combat-ac__details-toggle",
+        "Details"));
+    const body = createElement("div", "dd-combat-ac__details-body");
+
+    for (const value of detailed) {
+        const section = createElement("section", "dd-combat-ac__detail");
+        section.setAttribute("data-mechanic-key", value.key);
+        section.append(createElement(
+            "h4",
+            "dd-combat-ac__detail-title",
+            value.label));
+        const facts = renderFacts([
+            ...(value.breakdown ?? []).map(entry =>
+                [entry.label, formatMechanicalValue(entry)] as const),
+            ...(value.relatedValues ?? []).map(entry =>
+                [entry.label, formatMechanicalValue(entry)] as const)
+        ]);
+        if (facts !== null) section.append(facts);
+        appendSources(section, value.sourceAttributions);
+        body.append(section);
+    }
+
+    disclosure.append(body);
+    return disclosure;
 }
 
 function renderArmorClassSecondary(
@@ -148,6 +191,17 @@ export function renderDefenseScaffold(
     mechanics: CharacterMechanicsView | null
 ): HTMLElement[] {
     return renderMechanicalScaffold(orderedDefenses(mechanics), DEFENSE_SCAFFOLD);
+}
+
+export function promotedArmorClassKeys(
+    mechanics: CharacterMechanicsView | null
+): ReadonlySet<string> {
+    const values = orderedDefenses(mechanics);
+    return new Set(
+        resolveArmorClassValues(mechanics, values)
+            .filter((value): value is CalculatedMechanicalValueView =>
+                value !== undefined)
+            .map(value => value.key));
 }
 
 function resolveArmorClassValues(

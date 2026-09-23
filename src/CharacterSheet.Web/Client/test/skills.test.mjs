@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { renderSkillsCard } from "../.test-dist/ui/skills.js";
+import { buildCompetencyPresentation } from "../.test-dist/ui/character-mechanics.js";
 
 class FakeStyle {
     values = new Map();
@@ -34,6 +35,8 @@ class FakeElement {
     dispatch(name) {
         for (const handler of this.listeners?.get(name) ?? []) handler({ target: this });
     }
+    setCustomValidity(message) { this.validationMessage = String(message); }
+    reportValidity() { return (this.validationMessage ?? "").length === 0; }
 }
 
 globalThis.document = { createElement: tagName => new FakeElement(tagName) };
@@ -124,6 +127,40 @@ test("standalone competency renders as one ordinary row", () => {
     assert.match(visibleText(card), /\+7/);
 });
 
+test("Rules Core family metadata adds a nested specialty disclosure without changing ordinary rows", () => {
+    const presentation = buildCompetencyPresentation({
+        entries: [
+            competency("family.artisan", "Artisan Work", "-", {
+                family: "artisan",
+                isFamily: true
+            }),
+            competency("specialty.glass", "Glasswork", "+6", {
+                kind: "specialized-skill",
+                family: "artisan",
+                specialty: "glass",
+                supportsRanks: true,
+                ranks: 4
+            }),
+            competency("navigation", "Navigation", "+3")
+        ],
+        relationships: []
+    });
+
+    assert.equal(presentation.length, 2);
+    const family = presentation.find(item => item.kind === "family");
+    assert.ok(family);
+    assert.equal(family.parent.key, "family.artisan");
+    assert.deepEqual(family.members.map(member => member.key), ["specialty.glass"]);
+
+    const card = renderSkillsCard(presentation);
+    const familyDisclosure = byAttribute(card, "data-skill-family", "family.artisan")[0];
+    assert.ok(familyDisclosure);
+    assert.equal(byClass(familyDisclosure, "dd-skill-family-members").length, 1);
+    assert.equal(byAttribute(familyDisclosure, "data-skill-id", "specialty.glass").length, 1);
+    assert.equal(byClass(card, "dd-skill-disclosure--composite").length, 0);
+    assert.equal(byAttribute(card, "data-skill-id", "navigation").length, 1);
+});
+
 test("composite competency supports arbitrary component counts and preserves hierarchy", () => {
     const card = renderSkillsCard([
         composite(
@@ -181,6 +218,52 @@ test("ranked specialty competency progressively discloses metadata", () => {
     assert.match(visibleText(card), /Ranks/);
     assert.match(visibleText(card), /Class skill/);
     assert.match(visibleText(card), /Armor Check Penalty/);
+});
+
+test("rank-capable competencies expose sparse Character-owned rank editing", () => {
+    let saved = null;
+    let cleared = null;
+    const card = renderSkillsCard([
+        standalone(competency("skill.arcana", "Arcana", "+9", {
+            ranks: 5,
+            supportsRanks: true
+        }))
+    ], {
+        readOnly: false,
+        onSetRank(key, ranks) { saved = [key, ranks]; },
+        onClearRank(key) { cleared = key; }
+    });
+
+    const editor = byAttribute(card, "data-competency-rank-editor", "skill.arcana")[0];
+    assert.ok(editor);
+    const input = walk(editor).find(node => node.tagName === "INPUT");
+    assert.ok(input);
+    assert.equal(input.value, "5");
+    input.value = "7";
+    const buttons = walk(editor).filter(node => node.tagName === "BUTTON");
+    const save = buttons.find(button => button.textContent === "Save");
+    const clear = buttons.find(button => button.textContent === "Clear");
+    assert.ok(save);
+    assert.ok(clear);
+    save.dispatch("click");
+    clear.dispatch("click");
+    assert.deepEqual(saved, ["skill.arcana", 7]);
+    assert.equal(cleared, "skill.arcana");
+});
+
+test("rank editing is not exposed for competencies that do not support ranks", () => {
+    const card = renderSkillsCard([
+        standalone(competency("tool.thieves-tools", "Thieves' Tools", "+5", {
+            supportsRanks: false,
+            supportsTrainingState: true
+        }))
+    ], {
+        readOnly: false,
+        onSetRank() {
+            throw new Error("rank callback should not be reachable");
+        }
+    });
+    assert.equal(byClass(card, "dd-skill-rank-editor").length, 0);
 });
 
 test("skill rows use reference-style proficiency markers without guessing unresolved training", () => {
@@ -242,7 +325,7 @@ test("specialty Skill and tool proficiency remain separate rows", () => {
 
 test("renderer remains generic and does not special-case known Rules Core skill names", async () => {
     const source = await readFile(new URL("../src/ui/skills.ts", import.meta.url), "utf8");
-    assert.doesNotMatch(source, /\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble)\b/);
+    assert.doesNotMatch(source, /\b(?:Stealth|Hide|Move Silently|Perception|Listen|Spot|Athletics|Climb|Jump|Swim|Acrobatics|Balance|Tumble|Craft|Perform|Profession)\b/);
 });
 
 test("presentation adds no permanent Derived, Independent, Composite, or Parent labels", () => {
@@ -271,5 +354,7 @@ test("production Character Sheet drives competencies from the nullable mechanics
     assert.doesNotMatch(sheetSource, /renderSkillsCard\(null\)/);
     assert.match(sheetSource, /mechanics\?\.competencies === undefined/);
     assert.match(sheetSource, /buildCompetencyPresentation\(mechanics\.competencies\)/);
-    assert.match(sheetSource, /renderSkillsCard\(competencyPresentation\)/);
+    assert.match(sheetSource, /renderSkillsCard\(\s*competencyPresentation,\s*\{/);
+    assert.match(sheetSource, /onSetRank:\s*handlers\.rules\.setCompetencyRank/);
+    assert.match(sheetSource, /onClearRank:\s*handlers\.rules\.clearCompetencyRank/);
 });

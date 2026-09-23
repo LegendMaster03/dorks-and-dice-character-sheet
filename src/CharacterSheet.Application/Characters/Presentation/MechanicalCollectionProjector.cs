@@ -138,15 +138,30 @@ internal static class MechanicalCollectionProjector
                 return new HealthTrackPresentationView(
                     value.MechanicKey,
                     value.DisplayName,
-                    string.Equals(value.MechanicKey, "resource.nonlethal-damage", StringComparison.Ordinal)
-                        ? "nonlethal-damage"
-                        : "resource",
+                    ResolveHealthTrackRole(value),
                     Current: evaluation is null
                         ? CharacterMechanicsProjector.Unconfigured
                         : (object)evaluation.Value,
                     SourceAttributions: SourceAttributionMapper.Map(value.SourceAttributions));
             })
             .ToArray();
+    private static string ResolveHealthTrackRole(RulesCoreMechanicView value)
+    {
+        var key = NormalizeIdentity(value.MechanicKey);
+        var label = NormalizeIdentity(value.DisplayName);
+        if (key is "resourcenonlethaldamage" or "nonlethaldamage"
+            || label == "nonlethaldamage")
+        {
+            return "nonlethal-damage";
+        }
+        if (key is "resourcehitdice" or "hitdice"
+            || label is "hitdice" or "hitdie")
+        {
+            return "hit-dice";
+        }
+        return "resource";
+    }
+
     private static bool IsInspirationResource(RulesCoreMechanicView value)
     {
         var key = NormalizeIdentity(value.MechanicKey);

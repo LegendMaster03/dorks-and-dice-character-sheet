@@ -1,20 +1,27 @@
+import type { RecoveryUiState } from "../../app-state.js";
+import type { CharacterRecoveryRequestInput } from "../../character-state-api.js";
 import {
     formatHealthTrack,
     type CharacterMechanicsView,
+    type CharacterRecoveryProcedureView,
     type HealthTrackView
 } from "../../ui/character-mechanics.js";
-import { createElement, createSectionCard } from "../../ui/components.js";
+import { createButton, createElement, createInlineState, createSectionCard } from "../../ui/components.js";
 import { renderSourceAttributionDisclosure } from "../../ui/source-attribution.js";
 import { appendSources, normalizeMechanicalLabel } from "../../core/mechanics/mechanic-value.js";
 
-export type RestKind = "short" | "long";
+export interface DeathSaveState {
+    successes: number;
+    failures: number;
+}
 
 export interface HealthControlOptions {
     currentHitPoints?: number | null;
+    deathSaves?: DeathSaveState;
     readOnly?: boolean;
     saving?: boolean;
     onSetCurrentHitPoints?: (currentHitPoints: number | null) => void;
-    onRest?: (kind: RestKind) => void;
+    onSetDeathSaves?: (successes: number, failures: number) => void;
 }
 
 export function adjustCurrentHitPoints(
@@ -51,6 +58,11 @@ export function renderHealthQuickCard(
         track.role === "nonlethal-damage"
         || track.key === "resource.nonlethal-damage"
         || normalizeMechanicalLabel(track.label) === "nonlethaldamage");
+    const hitDice = tracks.find(track =>
+        track.role === "hit-dice"
+        || normalizeMechanicalLabel(track.key) === "resourcehitdice"
+        || normalizeMechanicalLabel(track.label) === "hitdice"
+        || normalizeMechanicalLabel(track.label) === "hitdie");
 
     const currentValue = control.currentHitPoints === undefined
         ? hitPoints?.current
@@ -60,24 +72,39 @@ export function renderHealthQuickCard(
     header.append(createElement("h3", "dd-stat__label", "Hit Points"));
 
     const promoted = new Set(
-        [hitPoints, temporaryHitPoints, nonlethal]
+        [hitPoints, temporaryHitPoints, nonlethal, hitDice]
             .filter((track): track is NonNullable<typeof track> => track !== undefined)
             .map(track => track.key));
     const extraTracks = tracks.filter(track => !promoted.has(track.key));
-    const sources = collectHealthTrackSources([hitPoints, temporaryHitPoints, nonlethal, ...extraTracks]);
+    const sources = collectHealthTrackSources([
+        hitPoints,
+        temporaryHitPoints,
+        nonlethal,
+        hitDice,
+        ...extraTracks
+    ]);
 
-    const editable = control.readOnly !== true
+    const editableHitPoints = control.readOnly !== true
         && control.onSetCurrentHitPoints !== undefined;
-    if (editable || extraTracks.length > 0 || sources.length > 0) {
+    const editableDeathSaves = control.readOnly !== true
+        && control.deathSaves !== undefined
+        && control.onSetDeathSaves !== undefined;
+    if (editableHitPoints || editableDeathSaves || extraTracks.length > 0 || sources.length > 0) {
         const details = createElement("details", "dd-health-quick__details");
         details.append(createElement("summary", "dd-health-quick__details-toggle", "Details"));
         const popover = createElement("div", "dd-health-quick__details-popover");
-        if (editable) {
+        if (editableHitPoints) {
             popover.append(renderDirectHitPointSetter(
                 toFiniteInteger(currentValue),
                 hitPoints?.maximum,
                 control.saving === true,
                 control.onSetCurrentHitPoints!));
+        }
+        if (editableDeathSaves) {
+            popover.append(renderDeathSaveEditor(
+                control.deathSaves!,
+                control.saving === true,
+                control.onSetDeathSaves!));
         }
         if (extraTracks.length > 0) {
             const extras = createElement("div", "dd-health-card__extras");
@@ -105,7 +132,16 @@ export function renderHealthQuickCard(
             "nonlethal",
             nonlethal));
 
-    const quickAdjustment = editable
+    const recovery = createElement("div", "dd-health-quick__recovery");
+    recovery.append(
+        renderHealthTextField(
+            "Hit Dice",
+            hitDice === undefined ? "-" : formatHealthTrack(hitDice),
+            "hit-dice",
+            hitDice),
+        renderDeathSaveSummary(control.deathSaves));
+
+    const quickAdjustment = editableHitPoints
         ? renderQuickHitPointAdjustment(
             toFiniteInteger(currentValue),
             hitPoints?.maximum,
@@ -113,7 +149,7 @@ export function renderHealthQuickCard(
             control.onSetCurrentHitPoints!)
         : null;
 
-    card.append(header, values);
+    card.append(header, values, recovery);
     if (quickAdjustment !== null) card.append(quickAdjustment);
     return card;
 }
@@ -131,6 +167,337 @@ function renderHealthQuickField(
         createElement("span", "dd-health-quick__label", label),
         createElement("strong", "dd-health-quick__value", formatOptionalHealthNumber(value)));
     return field;
+}
+
+function renderHealthTextField(
+    label: string,
+    value: string,
+    role: string,
+    track?: HealthTrackView
+): HTMLElement {
+    const field = createElement("div", "dd-health-quick__field");
+    field.setAttribute("data-health-quick-field", role);
+    if (track !== undefined) field.setAttribute("data-health-track-key", track.key);
+    field.append(
+        createElement("span", "dd-health-quick__label", label),
+        createElement("strong", "dd-health-quick__value", value));
+    return field;
+}
+
+function renderDeathSaveSummary(state: DeathSaveState | undefined): HTMLElement {
+    const successes = state?.successes;
+    const failures = state?.failures;
+    const value = successes === undefined || failures === undefined
+        ? "-"
+        : `S ${successes} • F ${failures}`;
+    return renderHealthTextField("Death Saves", value, "death-saves");
+}
+
+function renderDeathSaveEditor(
+    state: DeathSaveState,
+    saving: boolean,
+    onSetDeathSaves: (successes: number, failures: number) => void
+): HTMLElement {
+    const editor = createElement("div", "dd-death-saves-editor");
+    editor.setAttribute("data-death-saves-editor", "true");
+    editor.append(createElement("span", "dd-health-editor__label", "Death Saves"));
+
+    const controls = createElement("div", "dd-death-saves-editor__controls");
+    controls.append(
+        renderDeathSaveCounter("Successes", state.successes, saving, value =>
+            onSetDeathSaves(value, state.failures)),
+        renderDeathSaveCounter("Failures", state.failures, saving, value =>
+            onSetDeathSaves(state.successes, value)));
+
+    const reset = createElement(
+        "button",
+        "dd-button dd-button--ghost dd-death-saves-editor__reset",
+        "Reset") as HTMLButtonElement;
+    reset.type = "button";
+    reset.disabled = saving || (state.successes === 0 && state.failures === 0);
+    reset.setAttribute("data-death-save-action", "reset");
+    reset.onclick = () => onSetDeathSaves(0, 0);
+
+    editor.append(controls, reset);
+    return editor;
+}
+
+function renderDeathSaveCounter(
+    label: string,
+    value: number,
+    saving: boolean,
+    onChange: (value: number) => void
+): HTMLElement {
+    const counter = createElement("div", "dd-death-saves-editor__counter");
+    counter.append(createElement("span", "dd-death-saves-editor__label", label));
+
+    const decrement = createElement(
+        "button",
+        "dd-button dd-button--ghost dd-death-saves-editor__button",
+        "−") as HTMLButtonElement;
+    decrement.type = "button";
+    decrement.disabled = saving || value <= 0;
+    decrement.setAttribute(
+        "data-death-save-action",
+        label === "Successes" ? "success-decrement" : "failure-decrement");
+    decrement.onclick = () => onChange(Math.max(0, value - 1));
+
+    const count = createElement(
+        "strong",
+        "dd-death-saves-editor__value",
+        String(value));
+
+    const increment = createElement(
+        "button",
+        "dd-button dd-button--ghost dd-death-saves-editor__button",
+        "+") as HTMLButtonElement;
+    increment.type = "button";
+    increment.disabled = saving || value >= 3;
+    increment.setAttribute(
+        "data-death-save-action",
+        label === "Successes" ? "success-increment" : "failure-increment");
+    increment.onclick = () => onChange(Math.min(3, value + 1));
+
+    counter.append(decrement, count, increment);
+    return counter;
+}
+
+export function renderRecoveryContinuation(
+    recovery: RecoveryUiState,
+    procedures: readonly CharacterRecoveryProcedureView[] | undefined,
+    onContinue: ((input: CharacterRecoveryRequestInput) => void) | undefined,
+    onCancel: (() => void) | undefined
+): HTMLElement | null {
+    if (recovery.kind === "closed") return null;
+
+    const panel = createElement("section", "dd-recovery-continuation");
+    panel.setAttribute("data-recovery-continuation", recovery.procedureKey);
+    const procedure = procedures?.find(value => value.procedureKey === recovery.procedureKey);
+    const title = recovery.kind === "continuation"
+        ? recovery.resolution.displayName
+        : procedure?.displayName ?? recovery.procedureKey;
+    panel.append(createElement("strong", "dd-recovery-continuation__title", title));
+
+    if (recovery.kind === "resolving") {
+        panel.append(createInlineState("Resolving recovery…", "loading"));
+        return panel;
+    }
+
+    const actions = createElement("div", "dd-recovery-continuation__actions");
+    const cancel = createButton(
+        "Cancel",
+        "dd-button dd-button--ghost",
+        () => onCancel?.(),
+        onCancel === undefined);
+
+    if (recovery.kind === "error") {
+        panel.append(createInlineState(recovery.message, "error"));
+        actions.append(
+            createButton(
+                "Try Again",
+                "dd-button dd-button--secondary",
+                () => onContinue?.({}),
+                onContinue === undefined),
+            cancel);
+        panel.append(actions);
+        return panel;
+    }
+
+    const resolution = recovery.resolution;
+    panel.setAttribute("data-recovery-status", resolution.status);
+    if (resolution.missingCapabilityKeys.length > 0) {
+        panel.append(createInlineState(
+            "This recovery is not currently applicable. Missing capabilities: "
+                + resolution.missingCapabilityKeys.join(", ")
+                + ".",
+            "warning"));
+        actions.append(cancel);
+        panel.append(actions);
+        return panel;
+    }
+
+    const form = createElement("form", "dd-recovery-continuation__form");
+    const integerInputs = new Map<string, HTMLInputElement>();
+    const booleanInputs = new Map<string, HTMLSelectElement>();
+    const stringInputs = new Map<string, HTMLInputElement>();
+    const choices = new Map<string, HTMLSelectElement>();
+    const rolls = new Map<string, HTMLInputElement>();
+    let unsupportedInput = false;
+    let fieldCount = 0;
+
+    for (const key of resolution.missingInputKeys) {
+        const definition = procedure?.inputs?.find(input => input.key === key);
+        if (definition === undefined) {
+            form.append(createInlineState(
+                "Rules Core requested input '" + key + "' without a projected input definition.",
+                "warning"));
+            unsupportedInput = true;
+            continue;
+        }
+
+        const field = createElement("label", "dd-recovery-continuation__field");
+        field.append(createElement(
+            "span",
+            "dd-recovery-continuation__label",
+            definition.key + " · " + definition.origin));
+        if (definition.valueKind === "integer") {
+            const input = createElement("input", "dd-sheet-screen__input");
+            input.type = "number";
+            input.step = "1";
+            input.min = "-2147483648";
+            input.max = "2147483647";
+            input.required = true;
+            if (definition.defaultInteger !== undefined && definition.defaultInteger !== null) {
+                input.value = String(definition.defaultInteger);
+            }
+            field.append(input);
+            integerInputs.set(key, input);
+        } else if (definition.valueKind === "boolean") {
+            const select = createElement("select", "dd-rule-chooser__input");
+            select.required = true;
+            const placeholder = createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Choose…";
+            select.append(placeholder);
+            for (const [value, label] of [["true", "True"], ["false", "False"]] as const) {
+                const option = createElement("option");
+                option.value = value;
+                option.textContent = label;
+                select.append(option);
+            }
+            field.append(select);
+            booleanInputs.set(key, select);
+        } else if (definition.valueKind === "string") {
+            const input = createElement("input", "dd-sheet-screen__input");
+            input.type = "text";
+            input.required = true;
+            field.append(input);
+            stringInputs.set(key, input);
+        } else {
+            form.append(createInlineState(
+                "Recovery input '" + key + "' uses unsupported value kind '" + definition.valueKind + "'.",
+                "warning"));
+            unsupportedInput = true;
+            continue;
+        }
+        form.append(field);
+        fieldCount++;
+    }
+
+    for (const choice of resolution.pendingChoices) {
+        const field = createElement("label", "dd-recovery-continuation__field");
+        field.append(createElement("span", "dd-recovery-continuation__label", choice.prompt));
+        const select = createElement("select", "dd-rule-chooser__input");
+        select.required = choice.required;
+        const placeholder = createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose…";
+        select.append(placeholder);
+        for (const choiceOption of choice.options) {
+            const option = createElement("option");
+            option.value = choiceOption.key;
+            option.textContent = choiceOption.displayName;
+            select.append(option);
+        }
+        field.append(select);
+        form.append(field);
+        choices.set(choice.key, select);
+        fieldCount++;
+    }
+
+    for (const roll of resolution.pendingRolls) {
+        const field = createElement("label", "dd-recovery-continuation__field");
+        field.append(createElement(
+            "span",
+            "dd-recovery-continuation__label",
+            roll.prompt + " · " + roll.rollKind));
+        const input = createElement("input", "dd-sheet-screen__input");
+        input.type = "number";
+        input.step = "1";
+        input.min = "-2147483648";
+        input.max = "2147483647";
+        input.required = roll.required;
+        field.append(input);
+        form.append(field);
+        rolls.set(roll.key, input);
+        fieldCount++;
+    }
+
+    const submit = createButton(
+        "Continue",
+        "dd-button dd-button--secondary",
+        () => {},
+        unsupportedInput || onContinue === undefined || fieldCount === 0);
+    submit.type = "submit";
+    actions.append(submit, cancel);
+    form.append(actions);
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        if (unsupportedInput || onContinue === undefined || fieldCount === 0) return;
+
+        const next: CharacterRecoveryRequestInput = {};
+        if (integerInputs.size > 0) next.integerInputs = {};
+        for (const [key, input] of integerInputs) {
+            const value = parseInt32(input.value);
+            if (value === null) {
+                input.setCustomValidity("Enter a whole number from -2147483648 through 2147483647.");
+                input.reportValidity();
+                return;
+            }
+            input.setCustomValidity("");
+            next.integerInputs![key] = value;
+        }
+        if (booleanInputs.size > 0) next.booleanInputs = {};
+        for (const [key, select] of booleanInputs) {
+            if (select.value !== "true" && select.value !== "false") {
+                select.reportValidity();
+                return;
+            }
+            next.booleanInputs![key] = select.value === "true";
+        }
+        if (stringInputs.size > 0) next.stringInputs = {};
+        for (const [key, input] of stringInputs) {
+            if (!input.reportValidity()) return;
+            next.stringInputs![key] = input.value;
+        }
+        if (choices.size > 0) next.choices = {};
+        for (const [key, select] of choices) {
+            if (!select.reportValidity()) return;
+            next.choices![key] = select.value;
+        }
+        if (rolls.size > 0) next.rolls = {};
+        for (const [key, input] of rolls) {
+            const value = parseInt32(input.value);
+            if (value === null) {
+                input.setCustomValidity("Enter the roll result as a whole number from -2147483648 through 2147483647.");
+                input.reportValidity();
+                return;
+            }
+            input.setCustomValidity("");
+            next.rolls![key] = value;
+        }
+        onContinue(next);
+    });
+
+    if (fieldCount === 0) {
+        panel.append(createInlineState(
+            "Rules Core returned recovery state '" + resolution.status
+                + "' without a continuation field this UI can supply.",
+            "warning"));
+    }
+    panel.append(form);
+    return panel;
+}
+
+function parseInt32(value: string): number | null {
+    const normalized = value.trim();
+    if (!/^-?\d+$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed)
+        && parsed >= -2147483648
+        && parsed <= 2147483647
+        ? parsed
+        : null;
 }
 
 export function renderHealthMechanicsCard(
@@ -256,42 +623,51 @@ export function renderHealthScaffold(
     return cells;
 }
 
-export function renderRestControls(
+export function renderRecoveryControls(
+    procedures: readonly CharacterRecoveryProcedureView[] | undefined,
     readOnly: boolean,
     saving: boolean,
-    onRest: ((kind: RestKind) => void) | undefined
-): HTMLElement {
+    onRecovery: ((procedureKey: string) => void) | undefined
+): HTMLElement | null {
+    if (procedures === undefined || procedures.length === 0) return null;
+
     const controls = createElement("div", "dd-rest-controls");
     controls.setAttribute("role", "group");
-    controls.setAttribute("aria-label", "Rest actions");
+    controls.setAttribute("aria-label", "Recovery actions");
 
-    const available = onRest !== undefined;
-    const disabled = readOnly || saving || !available;
-    const unavailableTitle = readOnly
-        ? "Rest actions are unavailable while this Character is read-only."
-        : saving
-            ? "Wait for the current Character state change to finish."
-            : "Rest resolution is not available from the current rules projection.";
-
-    const createRestButton = (
-        kind: RestKind,
-        label: string
-    ): HTMLButtonElement => {
+    for (const procedure of procedures) {
+        const applicable = procedure.applicabilityState === "applicable";
+        const executable = onRecovery !== undefined;
+        const disabled = readOnly || saving || !applicable || !executable;
         const button = createElement(
             "button",
             "dd-button dd-button--ghost dd-rest-button",
-            label) as HTMLButtonElement;
+            procedure.displayName) as HTMLButtonElement;
         button.type = "button";
         button.disabled = disabled;
-        button.setAttribute("data-rest-action", kind);
-        if (disabled) button.title = unavailableTitle;
-        if (!disabled) button.onclick = () => onRest?.(kind);
-        return button;
-    };
+        button.setAttribute("data-recovery-procedure", procedure.procedureKey);
+        if (procedure.presentationRole !== undefined) {
+            button.setAttribute("data-recovery-role", procedure.presentationRole);
+            if (procedure.presentationRole === "short-rest") {
+                button.setAttribute("data-rest-action", "short");
+            } else if (procedure.presentationRole === "long-rest") {
+                button.setAttribute("data-rest-action", "long");
+            }
+        }
+        if (disabled) {
+            button.title = readOnly
+                ? "Recovery actions are unavailable while this Character is read-only."
+                : saving
+                    ? "Wait for the current Character state change to finish."
+                    : !applicable
+                        ? "This recovery procedure is not currently applicable to the Character."
+                        : "Recovery execution is not available yet.";
+        } else {
+            button.onclick = () => onRecovery(procedure.procedureKey);
+        }
+        controls.append(button);
+    }
 
-    controls.append(
-        createRestButton("short", "Short Rest"),
-        createRestButton("long", "Long Rest"));
     return controls;
 }
 

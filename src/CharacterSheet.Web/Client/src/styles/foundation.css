@@ -282,6 +282,16 @@
     line-height: 1;
 }
 
+button.dd-inspiration__indicator:not(:disabled) {
+    cursor: pointer;
+}
+
+button.dd-inspiration__indicator[aria-pressed="true"] {
+    color: var(--dd-sheet-on-accent);
+    background: var(--dd-sheet-accent);
+    border-color: var(--dd-sheet-accent);
+}
+
 .dd-stat--movement,
 .dd-stat--initiative {
     padding: 0.55rem 0.45rem;
@@ -717,6 +727,13 @@
 .dd-skill-row--standalone {
     border: 1px solid var(--dd-sheet-border);
     border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-skill-family-members {
+    display: grid;
+    gap: 0.12rem;
+    margin-top: 0.12rem;
+    padding-left: 0.65rem;
 }
 
 .dd-skill-row__training {
@@ -2242,3 +2259,81 @@
     color: var(--dd-sheet-muted);
 }
 
+
+
+/* Official-sheet completeness: compact health recovery state and progressive combat detail. */
+.dd-health-quick__recovery {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    margin-top: 0.12rem;
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-health-quick__recovery .dd-health-quick__field {
+    padding-block: 0.22rem;
+}
+
+.dd-death-saves-editor {
+    display: grid;
+    gap: 0.35rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
+.dd-death-saves-editor__controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+}
+
+.dd-death-saves-editor__counter {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.dd-death-saves-editor__label {
+    grid-column: 1 / -1;
+    color: var(--dd-sheet-muted);
+    font-size: 0.58rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.dd-death-saves-editor__value {
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.dd-death-saves-editor__button {
+    min-width: 2rem;
+    padding-inline: 0.45rem;
+}
+
+.dd-combat-ac__details,
+.dd-combat-defenses__details {
+    margin-top: 0.35rem;
+    text-align: left;
+}
+
+.dd-combat-ac__details-toggle,
+.dd-combat-defenses__details-toggle {
+    color: var(--dd-sheet-muted);
+    cursor: pointer;
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+
+.dd-combat-ac__details-body,
+.dd-combat-defenses__details-body {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+}
+
+.dd-combat-ac__detail-title {
+    margin: 0 0 0.2rem;
+    font-size: 0.68rem;
+}

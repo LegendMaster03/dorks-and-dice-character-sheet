@@ -62,7 +62,7 @@ export interface DefenseGroupView {
 }
 
 export type HealthTrackRole = ExtensiblePresentationKey<
-    "hit-points" | "temporary-hit-points" | "nonlethal-damage" | "resource"
+    "hit-points" | "temporary-hit-points" | "nonlethal-damage" | "hit-dice" | "resource"
 >;
 
 export interface HealthTrackView {
@@ -81,7 +81,23 @@ export interface ArmorCheckPenaltyView {
     formattedEffect?: string;
 }
 
-export type CompetencyKind = ExtensiblePresentationKey<"skill" | "tool" | "other">;
+export type CompetencyKind = ExtensiblePresentationKey<"skill" | "specialized-skill" | "tool" | "other">;
+
+export interface CompetencyFacetView {
+    facetType: string;
+    supportsRanks: boolean;
+    supportsClassSkillState: boolean;
+    supportsTrainingState: boolean;
+    mechanicKeys?: readonly string[];
+}
+
+export interface RelatedCompetencyView {
+    kind: string;
+    targetType: string;
+    targetName: string;
+    scope?: string;
+    sharesTrainingState?: boolean;
+}
 
 export interface CompetencyView extends CalculatedMechanicalValueView {
     kind?: CompetencyKind;
@@ -96,6 +112,12 @@ export interface CompetencyView extends CalculatedMechanicalValueView {
     supportsRanks?: boolean;
     supportsClassSkillState?: boolean;
     supportsTrainingState?: boolean;
+    identityKey?: string;
+    identityName?: string;
+    sharedTrainingKey?: string;
+    isFamily?: boolean;
+    facets?: readonly CompetencyFacetView[];
+    relatedCompetencies?: readonly RelatedCompetencyView[];
 }
 
 export interface CompetencyRelationshipView {
@@ -107,6 +129,11 @@ export interface CompetencyRelationshipView {
 
 export type CompetencyPresentationItem =
     | { kind: "standalone"; competency: CompetencyView }
+    | {
+        kind: "family";
+        parent: CompetencyView;
+        members: readonly [CompetencyView, ...CompetencyView[]];
+    }
     | {
         kind: "composite";
         parent: CompetencyView;
@@ -199,6 +226,28 @@ export interface InventoryMechanicsView {
     crafting?: readonly CraftingProcedureView[];
 }
 
+export interface CharacterFeatureView {
+    key: string;
+    label: string;
+    kind: string;
+    state: string;
+    sourceConceptKey?: string;
+    grantingSourceKind?: string;
+    acquisitionLevel?: number;
+    effects?: readonly DisplayFieldView[];
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
+export interface SpellcastingResourceView {
+    key: string;
+    label: string;
+    state: string;
+    current?: number;
+    maximum?: number;
+    recoveryProcedureKey?: string;
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
 export interface SpellcastingProfileView {
     key: string;
     label: string;
@@ -207,6 +256,7 @@ export interface SpellcastingProfileView {
     saveDc?: CalculatedMechanicalValueView;
     spellAttack?: CalculatedMechanicalValueView;
     resourceSystem?: DisplayFieldView;
+    resources?: readonly SpellcastingResourceView[];
     domains?: readonly string[];
     specialtySchool?: string;
     prohibitedSchools?: readonly string[];
@@ -214,6 +264,55 @@ export interface SpellcastingProfileView {
     bonusSpells?: readonly DisplayFieldView[];
     metadata?: readonly DisplayFieldView[];
     sourceAttributions?: readonly SourceAttributionView[];
+}
+
+export interface CharacterRuleChoiceOptionView {
+    value: string;
+    displayName: string;
+    conceptKey?: string;
+}
+
+export interface CharacterRuleChoiceView {
+    choiceKey: string;
+    groupKey: string;
+    displayName: string;
+    kind: string;
+    state: string;
+    options: readonly CharacterRuleChoiceOptionView[];
+    selectedValue?: string;
+    sourceConceptKey?: string;
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
+export interface CharacterRecoveryInputView {
+    key: string;
+    valueKind: string;
+    origin: string;
+    required: boolean;
+    defaultInteger?: number | null;
+}
+
+export interface CharacterRecoveryProcedureView {
+    procedureKey: string;
+    displayName: string;
+    applicabilityState: string;
+    presentationRole?: string;
+    requiresCharacterState?: boolean;
+    requiresPlayerChoices?: boolean;
+    requiresRolls?: boolean;
+    requiresResourceExpenditure?: boolean;
+    requiresOtherRuntimeFacts?: boolean;
+    missingCapabilityKeys?: readonly string[];
+    inputs?: readonly CharacterRecoveryInputView[];
+    sourceAttributions?: readonly SourceAttributionView[];
+}
+
+export interface CharacterProjectionConflictView {
+    conflictKey: string;
+    kind: string;
+    message: string;
+    relatedMechanicKeys: readonly string[];
+    relatedConceptKeys: readonly string[];
 }
 
 export interface CharacterMechanicsView {
@@ -236,6 +335,11 @@ export interface CharacterMechanicsView {
     checks?: readonly CharacterCheckView[];
     procedures?: readonly CharacterProcedureView[];
     spellcastingProfiles?: readonly SpellcastingProfileView[];
+    features?: readonly CharacterFeatureView[];
+    characterMetadata?: readonly CalculatedMechanicalValueView[];
+    ruleChoices?: readonly CharacterRuleChoiceView[];
+    projectionConflicts?: readonly CharacterProjectionConflictView[];
+    recoveryProcedures?: readonly CharacterRecoveryProcedureView[];
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
@@ -301,6 +405,27 @@ export function buildCompetencyPresentation(
             parent: presentedParent,
             components: components as [CompetencyView, ...CompetencyView[]],
             relationship
+        });
+    }
+
+    for (const parent of collection.entries) {
+        if (consumed.has(parent.key) || parent.isFamily !== true) continue;
+        const familyName = parent.family?.trim();
+        if (familyName === undefined || familyName.length === 0) continue;
+
+        const members = collection.entries.filter(entry =>
+            entry.key !== parent.key
+            && !consumed.has(entry.key)
+            && entry.isFamily !== true
+            && entry.family?.trim() === familyName);
+        if (members.length === 0) continue;
+
+        consumed.add(parent.key);
+        for (const member of members) consumed.add(member.key);
+        groups.set(parent.key, {
+            kind: "family",
+            parent,
+            members: members as [CompetencyView, ...CompetencyView[]]
         });
     }
 

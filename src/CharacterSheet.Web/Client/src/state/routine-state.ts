@@ -29,8 +29,12 @@ export function reduceRoutineState(
             break;
         case "routine-reference-resolved": {
             const occurrence = routine.state?.inventoryItemOccurrences.find(value => value.id === action.occurrenceId);
+            const knownSpell = routine.state?.rulesInputs?.find(value =>
+                value.id === action.occurrenceId && value.kind === "knownSpell");
             const condition = routine.state?.conditions?.find(value => value.id === action.occurrenceId);
-            const conceptKey = occurrence?.ruleConceptKey ?? condition?.ruleConceptKey;
+            const conceptKey = occurrence?.ruleConceptKey
+                ?? knownSpell?.key
+                ?? condition?.ruleConceptKey;
             const currentReference = routine.references[action.occurrenceId];
             if (conceptKey === action.conceptKey
                 && currentReference !== undefined
@@ -116,6 +120,76 @@ export function reduceRoutineState(
         case "inventory-chooser-closed":
             routine = { ...routine, inventoryChooser: { kind: "closed" } };
             break;
+        case "spell-chooser-opened":
+            if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly) {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        kind: "open",
+                        query: "",
+                        status: "idle",
+                        results: []
+                    },
+                    mutationError: undefined
+                };
+            }
+            break;
+        case "spell-chooser-query-changed":
+            if (routine.spellChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        query: action.query
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-load-started":
+            if (routine.spellChooser.kind === "open") {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        query: action.query,
+                        status: "loading",
+                        results: [],
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-loaded":
+            if (routine.spellChooser.kind === "open"
+                && routine.spellChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        status: "ready",
+                        results: action.results,
+                        message: undefined
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-load-failed":
+            if (routine.spellChooser.kind === "open"
+                && routine.spellChooser.query === action.query) {
+                routine = {
+                    ...routine,
+                    spellChooser: {
+                        ...routine.spellChooser,
+                        status: "error",
+                        results: [],
+                        message: action.message
+                    }
+                };
+            }
+            break;
+        case "spell-chooser-closed":
+            routine = { ...routine, spellChooser: { kind: "closed" } };
+            break;
         case "condition-chooser-opened":
             if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly) {
                 routine = {
@@ -186,6 +260,49 @@ export function reduceRoutineState(
         case "condition-chooser-closed":
             routine = { ...routine, conditionChooser: { kind: "closed" } };
             break;
+        case "recovery-started":
+            if (routine.status === "ready"
+                && routine.state !== null
+                && !routine.state.readOnly
+                && routine.recovery.kind !== "resolving") {
+                routine = {
+                    ...routine,
+                    recovery: {
+                        kind: "resolving",
+                        procedureKey: action.procedureKey,
+                        request: action.request
+                    }
+                };
+            }
+            break;
+        case "recovery-continuation":
+            routine = {
+                ...routine,
+                recovery: {
+                    kind: "continuation",
+                    procedureKey: action.procedureKey,
+                    request: action.request,
+                    resolution: action.resolution
+                }
+            };
+            break;
+        case "recovery-succeeded":
+            routine = routineStateFromResponse(action.state);
+            break;
+        case "recovery-failed":
+            routine = {
+                ...routine,
+                recovery: {
+                    kind: "error",
+                    procedureKey: action.procedureKey,
+                    request: action.request,
+                    message: action.message
+                }
+            };
+            break;
+        case "recovery-cancelled":
+            routine = { ...routine, recovery: { kind: "closed" } };
+            break;
         case "routine-mutation-started":
             if (routine.status === "ready" && routine.state !== null && !routine.state.readOnly && routine.mutation === null) {
                 routine = {
@@ -216,7 +333,9 @@ export function createInitialRoutineState(): CharacterRoutineUiState {
         state: null,
         references: {},
         inventoryChooser: { kind: "closed" },
+        spellChooser: { kind: "closed" },
         conditionChooser: { kind: "closed" },
+        recovery: { kind: "closed" },
         mutation: null
     };
 }
@@ -224,13 +343,23 @@ export function createInitialRoutineState(): CharacterRoutineUiState {
 function routineStateFromResponse(state: CharacterStateResponse): CharacterRoutineUiState {
     const normalizedState: CharacterStateResponse = {
         ...state,
-        conditions: state.conditions ?? []
+        conditions: state.conditions ?? [],
+        rulesInputs: state.rulesInputs ?? [],
+        hitPointGains: state.hitPointGains ?? [],
+        currencyBalances: state.currencyBalances ?? []
     };
     const references: Record<string, RuleReferenceState> = {};
     for (const occurrence of normalizedState.inventoryItemOccurrences) {
         references[occurrence.id] = {
             status: "loading",
             conceptKey: occurrence.ruleConceptKey
+        };
+    }
+    for (const input of normalizedState.rulesInputs ?? []) {
+        if (input.kind !== "knownSpell") continue;
+        references[input.id] = {
+            status: "loading",
+            conceptKey: input.key
         };
     }
     for (const condition of normalizedState.conditions) {
@@ -245,7 +374,9 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
         state: normalizedState,
         references,
         inventoryChooser: { kind: "closed" },
+        spellChooser: { kind: "closed" },
         conditionChooser: { kind: "closed" },
+        recovery: { kind: "closed" },
         mutation: null
     };
 }

@@ -11,7 +11,7 @@ import {
     renderHealthMechanicsCard,
     renderMovementValues,
     renderQuickMechanicalValue,
-    renderRestControls,
+    renderRecoveryControls,
     renderSavingThrowsCard
 } from "../.test-dist/ui/mechanics-components.js";
 import { renderChecksAndProceduresPresentation, renderProcedure } from "../.test-dist/ui/procedure-components.js";
@@ -262,29 +262,42 @@ test("editable Hit Points card exposes direct and modifier controls while keepin
     assert.equal(saved.at(-1), -8);
 });
 
-test("rest controls are independently renderable without inventing rest mechanics", () => {
-    const rendered = renderRestControls(false, false, undefined);
-    const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
-    const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
-    assert.ok(shortRest);
-    assert.ok(longRest);
-    assert.equal(shortRest.disabled, true);
-    assert.equal(longRest.disabled, true);
-    assert.match(shortRest.title, /Rest resolution is not available/);
+test("recovery controls render nothing when Rules Core supplies no procedures", () => {
+    assert.equal(renderRecoveryControls(undefined, false, false, undefined), null);
+    assert.equal(renderRecoveryControls([], false, false, undefined), null);
 });
 
-test("rest controls emit only rest intent when a rules-backed handler is supplied", () => {
-    const rests = [];
-    const rendered = renderRestControls(false, false, kind => rests.push(kind));
-    const shortRest = byAttribute(rendered, "data-rest-action", "short")[0];
-    const longRest = byAttribute(rendered, "data-rest-action", "long")[0];
+test("recovery controls use Rules Core procedure identity, labels, roles, and applicability", () => {
+    const calls = [];
+    const rendered = renderRecoveryControls([
+        {
+            procedureKey: "recovery.short.fixture",
+            displayName: "Take a Breather",
+            presentationRole: "short-rest",
+            applicabilityState: "applicable"
+        },
+        {
+            procedureKey: "recovery.long.fixture",
+            displayName: "Full Recovery",
+            presentationRole: "long-rest",
+            applicabilityState: "not-applicable"
+        }
+    ], false, false, key => calls.push(key));
+    assert.ok(rendered);
+
+    const shortRest = byAttribute(rendered, "data-recovery-procedure", "recovery.short.fixture")[0];
+    const longRest = byAttribute(rendered, "data-recovery-procedure", "recovery.long.fixture")[0];
+    assert.ok(shortRest);
+    assert.ok(longRest);
+    assert.equal(shortRest.textContent, "Take a Breather");
+    assert.equal(longRest.textContent, "Full Recovery");
+    assert.equal(shortRest.getAttribute("data-rest-action"), "short");
+    assert.equal(longRest.getAttribute("data-rest-action"), "long");
     assert.equal(shortRest.disabled, false);
-    assert.equal(longRest.disabled, false);
+    assert.equal(longRest.disabled, true);
 
     shortRest.onclick();
-    longRest.onclick();
-
-    assert.deepEqual(rests, ["short", "long"]);
+    assert.deepEqual(calls, ["recovery.short.fixture"]);
 });
 
 test("read-only Hit Points card omits mutation controls", () => {

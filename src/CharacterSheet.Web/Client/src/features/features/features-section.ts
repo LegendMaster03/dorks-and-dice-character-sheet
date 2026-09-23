@@ -1,4 +1,6 @@
 import type { CharacterBuilderUiState } from "../../app-state.js";
+import type { CharacterFeatureView } from "../../ui/character-mechanics.js";
+import { renderSourceAttributions } from "../../ui/source-attribution.js";
 import {
     createButton,
     createElement,
@@ -14,6 +16,7 @@ export function renderFeaturesSection(
     builder: CharacterBuilderUiState,
     structuralEditing: boolean,
     readOnly: boolean,
+    projectedFeatures: readonly CharacterFeatureView[] | undefined,
     handlers: FeatCharacterHandlers
 ): HTMLElement {
     const content = createElement("div", "dd-feature-sections");
@@ -92,11 +95,44 @@ export function renderFeaturesSection(
     }
 
     const other = createElement("section", "dd-feature-subsection");
-    other.append(
-        createElement("h3", "dd-feature-subsection__title", "Other Features & Traits"),
-        createInlineState(
-            "Additional Class, Subclass, Species, and other granted features are not available in Character Sheet yet.",
+    other.append(createElement("h3", "dd-feature-subsection__title", "Other Features & Traits"));
+    if (projectedFeatures === undefined) {
+        other.append(createInlineState(
+            "Rules-derived features are unavailable for this Character.",
             "neutral"));
+    } else if (projectedFeatures.length === 0) {
+        other.append(createElement("p", "dd-routine-empty", "No additional granted features."));
+    } else {
+        const list = createElement("div", "dd-feat-list");
+        for (const feature of projectedFeatures) {
+            const item = createElement("article", "dd-feat");
+            item.setAttribute("data-feature-key", feature.key);
+            item.setAttribute("data-feature-state", feature.state);
+            item.append(createElement("h4", "dd-feat__name", feature.label));
+
+            const meta = [
+                feature.grantingSourceKind,
+                feature.acquisitionLevel === undefined
+                    ? undefined
+                    : `Level ${feature.acquisitionLevel}`,
+                feature.sourceConceptKey
+            ].filter((value): value is string => value !== undefined && value.length > 0);
+            if (meta.length > 0) {
+                item.append(createElement("p", "dd-routine-meta", meta.join(" • ")));
+            }
+
+            for (const effect of feature.effects ?? []) {
+                item.append(createElement(
+                    "p",
+                    "dd-routine-meta",
+                    `${effect.label}: ${effect.value}`));
+            }
+            const sources = renderSourceAttributions(feature.sourceAttributions, true);
+            if (sources !== null) item.append(sources);
+            list.append(item);
+        }
+        other.append(list);
+    }
     content.append(feats, other);
     return content;
 }

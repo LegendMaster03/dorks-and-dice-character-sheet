@@ -617,3 +617,41 @@
         min-width: 7rem;
     }
 }
+
+
+.dd-profile {
+    display: grid;
+    gap: var(--dd-sheet-space-4);
+}
+
+.dd-profile__form,
+.dd-profile__summary {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+}
+
+.dd-profile__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: var(--dd-sheet-space-3);
+}
+
+.dd-profile__field {
+    display: grid;
+    gap: var(--dd-sheet-space-1);
+    min-width: 0;
+}
+
+.dd-profile__field--wide {
+    grid-column: 1 / -1;
+}
+
+.dd-profile__value {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.dd-profile__empty {
+    color: var(--dd-sheet-muted);
+    margin: 0;
+}

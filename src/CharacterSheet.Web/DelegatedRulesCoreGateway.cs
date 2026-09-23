@@ -80,6 +80,65 @@ public sealed class DelegatedRulesCoreGateway(
             cancellationToken);
     }
 
+    public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
+        RulesCoreCharacterSupportProjectionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterSupportProjectionView>(
+            HttpMethod.Post,
+            "/api/rules/mechanics/support",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
+    public Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
+        string procedureKey,
+        RulesCoreCharacterRecoveryResolutionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(procedureKey))
+        {
+            throw new ArgumentException("Recovery procedure key can not be blank.", nameof(procedureKey));
+        }
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterRecoveryResolutionView>(
+            HttpMethod.Post,
+            $"/api/rules/mechanics/recovery/{Uri.EscapeDataString(procedureKey.Trim())}/resolve",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
+    public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
+        RulesCoreCharacterRulesProjectionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterRulesProjectionView>(
+            HttpMethod.Post,
+            "/api/rules/character-mechanics/resolve",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
+    public Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
+        Guid campaignId,
+        RulesCoreCharacterRulesProjectionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (campaignId == Guid.Empty)
+        {
+            throw new ArgumentException("Campaign ID can not be empty.", nameof(campaignId));
+        }
+
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterRulesProjectionView>(
+            HttpMethod.Post,
+            $"/api/campaigns/{campaignId:D}/rules/character-mechanics/resolve",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
     private async Task<T> SendJsonAsync<T>(
         HttpMethod method,
         string targetPath,

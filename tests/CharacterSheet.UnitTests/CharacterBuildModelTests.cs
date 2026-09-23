@@ -146,6 +146,37 @@ public sealed class CharacterBuildModelTests
     }
 
     [Fact]
+    public void ClassAndPrestigeOccurrencesOwnPositiveLevelsWhileSubclassUsesItsParent()
+    {
+        var root = Root();
+        var startingClass = root.SetStartingClass("class:fighter", DateTimeOffset.UtcNow);
+        var prestigeClass = root.AddAdvancement(
+            CharacterAdvancementKind.PrestigeClass,
+            "prestigeclass:loremaster",
+            4,
+            null,
+            DateTimeOffset.UtcNow.AddMinutes(1));
+        var subclass = root.SetSubclassForClass(
+            startingClass.Id,
+            "subclass:champion",
+            DateTimeOffset.UtcNow.AddMinutes(2));
+
+        Assert.Equal(1, startingClass.Level);
+        Assert.Equal(1, prestigeClass.Level);
+        Assert.Null(subclass.Level);
+
+        root.SetAdvancementLevel(startingClass.Id, 7, DateTimeOffset.UtcNow.AddMinutes(3));
+        root.SetAdvancementLevel(prestigeClass.Id, 3, DateTimeOffset.UtcNow.AddMinutes(4));
+
+        Assert.Equal(7, startingClass.Level);
+        Assert.Equal(3, prestigeClass.Level);
+        Assert.Throws<InvalidOperationException>(() =>
+            root.SetAdvancementLevel(subclass.Id, 2, DateTimeOffset.UtcNow.AddMinutes(5)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.SetAdvancementLevel(startingClass.Id, 0, DateTimeOffset.UtcNow.AddMinutes(6)));
+    }
+
+    [Fact]
     public void AdvancementParentMustBelongToSameCharacter()
     {
         var characterA = Root();

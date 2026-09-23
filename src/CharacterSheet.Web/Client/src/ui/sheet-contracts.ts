@@ -3,18 +3,28 @@ import type {
     CharacterRoutineUiState
 } from "../app-state.js";
 import type { CharacterAbilityKey } from "../builder-api.js";
-import type { CharacterConditionStateInput } from "../character-state-api.js";
-import type { RestKind } from "../features/health/health.js";
+import type {
+    CharacterConditionStateInput,
+    CharacterInventoryItemOccurrenceStateInput,
+    CharacterProfileInput,
+    CharacterRecoveryRequestInput
+} from "../character-state-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
 
 export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
+    setAdvancementLevel(occurrenceId: string, level: number): void;
     setBaseAbilityScore(abilityKey: CharacterAbilityKey, score: number): void;
     clearBaseAbilityScore(abilityKey: CharacterAbilityKey): void;
 }
 
 export interface RoutineCharacterHandlers {
+    setInspiration(inspired: boolean): void;
+    setCurrencyBalance(currencyKey: string, amount: number): void;
+    removeCurrencyBalance(currencyKey: string): void;
+    setProfile(input: CharacterProfileInput): void;
     setCurrentHitPoints(currentHitPoints: number | null): void;
+    setDeathSaves(successes: number, failures: number): void;
     addNote(content: string): void;
     updateNote(noteId: string, content: string): void;
     deleteNote(noteId: string): void;
@@ -22,6 +32,10 @@ export interface RoutineCharacterHandlers {
     closeInventoryChooser(): void;
     searchInventory(query: string): void;
     addInventoryItem(conceptKey: string): void;
+    updateInventoryItem(
+        occurrenceId: string,
+        input: CharacterInventoryItemOccurrenceStateInput
+    ): void;
     removeInventoryItem(occurrenceId: string): void;
     openConditionChooser(): void;
     closeConditionChooser(): void;
@@ -30,7 +44,34 @@ export interface RoutineCharacterHandlers {
     addCustomCondition(customName: string, input: CharacterConditionStateInput): void;
     updateCondition(conditionId: string, input: CharacterConditionStateInput): void;
     removeCondition(conditionId: string): void;
-    rest?(kind: RestKind): void;
+    recover?(procedureKey: string): void;
+    continueRecovery?(input: CharacterRecoveryRequestInput): void;
+    cancelRecovery?(): void;
+}
+
+export interface RulesInputCharacterHandlers {
+    setChoice(choiceKey: string, value: string): void;
+    clearChoice(choiceKey: string): void;
+    setResource(resourceKey: string, currentValue: number): void;
+    setCompetencyRank(competencyKey: string, ranks: number): void;
+    clearCompetencyRank(competencyKey: string): void;
+    setHitPointGain(
+        advancementOccurrenceId: string,
+        classLevel: number,
+        hitDieValue: number
+    ): void;
+    clearHitPointGain(
+        advancementOccurrenceId: string,
+        classLevel: number
+    ): void;
+}
+
+export interface KnownSpellCharacterHandlers {
+    openChooser(): void;
+    closeChooser(): void;
+    search(query: string): void;
+    add(conceptKey: string): void;
+    remove(conceptKey: string): void;
 }
 
 export interface FeatCharacterHandlers {
@@ -44,6 +85,8 @@ export interface FeatCharacterHandlers {
 export interface CharacterSheetHandlers {
     structural: StructuralCharacterHandlers;
     feats: FeatCharacterHandlers;
+    spells: KnownSpellCharacterHandlers;
+    rules: RulesInputCharacterHandlers;
     routine: RoutineCharacterHandlers;
     selectSection(section: SheetSection): void;
     enterEditMode(): void;

@@ -13,6 +13,75 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         BuildQuery(tracking: false)
             .SingleOrDefaultAsync(value => value.CharacterId == characterId, cancellationToken);
 
+    public async Task<CharacterSheetRoot?> SetCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        long amount,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        root.SetCurrencyBalance(currencyKey, amount, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveCurrencyBalanceAsync(
+        Guid characterId,
+        string currencyKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        root.RemoveCurrencyBalance(currencyKey, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> SetProfileAsync(
+        Guid characterId,
+        string? alignment,
+        string? deity,
+        string? age,
+        string? height,
+        string? weight,
+        string? appearance,
+        string? personalityTraits,
+        string? ideals,
+        string? bonds,
+        string? flaws,
+        string? backstory,
+        string? alliesAndOrganizations,
+        string? symbol,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        root.SetProfile(
+            alignment,
+            deity,
+            age,
+            height,
+            weight,
+            appearance,
+            personalityTraits,
+            ideals,
+            bonds,
+            flaws,
+            backstory,
+            alliesAndOrganizations,
+            symbol,
+            changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> SetCurrentHitPointsAsync(
         Guid characterId,
         int? currentHitPoints,
@@ -26,6 +95,37 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         }
 
         root.SetCurrentHitPoints(currentHitPoints, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> SetDeathSavesAsync(
+        Guid characterId,
+        int successes,
+        int failures,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.SetDeathSaves(successes, failures, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> ApplyIntegerStateMutationsAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterIntegerStateMutation> mutations,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.ApplyIntegerStateMutations(mutations, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
     }
@@ -47,6 +147,35 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> UpdateInventoryItemOccurrenceAsync(
+        Guid characterId,
+        Guid occurrenceId,
+        int quantity,
+        bool isCarried,
+        bool isEquipped,
+        bool isAttuned,
+        Guid? containerOccurrenceId,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.UpdateInventoryItemOccurrence(
+            occurrenceId,
+            quantity,
+            isCarried,
+            isEquipped,
+            isAttuned,
+            containerOccurrenceId,
+            changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> RemoveInventoryItemOccurrenceAsync(
         Guid characterId,
         Guid occurrenceId,
@@ -60,6 +189,66 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         }
 
         root.RemoveInventoryItemOccurrence(occurrenceId, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> SetRulesInputAsync(
+        Guid characterId,
+        CharacterRulesInputKind kind,
+        string key,
+        int? integerValue,
+        bool? booleanValue,
+        string? textValue,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.SetRulesInput(kind, key, integerValue, booleanValue, textValue, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveRulesInputAsync(
+        Guid characterId,
+        CharacterRulesInputKind kind,
+        string key,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.RemoveRulesInput(kind, key, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> SetHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        int hitDieValue,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.SetHitPointGain(advancementOccurrenceId, classLevel, hitDieValue, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> RemoveHitPointGainAsync(
+        Guid characterId,
+        Guid advancementOccurrenceId,
+        int classLevel,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+        root.RemoveHitPointGain(advancementOccurrenceId, classLevel, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
     }
@@ -192,9 +381,14 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
     private IQueryable<CharacterSheetRoot> BuildQuery(bool tracking)
     {
         var query = dbContext.CharacterSheets
+            .Include(value => value.Profile)
+            .Include(value => value.CurrencyBalances)
             .Include(value => value.InventoryItemOccurrences)
             .Include(value => value.Notes)
             .Include(value => value.Conditions)
+            .Include(value => value.RulesInputs)
+            .Include(value => value.HitPointGains)
+            .Include(value => value.AdvancementEntries)
             .AsQueryable();
         return tracking ? query : query.AsNoTracking();
     }

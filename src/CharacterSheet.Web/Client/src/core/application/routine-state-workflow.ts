@@ -63,6 +63,44 @@ export function createRoutineStateWorkflow(
             }
         });
 
+        const knownSpellReferences = (state.rulesInputs ?? [])
+            .filter(input => input.kind === "knownSpell")
+            .map(async input => {
+                const conceptKey = input.key;
+                try {
+                    const rule = await resolveRuleConcept(environment, conceptKey);
+                    const reference = rule !== null
+                        && rule.entityType === "spell"
+                        && rule.conceptKey === conceptKey
+                        ? {
+                            status: "resolved" as const,
+                            conceptKey,
+                            rule
+                        }
+                        : {
+                            status: "unavailable" as const,
+                            conceptKey
+                        };
+                    application.dispatch({
+                        type: "routine-reference-resolved",
+                        occurrenceId: input.id,
+                        conceptKey,
+                        reference
+                    });
+                } catch (error) {
+                    application.dispatch({
+                        type: "routine-reference-resolved",
+                        occurrenceId: input.id,
+                        conceptKey,
+                        reference: {
+                            status: "error",
+                            conceptKey,
+                            message: requestErrorMessage(error)
+                        }
+                    });
+                }
+            });
+
         const conditionReferences = (state.conditions ?? [])
             .filter(condition => condition.ruleConceptKey !== null)
             .map(async condition => {
@@ -101,7 +139,11 @@ export function createRoutineStateWorkflow(
                 }
             });
 
-        await Promise.all([...inventoryReferences, ...conditionReferences]);
+        await Promise.all([
+            ...inventoryReferences,
+            ...knownSpellReferences,
+            ...conditionReferences
+        ]);
     }
 
     return {
