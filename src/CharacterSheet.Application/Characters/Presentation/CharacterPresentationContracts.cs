@@ -360,6 +360,13 @@ public sealed record CharacterRuleChoicePresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
+public sealed record CharacterRecoveryInputPresentationView(
+    string Key,
+    string ValueKind,
+    string Origin,
+    bool Required,
+    int? DefaultInteger = null);
+
 public sealed record CharacterRecoveryProcedurePresentationView(
     string ProcedureKey,
     string DisplayName,
@@ -378,6 +385,8 @@ public sealed record CharacterRecoveryProcedurePresentationView(
     bool RequiresOtherRuntimeFacts = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<string>? MissingCapabilityKeys = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CharacterRecoveryInputPresentationView>? Inputs = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SourceAttributionPresentationView>? SourceAttributions = null);
 
