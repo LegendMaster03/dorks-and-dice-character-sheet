@@ -182,13 +182,19 @@ The backend remains authoritative for combat values and their calculations. Base
 
 The three `supports...` fields and family/specialty metadata describe the normalized Rules Core competency contract. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend displays `-`; it must not substitute `0`, `false`, or another inferred value.
 
+Rules Core now exposes an authoritative universal competency catalog separately from its source-shaped implementation mechanics. Character Sheet treats the universal catalog as the presentation identity. A universal entry uses a semantic key such as `competency.alchemy`, while its `mechanicKeys` point to the Rules Core implementation mechanics used for evaluation and compatibility. Historical skill names, tool names, and other import aliases do not become duplicate Character Sheet rows.
+
+Character Sheet may carry `rankInputKey` for the one unambiguous implementation concept that owns rank state. This is an implementation-state join only. The visible row remains keyed by the universal semantic competency. If no unambiguous rank implementation is supplied, the frontend does not invent one and does not expose a rank editor.
+
 Ranks, final modifiers, class-skill effects, trained-only rules, and Armor Check Penalty effects are backend/Rules Core responsibilities. The frontend displays supplied facts.
 
 ### Specialty competencies
 
-Specialized entries are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. A Rules Core entry marked `isFamily: true` may be rendered as an expandable family row containing the independently addressable entries whose supplied `family` value matches that family. The family grouping is taxonomy only: each specialized child keeps its own value, ranks, class-skill state, training state, and other supplied mechanics.
+Specialized entries are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. A Rules Core entry marked `isFamily: true` is rendered as an organizational family. When `childCompetencyKeys` are supplied, those keys are authoritative for family membership. Matching a family label is retained only as a compatibility fallback for older Rules Core responses.
 
-The frontend does not identify specialties, parse names such as `Craft (...)`, or maintain a hard-coded list of family names. Family nesting is driven only by the authoritative competency metadata. This is distinct from composite relationships, which represent explicit mechanical composition rather than taxonomy.
+This allows Rules Core to expose reviewed catalog members even when no source-shaped implementation mechanic exists for a particular family child. For example, Character Sheet can render the complete reviewed Craft family from semantic entries while only those members with applicable implementation mechanics expose calculation/rank controls.
+
+The frontend does not identify specialties, parse names such as `Craft (...)`, deduplicate tools and skills by display name, or maintain a hard-coded list of family names. Family nesting is driven only by authoritative Rules Core semantic metadata. This is distinct from composite relationships, which represent explicit mechanical composition rather than taxonomy.
 
 ### Composite relationships
 
@@ -351,7 +357,9 @@ The Character Sheet backend uses the Site's source-bound Tool-to-Tool delegation
 
 Advancement always preserves Character-owned occurrence identity, concept identity, persisted parent occurrence identity, and open-ended kind. The backend resolves display/source metadata by the stable concept key itself; it does not use advancement `kind` as a Rules Core `entityType` filter. An inaccessible or unresolved reference remains present as an unavailable occurrence. Progression is omitted because the current Character-owned model does not establish Class level, Prestige Class level, Position rank, tier, standing, or another progression value.
 
-Mechanics are capability- and input-driven. The current bridge projects accessible competency definitions, family/specialty and support metadata, effective `derive-parent` relationships, generalized check metadata, source attribution, and only values Rules Core can evaluate without any unmodeled Character/runtime/source input. Rules Core defaults are not treated as proof that missing Character state is configured. A competency whose Character inputs are not modeled is shown as `-`, never zero. Base Ability inputs are not relabeled as effective Abilities.
+Mechanics are capability- and input-driven. The bridge consumes Rules Core's universal `competencies` catalog for Character-facing competency identity and keeps the raw `mechanics` collection only for calculation, relationship, and compatibility joins. Multiple source-shaped skill/tool implementations of one semantic competency therefore render once. Reviewed family members with no implementation row can still appear under their Rules Core-defined family. Effective `derive-parent` relationships are translated to semantic competency keys before reaching the browser.
+
+Rules Core defaults are not treated as proof that missing Character state is configured. A competency whose Character inputs are not modeled is shown as `-`, never zero. Base Ability inputs are not relabeled as effective Abilities.
 
 Rules Core failure degrades mechanics independently. The Character page continues to load its build, Inventory, and Notes state, and Character-owned advancement occurrences remain present even when Rules Core display metadata is unavailable.
 
