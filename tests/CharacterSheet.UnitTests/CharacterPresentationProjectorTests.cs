@@ -207,6 +207,14 @@ public sealed class CharacterPresentationProjectorTests
             "tool.alchemists-supplies",
             "Alchemist's Supplies",
             competencyKind: "tool");
+        var blacksmithingMechanic = Competency(
+            "competency.blacksmithing",
+            "competency.blacksmithing",
+            "Blacksmithing",
+            family: "Craft",
+            specialty: "Blacksmithing",
+            competencyKind: "specialized-skill",
+            governingAbility: "intelligence");
 
         var universal =
             new RulesCoreUniversalCompetencyView[]
@@ -264,20 +272,33 @@ public sealed class CharacterPresentationProjectorTests
                     false,
                     "competency.blacksmithing.training",
                     [],
-                    [],
+                    ["competency.blacksmithing"],
                     ["competency.skill.craft-blacksmithing"],
                     ["Blacksmithing", "Craft (blacksmithing)"],
                     [],
                     [],
                     [],
-                    [])
+                    [],
+                    new RulesCoreUniversalCompetencyMechanicsView(
+                        new RulesCoreUniversalGoverningAbilityView(
+                            "fixed",
+                            "intelligence",
+                            ["intelligence"]),
+                        SupportsRanks: true,
+                        SupportsClassSkillState: true,
+                        SupportsTrainingState: true,
+                        TrainedOnly: false,
+                        ArmorCheckPenaltyApplies: false,
+                        EvaluationProfileKeys: ["ranked-skill"],
+                        EvaluationKinds: ["competency-profile"],
+                        CanEvaluate: true))
             };
         var catalog = new RulesCoreMechanicsCatalogView(
             "global",
             null,
             1,
             Now,
-            [craft, craftAlchemy, alchemyTools],
+            [craft, craftAlchemy, alchemyTools, blacksmithingMechanic],
             universal);
 
         var mechanics = CharacterPresentationProjector.ProjectMechanics(catalog, null);
@@ -320,7 +341,10 @@ public sealed class CharacterPresentationProjectorTests
         Assert.Equal("Craft", blacksmithing.Family);
         Assert.Equal("intelligence", blacksmithing.GoverningAbility);
         Assert.Equal("-", blacksmithing.EffectiveValue);
-        Assert.Null(blacksmithing.RankInputKey);
+        Assert.True(blacksmithing.SupportsRanks);
+        Assert.True(blacksmithing.SupportsClassSkillState);
+        Assert.True(blacksmithing.SupportsTrainingState);
+        Assert.Equal("competency.blacksmithing", blacksmithing.RankInputKey);
     }
 
     [Fact]

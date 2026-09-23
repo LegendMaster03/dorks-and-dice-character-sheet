@@ -66,30 +66,11 @@ internal static class CompetencyProjector
             }
         }
 
-        var familyGoverningAbilityByName = universalCompetencies
-            .Where(value => value.IsFamily)
-            .Select(value => new
-            {
-                value.DisplayName,
-                GoverningAbility = ResolveGoverningAbility(
-                    value,
-                    FindImplementations(value, mechanicByKey))
-            })
-            .Where(value => !string.IsNullOrWhiteSpace(value.GoverningAbility))
-            .GroupBy(value => value.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.First().GoverningAbility!,
-                StringComparer.OrdinalIgnoreCase);
-
         var entries = universalCompetencies
             .Select(value => ProjectUniversalCompetency(
                 value,
                 mechanicByKey,
-                evaluationByKey,
-                value.FamilyName is null
-                    ? null
-                    : familyGoverningAbilityByName.GetValueOrDefault(value.FamilyName)))
+                evaluationByKey))
             .ToArray();
 
         var relationships = competencyMechanics
@@ -113,8 +94,7 @@ internal static class CompetencyProjector
     private static CompetencyPresentationView ProjectUniversalCompetency(
         RulesCoreUniversalCompetencyView universal,
         IReadOnlyDictionary<string, RulesCoreMechanicView> mechanicByKey,
-        IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey,
-        string? familyGoverningAbility)
+        IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey)
     {
         var implementations = FindImplementations(universal, mechanicByKey);
         var evaluations = implementations
@@ -126,8 +106,7 @@ internal static class CompetencyProjector
 
         var profiles = universal.Profiles;
         var governingAbility = ResolveUniversalGoverningAbility(universal.Mechanics?.GoverningAbility)
-            ?? ResolveGoverningAbility(universal, implementations)
-            ?? familyGoverningAbility;
+            ?? ResolveGoverningAbility(universal, implementations);
         var competencyKinds = profiles
             .Select(value => value.CompetencyKind)
             .Concat(implementations
