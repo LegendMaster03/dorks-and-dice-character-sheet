@@ -34,9 +34,39 @@ export function renderSkillsCard(
     const controls = createElement("div", "dd-skills-controls");
     const search = createElement("input", "dd-skills-search");
     search.type = "search";
-    search.placeholder = "Search skills";
+    search.placeholder = "Search all competencies";
     search.setAttribute("aria-label", "Search skills and competencies");
-    controls.append(search);
+
+    const filterGroup = createElement("div", "dd-skills-filters");
+    filterGroup.setAttribute("role", "group");
+    filterGroup.setAttribute("aria-label", "Competency visibility");
+    const filterDefinitions: readonly { key: CompetencyFilter; label: string }[] = [
+        { key: "relevant", label: "Relevant" },
+        { key: "trained", label: "Trained" },
+        { key: "families", label: "Families" },
+        { key: "all", label: "All" }
+    ];
+    let activeFilter: CompetencyFilter = "relevant";
+    const filterButtons = new Map<CompetencyFilter, HTMLButtonElement>();
+    for (const definition of filterDefinitions) {
+        const button = createButton(
+            definition.label,
+            definition.key === activeFilter
+                ? "dd-skills-filter dd-skills-filter--active"
+                : "dd-skills-filter",
+            () => {
+                activeFilter = definition.key;
+                updateFilterButtons();
+                applyFilters();
+            });
+        button.type = "button";
+        button.setAttribute("data-skills-filter", definition.key);
+        button.setAttribute("aria-pressed", definition.key === activeFilter ? "true" : "false");
+        filterButtons.set(definition.key, button);
+        filterGroup.append(button);
+    }
+
+    controls.append(search, filterGroup);
 
     const list = createElement("div", "dd-skill-list");
     const renderedItems = items.map((item, index) => {
@@ -47,6 +77,7 @@ export function renderSkillsCard(
                 : renderCompositeCompetency(item, index, control);
         list.append(element);
         return {
+            item,
             element,
             searchText: competencySearchText(item)
         };
@@ -55,21 +86,52 @@ export function renderSkillsCard(
     const noMatches = createElement(
         "p",
         "dd-skills-no-matches",
-        "No skills match this search.");
+        "No competencies match the current view.");
     noMatches.hidden = true;
 
-    search.addEventListener("input", () => {
+    const viewHint = createElement(
+        "p",
+        "dd-skills-view-hint",
+        "Showing trained, ranked, or class-relevant competencies. Search always checks the full catalog.");
+
+    function updateFilterButtons(): void {
+        for (const [key, button] of filterButtons) {
+            const active = key === activeFilter;
+            button.classList.toggle("dd-skills-filter--active", active);
+            button.setAttribute("aria-pressed", active ? "true" : "false");
+        }
+    }
+
+    function applyFilters(): void {
         const query = search.value.trim().toLowerCase();
         let visible = 0;
-        for (const item of renderedItems) {
-            const matches = query.length === 0 || item.searchText.includes(query);
-            item.element.hidden = !matches;
+        for (const rendered of renderedItems) {
+            const matchesSearch = query.length === 0 || rendered.searchText.includes(query);
+            const matchesFilter = query.length > 0
+                || matchesCompetencyFilter(rendered.item, activeFilter);
+            const matches = matchesSearch && matchesFilter;
+            rendered.element.hidden = !matches;
             if (matches) visible++;
         }
         noMatches.hidden = visible !== 0;
-    });
 
-    card.append(controls, list, noMatches);
+        if (query.length > 0) {
+            viewHint.textContent = "Search checks the full competency catalog.";
+        } else if (activeFilter === "all") {
+            viewHint.textContent = "Showing the full competency catalog.";
+        } else if (activeFilter === "families") {
+            viewHint.textContent = "Showing competency families. Expand a family to view its specialties.";
+        } else if (activeFilter === "trained") {
+            viewHint.textContent = "Showing competencies with resolved training.";
+        } else {
+            viewHint.textContent = "Showing trained, ranked, or class-relevant competencies. Search always checks the full catalog.";
+        }
+    }
+
+    search.addEventListener("input", applyFilters);
+    applyFilters();
+
+    card.append(controls, viewHint, list, noMatches);
     return card;
 }
 
@@ -180,6 +242,43 @@ function competencySearchText(item: CompetencyPresentationItem): string {
         .filter((value): value is string => value !== undefined && value.trim().length > 0)
         .join(" ")
         .toLowerCase();
+}
+
+type CompetencyFilter = "relevant" | "trained" | "families" | "all";
+
+function matchesCompetencyFilter(
+    item: CompetencyPresentationItem,
+    filter: CompetencyFilter
+): boolean {
+    if (filter === "all") return true;
+    if (filter === "families") return item.kind === "family";
+
+    const competencies = item.kind === "standalone"
+        ? [item.competency]
+        : item.kind === "family"
+            ? [item.parent, ...item.members]
+            : [item.parent, ...item.components];
+
+    if (filter === "trained") {
+        return competencies.some(competency => competencyHasResolvedTraining(competency));
+    }
+    return competencies.some(competency => competencyIsRelevant(competency));
+}
+
+function competencyHasResolvedTraining(competency: CompetencyView): boolean {
+    const training = competency.training?.trim();
+    if (training === undefined || training.length === 0) return false;
+    const state = classifyTrainingMarker(training);
+    return state === "proficient"
+        || state === "expertise"
+        || state === "other";
+}
+
+function competencyIsRelevant(competency: CompetencyView): boolean {
+    if (competencyHasResolvedTraining(competency)) return true;
+    if (typeof competency.ranks === "number" && competency.ranks > 0) return true;
+    if (competency.classSkill === true) return true;
+    return false;
 }
 
 type CompetencyRelationshipRole = "standalone" | "parent" | "component";
