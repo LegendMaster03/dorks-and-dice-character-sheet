@@ -234,7 +234,8 @@ public sealed record RulesCoreCharacterRecoveryRollView(
     string RollKind,
     string Prompt,
     bool Required,
-    string? MechanicKey);
+    string? MechanicKey,
+    string RollMode = "normal");
 
 public sealed record RulesCoreCharacterRecoveryProcedureView(
     string ProcedureKey,

@@ -121,6 +121,7 @@ export interface CharacterRecoveryRollResponse {
     prompt: string;
     required: boolean;
     mechanicKey?: string | null;
+    rollMode?: string | null;
 }
 
 export interface CharacterRecoveryEffectResponse {

@@ -9,6 +9,14 @@ import {
 import { createButton, createElement, createInlineState, createSectionCard } from "../../ui/components.js";
 import { renderSourceAttributionDisclosure } from "../../ui/source-attribution.js";
 import { appendSources, normalizeMechanicalLabel } from "../../core/mechanics/mechanic-value.js";
+import {
+    D20_ROLL_MODES,
+    formatD20Selection,
+    isD20RollKind,
+    normalizeD20RollMode,
+    rollD20,
+    rollModeLabel
+} from "../../dice/roll-selection.js";
 
 export interface DeathSaveState {
     successes: number;
@@ -417,6 +425,65 @@ export function renderRecoveryContinuation(
         input.min = "-2147483648";
         input.max = "2147483647";
         input.required = roll.required;
+        input.placeholder = "Enter result from physical dice or use the roller";
+
+        if (isD20RollKind(roll.rollKind)) {
+            const controls = createElement("div", "dd-recovery-continuation__roll-controls");
+            const mode = createElement("select", "dd-rule-chooser__input dd-recovery-continuation__roll-mode");
+            const ruleMode = normalizeD20RollMode(roll.rollMode);
+            mode.setAttribute("data-rule-roll-mode", ruleMode);
+            mode.setAttribute("data-roll-mode-override", "false");
+            mode.title = "Rules Core supplies the default. You can change the roll mode before rolling.";
+            for (const rollMode of D20_ROLL_MODES) {
+                const option = createElement("option");
+                option.value = rollMode;
+                option.textContent = rollModeLabel(rollMode);
+                option.selected = rollMode === ruleMode;
+                mode.append(option);
+            }
+            mode.onchange = () => {
+                const effective = normalizeD20RollMode(mode.value);
+                mode.value = effective;
+                mode.setAttribute(
+                    "data-roll-mode-override",
+                    effective === ruleMode ? "false" : "true");
+            };
+
+            const automatic = createButton(
+                "Roll",
+                "dd-button dd-button--secondary",
+                () => {
+                    const selection = rollD20(normalizeD20RollMode(mode.value));
+                    if (selection.tied && selection.rolls[0] !== selection.rolls[1]) {
+                        input.value = "";
+                        input.setCustomValidity("");
+                        audit.textContent =
+                            formatD20Selection(selection)
+                            + " · choose the Emphasis result manually";
+                        input.focus();
+                        return;
+                    }
+
+                    input.value = String(selection.selected);
+                    input.setCustomValidity("");
+                    audit.textContent = formatD20Selection(selection) + " · automatic";
+                });
+            automatic.type = "button";
+            automatic.title = "Roll digitally. Entering a physical-dice result in the field remains available.";
+
+            const audit = createElement(
+                "span",
+                "dd-recovery-continuation__roll-audit",
+                "Physical dice: enter the selected result directly.");
+            controls.append(mode, automatic, audit);
+            field.append(controls);
+        } else {
+            field.append(createElement(
+                "span",
+                "dd-recovery-continuation__roll-audit",
+                "Enter the result manually; physical dice are supported."));
+        }
+
         field.append(input);
         form.append(field);
         rolls.set(roll.key, input);
