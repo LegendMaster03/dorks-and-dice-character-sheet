@@ -186,7 +186,6 @@ function renderWorkspace(
         state.guidedBuilder,
         state.presentation.status === "ready" ? state.presentation.advancement : null,
         state.presentation.status === "ready" ? state.presentation.mechanics : null,
-        state.harvestingCrafting,
         {
             structural: {
                 openChooser: target => advancementWorkflow.openChooser(target),
@@ -331,7 +330,8 @@ function renderWorkspace(
             selectGuidedBuilderSection: section => dispatchAndFocus(
                 { type: "guided-builder-section-selected", section },
                 `[data-guided-builder-section="${section}"]`)
-        });
+        },
+        state.harvestingCrafting);
     return workspace;
 }
 
