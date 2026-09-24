@@ -110,7 +110,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
 
             b.HasKey("Id");
 
-            b.HasIndex("CharacterId");
+            b.HasIndex("CharacterId", "CreatedAt");
 
             b.HasIndex("StorageKey")
                 .IsUnique();
