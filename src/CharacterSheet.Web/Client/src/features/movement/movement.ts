@@ -18,56 +18,51 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
 
     const supplied = values ?? [];
     const claimed = new Set<CalculatedMechanicalValueView>();
-    const walk = findMovementMode(supplied, MOVEMENT_PRESENTATION_MODES[0]);
-    if (walk !== undefined) claimed.add(walk);
+    const grid = createElement("div", "dd-movement-values__grid");
+    grid.setAttribute("aria-label", "Movement speeds");
 
-    const primary = createElement("div", "dd-movement-values__primary");
-    primary.setAttribute("data-movement-primary", walk?.key ?? "movement.walk");
-    primary.setAttribute("data-mechanic-key", walk?.key ?? "movement.walk");
-    primary.setAttribute("data-movement-mode", "walk");
-    primary.append(
-        createElement("span", "dd-movement-values__primary-label", "Walk"),
-        createElement(
-            "strong",
-            "dd-movement-values__primary-value",
-            walk === undefined ? "-" : formatMechanicalValue(walk)));
-    root.append(primary);
-
-    const details = createElement("details", "dd-movement-values__details");
-    const toggle = createElement("summary", "dd-movement-values__details-toggle", "Other speeds");
-    const variants = createElement("div", "dd-movement-values__variants");
-    variants.setAttribute("aria-label", "Additional movement speeds");
-
-    for (const mode of MOVEMENT_PRESENTATION_MODES.slice(1)) {
+    for (const mode of MOVEMENT_PRESENTATION_MODES) {
         const value = findMovementMode(supplied, mode);
         if (value !== undefined) claimed.add(value);
-        variants.append(renderMovementVariant(mode.id, mode.label, value));
+
+        // Walking speed is the baseline slot. Alternate modes are shown only
+        // when Rules Core actually supplies them, rather than fabricating
+        // empty Swim / Climb / Fly entries.
+        if (mode.id !== "walk" && value === undefined) continue;
+        grid.append(renderMovementMode(mode.id, mode.label, value, mode.id === "walk"));
     }
 
     for (const value of supplied.filter(value => !claimed.has(value))) {
-        variants.append(renderMovementVariant(value.key, value.label, value));
+        grid.append(renderMovementMode(value.key, value.label, value, false));
     }
 
-    details.append(toggle, variants);
-    root.append(details);
+    root.append(grid);
     return root;
 }
 
-function renderMovementVariant(
+function renderMovementMode(
     modeKey: string,
     label: string,
-    value: CalculatedMechanicalValueView | undefined
+    value: CalculatedMechanicalValueView | undefined,
+    primary: boolean
 ): HTMLElement {
-    const variant = createElement("div", "dd-movement-values__variant");
-    variant.setAttribute("data-movement-mode", modeKey);
-    variant.setAttribute("data-mechanic-key", value?.key ?? `movement.${modeKey}`);
-    variant.append(
-        createElement("span", "dd-movement-values__variant-label", label),
+    const mode = createElement(
+        "div",
+        primary
+            ? "dd-movement-values__mode dd-movement-values__mode--primary"
+            : "dd-movement-values__mode");
+    mode.setAttribute("data-movement-mode", modeKey);
+    mode.setAttribute("data-mechanic-key", value?.key ?? `movement.${modeKey}`);
+    if (primary) {
+        mode.setAttribute("data-movement-primary", value?.key ?? "movement.walk");
+    }
+    mode.append(
+        createElement("span", "dd-movement-values__mode-label", label),
         createElement(
             "strong",
-            "dd-movement-values__variant-value",
+            "dd-movement-values__mode-value",
             value === undefined ? "-" : formatMechanicalValue(value)));
-    return variant;
+    return mode;
 }
 
 function findMovementMode(

@@ -359,12 +359,13 @@ test("deployed-density polish keeps all primary tabs visible and separates 3.x s
     assert.match(abilitySource, /isThreeXSavingThrowKey\(key\)/);
 });
 
-test("desktop top stats stretch to a shared height and Movement uses a disclosure instead of a horizontal speed strip", () => {
+test("desktop top stats stretch to a shared height and Movement shows related speeds in-card", () => {
     assert.match(css, /\.dd-core-stats\s*\{[^}]*align-items:\s*stretch;/s);
     assert.match(css, /\.dd-core-stats \.dd-stat\s*\{[^}]*height:\s*100%;/s);
-    assert.match(css, /\.dd-movement-values__details\s*\{/s);
-    assert.match(css, /\.dd-movement-values__variants\s*\{[^}]*position:\s*absolute;/s);
-    assert.doesNotMatch(css, /\.dd-movement-values__variants\s*\{[^}]*overflow-x:\s*auto;/s);
+    assert.match(css, /\.dd-movement-values__grid\s*\{[^}]*display:\s*grid;[^}]*auto-fit[^}]*minmax\(3\.1rem,\s*1fr\)/s);
+    assert.match(css, /\.dd-movement-values__mode\s*\{[^}]*place-content:\s*center;/s);
+    assert.doesNotMatch(css, /\.dd-movement-values__details\s*\{/s);
+    assert.doesNotMatch(css, /\.dd-movement-values__variants\s*\{/s);
 });
 
 test("skill rows use stable single-line columns for proficiency, stat, name, and modifier", () => {
