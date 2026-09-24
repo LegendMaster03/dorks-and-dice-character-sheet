@@ -72,7 +72,7 @@ public sealed class CharacterArtPersistenceTests
                 Assert.NotNull(read);
                 using var copy = new MemoryStream();
                 await read.CopyToAsync(copy);
-                Assert.Equal([1, 2, 3, 4], copy.ToArray());
+                Assert.Equal(new byte[] { 1, 2, 3, 4 }, copy.ToArray());
             }
 
             await storage.DeleteAsync(firstKey);
