@@ -223,7 +223,10 @@ export function renderCharacterWorkspace(
     stage.append(primary);
 
     dashboard.append(referenceRail, skillsColumn, stage);
-    shell.append(topRow, dashboard);
+
+    const body = createElement("div", "dd-sheet__body");
+    body.append(topRow, dashboard);
+    shell.append(body);
     return shell;
 }
 
