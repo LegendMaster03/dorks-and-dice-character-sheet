@@ -56,10 +56,10 @@ export function renderAbilityScoreCard(
             : formatMechanicalValue(effectiveValue),
         primaryDetail: effectiveValue === undefined
             ? display.detail
-            : "Effective value",
-        primaryContext: effectiveValue === undefined
+            : undefined,
+        primaryContext: effectiveValue === undefined || !structuralEditing
             ? undefined
-            : `Base input: ${display.value}`,
+            : `Base: ${display.value}`,
         className: "dd-ability-stat__presentation",
         secondary: [
             {
