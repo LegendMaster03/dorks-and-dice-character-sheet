@@ -32,6 +32,7 @@ import { createInventoryWorkflow } from "./features/inventory/inventory-workflow
 import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
 import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
+import { createHarvestingCraftingWorkflow } from "./features/harvesting/harvesting-workflow.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -185,6 +186,7 @@ function renderWorkspace(
         state.guidedBuilder,
         state.presentation.status === "ready" ? state.presentation.advancement : null,
         state.presentation.status === "ready" ? state.presentation.mechanics : null,
+        state.harvestingCrafting,
         {
             structural: {
                 openChooser: target => advancementWorkflow.openChooser(target),
@@ -310,6 +312,7 @@ function renderWorkspace(
                 removeCondition: conditionId =>
                     void conditionsWorkflow.remove(character.characterId, conditionId)
             },
+            harvestingCrafting: harvestingCraftingWorkflow,
             selectSection: section => dispatchAndFocus(
                 { type: "sheet-section-selected", section },
                 `[data-sheet-section-tab="${section}"]`),
@@ -404,6 +407,7 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
 }
 
 const application = createApplication(initialState, render);
+const harvestingCraftingWorkflow = createHarvestingCraftingWorkflow(application, environment);
 const presentationWorkflow = createPresentationWorkflow(application, environment);
 const routineStateWorkflow = createRoutineStateWorkflow(application, environment);
 const buildStateWorkflow = createBuildStateWorkflow(application, environment);
