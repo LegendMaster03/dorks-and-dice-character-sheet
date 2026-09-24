@@ -1,3 +1,4 @@
+using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Lifecycle;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +14,7 @@ public sealed class ProcessedLifecycleEvent
 
 public sealed class CharacterSheetLifecycleProcessor(
     CharacterSheetDbContext dbContext,
+    ICharacterArtStorage artStorage,
     TimeProvider timeProvider) : ICharacterSheetLifecycleProcessor
 {
     public async Task<LifecycleProcessingStatus> ProcessAsync(
@@ -73,6 +75,15 @@ public sealed class CharacterSheetLifecycleProcessor(
         Guid characterId,
         CancellationToken cancellationToken)
     {
+        var artKeys = await dbContext.CharacterArtAssets
+            .Where(item => item.CharacterId == characterId)
+            .Select(item => item.StorageKey)
+            .ToArrayAsync(cancellationToken);
+        foreach (var storageKey in artKeys)
+        {
+            await artStorage.DeleteAsync(storageKey, cancellationToken);
+        }
+
         var root = await dbContext.CharacterSheets.SingleOrDefaultAsync(
             item => item.CharacterId == characterId,
             cancellationToken);
