@@ -287,6 +287,7 @@ test("recovery d20 UI preserves physical dice entry and exposes a manual roll-mo
     assert.match(source, /Physical dice: enter the selected result directly/);
     assert.match(source, /input\.placeholder = "Enter result from physical dice or use the roller"/);
     assert.match(source, /rollD20\(normalizeD20RollMode\(mode\.value\)\)/);
+    assert.match(source, /choose the Emphasis result manually/);
 });
 
 test("recovery controls render nothing when Rules Core supplies no procedures", () => {
