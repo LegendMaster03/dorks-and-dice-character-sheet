@@ -95,6 +95,8 @@ export type RoutineMutationKind =
     | "currency-update"
     | "currency-delete"
     | "profile-update"
+    | "art-update"
+    | "art-delete"
     | "health-update"
     | "death-saves-update"
     | "note-add"
