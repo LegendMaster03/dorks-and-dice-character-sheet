@@ -91,6 +91,24 @@ public sealed class CharacterStateModelTests
     }
 
     [Fact]
+    public void AdvancementProgressIsCharacterOwnedNeutralAndNonnegative()
+    {
+        var root = Root();
+        var now = DateTimeOffset.UtcNow;
+
+        root.SetAdvancementProgress(1250, now);
+        Assert.Equal(1250, root.AdvancementProgress);
+        Assert.Equal(now, root.UpdatedAt);
+
+        root.SetAdvancementProgress(null, now.AddMinutes(1));
+        Assert.Null(root.AdvancementProgress);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            root.SetAdvancementProgress(-1, now.AddMinutes(2)));
+        Assert.Null(root.AdvancementProgress);
+    }
+
+    [Fact]
     public void DeathSavesAreCharacterOwnedBoundedRuntimeState()
     {
         var root = Root();
