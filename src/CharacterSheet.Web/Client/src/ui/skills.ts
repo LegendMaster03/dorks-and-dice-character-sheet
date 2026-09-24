@@ -103,7 +103,7 @@ export function renderSkillsCard(
     }
 
     function applyFilters(): void {
-        const query = search.value.trim().toLowerCase();
+        const query = (search.value ?? "").trim().toLowerCase();
         let visible = 0;
         for (const rendered of renderedItems) {
             const matchesSearch = query.length === 0 || rendered.searchText.includes(query);
