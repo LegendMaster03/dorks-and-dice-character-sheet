@@ -114,7 +114,7 @@ function renderChoice(
     unavailableMessage: string | undefined,
     handlers: CharacterBuilderHandlers
 ): HTMLElement {
-    const reference = builder.references[target];
+    const reference = builder.references[target] ?? { status: "none" as const };
     const display = toRuleReferenceDisplay(reference);
     const policy = getChoiceActionPolicy(reference, readOnly, available, hasPendingBuildMutation(builder));
     const card = createElement("article", "dd-build-choice");
