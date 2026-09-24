@@ -166,6 +166,16 @@ export interface CharacterCurrencyBalanceResponse {
     updatedAt: string;
 }
 
+export interface CharacterArtAssetResponse {
+    id: string;
+    originalFileName: string;
+    contentType: string;
+    byteLength: number;
+    isPortrait: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface CharacterProfileResponse {
     alignment: string | null;
     deity: string | null;
@@ -198,6 +208,7 @@ export interface CharacterStateResponse {
     hitPointGains?: CharacterHitPointGainStateResponse[];
     profile?: CharacterProfileResponse | null;
     currencyBalances?: CharacterCurrencyBalanceResponse[];
+    artAssets?: CharacterArtAssetResponse[];
 }
 
 export function buildCharacterStateBackendUrl(
