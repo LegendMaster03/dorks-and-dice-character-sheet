@@ -77,7 +77,8 @@ export function renderHarvestingCraftingWorkspace(
 }
 
 export function renderHarvestingLauncher(
-    handlers: Pick<HarvestingCraftingWorkflow, "open">
+    handlers: Pick<HarvestingCraftingWorkflow, "open">,
+    readOnly: boolean
 ): HTMLElement {
     const card = createSectionCard(
         "Harvesting & Crafting",
@@ -91,7 +92,8 @@ export function renderHarvestingLauncher(
         createButton(
             "Open Harvesting & Crafting",
             "dd-button dd-button--secondary",
-            handlers.open));
+            handlers.open,
+            readOnly));
     return card;
 }
 
