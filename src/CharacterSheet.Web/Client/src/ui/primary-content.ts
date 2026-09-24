@@ -125,8 +125,12 @@ export function renderPrimaryContent(
                 renderActionsPresentation(mechanics?.actions),
                 renderChecksAndProceduresPresentation(
                     mechanics?.checks,
-                    mechanics?.procedures),
-                renderHarvestingLauncher(handlers.harvestingCrafting, readOnly));
+                    mechanics?.procedures));
+            if (handlers.harvestingCrafting !== undefined) {
+                presentation.append(renderHarvestingLauncher(
+                    handlers.harvestingCrafting,
+                    readOnly));
+            }
             panel.append(presentation);
             break;
         }
