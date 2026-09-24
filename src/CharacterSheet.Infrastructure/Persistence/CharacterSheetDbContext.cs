@@ -38,6 +38,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         root.Property(character => character.UpdatedAt)
             .IsRequired();
         root.Property(character => character.CurrentHitPoints);
+        root.Property(character => character.AdvancementProgress);
         root.Property(character => character.DeathSaveSuccesses)
             .HasDefaultValue(0)
             .IsRequired();
