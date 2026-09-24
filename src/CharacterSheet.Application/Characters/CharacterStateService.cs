@@ -107,7 +107,6 @@ public sealed record CharacterStateView(
     Guid CharacterId,
     bool ReadOnly,
     int? CurrentHitPoints,
-    int? AdvancementProgress,
     CharacterDeathSavesView DeathSaves,
     IReadOnlyList<CharacterInventoryItemOccurrenceView> InventoryItemOccurrences,
     IReadOnlyList<CharacterNoteView> Notes,
@@ -116,7 +115,8 @@ public sealed record CharacterStateView(
     IReadOnlyList<CharacterHitPointGainStateView>? HitPointGains = null,
     CharacterProfileView? Profile = null,
     IReadOnlyList<CharacterCurrencyBalanceView>? CurrencyBalances = null,
-    IReadOnlyList<CharacterArtAssetView>? ArtAssets = null);
+    IReadOnlyList<CharacterArtAssetView>? ArtAssets = null,
+    int? AdvancementProgress = null);
 
 public sealed record CharacterStateResult(
     CharacterStateAccessStatus Status,
@@ -561,7 +561,6 @@ public sealed class CharacterStateService(
             root.CharacterId,
             readOnly,
             root.CurrentHitPoints,
-            root.AdvancementProgress,
             new CharacterDeathSavesView(root.DeathSaveSuccesses, root.DeathSaveFailures),
             root.InventoryItemOccurrences
                 .OrderBy(value => value.CreatedAt)
@@ -661,7 +660,8 @@ public sealed class CharacterStateService(
                     value.IsPortrait,
                     value.CreatedAt,
                     value.UpdatedAt))
-                .ToArray());
+                .ToArray(),
+            root.AdvancementProgress);
     private static CharacterRulesInputKind ParseRulesInputKind(string value) =>
         value?.Trim() switch
         {
