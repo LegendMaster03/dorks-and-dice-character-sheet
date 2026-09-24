@@ -23,6 +23,7 @@ export interface RoutineCharacterHandlers {
     setCurrencyBalance(currencyKey: string, amount: number): void;
     removeCurrencyBalance(currencyKey: string): void;
     setProfile(input: CharacterProfileInput): void;
+    setAdvancementProgress(value: number | null): void;
     uploadArt(file: File): void;
     setPortrait(assetId: string): void;
     clearPortrait(): void;
