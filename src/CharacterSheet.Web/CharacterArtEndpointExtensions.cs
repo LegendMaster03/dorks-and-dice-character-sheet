@@ -24,7 +24,11 @@ public static class CharacterArtEndpointExtensions
             if (file is null) return Results.BadRequest(new { error = "Character art upload requires a file field." });
             try
             {
-                await using var input = file.OpenReadStream(CharacterArtService.MaxUploadBytes + 1);
+                if (file.Length <= 0 || file.Length > CharacterArtService.MaxUploadBytes)
+                {
+                    return Results.BadRequest(new { error = $"Character art must be between 1 byte and {CharacterArtService.MaxUploadBytes / (1024 * 1024)} MiB." });
+                }
+                await using var input = file.OpenReadStream();
                 return ToApiResult(
                     await service.UploadAsync(characterId, file.FileName, file.ContentType, input, cancellationToken),
                     mutating: true);
@@ -70,7 +74,7 @@ public static class CharacterArtEndpointExtensions
 
     private static IResult ToApiResult(CharacterArtResult result, bool mutating) => result.Status switch
     {
-        CharacterArtAccessStatus.Ready => Results.Ok(new { assets = result.Assets ?? [] }),
+        CharacterArtAccessStatus.Ready => Results.Ok(new { assets = result.Assets ?? Array.Empty<CharacterArtAssetView>() }),
         CharacterArtAccessStatus.NotFoundOrNotOwned => Results.NotFound(new { error = "Character unavailable." }),
         CharacterArtAccessStatus.ProjectionUnavailable => Results.Json(new { error = "Site Character authorization is unavailable for this request." }, statusCode: 503),
         CharacterArtAccessStatus.Unauthenticated => Results.Unauthorized(),
