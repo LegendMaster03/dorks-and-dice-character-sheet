@@ -114,7 +114,8 @@ public sealed record CharacterStateView(
     IReadOnlyList<CharacterRulesInputStateView>? RulesInputs = null,
     IReadOnlyList<CharacterHitPointGainStateView>? HitPointGains = null,
     CharacterProfileView? Profile = null,
-    IReadOnlyList<CharacterCurrencyBalanceView>? CurrencyBalances = null);
+    IReadOnlyList<CharacterCurrencyBalanceView>? CurrencyBalances = null,
+    IReadOnlyList<CharacterArtAssetView>? ArtAssets = null);
 
 public sealed record CharacterStateResult(
     CharacterStateAccessStatus Status,
@@ -127,7 +128,8 @@ public sealed record CharacterStateResult(
 public sealed class CharacterStateService(
     ISiteCharacterAccessGateway siteCharacterAccess,
     ICharacterStateStore stateStore,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ICharacterArtStore? artStore = null)
 {
     public async Task<CharacterStateResult> GetAsync(
         Guid characterId,
@@ -146,7 +148,7 @@ public sealed class CharacterStateService(
             return new CharacterStateResult(CharacterStateAccessStatus.SheetNotInitialized);
         }
 
-        return Ready(root, access.Character!);
+        return await ReadyAsync(root, access.Character!, cancellationToken);
     }
 
     public Task<CharacterStateResult> SetCurrencyBalanceAsync(
@@ -512,12 +514,18 @@ public sealed class CharacterStateService(
         return Ready(root, character);
     }
 
-    private static CharacterStateResult Ready(
+    private async Task<CharacterStateResult> ReadyAsync(
         CharacterSheetRoot root,
-        SiteCharacterProjection character) =>
-        new(
+        SiteCharacterProjection character,
+        CancellationToken cancellationToken)
+    {
+        var art = artStore is null
+            ? Array.Empty<CharacterArtAsset>()
+            : await artStore.ListAsync(root.CharacterId, cancellationToken);
+        return new(
             CharacterStateAccessStatus.Ready,
-            ToView(root, !character.AllowsOrdinaryEditingByLifecycle));
+            ToView(root, !character.AllowsOrdinaryEditingByLifecycle, art));
+    }
 
     private static CharacterStateResult? MapDeniedAccess(SiteCharacterAccessStatus status) => status switch
     {
@@ -531,7 +539,10 @@ public sealed class CharacterStateService(
         _ => new(CharacterStateAccessStatus.ProjectionUnavailable)
     };
 
-    private static CharacterStateView ToView(CharacterSheetRoot root, bool readOnly) =>
+    private static CharacterStateView ToView(
+        CharacterSheetRoot root,
+        bool readOnly,
+        IReadOnlyList<CharacterArtAsset> artAssets) =>
         new(
             root.CharacterId,
             readOnly,
@@ -623,6 +634,16 @@ public sealed class CharacterStateService(
                     value.Id,
                     value.CurrencyKey,
                     value.Amount,
+                    value.CreatedAt,
+                    value.UpdatedAt))
+                .ToArray(),
+            artAssets
+                .Select(value => new CharacterArtAssetView(
+                    value.Id,
+                    value.OriginalFileName,
+                    value.ContentType,
+                    value.ByteLength,
+                    value.IsPortrait,
                     value.CreatedAt,
                     value.UpdatedAt))
                 .ToArray());
