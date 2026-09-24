@@ -754,16 +754,20 @@ test("Defense and combat fundamentals stay above the tabs instead of trailing Sk
 
 test("wide shell uses a Beyond-style reference rail beside Skills and the primary stage", () => {
     const rendered = render("actions", null);
+    const body = byClass(rendered, "dd-sheet__body")[0];
     const dashboard = byClass(rendered, "dd-sheet__dashboard")[0];
     const rail = byClass(rendered, "dd-sheet__reference-rail")[0];
     const skills = byClass(rendered, "dd-sheet__skills")[0];
     const topRow = byClass(rendered, "dd-sheet__top-row")[0];
     const main = byClass(rendered, "dd-sheet__main")[0];
+    assert.ok(body);
     assert.ok(dashboard);
     assert.ok(rail);
     assert.ok(skills);
     assert.ok(topRow);
     assert.ok(main);
+    assert.equal(walk(body).includes(topRow), true);
+    assert.equal(walk(body).includes(dashboard), true);
     assert.equal(byClass(topRow, "dd-health-quick").length, 1);
     assert.equal(walk(rail).includes(byClass(rendered, "dd-saving-throws-card")[0]), true);
     assert.equal(walk(rail).includes(byClass(rendered, "dd-senses-summary-card")[0]), true);

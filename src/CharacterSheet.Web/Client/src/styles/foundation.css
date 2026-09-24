@@ -587,6 +587,10 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
     line-height: 1.25;
 }
 
+.dd-sheet__body {
+    min-width: 0;
+}
+
 .dd-sheet__top-row {
     min-width: 0;
     padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) 0;
@@ -627,6 +631,55 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
     container-type: inline-size;
     display: grid;
     align-content: start;
+}
+
+/*
+ * Wide landscape composition.
+ *
+ * Beyond's narrower desktop/tablet hierarchy remains the fallback. When the
+ * embedded sheet itself is at least 96rem wide and the viewport is landscape
+ * enough to benefit from horizontal composition, Skills becomes the far-left
+ * vertical rail. The existing core-stat strip spans the other three tracks.
+ */
+@media (min-aspect-ratio: 8 / 5) {
+    @container character-sheet (min-width: 96rem) {
+        .dd-sheet__body {
+            display: grid;
+            grid-template-columns:
+                minmax(18rem, 21rem)
+                minmax(13.5rem, 16rem)
+                repeat(2, minmax(0, 1fr));
+            grid-template-rows: auto auto;
+            gap: var(--dd-sheet-space-3);
+            align-items: start;
+            padding: var(--dd-sheet-space-4) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
+        }
+
+        .dd-sheet__top-row {
+            grid-column: 2 / -1;
+            grid-row: 1;
+            padding: 0;
+        }
+
+        .dd-sheet__dashboard {
+            display: contents;
+        }
+
+        .dd-sheet__skills {
+            grid-column: 1;
+            grid-row: 1 / span 2;
+        }
+
+        .dd-sheet__reference-rail {
+            grid-column: 2;
+            grid-row: 2;
+        }
+
+        .dd-sheet__stage {
+            grid-column: 3 / -1;
+            grid-row: 2;
+        }
+    }
 }
 
 .dd-sheet__skills .dd-mechanics-summary-grid {

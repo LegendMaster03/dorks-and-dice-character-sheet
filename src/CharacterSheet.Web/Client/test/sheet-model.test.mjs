@@ -325,13 +325,17 @@ test("retired workspace grid selectors are removed after the reference-layout co
     assert.doesNotMatch(css, /\.dd-sheet__workspace\b/);
 });
 
-test("wide layout uses a full-width top strip, a persistent left rail, and a broad primary workspace", () => {
+test("wide landscape layout gives Skills its own column and spans top stats across the other three", () => {
     assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(0,\s*1fr\)/s);
-    assert.match(css, /\.dd-sheet__top-row\s*\{[^}]*padding:/s);
-    assert.match(sheetSource, /createElement\("aside", "dd-sheet__reference-rail"\)/);
-    assert.match(sheetSource, /createElement\("aside", "dd-sheet__skills"\)/);
+    assert.match(css, /@media \(min-aspect-ratio:\s*8 \/ 5\)[\s\S]*?@container character-sheet \(min-width:\s*96rem\)/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(18rem,\s*21rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__top-row\s*\{[^}]*grid-column:\s*2 \/ -1;[^}]*grid-row:\s*1;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__skills\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__reference-rail\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__stage\s*\{[^}]*grid-column:\s*3 \/ -1;[^}]*grid-row:\s*2;/s);
+    assert.match(sheetSource, /createElement\("div", "dd-sheet__body"\)/);
+    assert.match(sheetSource, /body\.append\(topRow, dashboard\)/);
     assert.match(sheetSource, /dashboard\.append\(referenceRail, skillsColumn, stage\)/);
-    assert.match(sheetSource, /stage\.append\(primary\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
     assert.match(sheetSource, /renderCombatSummaryBand\([\s\S]*renderConditionsCard\(routine, readOnly, handlers\.routine\)/s);
 });
