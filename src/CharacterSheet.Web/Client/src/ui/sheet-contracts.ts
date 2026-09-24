@@ -11,6 +11,7 @@ import type {
 } from "../character-state-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
+import type { HarvestingCraftingWorkflow } from "../features/harvesting/harvesting-workflow.js";
 
 export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
     setAdvancementLevel(occurrenceId: string, level: number): void;
@@ -94,6 +95,7 @@ export interface CharacterSheetHandlers {
     spells: KnownSpellCharacterHandlers;
     rules: RulesInputCharacterHandlers;
     routine: RoutineCharacterHandlers;
+    harvestingCrafting: HarvestingCraftingWorkflow;
     selectSection(section: SheetSection): void;
     enterEditMode(): void;
     leaveEditMode(): void;
