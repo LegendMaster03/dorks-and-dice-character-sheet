@@ -17,6 +17,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterHitPointGainState> CharacterHitPointGains => Set<CharacterHitPointGainState>();
     public DbSet<CharacterProfileState> CharacterProfiles => Set<CharacterProfileState>();
     public DbSet<CharacterCurrencyBalance> CharacterCurrencyBalances => Set<CharacterCurrencyBalance>();
+    public DbSet<CharacterArtAsset> CharacterArtAssets => Set<CharacterArtAsset>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -37,6 +38,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         root.Property(character => character.UpdatedAt)
             .IsRequired();
         root.Property(character => character.CurrentHitPoints);
+        root.Property(character => character.AdvancementProgress);
         root.Property(character => character.DeathSaveSuccesses)
             .HasDefaultValue(0)
             .IsRequired();
@@ -323,6 +325,29 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         root.HasOne(value => value.Profile)
             .WithOne()
             .HasForeignKey<CharacterProfileState>(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var art = modelBuilder.Entity<CharacterArtAsset>();
+        art.ToTable("character_art_assets");
+        art.HasKey(value => value.Id);
+        art.Property(value => value.Id).ValueGeneratedNever();
+        art.Property(value => value.CharacterId).ValueGeneratedNever().IsRequired();
+        art.Property(value => value.StorageKey).HasMaxLength(CharacterArtAsset.MaxStorageKeyLength).IsRequired();
+        art.Property(value => value.OriginalFileName).HasMaxLength(CharacterArtAsset.MaxOriginalFileNameLength).IsRequired();
+        art.Property(value => value.ContentType).HasMaxLength(CharacterArtAsset.MaxContentTypeLength).IsRequired();
+        art.Property(value => value.ByteLength).IsRequired();
+        art.Property(value => value.IsPortrait).HasDefaultValue(false).IsRequired();
+        art.Property(value => value.CreatedAt).IsRequired();
+        art.Property(value => value.UpdatedAt).IsRequired();
+        art.HasIndex(value => value.StorageKey).IsUnique();
+        art.HasIndex(value => new { value.CharacterId, value.CreatedAt });
+        art.HasIndex(value => value.CharacterId)
+            .HasDatabaseName("UX_character_art_assets_Portrait")
+            .IsUnique()
+            .HasFilter("\"IsPortrait\" = TRUE");
+        art.HasOne<CharacterSheetRoot>()
+            .WithMany()
+            .HasForeignKey(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var processedLifecycleEvent = modelBuilder.Entity<ProcessedLifecycleEvent>();

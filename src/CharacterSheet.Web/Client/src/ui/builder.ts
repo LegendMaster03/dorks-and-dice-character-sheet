@@ -25,6 +25,8 @@ export interface CharacterBuilderRenderOptions {
 
 const ALL_CHARACTER_BUILDER_CHOICES: readonly CharacterBuilderChoice[] = [
     "raceSpecies",
+    "background",
+    "deity",
     "startingClass",
     "subclass"
 ];
@@ -71,6 +73,12 @@ export function renderCharacterBuilder(
     if (choices.includes("raceSpecies")) {
         grid.append(renderChoice("raceSpecies", "Race / Species", builder, readOnly, true, undefined, handlers));
     }
+    if (choices.includes("background")) {
+        grid.append(renderChoice("background", "Background", builder, readOnly, true, undefined, handlers));
+    }
+    if (choices.includes("deity")) {
+        grid.append(renderChoice("deity", "Deity", builder, readOnly, true, undefined, handlers));
+    }
     if (choices.includes("startingClass")) {
         grid.append(renderChoice("startingClass", "Starting Class", builder, readOnly, true, undefined, handlers));
     }
@@ -106,7 +114,7 @@ function renderChoice(
     unavailableMessage: string | undefined,
     handlers: CharacterBuilderHandlers
 ): HTMLElement {
-    const reference = builder.references[target];
+    const reference = builder.references[target] ?? { status: "none" as const };
     const display = toRuleReferenceDisplay(reference);
     const policy = getChoiceActionPolicy(reference, readOnly, available, hasPendingBuildMutation(builder));
     const card = createElement("article", "dd-build-choice");
@@ -169,7 +177,11 @@ function renderRuleChooser(
         "dd-rule-chooser__title",
         target === "raceSpecies"
             ? "Choose Race / Species"
-            : target === "startingClass" ? "Choose Starting Class" : "Choose Subclass");
+            : target === "background"
+                ? "Choose Background"
+                : target === "deity"
+                    ? "Choose Deity"
+                    : target === "startingClass" ? "Choose Starting Class" : "Choose Subclass");
     heading.id = headingId;
     header.append(heading, createButton("Close", "dd-button dd-button--ghost", handlers.closeChooser));
     container.append(header);

@@ -1,3 +1,4 @@
+using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Lifecycle;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +14,8 @@ public sealed class ProcessedLifecycleEvent
 
 public sealed class CharacterSheetLifecycleProcessor(
     CharacterSheetDbContext dbContext,
-    TimeProvider timeProvider) : ICharacterSheetLifecycleProcessor
+    TimeProvider timeProvider,
+    ICharacterArtStorage? artStorage = null) : ICharacterSheetLifecycleProcessor
 {
     public async Task<LifecycleProcessingStatus> ProcessAsync(
         ToolLifecycleContext lifecycleEvent,
@@ -26,6 +28,7 @@ public sealed class CharacterSheetLifecycleProcessor(
             return LifecycleProcessingStatus.Unsupported;
         }
 
+        IReadOnlyList<string> committedArtKeys = Array.Empty<string>();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -40,7 +43,9 @@ public sealed class CharacterSheetLifecycleProcessor(
             switch (lifecycleEvent.EventType)
             {
                 case ToolLifecycleEventTypes.CharacterDeleted:
-                    await DeleteCharacterOwnedStateAsync(lifecycleEvent.SubjectId, cancellationToken);
+                    committedArtKeys = await DeleteCharacterOwnedStateAsync(
+                        lifecycleEvent.SubjectId,
+                        cancellationToken);
                     break;
                 case ToolLifecycleEventTypes.CampaignDeleted:
                     await DeleteCampaignScopedStateAsync(lifecycleEvent.SubjectId, cancellationToken);
@@ -60,6 +65,23 @@ public sealed class CharacterSheetLifecycleProcessor(
 
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            if (artStorage is not null)
+            {
+                foreach (var storageKey in committedArtKeys)
+                {
+                    try
+                    {
+                        await artStorage.DeleteAsync(storageKey, cancellationToken);
+                    }
+                    catch
+                    {
+                        // Database deletion is authoritative. A failed file cleanup may leave an
+                        // orphaned object but must not resurrect or partially retain Character state.
+                    }
+                }
+            }
+
             return LifecycleProcessingStatus.Processed;
         }
         catch
@@ -69,10 +91,15 @@ public sealed class CharacterSheetLifecycleProcessor(
         }
     }
 
-    private async Task DeleteCharacterOwnedStateAsync(
+    private async Task<IReadOnlyList<string>> DeleteCharacterOwnedStateAsync(
         Guid characterId,
         CancellationToken cancellationToken)
     {
+        var artKeys = await dbContext.CharacterArtAssets
+            .Where(item => item.CharacterId == characterId)
+            .Select(item => item.StorageKey)
+            .ToArrayAsync(cancellationToken);
+
         var root = await dbContext.CharacterSheets.SingleOrDefaultAsync(
             item => item.CharacterId == characterId,
             cancellationToken);
@@ -83,6 +110,7 @@ public sealed class CharacterSheetLifecycleProcessor(
 
         // Future Character-owned tables belong behind this boundary so the lifecycle wire
         // contract remains unchanged as Character Sheet persistence grows.
+        return artKeys;
     }
 
     private static Task DeleteCampaignScopedStateAsync(

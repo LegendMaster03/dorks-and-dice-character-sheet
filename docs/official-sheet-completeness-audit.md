@@ -17,13 +17,13 @@ The classification is semantic rather than visual. A concept is complete only wh
 | Official-sheet concept | Current ownership / source | Current status | Merge boundary / follow-up |
 | --- | --- | --- | --- |
 | Character name | Site Character projection | **Modeled + displayed** | None. |
-| Player Name | Site/account or explicit Character attribution | **Upstream contract required** | Do not infer account identity or duplicate Site identity. |
-| Background | Rules Core concept identity; Character owns selection | **Upstream contract required** | Rules Core currently catalogs backgrounds and defines the ownership boundary, but the Character projection does not yet expose a dedicated background-selection contract. Do not reduce Background to freeform profile text. |
+| Player Name | Site-authenticated user display projection | **Modeled + displayed** | Transient Site-owned identity is shown in the Character header and is not copied into Character Sheet persistence. |
+| Background | Character foundational selection + Rules Core background concept | **Modeled + displayed** | Character Sheet persists only the selected stable concept key, resolves the Rules Core display identity, and supports choose/replace/clear without reducing Background to profile text. |
 | Alignment | Rules Core identity when rules-defined; authored profile currently exists | **Modeled, presentation partial** | Current profile can preserve/display authored text, but it is not a canonical Rules Core concept selection. Future Rules Core identity selection should supersede/validate the authored fallback when applicable. |
-| Deity | Rules Core identity when rules-defined; authored profile currently exists | **Modeled, presentation partial** | Same boundary as Alignment. Preserve current authored text without pretending it is canonical rule identity. |
-| XP | Character-owned mutable advancement state | **Character semantic model required** | Rules Core now explicitly assigns current XP to Character state. A generalized progression-value contract is still needed; do not assume every ruleset uses XP. |
+| Deity | Character foundational selection + Rules Core deity concept; authored profile remains available for legacy/custom text | **Modeled + displayed** | The rule-backed selection is shown as Character identity. Authored profile text remains separate and is not promoted to canonical Rules Core identity. |
+| XP | Character-owned neutral advancement-progress state | **Modeled + displayed** | Character Sheet persists and edits a nonnegative numeric **Advancement Progress** value without inventing XP semantics. A future Rules Core progression label can present the same state as XP or another ruleset-specific concept. |
 | Size | Rules Core `character.size-category` metadata projection | **Modeled + displayed** | Multi-size source choices remain Rules Core choices; Character Sheet renders the projected result generically. |
-| Campaign name | Site projection | **Upstream contract required** | Site currently supplies Campaign IDs, not a display-safe Campaign name. Raw IDs must not be promoted as identity text. |
+| Campaign name | Site Tool Host campaign display projection | **Modeled + displayed** | Display-safe Site-owned Campaign names are shown in the header; raw Campaign IDs remain implementation identity rather than player-facing text. |
 | Effective Ability score/modifier | Rules Core Character projection | **Modeled + displayed** | Frontend renders authoritative effective values only. |
 | 3.x ordinary/temporary Ability Score and Modifier | Rules Core related ability mechanics | **Modeled, source-dependent** | Character Sheet already preserves `ordinary-score`, `ordinary-modifier`, `temporary-score`, and `temporary-modifier` when Rules Core supplies them. |
 | Current HP | Character runtime state | **Modeled + displayed** | Persisted and editable. |
@@ -66,6 +66,7 @@ The classification is semantic rather than visual. A concept is complete only wh
 | Backstory | Character profile | **Modeled + displayed** | Authored long-form Character data. |
 | Allies & Organizations / Symbol | Character profile | **Modeled + displayed** | Authored Character data. |
 | Recovery / rests | Rules Core recovery procedures + Character consequence persistence | **Modeled + displayed** | Generic continuation supports declared choices, rolls, and consequences; no hard-coded Short/Long Rest algorithm. |
+| Character portrait / art gallery | Character-owned art metadata + application-managed image storage | **Modeled + displayed** | Multiple image assets persist independently; one optional portrait can be selected for the header. Upload, full-size viewing, portrait replacement/clearing, deletion, archived read-only behavior, and lifecycle cleanup are supported. |
 
 ## What this branch now establishes
 
@@ -75,24 +76,29 @@ The classification is semantic rather than visual. A concept is complete only wh
 4. Rich inventory occurrence state: quantity, carried/equipped/attuned flags, containers, Rules Core item identity, and generic currency balances.
 5. Character Details/Profile state for player-authored biography fields, plus generic display of Rules Core Character metadata such as Size.
 6. Cross-edition competency presentation that preserves historical identities and supports family/facet/shared-proficiency relationships rather than flattening them into a single edition.
-7. No frontend formulas for edition rules, currency conversion, encumbrance, AC, spell progression, recovery, or other rules-owned calculations.
+7. Site-owned Player and Campaign display identity are consumed transiently for the Character header without duplicating Site ownership state.
+8. Background and Deity are Character-owned rule selections backed by stable Rules Core concepts, with authored Deity profile text kept separate for custom/legacy biography.
+9. A generalized nonnegative Character-owned Advancement Progress value is persisted and editable without hard-coding XP semantics.
+10. Character art supports multiple persisted image assets plus one optional portrait, including safe upload validation, read-only viewing, replacement, deletion, and lifecycle cleanup.
+11. No frontend formulas for edition rules, currency conversion, encumbrance, AC, spell progression, recovery, or other rules-owned calculations.
 
 ## Remaining blockers before full official-sheet semantic completeness
 
-The remaining gaps are now narrow and have explicit owners:
+No Character Sheet-owned feature in the official-sheet union remains a pre-acceptance blocker.
 
-- **Site:** Player Name semantics and a display-safe Campaign name.
-- **Rules Core:** a concrete Character projection/selection contract for rules-defined Background, Alignment, and Deity identities. The ownership boundary is documented in Rules Core, but Character Sheet should not invent the missing projection.
-- **Character Sheet:** generalized mutable progression state for values such as current XP. This should not hard-code XP as universal because non-XP progression systems must remain possible.
+The remaining items are refinements rather than blockers:
+
+- **Rules Core / identity refinement:** Alignment is currently preserved as editable Character-authored profile text. If Rules Core later exposes canonical rules-defined Alignment choices, Character Sheet can add a stable concept selection without discarding the authored fallback.
+- **Rules Core / progression semantics:** the Character-owned numeric Advancement Progress value is complete, but the ruleset-specific label and meaning (for example XP) should come from Rules Core when such a contract exists.
 - **Presentation polish:** Initiative can expose projected contribution details using the same progressive-disclosure pattern already used elsewhere.
 
-These are not reasons to reintroduce edition-specific fields or arithmetic into the Character Sheet frontend.
+These are not reasons to reintroduce edition-specific fields or arithmetic into the Character Sheet frontend, and they do not block a complete WorkChat acceptance pass.
 
 ## Merge-readiness interpretation
 
-This branch is suitable for progress evaluation once validation is green. It closes the large Character Sheet-owned backend cycle and leaves remaining cross-repository semantics explicitly identified rather than hidden behind placeholder strings or Notes.
+This branch is ready for a complete WorkChat acceptance pass now that validation is green. It closes the Character Sheet-owned pre-acceptance work for identity display, Background/Deity selection, generalized advancement progress, portrait/art storage, persistence, read-only behavior, and the previously completed cross-edition mechanics surfaces.
 
-The branch should not be described as final official-sheet completeness until the Site identity/display contracts, Rules Core identity-selection projection, and generalized Character progression value are completed.
+The remaining Alignment/progression-label items are upstream semantic refinements, not missing Character Sheet utility. WorkChat should still verify the full 3e, 3.5e, 5e, and 5.5e union end to end and report any concrete usability or behavioral defects before merge.
 
 ## Reference-sheet verification
 

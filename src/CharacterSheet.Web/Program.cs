@@ -6,6 +6,7 @@ using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Infrastructure.Hosting;
 using CharacterSheet.Infrastructure.Persistence;
+using CharacterSheet.Infrastructure.Storage;
 using CharacterSheet.Web;
 using Microsoft.EntityFrameworkCore;
 
@@ -84,16 +85,25 @@ if (string.IsNullOrWhiteSpace(characterSheetConnectionString))
 
 builder.Services.AddDbContext<CharacterSheetDbContext>(options =>
     options.UseNpgsql(characterSheetConnectionString));
+var characterArtStoragePath = builder.Configuration["CharacterArt:StoragePath"];
+if (string.IsNullOrWhiteSpace(characterArtStoragePath))
+{
+    characterArtStoragePath = Path.Combine(Path.GetTempPath(), "dorks-and-dice-character-sheet-art");
+}
+
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ICharacterArtStorage>(new FileSystemCharacterArtStorage(characterArtStoragePath));
 builder.Services.AddScoped<ICharacterSheetStore, PostgresCharacterSheetStore>();
 builder.Services.AddScoped<ICharacterBuildStore, PostgresCharacterBuildStore>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
+builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterStateService>();
+builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
 builder.Services.AddScoped<CharacterPresentationService>();
 builder.Services.AddHealthChecks();
@@ -152,6 +162,7 @@ app.MapGet("/api", () => Results.Ok(new
 
 app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
 app.MapCharacterStateEndpoints();
+app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
@@ -197,6 +208,50 @@ app.MapDelete("/api/characters/{characterId:guid}/build/race-species", async (
     ToBuildApiResult(
         await service.ClearRaceSpeciesAsync(characterId, cancellationToken),
         mutating: true));
+
+app.MapPut("/api/characters/{characterId:guid}/build/background", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(await service.SetBackgroundAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/background", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(await service.ClearBackgroundAsync(characterId, cancellationToken), mutating: true));
+
+app.MapPut("/api/characters/{characterId:guid}/build/deity", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(await service.SetDeityAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/deity", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(await service.ClearDeityAsync(characterId, cancellationToken), mutating: true));
 
 app.MapPut("/api/characters/{characterId:guid}/build/ability-scores/{abilityKey}", async (
     Guid characterId,

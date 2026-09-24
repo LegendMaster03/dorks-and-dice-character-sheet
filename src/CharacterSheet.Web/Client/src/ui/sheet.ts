@@ -73,7 +73,16 @@ export function renderCharacterWorkspace(
     shell.setAttribute("data-sheet-mode", sheetMode);
     shell.setAttribute("data-guided-builder-open", guidedBuilder.open ? "true" : "false");
 
-    shell.append(renderCharacterHeader(character, builder, forceReadOnly, advancement));
+    const portraitAsset = routine.status === "ready"
+        ? (routine.state?.artAssets ?? []).find(asset => asset.isPortrait)
+        : undefined;
+    shell.append(renderCharacterHeader(
+        character,
+        builder,
+        forceReadOnly,
+        advancement,
+        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id),
+        routine.status === "ready" ? routine.state?.advancementProgress : undefined));
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = structuralEditing
             || (guidedBuilder.open
@@ -83,7 +92,15 @@ export function renderCharacterWorkspace(
             advancement,
             builder,
             advancementEditing,
-            handlers.structural));
+            handlers.structural,
+            {
+                value: routine.status === "ready"
+                    ? routine.state?.advancementProgress
+                    : undefined,
+                readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+                saving: routine.mutation?.kind === "progression-update",
+                onSet: handlers.routine.setAdvancementProgress
+            }));
     }
     if (editable) {
         shell.append(renderModeControls(
@@ -315,7 +332,7 @@ function renderGuidedBuilder(
                 builder,
                 false,
                 handlers.structural,
-                { title: "Species", choices: ["raceSpecies"] }));
+                { title: "Identity", choices: ["raceSpecies", "background", "deity"] }));
             break;
         case "advancement":
             panel.append(renderCharacterBuilder(
@@ -516,14 +533,25 @@ export function renderCharacterHeader(
     character: CharacterSheetBootstrapResponse,
     builder: CharacterBuilderUiState,
     forceReadOnly: boolean,
-    advancement: CharacterAdvancementView | null = null
+    advancement: CharacterAdvancementView | null = null,
+    portraitUrl: string | null = null,
+    advancementProgress: number | null | undefined = undefined
 ): HTMLElement {
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
     const header = createElement("header", "dd-sheet-header");
 
     const identity = createElement("div", "dd-sheet-header__identity");
-    const monogram = createElement("div", "dd-sheet-header__portrait", characterInitials(character.name));
-    monogram.setAttribute("aria-hidden", "true");
+    const portrait = createElement("div", "dd-sheet-header__portrait");
+    if (portraitUrl === null) {
+        portrait.textContent = characterInitials(character.name);
+        portrait.setAttribute("aria-hidden", "true");
+    } else {
+        const image = document.createElement("img");
+        image.className = "dd-sheet-header__portrait-image";
+        image.src = portraitUrl;
+        image.alt = `${character.name} portrait`;
+        portrait.append(image);
+    }
     const text = createElement("div", "dd-sheet-header__text");
     const name = createElement("h1", "dd-sheet-header__name", model.name);
     const statusLine = createElement("div", "dd-sheet-header__status");
@@ -538,7 +566,7 @@ export function renderCharacterHeader(
         statusLine.append(createElement("span", "dd-sheet-header__campaign", model.campaignContext));
     }
     text.append(name, statusLine);
-    identity.append(monogram, text);
+    identity.append(portrait, text);
 
     const advancementSummary = advancement === null
         ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
@@ -546,8 +574,18 @@ export function renderCharacterHeader(
     const summary = createElement("dl", "dd-sheet-header__summary");
     summary.append(
         headerSummaryItem("Race / Species", model.raceSpecies.value, model.raceSpecies.detail),
+        headerSummaryItem("Background", model.background.value, model.background.detail),
+        headerSummaryItem("Deity", model.deity.value, model.deity.detail),
         headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
     );
+    if (advancementProgress !== undefined) {
+        summary.append(headerSummaryItem(
+            "Advancement Progress",
+            advancementProgress === null ? "Not set" : String(advancementProgress)));
+    }
+    if (model.playerName !== null) {
+        summary.append(headerSummaryItem("Player Name", model.playerName));
+    }
     if (model.readOnly) {
         summary.append(headerSummaryItem("Sheet state", "Read-only", "Restore the Character through the Site to edit."));
     }

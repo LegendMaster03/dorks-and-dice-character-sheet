@@ -19,6 +19,8 @@ public sealed record CharacterSheetRootState(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public sealed record CharacterCampaignDisplayView(Guid CampaignId, string Name);
+
 public sealed record CharacterSheetBootstrapView(
     Guid CharacterId,
     string Name,
@@ -26,7 +28,9 @@ public sealed record CharacterSheetBootstrapView(
     DateTimeOffset? ArchivedAt,
     IReadOnlyCollection<Guid> CampaignIds,
     bool HasRichSheet,
-    CharacterSheetRootState? Sheet);
+    CharacterSheetRootState? Sheet,
+    string? PlayerName = null,
+    IReadOnlyCollection<CharacterCampaignDisplayView>? Campaigns = null);
 
 public sealed record CharacterSheetBootstrapResult(
     CharacterSheetBootstrapStatus Status,
@@ -108,5 +112,9 @@ public sealed class CharacterSheetBootstrapService(
                     root.SchemaVersion,
                     root.BuilderStatus.ToString(),
                     root.CreatedAt,
-                    root.UpdatedAt));
+                    root.UpdatedAt),
+            character.PlayerName,
+            (character.Campaigns ?? [])
+                .Select(value => new CharacterCampaignDisplayView(value.CampaignId, value.Name))
+                .ToArray());
 }

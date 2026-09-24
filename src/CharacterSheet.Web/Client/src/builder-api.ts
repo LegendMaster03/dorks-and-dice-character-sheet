@@ -53,7 +53,7 @@ export interface CharacterBuildResponse {
     progressionEntries: CharacterAdvancementEntryResponse[];
 }
 
-export type CharacterBuilderChoice = "raceSpecies" | "startingClass" | "subclass";
+export type CharacterBuilderChoice = "raceSpecies" | "background" | "deity" | "startingClass" | "subclass";
 
 export function buildCharacterBuildBackendUrl(
     environment: HostEnvironment,
@@ -64,6 +64,12 @@ export function buildCharacterBuildBackendUrl(
     const base = `/api/characters/${encodeURIComponent(characterId)}/build`;
     if (choice === "raceSpecies") {
         return buildCharacterSheetApiUrl(environment, `${base}/race-species`);
+    }
+    if (choice === "background") {
+        return buildCharacterSheetApiUrl(environment, `${base}/background`);
+    }
+    if (choice === "deity") {
+        return buildCharacterSheetApiUrl(environment, `${base}/deity`);
     }
     if (choice === "startingClass") {
         return buildCharacterSheetApiUrl(environment, `${base}/starting-class`);

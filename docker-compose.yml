@@ -6,8 +6,14 @@ services:
     environment:
       ConnectionStrings__CharacterSheet: "${ConnectionStrings__CharacterSheet:?ConnectionStrings__CharacterSheet must be configured}"
       ToolHost__BaseUrl: "http://dorks-and-dice-site:8080"
+      CharacterArt__StoragePath: "/var/lib/dorks-and-dice-character-sheet/art"
+    volumes:
+      - character-sheet-art:/var/lib/dorks-and-dice-character-sheet/art
     networks:
       - dorks-and-dice-backend
+
+volumes:
+  character-sheet-art:
 
 networks:
   dorks-and-dice-backend:

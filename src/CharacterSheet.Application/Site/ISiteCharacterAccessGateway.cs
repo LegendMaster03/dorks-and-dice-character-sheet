@@ -17,12 +17,16 @@ public enum SiteCharacterAccessStatus
 /// <summary>
 /// Transient Site-authoritative projection. This is not Character Sheet persistence.
 /// </summary>
+public sealed record SiteCampaignDisplayProjection(Guid CampaignId, string Name);
+
 public sealed record SiteCharacterProjection(
     Guid CharacterId,
     string Name,
     SiteCharacterLifecycleState LifecycleState,
     DateTimeOffset? ArchivedAt,
-    IReadOnlyCollection<Guid> CampaignIds)
+    IReadOnlyCollection<Guid> CampaignIds,
+    string? PlayerName = null,
+    IReadOnlyCollection<SiteCampaignDisplayProjection>? Campaigns = null)
 {
     public bool AllowsOrdinaryEditingByLifecycle => LifecycleState == SiteCharacterLifecycleState.Active;
 }

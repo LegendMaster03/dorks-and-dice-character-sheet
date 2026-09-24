@@ -17,6 +17,8 @@ public enum CharacterBuildAccessStatus
 public static class CharacterBuildSelectionCategories
 {
     public const string RaceSpecies = "raceSpecies";
+    public const string Background = "background";
+    public const string Deity = "deity";
 }
 
 public static class CharacterBuildAdvancementKinds
@@ -110,6 +112,58 @@ public sealed class CharacterBuildService(
             (changedAt, token) => buildStore.ClearFoundationalSelectionAsync(
                 characterId,
                 CharacterFoundationalSelectionCategory.RaceSpecies,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> SetBackgroundAsync(
+        Guid characterId,
+        string ruleConceptKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.SetFoundationalSelectionAsync(
+                characterId,
+                CharacterFoundationalSelectionCategory.Background,
+                ruleConceptKey,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> ClearBackgroundAsync(
+        Guid characterId,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.ClearFoundationalSelectionAsync(
+                characterId,
+                CharacterFoundationalSelectionCategory.Background,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> SetDeityAsync(
+        Guid characterId,
+        string ruleConceptKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.SetFoundationalSelectionAsync(
+                characterId,
+                CharacterFoundationalSelectionCategory.Deity,
+                ruleConceptKey,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterBuildResult> ClearDeityAsync(
+        Guid characterId,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => buildStore.ClearFoundationalSelectionAsync(
+                characterId,
+                CharacterFoundationalSelectionCategory.Deity,
                 changedAt,
                 token),
             cancellationToken);
@@ -321,6 +375,8 @@ public sealed class CharacterBuildService(
     private static string MapCategory(CharacterFoundationalSelectionCategory category) => category switch
     {
         CharacterFoundationalSelectionCategory.RaceSpecies => CharacterBuildSelectionCategories.RaceSpecies,
+        CharacterFoundationalSelectionCategory.Background => CharacterBuildSelectionCategories.Background,
+        CharacterFoundationalSelectionCategory.Deity => CharacterBuildSelectionCategories.Deity,
         _ => throw new InvalidOperationException($"Unsupported foundational selection category '{category}'.")
     };
 

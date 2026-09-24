@@ -12,6 +12,12 @@ public interface ICharacterStateStore
         Guid characterId,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> SetAdvancementProgressAsync(
+        Guid characterId,
+        int? value,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> SetCurrencyBalanceAsync(
         Guid characterId,
         string currencyKey,

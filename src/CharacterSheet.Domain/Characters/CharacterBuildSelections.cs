@@ -2,7 +2,9 @@ namespace CharacterSheet.Domain.Characters;
 
 public enum CharacterFoundationalSelectionCategory
 {
-    RaceSpecies = 1
+    RaceSpecies = 1,
+    Background = 2,
+    Deity = 3
 }
 
 public enum CharacterAdvancementKind

@@ -293,7 +293,10 @@ export interface CharacterHeaderModel {
     readOnly: boolean;
     builderStatus: string | null;
     campaignContext: string | null;
+    playerName: string | null;
     raceSpecies: RuleReferenceDisplay;
+    background: RuleReferenceDisplay;
+    deity: RuleReferenceDisplay;
     startingClass: RuleReferenceDisplay;
     subclass: RuleReferenceDisplay;
 }
@@ -309,13 +312,27 @@ export function createCharacterHeaderModel(
         lifecycleLabel: character.lifecycle === "Archived" ? "Archived" : "Active Character",
         readOnly,
         builderStatus: builder.build?.builderStatus ?? character.sheet?.builderStatus ?? null,
-        campaignContext: character.campaignIds.length > 0
-            ? `${character.campaignIds.length} Campaign ${character.campaignIds.length === 1 ? "association" : "associations"}`
-            : null,
+        campaignContext: formatCampaignContext(character),
+        playerName: character.playerName?.trim() || null,
         raceSpecies: headerReferenceDisplay(builder, "raceSpecies"),
+        background: headerReferenceDisplay(builder, "background"),
+        deity: headerReferenceDisplay(builder, "deity"),
         startingClass: headerReferenceDisplay(builder, "startingClass"),
         subclass: headerReferenceDisplay(builder, "subclass")
     };
+}
+
+function formatCampaignContext(character: CharacterSheetBootstrapResponse): string | null {
+    const namedCampaigns = (character.campaigns ?? [])
+        .filter(value => value.name.trim().length > 0)
+        .map(value => value.name.trim());
+    const names = [...new Set(namedCampaigns)];
+    if (names.length === 1) return names[0]!;
+    if (names.length > 1) return names.join(" • ");
+    if (character.campaignIds.length === 0) return null;
+    return character.campaignIds.length === 1
+        ? "1 Campaign association"
+        : `${character.campaignIds.length} Campaign associations`;
 }
 
 function headerReferenceDisplay(
@@ -335,7 +352,7 @@ function headerReferenceDisplay(
             tone: "error"
         };
     }
-    return toRuleReferenceDisplay(builder.references[target]);
+    return toRuleReferenceDisplay(builder.references[target] ?? { status: "none" });
 }
 
 export interface ChoiceActionPolicy {

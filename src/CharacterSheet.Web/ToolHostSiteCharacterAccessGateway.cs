@@ -68,11 +68,29 @@ public sealed class ToolHostSiteCharacterAccessGateway(IHttpContextAccessor http
             return Task.FromResult(new SiteCharacterAccessResult(SiteCharacterAccessStatus.ProjectionUnavailable));
         }
 
+        var campaignIds = character.CampaignIds.Distinct().ToArray();
+        var campaigns = authenticationContext.Campaigns
+            .Where(entry => campaignIds.Contains(entry.Id))
+            .GroupBy(entry => entry.Id)
+            .Select(group => new SiteCampaignDisplayProjection(
+                group.Key,
+                group.Select(value => value.Name)
+                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+                    ?.Trim() ?? string.Empty))
+            .Where(value => value.Name.Length > 0)
+            .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.CampaignId)
+            .ToArray();
+
         return Task.FromResult(SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
             character.Id,
             character.Name,
             lifecycle,
             character.ArchivedAt,
-            character.CampaignIds.ToArray())));
+            campaignIds,
+            string.IsNullOrWhiteSpace(authenticationContext.User.DisplayName)
+                ? null
+                : authenticationContext.User.DisplayName.Trim(),
+            campaigns)));
     }
 }

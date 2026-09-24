@@ -71,6 +71,58 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_advancement_entries");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterArtAsset", b =>
+        {
+            b.Property<Guid>("Id")
+                .HasColumnType("uuid");
+
+            b.Property<long>("ByteLength")
+                .HasColumnType("bigint");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<string>("ContentType")
+                .IsRequired()
+                .HasMaxLength(100)
+                .HasColumnType("character varying(100)");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<bool>("IsPortrait")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("boolean")
+                .HasDefaultValue(false);
+
+            b.Property<string>("OriginalFileName")
+                .IsRequired()
+                .HasMaxLength(260)
+                .HasColumnType("character varying(260)");
+
+            b.Property<string>("StorageKey")
+                .IsRequired()
+                .HasMaxLength(200)
+                .HasColumnType("character varying(200)");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("Id");
+
+            b.HasIndex("CharacterId", "CreatedAt");
+
+            b.HasIndex("StorageKey")
+                .IsUnique();
+
+            b.HasIndex("CharacterId")
+                .IsUnique()
+                .HasDatabaseName("UX_character_art_assets_Portrait")
+                .HasFilter("\"IsPortrait\" = TRUE");
+
+            b.ToTable("character_art_assets");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterBaseAbilityScoreInput", b =>
         {
             b.Property<Guid>("Id")
@@ -433,6 +485,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<Guid>("CharacterId")
                 .HasColumnType("uuid");
 
+            b.Property<int?>("AdvancementProgress")
+                .HasColumnType("integer");
+
             b.Property<string>("BuilderStatus")
                 .IsRequired()
                 .HasMaxLength(64)
@@ -497,6 +552,15 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasForeignKey("ParentAdvancementEntryId", "CharacterId")
                 .HasPrincipalKey("Id", "CharacterId")
                 .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterArtAsset", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithMany()
+                .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
         });
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterBaseAbilityScoreInput", b =>

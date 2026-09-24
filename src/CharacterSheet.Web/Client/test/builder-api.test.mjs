@@ -40,6 +40,12 @@ test("builder API remains behind Character Sheet Tool Host authorization", () =>
         buildCharacterBuildBackendUrl(environment, characterId, "raceSpecies"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/race-species`);
     assert.equal(
+        buildCharacterBuildBackendUrl(environment, characterId, "background"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/background`);
+    assert.equal(
+        buildCharacterBuildBackendUrl(environment, characterId, "deity"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/deity`);
+    assert.equal(
         buildCharacterBuildBackendUrl(environment, characterId, "startingClass"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/starting-class`);
     assert.equal(
@@ -76,6 +82,8 @@ test("selection mutation sends only the stable concept key", async () => {
     };
 
     await setCharacterBuildChoice(environment, characterId, "raceSpecies", "race:elf", undefined, fetcher);
+    await setCharacterBuildChoice(environment, characterId, "background", "background:sage", undefined, fetcher);
+    await setCharacterBuildChoice(environment, characterId, "deity", "deity:pelor", undefined, fetcher);
     await setCharacterBuildChoice(environment, characterId, "startingClass", "class:wizard", undefined, fetcher);
     await setCharacterBuildChoice(
         environment,
@@ -86,11 +94,15 @@ test("selection mutation sends only the stable concept key", async () => {
         fetcher);
 
     assert.deepEqual(JSON.parse(calls[0].body), { conceptKey: "race:elf" });
-    assert.deepEqual(JSON.parse(calls[1].body), { conceptKey: "class:wizard" });
-    assert.deepEqual(JSON.parse(calls[2].body), { conceptKey: "subclass.wizard.evocation" });
+    assert.deepEqual(JSON.parse(calls[1].body), { conceptKey: "background:sage" });
+    assert.deepEqual(JSON.parse(calls[2].body), { conceptKey: "deity:pelor" });
+    assert.deepEqual(JSON.parse(calls[3].body), { conceptKey: "class:wizard" });
+    assert.deepEqual(JSON.parse(calls[4].body), { conceptKey: "subclass.wizard.evocation" });
     assert.equal(calls[0].input.endsWith("/build/race-species"), true);
-    assert.equal(calls[1].input.endsWith("/build/starting-class"), true);
-    assert.equal(calls[2].input.endsWith(`/build/classes/${classEntryId}/subclass`), true);
+    assert.equal(calls[1].input.endsWith("/build/background"), true);
+    assert.equal(calls[2].input.endsWith("/build/deity"), true);
+    assert.equal(calls[3].input.endsWith("/build/starting-class"), true);
+    assert.equal(calls[4].input.endsWith(`/build/classes/${classEntryId}/subclass`), true);
     assert.equal(calls.some(call => String(call.body).includes("displayName")), false);
 });
 

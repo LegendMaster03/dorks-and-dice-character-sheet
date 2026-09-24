@@ -24,6 +24,36 @@ public sealed class CharacterBuildModelTests
     }
 
     [Fact]
+    public void BackgroundAndDeityAreIndependentFoundationalRuleSelections()
+    {
+        var root = Root();
+        var now = DateTimeOffset.UtcNow;
+
+        var background = root.SetFoundationalSelection(
+            CharacterFoundationalSelectionCategory.Background,
+            "  BACKGROUND:SAGE  ",
+            now);
+        var deity = root.SetFoundationalSelection(
+            CharacterFoundationalSelectionCategory.Deity,
+            "  DEITY:PELOR  ",
+            now.AddSeconds(1));
+        var replacement = root.SetFoundationalSelection(
+            CharacterFoundationalSelectionCategory.Background,
+            "background:soldier",
+            now.AddMinutes(1));
+
+        Assert.Same(background, replacement);
+        Assert.Equal(2, root.FoundationalSelections.Count);
+        Assert.Equal("background:soldier", replacement.RuleConceptKey);
+        Assert.Equal("deity:pelor", deity.RuleConceptKey);
+        Assert.Same(
+            deity,
+            Assert.Single(
+                root.FoundationalSelections,
+                value => value.Category == CharacterFoundationalSelectionCategory.Deity));
+    }
+
+    [Fact]
     public void RuleConceptKeysAreTrimmedAndLowercasedInvariantly()
     {
         var root = Root();

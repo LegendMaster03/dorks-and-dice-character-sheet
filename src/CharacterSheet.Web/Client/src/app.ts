@@ -8,6 +8,7 @@ import {
     RichSheetInitializationError,
     type CharacterSheetBootstrapResponse
 } from "./character-api.js";
+import { setCharacterAdvancementProgress } from "./character-state-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
 import { createApplication } from "./render-lifecycle.js";
 import { parseCharacterSheetRoute } from "./routes.js";
@@ -24,6 +25,8 @@ import { createAbilityWorkflow } from "./features/abilities/ability-workflow.js"
 import { createFeatWorkflow } from "./features/features/feat-workflow.js";
 import { createHealthWorkflow } from "./features/health/health-workflow.js";
 import { createProfileWorkflow } from "./features/profile/profile-workflow.js";
+import { createCharacterArtWorkflow } from "./features/profile/character-art-workflow.js";
+import { buildCharacterArtContentUrl } from "./features/profile/character-art-api.js";
 import { createRecoveryWorkflow } from "./features/health/recovery-workflow.js";
 import { createInventoryWorkflow } from "./features/inventory/inventory-workflow.js";
 import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
@@ -257,6 +260,25 @@ function renderWorkspace(
                     void inventoryWorkflow.removeCurrency(character.characterId, currencyKey),
                 setProfile: input =>
                     void profileWorkflow.save(character.characterId, input),
+                setAdvancementProgress: value =>
+                    void routineStateWorkflow.mutate(
+                        "progression-update",
+                        () => setCharacterAdvancementProgress(
+                            environment,
+                            character.characterId,
+                            value),
+                        undefined,
+                        { resolveReferences: false }),
+                uploadArt: file =>
+                    void characterArtWorkflow.upload(character.characterId, file),
+                setPortrait: assetId =>
+                    void characterArtWorkflow.setPortrait(character.characterId, assetId),
+                clearPortrait: () =>
+                    void characterArtWorkflow.clearPortrait(character.characterId),
+                deleteArt: assetId =>
+                    void characterArtWorkflow.remove(character.characterId, assetId),
+                artContentUrl: assetId =>
+                    buildCharacterArtContentUrl(environment, character.characterId, assetId),
                 setCurrentHitPoints: currentHitPoints =>
                     void healthWorkflow.setCurrentHitPoints(character.characterId, currentHitPoints),
                 setDeathSaves: (successes, failures) =>
@@ -402,6 +424,7 @@ const featWorkflow = createFeatWorkflow(
     environment);
 const healthWorkflow = createHealthWorkflow(routineStateWorkflow, environment);
 const profileWorkflow = createProfileWorkflow(routineStateWorkflow, environment);
+const characterArtWorkflow = createCharacterArtWorkflow(routineStateWorkflow, environment);
 const recoveryWorkflow = createRecoveryWorkflow(
     application,
     presentationWorkflow,

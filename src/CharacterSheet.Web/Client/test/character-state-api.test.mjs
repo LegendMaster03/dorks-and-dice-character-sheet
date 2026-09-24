@@ -10,6 +10,7 @@ import {
     removeCharacterNote,
     removeCharacterRulesInput,
     removeInventoryItemOccurrence,
+    setCharacterAdvancementProgress,
     setCharacterCurrencyBalance,
     setCharacterCurrentHitPoints,
     setCharacterDeathSaves,
@@ -45,6 +46,9 @@ test("routine-state API remains behind Character Sheet Tool Host authorization",
     assert.equal(
         buildCharacterStateBackendUrl(environment, characterId),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state`);
+    assert.equal(
+        buildCharacterStateBackendUrl(environment, characterId, "progression"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/progression`);
     assert.equal(
         buildCharacterStateBackendUrl(environment, characterId, "currency"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/currency`);
@@ -114,6 +118,25 @@ test("profile mutation sends only Character-authored descriptive state", async (
     assert.equal("background" in JSON.parse(calls[0].body), false);
 });
 
+
+test("advancement progress mutation stays neutral instead of inventing XP semantics", async () => {
+    const calls = [];
+    const fetcher = async (input, init) => {
+        calls.push({ input: String(input), method: init?.method, body: init?.body });
+        return Response.json(state);
+    };
+
+    await setCharacterAdvancementProgress(environment, characterId, 1450, fetcher);
+    await setCharacterAdvancementProgress(environment, characterId, null, fetcher);
+
+    assert.equal(calls[0].method, "PUT");
+    assert.equal(
+        calls[0].input,
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/progression`);
+    assert.deepEqual(JSON.parse(calls[0].body), { value: 1450 });
+    assert.deepEqual(JSON.parse(calls[1].body), { value: null });
+    assert.equal(String(calls[0].body).toLowerCase().includes("xp"), false);
+});
 
 test("currency mutations preserve arbitrary Character-owned denominations", async () => {
     const calls = [];

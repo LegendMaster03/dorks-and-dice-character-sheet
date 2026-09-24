@@ -205,32 +205,28 @@ An owned basic Site Character still uses `POST /sheet` to initialize rich state 
 
 ## Current builder UI
 
-The rules-backed Character Builder currently exposes:
+The rules-backed Character Builder exposes stable Character-owned identity and advancement choices:
 
 ```text
 <Character Name>
 
-Character Builder
-
 Race / Species
-[current choice / Choose / Replace / Clear]
-
+Background
+Deity
 Starting Class
-[current choice / Choose / Replace / Clear]
-
 Subclass
-[current choice / Choose / Replace / Clear]
 
-Build status: In progress
+Base Ability Scores
+Advancement levels
 ```
 
-Race / Species queries the global Rules Core catalog with `entityType=race`. Starting Class queries it with `entityType=class`. `prestigeClass` is not offered as a Starting Class. `npcClass` is not offered because the current architecture does not establish NPC Classes as ordinary player Starting Classes.
+Race / Species, Background, Deity, Class, and Subclass are persisted only as stable Rules Core concept references. Their display names and source metadata are resolved from Rules Core rather than copied into Character Sheet state. Each chooser supports loading, search, empty results, Rules Core error, selection, replacement, clear, save error, and cancel.
 
-Subclass selection is unavailable until the Character has a Class advancement. The chooser queries `entityType=subclass`, then accepts only resolved Subclass concepts whose Rules Core `parent-class` relationship identifies the selected Class concept. Character Sheet does not inspect `Document`, `ContentJson`, source-native JSON, or nested Class content to create that list.
+Race / Species queries the global Rules Core race/species catalog. Background queries `entityType=background`; Deity queries `entityType=deity`; Starting Class queries `entityType=class`. `prestigeClass` is not treated as a Starting Class. Subclass selection remains attached to a Character-owned Class advancement occurrence and uses Rules Core parent-Class relationships rather than source-document parsing.
 
-The chooser models loading, search, empty results, Rules Core error, selection, replacement, clear, save error, and cancel explicitly. It displays Rules Core identification metadata such as resolved display name, edition/source/package metadata, but does not dump raw resolved JSON or reproduce source prose.
+The sheet also consumes transient Site-owned header identity. Player Name comes from the authenticated Site user display projection and Campaign names come from the Site Tool Host campaign projection. Character Sheet does not persist those values as substitute ownership or Campaign state.
 
-Build status remains `In progress` after these choices are selected. This slice does not invent a complete builder-step state machine.
+Build status remains `In progress`; the Guided Setup UI reports what it can verify without inventing an edition-specific completion state machine.
 
 ## Subclass boundary
 
@@ -246,58 +242,44 @@ Prestige Classes remain distinct from ordinary Classes and Subclasses in Charact
 
 ## Routine Character-owned state
 
-Routine Character state is separate from builder/progression decisions and from calculated/effective
-mechanics. The persisted routine-state resource contains Character-owned current hit points, inventory
-ownership occurrences, and plain Character notes. `CurrentHitPoints` is nullable on the Character
-root: null means that current HP has not been recorded. It deliberately does not store or calculate
-maximum HP, temporary HP, death thresholds, or edition-specific health rules.
+Routine Character state is separate from builder decisions and Rules Core-calculated mechanics. The coherent `CharacterStateView` now includes Character-owned current HP, Death Saves, generalized Advancement Progress, inventory occurrence state, currency, Notes, Conditions, rules inputs, per-level HP gains, authored profile fields, and Character art metadata.
 
-The remaining routine collections are:
+`AdvancementProgress` is a nullable nonnegative integer. It deliberately has no hard-coded XP label or formula. The UI presents it as **Advancement Progress** until Rules Core supplies ruleset-specific progression semantics.
 
-```text
-character_inventory_item_occurrences
-  Id              Character-owned occurrence identity
-  CharacterId     Site CharacterId, FK -> root, cascade delete
-  RuleConceptKey  stable Rules Core item ConceptKey
-  CreatedAt
+Inventory occurrences preserve stable item identity plus Character-owned quantity, carried/equipped/attuned state, and optional container relationships. Rules Core remains responsible for item definitions, encumbrance, Armor Class effects, attacks, and other mechanical consequences.
 
-character_notes
-  Id              Character-owned note identity
-  CharacterId     Site CharacterId, FK -> root, cascade delete
-  Content         Character-authored note text
-  CreatedAt
-  UpdatedAt
-```
+Profile state preserves authored biography such as Alignment, custom/historical Deity text, age, physical description, personality fields, allies/organizations, symbols, and backstory. Rules-defined identity selections remain separate stable concept references.
 
-An inventory occurrence means only that the Character owns one logical occurrence of the referenced
-Rules Core item concept. Duplicate concept keys remain distinct Character-owned occurrences. The model
-does not claim equipped, carried, active, attuned, container, currency, ammunition, encumbrance, or
-mechanical-effect state. As with builder rule references, the backend persists only the stable
-`ConceptKey`; it does not copy display names or resolved mechanical JSON and does not call Rules Core
-to grant or validate source access while persisting the reference.
+Character art uses PostgreSQL metadata plus application-managed image bytes. Multiple art assets may belong to one Character, while at most one is marked as the portrait. Supported uploads are validated as PNG, JPEG, WebP, or GIF with an 8 MiB technical limit. Archived Characters may view art but may not mutate it.
 
-Notes are global Character-owned state. They are not Campaign-scoped modules, rule definitions, or
-mechanical effects.
-
-The coherent routine-state API is:
+The relevant state and art API includes:
 
 ```text
 GET    /api/characters/{characterId}/state
+PUT    /api/characters/{characterId}/state/progression
 PUT    /api/characters/{characterId}/state/health
+PUT    /api/characters/{characterId}/state/death-saves
+PUT    /api/characters/{characterId}/state/profile
+PUT    /api/characters/{characterId}/state/currency
+DELETE /api/characters/{characterId}/state/currency
 POST   /api/characters/{characterId}/state/inventory
+PUT    /api/characters/{characterId}/state/inventory/{occurrenceId}
 DELETE /api/characters/{characterId}/state/inventory/{occurrenceId}
 POST   /api/characters/{characterId}/state/notes
 PUT    /api/characters/{characterId}/state/notes/{noteId}
 DELETE /api/characters/{characterId}/state/notes/{noteId}
+POST   /api/characters/{characterId}/state/art
+GET    /api/characters/{characterId}/state/art/{assetId}/content
+PUT    /api/characters/{characterId}/state/art/{assetId}/portrait
+DELETE /api/characters/{characterId}/state/art/portrait
+DELETE /api/characters/{characterId}/state/art/{assetId}
 ```
 
-Successful mutations return the same `CharacterStateView` used by `GET /state`. Active owned
-Characters may mutate it; archived owned Characters may read it but can not mutate it. These mutation
-endpoints never initialize a basic Site Character implicitly.
+Successful ordinary state mutations return the coherent `CharacterStateView`. Active owned Characters may mutate it; archived owned Characters may read it but can not mutate it. These endpoints never initialize a basic Site Character implicitly.
 
 ## Durable Site lifecycle cleanup
 
-Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades to foundational selections, base ability-score inputs, and the complete advancement graph in the same Character Sheet database transaction before the lifecycle event is acknowledged. A missing local root is still successful.
+Permanent Site deletion is delivered through the existing trusted lifecycle inbox/outbox contract. For `character.deleted`, deleting `CharacterSheetRoot` cascades through Character-owned relational state in the same database transaction before the lifecycle event is acknowledged. Character-art storage keys are captured before the database mutation; image bytes are deleted only after the database transaction commits, so a failed transaction can not destroy art while retaining Character metadata. File cleanup is best-effort after commit, making an orphaned file preferable to inconsistent Character state. A missing local root is still successful.
 
 `campaign.deleted` remains unrelated to these base/global Character selections and does not remove them. Future Campaign-scoped Character module state belongs behind the existing Campaign cleanup boundary.
 
@@ -370,12 +352,18 @@ Deployment reads the connection configuration from the server-side environment f
 
 The deployment fails before Compose if that file is missing. The repository contains only `.env.example` with non-production example values; real credentials are not committed.
 
-The PostgreSQL database lifecycle is independent from the application container lifecycle. A normal Character Sheet redeployment may rebuild or recreate the application container but does not recreate, replace, or destroy the external database. `/ready` reports PostgreSQL connectivity as `postgresql-ready` or `postgresql-unavailable`.
+The PostgreSQL database lifecycle is independent from the application container lifecycle. A normal Character Sheet redeployment may rebuild or recreate the application container but does not recreate, replace, or destroy the external database. Character art bytes use the configured `CharacterArt__StoragePath`; production Compose mounts that path from the persistent `character-sheet-art` named volume. PostgreSQL remains authoritative for art metadata and portrait designation. `/ready` reports PostgreSQL connectivity as `postgresql-ready` or `postgresql-unavailable`.
 
 CI and deployment smoke tests use disposable PostgreSQL 18 containers. Integration tests create isolated temporary databases on the disposable server so persistence, concurrency constraints, foreign-key behavior, canonical key storage, lifecycle cleanup, authorization, and builder workflows execute against the same database engine used in production.
 
 ## Deferred systems
 
-This foundation persists base Ability inputs, rule selections, advancement occurrences, Inventory occurrences, and Notes, and it can present normalized Rules Core competency/check metadata. It still does not implement ability-score generation/provenance, effective/final Ability calculation, Ability modifiers, persisted competency ranks/training/class-skill state, Character capability derivation from Classes/Species/Feats, Character-fact-driven competency/check evaluation, maximum/derived hit-point calculation, temporary-hit-point state, equipment state or item-occurrence mechanics, movement state, spellcasting state/resources, carrying/encumbrance state, crafting progress/state, Prestige Class selection/prerequisites, multiclass prerequisites, generic level-up flow, Class/Subclass feature application, Campaign-specific mechanics context, optional Campaign modules, Rules-Core-backed Position authoring, Block Initiative integration, or cross-owner DM Character access.
+The Character Sheet now covers the Character-owned state and presentation needed for the pre-acceptance official-sheet union. Remaining work is intentionally upstream or optional rather than a missing local data model:
 
-Capability-gated saving throws, defenses, Base Attack Bonus, Grapple, nonlethal damage, and related 3.x mechanics are valid presentation shapes. Applicable Rules Core definitions remain visible with `-` while authoritative Character capability/contribution inputs are unavailable, and resolved values replace those dashes once the backend can evaluate them. Loot Tavern check/procedure definitions can likewise be presented from Rules Core, while Character-specific Harvesting/Crafting evaluation remains deferred until the required Character/runtime/source inputs exist.
+- Rules Core may later provide canonical Alignment choice semantics; Character Sheet currently preserves editable authored Alignment text.
+- Rules Core may later label generalized Advancement Progress as XP or another progression concept for a particular effective rules context.
+- Campaign-specific mechanics still require an explicit Campaign context rather than selecting one of several Campaign associations implicitly.
+- Generic DM cross-owner Character access remains a separate Site authorization concern.
+- Further progressive-disclosure polish, such as Initiative contribution detail, can reuse the existing calculated-value presentation contract.
+
+These deferred items do not justify duplicating Rules Core formulas or Site identity in Character Sheet persistence.

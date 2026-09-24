@@ -62,6 +62,8 @@ function builder(overrides = {}) {
         build,
         references: {
             raceSpecies: resolved("race:human", "race", "Human"),
+            background: resolved("background:sage", "background", "Sage"),
+            deity: resolved("deity:pelor", "deity", "Pelor"),
             startingClass: resolved("class:wizard", "class", "Wizard"),
             subclass: resolved("subclass:wizard:evocation", "subclass", "School of Evocation")
         },
@@ -79,9 +81,25 @@ test("header model presents real Character name and resolved Race, Class, and Su
     const model = createCharacterHeaderModel(character, builder(), false);
     assert.equal(model.name, "Sai Cithreth");
     assert.equal(model.raceSpecies.value, "Human");
+    assert.equal(model.background.value, "Sage");
+    assert.equal(model.deity.value, "Pelor");
     assert.equal(model.startingClass.value, "Wizard");
     assert.equal(model.subclass.value, "School of Evocation");
     assert.equal(model.campaignContext, "1 Campaign association");
+});
+
+test("header uses Site-owned Player and Campaign display context when supplied", () => {
+    const model = createCharacterHeaderModel({
+        ...character,
+        playerName: "Kyle",
+        campaigns: [{
+            campaignId: character.campaignIds[0],
+            name: "Humblewood"
+        }]
+    }, builder(), false);
+
+    assert.equal(model.playerName, "Kyle");
+    assert.equal(model.campaignContext, "Humblewood");
 });
 
 test("header does not present an uninitialized builder as real empty selections", () => {

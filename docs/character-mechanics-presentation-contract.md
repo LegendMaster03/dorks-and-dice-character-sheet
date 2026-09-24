@@ -26,6 +26,44 @@ The terms used below mean:
 - **Display-only**: prepared by the backend or integration layer for presentation. The frontend may format or group it but does not assign rule meaning.
 - **Required/optional**: required or optional within the frontend projection shape, not necessarily within every game rule.
 
+## Character identity and authored biography
+
+Character identity is composed from owner-specific sources rather than flattened into one Character Sheet record:
+
+| Data | Authority | Character Sheet behavior |
+| --- | --- | --- |
+| Character name | Site | Display transiently; never duplicate as local authoritative identity. |
+| Player Name | Site authenticated-user projection | Display when supplied; never infer it from local ownership state. |
+| Campaign name(s) | Site Tool Host campaign projection | Display safe names when supplied; raw Campaign IDs remain implementation identity. |
+| Race / Species | Character selection + Rules Core concept | Persist only the stable concept key; resolve presentation from Rules Core. |
+| Background | Character selection + Rules Core concept | Persist only the stable concept key; expose choose/replace/clear. |
+| Deity | Character selection + Rules Core concept | Persist only the stable concept key; keep authored profile Deity text separate for custom/legacy biography. |
+| Alignment | Character-authored profile today | Persist/display as authored text; do not pretend it is a canonical Rules Core concept until such a contract exists. |
+| Size | Rules Core Character mechanics projection | Render the authoritative projected value and any source details. |
+
+A missing optional Site display projection is rendered as unavailable rather than reconstructed from IDs. Character Sheet does not infer Player Name, Campaign display names, Background, Deity, Alignment, or Size from labels, source documents, or adjacent Character state.
+
+## Character-owned advancement progress
+
+The routine Character state contains nullable `advancementProgress`, a nonnegative integer. This is intentionally a semantic-neutral storage slot rather than an XP model.
+
+The browser may display and edit it as **Advancement Progress**. It must not label the value XP, calculate thresholds, level the Character automatically, or send the value to Rules Core under an invented mechanic key. If Rules Core later supplies a progression label or ruleset-specific interpretation, that semantic layer may relabel the same Character-owned value without changing its storage identity.
+
+## Character portrait and art
+
+Character art is Character-owned nonmechanical state. PostgreSQL stores asset metadata and portrait designation; application-managed storage contains the image bytes.
+
+The presentation contract permits:
+
+- multiple art assets per Character;
+- zero or one selected portrait;
+- portrait display in the Character header;
+- a Details gallery with full-size viewing;
+- upload, portrait selection/replacement, portrait clearing, and deletion for editable Characters;
+- view-only behavior for archived/read-only Characters.
+
+Uploads are technically constrained to validated PNG, JPEG, WebP, or GIF images up to 8 MiB. These constraints are storage/security limits, not game rules. Character Sheet does not assign mechanical meaning to an image, extract Character facts from art, or copy image bytes into Rules Core.
+
 ## Advancement
 
 `CharacterAdvancementView` contains `occurrences: AdvancementOccurrenceView[]`.
