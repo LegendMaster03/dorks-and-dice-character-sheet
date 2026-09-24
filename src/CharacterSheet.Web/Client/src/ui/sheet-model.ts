@@ -295,6 +295,8 @@ export interface CharacterHeaderModel {
     campaignContext: string | null;
     playerName: string | null;
     raceSpecies: RuleReferenceDisplay;
+    background: RuleReferenceDisplay;
+    deity: RuleReferenceDisplay;
     startingClass: RuleReferenceDisplay;
     subclass: RuleReferenceDisplay;
 }
@@ -313,6 +315,8 @@ export function createCharacterHeaderModel(
         campaignContext: formatCampaignContext(character),
         playerName: character.playerName?.trim() || null,
         raceSpecies: headerReferenceDisplay(builder, "raceSpecies"),
+        background: headerReferenceDisplay(builder, "background"),
+        deity: headerReferenceDisplay(builder, "deity"),
         startingClass: headerReferenceDisplay(builder, "startingClass"),
         subclass: headerReferenceDisplay(builder, "subclass")
     };
