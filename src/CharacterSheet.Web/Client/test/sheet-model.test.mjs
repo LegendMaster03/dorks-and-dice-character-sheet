@@ -359,12 +359,13 @@ test("deployed-density polish keeps all primary tabs visible and separates 3.x s
     assert.match(abilitySource, /isThreeXSavingThrowKey\(key\)/);
 });
 
-test("desktop top stats stretch to a shared height and Movement shows related speeds in-card", () => {
+test("desktop top stats stretch to a shared height and Movement uses a six-cell standard-speed layout", () => {
     assert.match(css, /\.dd-core-stats\s*\{[^}]*align-items:\s*stretch;/s);
     assert.match(css, /\.dd-core-stats \.dd-stat\s*\{[^}]*height:\s*100%;/s);
-    assert.match(css, /\.dd-movement-values__grid\s*\{[^}]*display:\s*grid;[^}]*auto-fit[^}]*minmax\(3\.1rem,\s*1fr\)/s);
-    assert.match(css, /\.dd-movement-values__mode\s*\{[^}]*place-content:\s*center;/s);
-    assert.doesNotMatch(css, /\.dd-movement-values__details\s*\{/s);
+    assert.match(css, /\.dd-movement-values__grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[^}]*grid-template-rows:\s*repeat\(3,/s);
+    assert.match(css, /\.dd-movement-values__mode--primary\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
+    assert.match(css, /\.dd-movement-values__details\s*\{[^}]*border-top:/s);
+    assert.match(css, /\.dd-movement-values__extras\s*\{[^}]*auto-fit/s);
     assert.doesNotMatch(css, /\.dd-movement-values__variants\s*\{/s);
 });
 

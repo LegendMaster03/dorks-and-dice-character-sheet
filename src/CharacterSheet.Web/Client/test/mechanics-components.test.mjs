@@ -185,44 +185,62 @@ test("combat summary groups defenses and saving throws using compact 3.x-style r
     assert.equal(byClass(rendered, "dd-saving-throw").length, 3);
 });
 
-test("movement presentation shows all supplied speeds directly in one card", () => {
+test("movement presentation gives all five standard speeds fixed in-card slots", () => {
     const rendered = renderMovementValues([
         mechanical("movement.fly", "Fly", "60 ft."),
         mechanical("movement.walk", "Walk", "30 ft."),
         mechanical("movement.swim", "Swim", "20 ft."),
-        mechanical("movement.climb", "Climb", "15 ft.")
+        mechanical("movement.climb", "Climb", "15 ft."),
+        mechanical("movement.burrow", "Burrow", "10 ft.")
     ]);
 
     assert.equal(rendered.getAttribute("data-movement-state"), "resolved");
     const primary = byAttribute(rendered, "data-movement-primary", "movement.walk");
     assert.equal(primary.length, 1);
-    assert.match(visibleText(primary[0]), /Walk/);
-    assert.match(visibleText(primary[0]), /30 ft\./);
-    assert.equal(byAttribute(rendered, "data-mechanic-key", "movement.fly").length, 1);
-    assert.equal(byAttribute(rendered, "data-mechanic-key", "movement.swim").length, 1);
-    assert.equal(byAttribute(rendered, "data-mechanic-key", "movement.climb").length, 1);
+    assert.match(visibleText(primary[0]), /Walk\s+30 ft\./);
+    assert.equal(byAttribute(rendered, "data-movement-mode", "burrow").length, 1);
+    assert.equal(byAttribute(rendered, "data-movement-mode", "climb").length, 1);
+    assert.equal(byAttribute(rendered, "data-movement-mode", "fly").length, 1);
+    assert.equal(byAttribute(rendered, "data-movement-mode", "swim").length, 1);
+    assert.match(visibleText(rendered), /Burrow\s+10 ft\./);
+    assert.match(visibleText(rendered), /Climb\s+15 ft\./);
     assert.match(visibleText(rendered), /Fly\s+60 ft\./);
     assert.match(visibleText(rendered), /Swim\s+20 ft\./);
-    assert.match(visibleText(rendered), /Climb\s+15 ft\./);
     assert.equal(byTag(rendered, "details").length, 0);
 });
 
-test("movement presentation keeps Walk as the baseline and omits unsupplied alternate placeholders", () => {
+test("movement presentation keeps unresolved standard speeds visible without inventing values", () => {
     const rendered = renderMovementValues([
-        mechanical("movement.burrow", "Burrow", "10 ft."),
         mechanical("movement.fly", "Fly", "40 ft.")
     ]);
+
     assert.equal(byAttribute(rendered, "data-movement-primary", "movement.walk").length, 1);
-    assert.equal(byAttribute(rendered, "data-movement-mode", "swim").length, 0);
-    assert.equal(byAttribute(rendered, "data-movement-mode", "climb").length, 0);
-    assert.equal(byAttribute(rendered, "data-movement-mode", "fly").length, 1);
-    assert.equal(byAttribute(rendered, "data-mechanic-key", "movement.burrow").length, 1);
+    for (const mode of ["burrow", "climb", "fly", "swim"]) {
+        assert.equal(byAttribute(rendered, "data-movement-mode", mode).length, 1);
+    }
     assert.match(visibleText(rendered), /Walk\s+-/);
+    assert.match(visibleText(rendered), /Burrow\s+-/);
+    assert.match(visibleText(rendered), /Climb\s+-/);
     assert.match(visibleText(rendered), /Fly\s+40 ft\./);
-    assert.match(visibleText(rendered), /Burrow\s+10 ft\./);
-    assert.doesNotMatch(visibleText(rendered), /Swim|Climb/);
+    assert.match(visibleText(rendered), /Swim\s+-/);
 });
 
+test("nonstandard movement modes remain available in an additional-movement disclosure", () => {
+    const rendered = renderMovementValues([
+        mechanical("movement.walk", "Walk", "30 ft."),
+        mechanical("movement.phase", "Phase", "15 ft."),
+        mechanical("movement.glide", "Glide", "45 ft.")
+    ]);
+
+    const details = byTag(rendered, "details");
+    assert.equal(details.length, 1);
+    assert.match(visibleText(details[0]), /Additional movement/);
+    assert.equal(byAttribute(details[0], "data-mechanic-key", "movement.phase").length, 1);
+    assert.equal(byAttribute(details[0], "data-mechanic-key", "movement.glide").length, 1);
+    assert.match(visibleText(details[0]), /Phase\s+15 ft\./);
+    assert.match(visibleText(details[0]), /Glide\s+45 ft\./);
+    assert.equal(byAttribute(details[0], "data-movement-mode", "burrow").length, 0);
+});
 test("hit point adjustment reuses the combat tracker behavior without imposing a 5e zero floor", () => {
     assert.equal(adjustCurrentHitPoints(12, 30, 5, -1), 7);
     assert.equal(adjustCurrentHitPoints(5, 30, 12, -1), -7);

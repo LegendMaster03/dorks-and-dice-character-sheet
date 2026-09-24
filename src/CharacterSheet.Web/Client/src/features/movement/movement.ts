@@ -7,9 +7,10 @@ import { normalizeMechanicalLabel } from "../../core/mechanics/mechanic-value.js
 
 const MOVEMENT_PRESENTATION_MODES = [
     { id: "walk", label: "Walk", aliases: ["walk", "walking", "land", "land speed", "speed"] },
-    { id: "swim", label: "Swim", aliases: ["swim", "swimming"] },
+    { id: "burrow", label: "Burrow", aliases: ["burrow", "burrowing"] },
     { id: "climb", label: "Climb", aliases: ["climb", "climbing"] },
-    { id: "fly", label: "Fly", aliases: ["fly", "flying"] }
+    { id: "fly", label: "Fly", aliases: ["fly", "flying"] },
+    { id: "swim", label: "Swim", aliases: ["swim", "swimming"] }
 ] as const;
 
 export function renderMovementValues(values: readonly CalculatedMechanicalValueView[] | undefined): HTMLElement {
@@ -24,19 +25,27 @@ export function renderMovementValues(values: readonly CalculatedMechanicalValueV
     for (const mode of MOVEMENT_PRESENTATION_MODES) {
         const value = findMovementMode(supplied, mode);
         if (value !== undefined) claimed.add(value);
-
-        // Walking speed is the baseline slot. Alternate modes are shown only
-        // when Rules Core actually supplies them, rather than fabricating
-        // empty Swim / Climb / Fly entries.
-        if (mode.id !== "walk" && value === undefined) continue;
         grid.append(renderMovementMode(mode.id, mode.label, value, mode.id === "walk"));
     }
 
-    for (const value of supplied.filter(value => !claimed.has(value))) {
-        grid.append(renderMovementMode(value.key, value.label, value, false));
+    root.append(grid);
+
+    const additional = supplied.filter(value => !claimed.has(value));
+    if (additional.length > 0) {
+        const details = createElement("details", "dd-movement-values__details");
+        const toggle = createElement(
+            "summary",
+            "dd-movement-values__details-toggle",
+            "Additional movement");
+        const extras = createElement("div", "dd-movement-values__extras");
+        extras.setAttribute("aria-label", "Additional movement speeds");
+        for (const value of additional) {
+            extras.append(renderMovementMode(value.key, value.label, value, false));
+        }
+        details.append(toggle, extras);
+        root.append(details);
     }
 
-    root.append(grid);
     return root;
 }
 
