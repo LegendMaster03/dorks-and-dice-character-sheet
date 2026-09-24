@@ -325,11 +325,12 @@ test("retired workspace grid selectors are removed after the reference-layout co
     assert.doesNotMatch(css, /\.dd-sheet__workspace\b/);
 });
 
-test("wide layout uses a full-width top strip, a persistent left rail, and a broad primary workspace", () => {
-    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(0,\s*1fr\)/s);
+test("wide layout uses a full-width top strip, a broad play workspace, and a compact right reference rail", () => {
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(0,\s*1fr\)[^}]*minmax\(19rem,\s*22rem\)[^}]*"stage reference"[^}]*"stage skills"/s);
     assert.match(css, /\.dd-sheet__top-row\s*\{[^}]*padding:/s);
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__reference-rail"\)/);
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__skills"\)/);
+    assert.match(sheetSource, /dashboard\.append\(stage, referenceRail, skillsColumn\)/);
     assert.match(sheetSource, /dashboard\.append\(referenceRail, skillsColumn, stage\)/);
     assert.match(sheetSource, /stage\.append\(primary\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
