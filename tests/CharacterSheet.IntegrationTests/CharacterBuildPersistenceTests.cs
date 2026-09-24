@@ -82,6 +82,47 @@ public sealed class CharacterBuildPersistenceTests
     }
 
     [Fact]
+    public async Task BackgroundAndDeitySelectionsPersistIndependently()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+
+        await using (var firstContext = new CharacterSheetDbContext(options))
+        {
+            await firstContext.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
+            var buildStore = new PostgresCharacterBuildStore(firstContext);
+
+            await buildStore.SetFoundationalSelectionAsync(
+                characterId,
+                CharacterFoundationalSelectionCategory.Background,
+                "BACKGROUND:SAGE",
+                DateTimeOffset.UtcNow);
+            await buildStore.SetFoundationalSelectionAsync(
+                characterId,
+                CharacterFoundationalSelectionCategory.Deity,
+                "DEITY:PELOR",
+                DateTimeOffset.UtcNow.AddSeconds(1));
+        }
+
+        await using (var secondContext = new CharacterSheetDbContext(options))
+        {
+            var persisted = await new PostgresCharacterBuildStore(secondContext).GetAsync(characterId);
+            Assert.NotNull(persisted);
+            Assert.Equal(2, persisted.FoundationalSelections.Count);
+            Assert.Contains(
+                persisted.FoundationalSelections,
+                value => value.Category == CharacterFoundationalSelectionCategory.Background
+                    && value.RuleConceptKey == "background:sage");
+            Assert.Contains(
+                persisted.FoundationalSelections,
+                value => value.Category == CharacterFoundationalSelectionCategory.Deity
+                    && value.RuleConceptKey == "deity:pelor");
+        }
+    }
+
+    [Fact]
     public async Task FeatOccurrencesPersistAcrossDbContextRecreationAndDuplicateConceptsRemainDistinct()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
