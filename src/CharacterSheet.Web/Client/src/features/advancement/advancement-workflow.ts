@@ -47,9 +47,13 @@ export function createAdvancementWorkflow(
         try {
             const entityType = target === "raceSpecies"
                 ? "race"
-                : target === "startingClass"
-                    ? "class"
-                    : "subclass";
+                : target === "background"
+                    ? "background"
+                    : target === "deity"
+                        ? "deity"
+                        : target === "startingClass"
+                            ? "class"
+                            : "subclass";
             const catalog = await searchResolvedRules(
                 environment,
                 entityType,
