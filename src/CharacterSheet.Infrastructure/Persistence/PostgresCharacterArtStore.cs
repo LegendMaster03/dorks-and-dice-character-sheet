@@ -27,11 +27,29 @@ public sealed class PostgresCharacterArtStore(CharacterSheetDbContext dbContext)
 
     public async Task<CharacterArtAsset?> SetPortraitAsync(Guid characterId, Guid assetId, DateTimeOffset changedAt, CancellationToken cancellationToken = default)
     {
-        var assets = await dbContext.CharacterArtAssets.Where(value => value.CharacterId == characterId).ToArrayAsync(cancellationToken);
+        var assets = await dbContext.CharacterArtAssets
+            .Where(value => value.CharacterId == characterId)
+            .ToArrayAsync(cancellationToken);
         var selected = assets.SingleOrDefault(value => value.Id == assetId);
         if (selected is null) return null;
-        foreach (var asset in assets) asset.SetPortrait(asset.Id == assetId, changedAt);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        foreach (var asset in assets.Where(value => value.IsPortrait && value.Id != assetId))
+        {
+            asset.SetPortrait(false, changedAt);
+        }
+
+        // Flush the previous portrait first. PostgreSQL enforces the filtered unique
+        // portrait index per Character, so promoting the replacement in the same
+        // SaveChanges batch can transiently violate the constraint depending on
+        // statement ordering.
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        selected.SetPortrait(true, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
         return selected;
     }
 
