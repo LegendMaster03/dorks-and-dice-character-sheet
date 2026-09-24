@@ -352,7 +352,7 @@ function headerReferenceDisplay(
             tone: "error"
         };
     }
-    return toRuleReferenceDisplay(builder.references[target]);
+    return toRuleReferenceDisplay(builder.references[target] ?? { status: "none" });
 }
 
 export interface ChoiceActionPolicy {
