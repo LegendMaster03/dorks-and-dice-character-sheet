@@ -454,6 +454,16 @@ export function renderRecoveryContinuation(
                 "dd-button dd-button--secondary",
                 () => {
                     const selection = rollD20(normalizeD20RollMode(mode.value));
+                    if (selection.tied && selection.rolls[0] !== selection.rolls[1]) {
+                        input.value = "";
+                        input.setCustomValidity("");
+                        audit.textContent =
+                            formatD20Selection(selection)
+                            + " · choose the Emphasis result manually";
+                        input.focus();
+                        return;
+                    }
+
                     input.value = String(selection.selected);
                     input.setCustomValidity("");
                     audit.textContent = formatD20Selection(selection) + " · automatic";
