@@ -47,6 +47,9 @@ export function getStoredChoiceConceptKey(
     if (choice === "raceSpecies") {
         return build.foundationalSelections.find(value => value.category === "raceSpecies")?.ruleConceptKey ?? null;
     }
+    if (choice === "background" || choice === "deity") {
+        return build.foundationalSelections.find(value => value.category === choice)?.ruleConceptKey ?? null;
+    }
     if (choice === "startingClass") {
         return getStartingClassEntry(build)?.ruleConceptKey ?? null;
     }
@@ -95,7 +98,11 @@ export async function resolveStoredChoice(
         const rule = await resolveRuleConcept(environment, conceptKey, fetcher);
         const expectedEntityType = choice === "raceSpecies"
             ? "race"
-            : choice === "startingClass" ? "class" : "subclass";
+            : choice === "background"
+                ? "background"
+                : choice === "deity"
+                    ? "deity"
+                    : choice === "startingClass" ? "class" : "subclass";
         if (rule === null || rule.entityType !== expectedEntityType || rule.conceptKey !== conceptKey) {
             return { status: "unavailable", conceptKey };
         }
