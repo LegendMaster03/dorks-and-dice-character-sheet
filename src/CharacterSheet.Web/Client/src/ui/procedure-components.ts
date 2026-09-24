@@ -4,7 +4,6 @@ import type {
     DisplayFieldView,
     InventoryMechanicsView,
     ItemOccurrenceMechanicsView,
-    SourceAttributionView,
     SpellcastingProfileView
 } from "./character-mechanics.js";
 import { createElement, createInlineState } from "./components.js";
@@ -65,53 +64,16 @@ export function renderChecksAndProceduresPresentation(
         return root;
     }
 
+    // Supplemental/public-rule procedures remain available in the backend projection,
+    // but they are intentionally not rendered inside the Character Sheet. Complex
+    // systems such as Harvesting & Crafting need a dedicated workflow rather than
+    // generic check cards embedded in Actions.
     const primaryChecks = (checks ?? []).filter(value => value.supplemental !== true);
     const primaryProcedures = (procedures ?? []).filter(value => value.supplemental !== true);
-    const supplementalChecks = (checks ?? []).filter(value => value.supplemental === true);
-    const supplementalProcedures = (procedures ?? []).filter(value => value.supplemental === true);
 
     appendCheckProcedureGroups(root, primaryChecks, primaryProcedures);
 
-    if (supplementalChecks.length > 0 || supplementalProcedures.length > 0) {
-        const supplementalSources = collectSourceAttributions(
-            supplementalChecks,
-            supplementalProcedures);
-        const nestedCheckKeys = new Set(
-            supplementalProcedures.flatMap(procedure =>
-                procedure.components.map(component => component.key)));
-        const standaloneSupplementalChecks = supplementalChecks.filter(
-            check => !nestedCheckKeys.has(check.key));
-
-        const disclosure = createElement("details", "dd-check-procedure-presentation__supplemental");
-        disclosure.append(createElement(
-            "summary",
-            "dd-check-procedure-presentation__supplemental-toggle",
-            supplementalDisclosureLabel(
-                supplementalSources,
-                supplementalChecks.length,
-                supplementalProcedures.length)));
-        const body = createElement("div", "dd-check-procedure-presentation__supplemental-body");
-
-        const sourceCredit = renderSourceAttributions(supplementalSources, true);
-        if (sourceCredit !== null) {
-            const credit = createElement("div", "dd-check-procedure-presentation__supplemental-credit");
-            credit.append(sourceCredit);
-            body.append(credit);
-        }
-
-        appendCheckProcedureGroups(
-            body,
-            standaloneSupplementalChecks,
-            supplementalProcedures,
-            { compact: true, showSources: false });
-        disclosure.append(body);
-        root.append(disclosure);
-    }
-
-    if (primaryChecks.length === 0
-        && primaryProcedures.length === 0
-        && supplementalChecks.length === 0
-        && supplementalProcedures.length === 0) {
+    if (primaryChecks.length === 0 && primaryProcedures.length === 0) {
         root.append(createInlineState("-", "neutral"));
     }
     return root;
@@ -133,55 +95,6 @@ function appendCheckProcedureGroups(
         group.append(...procedures.map(procedure => renderProcedure(procedure, options)));
         target.append(group);
     }
-}
-
-function supplementalDisclosureLabel(
-    sources: readonly SourceAttributionView[],
-    checkCount: number,
-    procedureCount: number
-): string {
-    const kind = checkCount > 0 && procedureCount > 0
-        ? "checks & procedures"
-        : checkCount > 0
-            ? "checks"
-            : "procedures";
-    const labels = [...new Set(
-        sources
-            .map(source => supplementalSourceLabel(source))
-            .filter(label => label.length > 0))];
-
-    if (labels.length === 1) return `${labels[0]} — ${kind}`;
-    if (labels.length > 1) return `Additional ${kind} — ${labels.join(" • ")}`;
-    return `Additional ${kind}`;
-}
-
-function supplementalSourceLabel(source: SourceAttributionView): string {
-    const label = source.label.trim();
-    const publisher = source.detail?.match(
-        /^Rules by\s+(.+?)(?:\s*[·•]\s*|$)/i)?.[1]?.trim();
-    if (publisher === undefined
-        || publisher.length === 0
-        || label.toLocaleLowerCase().includes(publisher.toLocaleLowerCase())) {
-        return label;
-    }
-    return `${label} · ${publisher}`;
-}
-
-function collectSourceAttributions(
-    checks: readonly CharacterCheckView[],
-    procedures: readonly CharacterProcedureView[]
-): readonly SourceAttributionView[] {
-    const byKey = new Map<string, SourceAttributionView>();
-    for (const source of [
-        ...checks.flatMap(value => value.sourceAttributions ?? []),
-        ...procedures.flatMap(value => value.sourceAttributions ?? []),
-        ...procedures.flatMap(value =>
-            value.components.flatMap(component => component.sourceAttributions ?? []))
-    ]) {
-        if (source.presentationRequired !== true) continue;
-        if (!byKey.has(source.key)) byKey.set(source.key, source);
-    }
-    return [...byKey.values()];
 }
 
 export function renderItemOccurrenceMechanics(mechanics: ItemOccurrenceMechanicsView | undefined): HTMLElement | null {

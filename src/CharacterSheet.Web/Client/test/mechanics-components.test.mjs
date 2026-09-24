@@ -400,7 +400,7 @@ test("procedure renderer accepts arbitrary component counts and displays only ba
     assert.match(visibleText(procedure), /Backend result/);
 });
 
-test("supplemental rules use a source-identified compact disclosure with one creator credit", () => {
+test("supplemental rules are omitted from the Character Sheet until a dedicated workflow exists", () => {
     const attribution = {
         key: "fixture-public",
         label: "Fixture Public Rules",
@@ -409,7 +409,7 @@ test("supplemental rules use a source-identified compact disclosure with one cre
         linkLabel: "Official rules",
         presentationRequired: true
     };
-    const sharedCheck = {
+    const supplementalCheck = {
         key: "external",
         name: "External Check",
         supplemental: true,
@@ -418,42 +418,31 @@ test("supplemental rules use a source-identified compact disclosure with one cre
     const rendered = renderChecksAndProceduresPresentation(
         [
             { key: "core", name: "Core Check" },
-            sharedCheck
+            supplementalCheck
         ],
         [{
             key: "external-procedure",
             name: "External Procedure",
-            components: [sharedCheck],
+            components: [supplementalCheck],
             supplemental: true,
             sourceAttributions: [attribution]
         }]
     );
 
-    const disclosure = byClass(rendered, "dd-check-procedure-presentation__supplemental")[0];
-    const credit = byClass(rendered, "dd-check-procedure-presentation__supplemental-credit")[0];
-    assert.ok(disclosure);
-    assert.equal(disclosure.tagName, "DETAILS");
-    assert.ok(credit);
-    assert.equal(walk(disclosure).includes(credit), true);
-    assert.match(
-        visibleText(disclosure),
-        /Fixture Public Rules · Fixture Publisher — checks & procedures/);
-    assert.match(visibleText(disclosure), /External Procedure/);
-    assert.doesNotMatch(visibleText(disclosure), /Core Check/);
+    assert.match(visibleText(rendered), /Core Check/);
+    assert.doesNotMatch(visibleText(rendered), /External Check|External Procedure|Fixture Public Rules/);
+    assert.equal(byClass(rendered, "dd-check-procedure-presentation__supplemental").length, 0);
+    assert.equal(byAttribute(rendered, "data-check-key", "external").length, 0);
+});
 
-    const externalChecks = byAttribute(disclosure, "data-check-key", "external");
-    assert.equal(externalChecks.length, 1);
-    assert.equal(byClass(disclosure, "dd-check-card--compact").length, 1);
-    assert.equal(byClass(disclosure, "dd-procedure-card--compact").length, 1);
-
-    assert.match(visibleText(credit), /Fixture Public Rules/);
-    assert.match(visibleText(credit), /Rules by Fixture Publisher/);
-    const allSourceBlocks = byClass(disclosure, "dd-source-attributions");
-    assert.equal(allSourceBlocks.length, 1);
-    const links = byTag(credit, "a");
-    assert.equal(links.length, 1);
-    assert.equal(links[0].href, "https://example.test/public-rules");
-    assert.equal(links[0].textContent, "Official rules");
+test("supplemental-only mechanics leave a neutral empty state instead of exposing an incomplete subsystem", () => {
+    const rendered = renderChecksAndProceduresPresentation(
+        [{ key: "external", name: "External Check", supplemental: true }],
+        []
+    );
+    assert.equal(rendered.getAttribute("data-check-procedure-state"), "resolved");
+    assert.match(visibleText(rendered), /-/);
+    assert.doesNotMatch(visibleText(rendered), /External Check/);
 });
 
 test("source attribution renders the official link supplied by data and has no source-specific assumption", async () => {
