@@ -284,7 +284,7 @@ test("UI shell responds to the embedded Character Sheet width instead of only th
     assert.match(css, /\.dd-sheet__stage\s*\{[^}]*container-name:\s*character-stage;[^}]*container-type:\s*inline-size;/s);
     assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*grid-template-areas:[^}]*"stage reference"[^}]*"stage skills"/s);
     assert.match(css, /@container character-sheet \(max-width: 78rem\)[\s\S]*?\.dd-sheet__dashboard[\s\S]*?"stage reference"/s);
-    assert.match(css, /@container character-sheet \(max-width: 62rem\)[\s\S]*?\.dd-sheet__dashboard[\s\S]*?"stage"[\s\S]*?"reference"[\s\S]*?"skills"/s);
+    assert.match(css, /@container character-sheet \(max-width: 62rem\)\s*\{[\s\S]*?\.dd-sheet__dashboard\s*\{[^}]*grid-template-areas:\s*"stage"\s*"reference"\s*"skills";/s);
     assert.match(css, /@container character-sheet \(max-width: 62rem\)[\s\S]*?\.dd-core-stats,[\s\S]*?repeat\(3,/s);
     assert.match(css, /@container character-sheet \(max-width: 45rem\)[\s\S]*?repeat\(2,/s);
 });
@@ -331,7 +331,6 @@ test("wide layout uses a full-width top strip, a broad play workspace, and a com
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__reference-rail"\)/);
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__skills"\)/);
     assert.match(sheetSource, /dashboard\.append\(stage, referenceRail, skillsColumn\)/);
-    assert.match(sheetSource, /dashboard\.append\(referenceRail, skillsColumn, stage\)/);
     assert.match(sheetSource, /stage\.append\(primary\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
     assert.match(sheetSource, /renderCombatSummaryBand\([\s\S]*renderConditionsCard\(routine, readOnly, handlers\.routine\)/s);
