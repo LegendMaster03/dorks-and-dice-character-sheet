@@ -23,8 +23,8 @@ interface ProfileField {
 }
 
 const PROFILE_FIELDS: readonly ProfileField[] = [
-    { key: "alignment", label: "Alignment", maxLength: 300 },
-    { key: "deity", label: "Deity", maxLength: 300 },
+    { key: "alignment", label: "Alignment (authored / legacy)", maxLength: 300 },
+    { key: "deity", label: "Custom / historical Deity", maxLength: 300 },
     { key: "age", label: "Age", maxLength: 300 },
     { key: "height", label: "Height", maxLength: 300 },
     { key: "weight", label: "Weight", maxLength: 300 },
@@ -76,6 +76,8 @@ export function renderProfileSection(
         content.append(createInlineState(routine.mutationError, "error"));
     }
 
+    content.append(renderCharacterArt(routine, editable, handlers));
+
     if (editable) {
         content.append(renderProfileForm(
             profile,
@@ -87,6 +89,106 @@ export function renderProfileSection(
 
     content.append(renderProfileSummary(profile));
     return content;
+}
+
+function renderCharacterArt(
+    routine: CharacterRoutineUiState,
+    editable: boolean,
+    handlers: RoutineCharacterHandlers
+): HTMLElement {
+    const section = createElement("section", "dd-character-art");
+    section.append(createElement("h3", "dd-primary-content__subtitle", "Character Art"));
+
+    const assets = routine.state?.artAssets ?? [];
+    const pending = routine.mutation?.kind === "art-update" || routine.mutation?.kind === "art-delete";
+    const portrait = assets.find(asset => asset.isPortrait);
+
+    if (assets.length === 0) {
+        section.append(createElement(
+            "p",
+            "dd-profile__empty",
+            "No Character art has been uploaded."));
+    } else {
+        const gallery = createElement("div", "dd-character-art__gallery");
+        for (const asset of assets) {
+            const card = createElement("article", "dd-character-art__asset");
+            card.setAttribute("data-art-asset-id", asset.id);
+
+            const link = document.createElement("a");
+            link.className = "dd-character-art__image-link";
+            link.href = handlers.artContentUrl(asset.id);
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.setAttribute("aria-label", `View ${asset.originalFileName} full size`);
+
+            const image = document.createElement("img");
+            image.className = "dd-character-art__image";
+            image.src = handlers.artContentUrl(asset.id);
+            image.alt = asset.isPortrait
+                ? `Character portrait: ${asset.originalFileName}`
+                : `Character art: ${asset.originalFileName}`;
+            image.loading = "lazy";
+            link.append(image);
+
+            card.append(
+                link,
+                createElement("p", "dd-character-art__name", asset.originalFileName));
+            if (asset.isPortrait) {
+                card.append(createElement("span", "dd-status-pill", "Portrait"));
+            }
+
+            if (editable) {
+                const actions = createElement("div", "dd-routine-actions");
+                if (!asset.isPortrait) {
+                    actions.append(createButton(
+                        "Use as Portrait",
+                        "dd-button dd-button--secondary",
+                        () => handlers.setPortrait(asset.id),
+                        pending));
+                }
+                actions.append(createButton(
+                    "Delete",
+                    "dd-button dd-button--ghost",
+                    () => handlers.deleteArt(asset.id),
+                    pending));
+                card.append(actions);
+            }
+            gallery.append(card);
+        }
+        section.append(gallery);
+    }
+
+    if (editable) {
+        const controls = createElement("div", "dd-character-art__controls");
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/png,image/jpeg,image/webp,image/gif";
+        input.setAttribute("aria-label", "Choose Character art image");
+        input.disabled = pending;
+        const upload = createButton(
+            pending ? "Saving…" : "Upload Art",
+            "dd-button dd-button--secondary",
+            () => {
+                const file = input.files?.[0];
+                if (file !== undefined) handlers.uploadArt(file);
+            },
+            pending);
+        controls.append(input, upload);
+        if (portrait !== undefined) {
+            controls.append(createButton(
+                "Clear Portrait",
+                "dd-button dd-button--ghost",
+                () => handlers.clearPortrait(),
+                pending));
+        }
+        section.append(controls);
+        section.append(createElement(
+            "p",
+            "dd-routine-meta",
+            "PNG, JPEG, WebP, or GIF. Maximum 8 MiB."));
+    }
+
+    return section;
 }
 
 function renderProfileForm(
