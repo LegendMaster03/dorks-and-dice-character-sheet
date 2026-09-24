@@ -115,9 +115,9 @@ internal static class CheckProcedureProjector
         ability.ResolutionKind switch
         {
             "fixed" => ability.FixedAbilityKey ?? "Unavailable",
-            "caller-selected" => "Caller selected",
-            "rule-resolved" => "Rule resolved",
-            "character-resolved" => "Character resolved",
+            "caller-selected" => "Choose when used",
+            "rule-resolved" => "Set by the rule",
+            "character-resolved" => "From character",
             _ => ability.ResolutionKind
         };
 
@@ -133,9 +133,9 @@ internal static class CheckProcedureProjector
 
         return competency.ResolutionKind switch
         {
-            "caller-selected" => "Caller selected",
-            "rule-resolved" => "Rule resolved",
-            "character-resolved" => "Character resolved",
+            "caller-selected" => "Choose when used",
+            "rule-resolved" => "Set by the rule",
+            "character-resolved" => "From character",
             _ => competency.ResolutionKind
         };
     }

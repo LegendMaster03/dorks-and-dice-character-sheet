@@ -39,14 +39,19 @@ export function renderChecksAndProceduresPresentation(
     checks: readonly CharacterCheckView[] | undefined,
     procedures: readonly CharacterProcedureView[] | undefined
 ): HTMLElement {
-    const root = createElement("section", "dd-check-procedure-presentation");
-    root.append(createElement("h3", "dd-check-procedure-presentation__title", "Checks & Procedures"));
+    const root = createElement("details", "dd-check-procedure-presentation");
     root.setAttribute(
         "data-check-procedure-state",
         checks === undefined && procedures === undefined ? "unavailable" : "resolved");
+    root.append(createElement(
+        "summary",
+        "dd-check-procedure-presentation__summary",
+        "Checks & Procedures"));
 
+    const body = createElement("div", "dd-check-procedure-presentation__body");
     if (checks === undefined && procedures === undefined) {
-        root.append(createInlineState("-", "neutral"));
+        body.append(createInlineState("-", "neutral"));
+        root.append(body);
         return root;
     }
 
@@ -55,15 +60,15 @@ export function renderChecksAndProceduresPresentation(
     const supplementalChecks = (checks ?? []).filter(value => value.supplemental === true);
     const supplementalProcedures = (procedures ?? []).filter(value => value.supplemental === true);
 
-    appendCheckProcedureGroups(root, primaryChecks, primaryProcedures);
+    appendCheckProcedureGroups(body, primaryChecks, primaryProcedures);
 
     if (supplementalChecks.length > 0 || supplementalProcedures.length > 0) {
         const disclosure = createElement("details", "dd-check-procedure-presentation__supplemental");
         disclosure.append(createElement(
             "summary",
             "dd-check-procedure-presentation__supplemental-toggle",
-            "Supplemental checks & procedures"));
-        const body = createElement("div", "dd-check-procedure-presentation__supplemental-body");
+            "Additional checks & procedures"));
+        const supplementalBody = createElement("div", "dd-check-procedure-presentation__supplemental-body");
 
         const sourceCredit = renderSourceAttributions(
             collectSourceAttributions(supplementalChecks, supplementalProcedures),
@@ -71,20 +76,22 @@ export function renderChecksAndProceduresPresentation(
         if (sourceCredit !== null) {
             const credit = createElement("div", "dd-check-procedure-presentation__supplemental-credit");
             credit.append(sourceCredit);
-            body.append(credit);
+            supplementalBody.append(credit);
         }
 
-        appendCheckProcedureGroups(body, supplementalChecks, supplementalProcedures);
-        disclosure.append(body);
-        root.append(disclosure);
+        appendCheckProcedureGroups(supplementalBody, supplementalChecks, supplementalProcedures);
+        disclosure.append(supplementalBody);
+        body.append(disclosure);
     }
 
     if (primaryChecks.length === 0
         && primaryProcedures.length === 0
         && supplementalChecks.length === 0
         && supplementalProcedures.length === 0) {
-        root.append(createInlineState("-", "neutral"));
+        body.append(createInlineState("-", "neutral"));
     }
+
+    root.append(body);
     return root;
 }
 

@@ -629,11 +629,11 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 
 .dd-sheet__dashboard {
     display: grid;
-    grid-template-columns:
-        minmax(13.5rem, 16rem)
-        minmax(20rem, 23rem)
-        minmax(0, 1fr);
-    gap: var(--dd-sheet-space-3);
+    grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
+    grid-template-areas:
+        "stage reference"
+        "stage skills";
+    gap: var(--dd-sheet-space-3) var(--dd-sheet-space-4);
     align-items: start;
     padding: var(--dd-sheet-space-3) var(--dd-sheet-space-5) var(--dd-sheet-space-5);
 }
@@ -658,10 +658,19 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 }
 
 .dd-sheet__stage {
+    grid-area: stage;
     container-name: character-stage;
     container-type: inline-size;
     display: grid;
     align-content: start;
+}
+
+.dd-sheet__reference-rail {
+    grid-area: reference;
+}
+
+.dd-sheet__skills {
+    grid-area: skills;
 }
 
 .dd-sheet__skills .dd-mechanics-summary-grid {
@@ -680,9 +689,9 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 }
 
 .dd-skills-controls {
-    display: flex;
-    align-items: center;
-    margin-bottom: var(--dd-sheet-space-2);
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+    margin-bottom: var(--dd-sheet-space-1);
 }
 
 .dd-skills-search {
@@ -2127,50 +2136,36 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 }
 
 .dd-primary-nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0;
     min-width: 0;
-    overflow-x: auto;
+    overflow: visible;
     border-bottom: 1px solid var(--dd-sheet-border);
     background: var(--dd-sheet-surface-muted);
-    scrollbar-width: thin;
-    scroll-padding-inline: var(--dd-sheet-space-2);
-    overscroll-behavior-inline: contain;
 }
 
 .dd-primary-nav__button {
     position: relative;
-    flex: 1 0 auto;
-    min-width: max-content;
+    min-width: 0;
     min-height: 3rem;
-    padding: 0.65rem;
+    padding: 0.65rem 0.45rem;
     color: var(--dd-sheet-muted);
     background: transparent;
     border: 0;
     border-inline-end: 1px solid var(--dd-sheet-border);
     cursor: pointer;
-    font-size: 0.77rem;
+    font-size: 0.72rem;
     font-weight: 850;
-    letter-spacing: 0.035em;
+    letter-spacing: 0.025em;
+    line-height: 1.15;
     text-transform: uppercase;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .dd-primary-nav__button:last-child {
     border-inline-end: 0;
 }
-@container character-stage (min-width: 54rem) {
-    .dd-primary-nav {
-        overflow-x: visible;
-    }
-
-    .dd-primary-nav__button {
-        flex: 1 1 0;
-        min-width: 0;
-    }
-}
-
-
 .dd-primary-nav__button:hover {
     color: var(--dd-sheet-ink);
     background: var(--dd-sheet-surface-muted);
@@ -2385,4 +2380,170 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 .dd-combat-ac__detail-title {
     margin: 0 0 0.2rem;
     font-size: 0.68rem;
+}
+
+
+/* Player-first sheet hierarchy */
+.dd-sheet-header {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--dd-sheet-space-4);
+    min-height: 6rem;
+    padding: 0.85rem var(--dd-sheet-space-5);
+}
+
+.dd-sheet-header__headline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    margin-top: 0.28rem;
+    color: var(--dd-sheet-header-ink);
+    font-size: 0.86rem;
+    font-weight: 750;
+}
+
+.dd-sheet-header__headline-separator {
+    color: var(--dd-sheet-header-muted);
+    opacity: 0.65;
+}
+
+.dd-sheet-header__details {
+    position: relative;
+    justify-self: end;
+}
+
+.dd-sheet-header__details-toggle {
+    padding: 0.45rem 0.7rem;
+    color: var(--dd-sheet-header-ink);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+    cursor: pointer;
+    font-size: 0.74rem;
+    font-weight: 800;
+    list-style: none;
+}
+
+.dd-sheet-header__details-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.dd-sheet-header__details-toggle::after {
+    content: " ▾";
+    color: var(--dd-sheet-header-muted);
+}
+
+.dd-sheet-header__details[open] .dd-sheet-header__details-toggle::after {
+    content: " ▴";
+}
+
+.dd-sheet-header__details-grid {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(10rem, 1fr));
+    gap: var(--dd-sheet-space-2) var(--dd-sheet-space-4);
+    width: min(31rem, calc(100vw - 3rem));
+    margin: 0;
+    padding: var(--dd-sheet-space-3);
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-raised);
+    border: 1px solid var(--dd-sheet-border-strong);
+    border-radius: var(--dd-sheet-radius);
+    box-shadow: var(--dd-sheet-shadow);
+}
+
+.dd-sheet-header__detail-item {
+    min-width: 0;
+}
+
+.dd-sheet-header__detail-label,
+.dd-sheet-header__detail-value,
+.dd-sheet-header__detail-meta {
+    margin: 0;
+}
+
+.dd-sheet-header__detail-label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.61rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.dd-sheet-header__detail-value {
+    margin-top: 0.1rem;
+    color: var(--dd-sheet-ink);
+    font-size: 0.82rem;
+    font-weight: 750;
+    overflow-wrap: anywhere;
+}
+
+.dd-sheet-header__detail-meta {
+    margin-top: 0.1rem;
+    color: var(--dd-sheet-muted);
+    font-size: 0.66rem;
+    overflow-wrap: anywhere;
+}
+
+.dd-skills-filters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.2rem;
+}
+
+.dd-skills-filter {
+    min-width: 0;
+    padding: 0.32rem 0.25rem;
+    color: var(--dd-sheet-muted);
+    background: transparent;
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+    cursor: pointer;
+    font-size: 0.58rem;
+    font-weight: 800;
+}
+
+.dd-skills-filter:hover,
+.dd-skills-filter--active {
+    color: var(--dd-sheet-accent-strong);
+    background: var(--dd-sheet-accent-soft);
+    border-color: var(--dd-sheet-accent-border);
+}
+
+.dd-skills-view-hint {
+    margin: 0 0 var(--dd-sheet-space-2);
+    color: var(--dd-sheet-muted);
+    font-size: 0.63rem;
+    line-height: 1.35;
+}
+
+.dd-sheet__reference-rail .dd-sheet-card,
+.dd-sheet__skills .dd-sheet-card {
+    box-shadow: none;
+}
+
+.dd-sheet__reference-rail .dd-sheet-card__title,
+.dd-sheet__skills .dd-sheet-card__title {
+    border-bottom-color: transparent;
+}
+
+@container character-stage (max-width: 40rem) {
+    .dd-primary-nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .dd-primary-nav__button {
+        min-height: 2.55rem;
+        border-bottom: 1px solid var(--dd-sheet-border);
+    }
+}
+
+@container character-stage (max-width: 24rem) {
+    .dd-primary-nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }

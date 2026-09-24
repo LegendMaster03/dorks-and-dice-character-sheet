@@ -117,28 +117,35 @@
 
 @media (min-width: 1100px) and (max-width: 1279px) {
     .dd-sheet__dashboard {
-        grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) minmax(19rem, 22rem);
+        grid-template-areas:
+            "stage reference"
+            "stage skills";
+    }
+
+    .dd-sheet__stage {
+        grid-column: 1;
+        grid-row: 1 / span 2;
     }
 
     .dd-sheet__reference-rail {
-        grid-column: 1;
+        grid-column: 2;
         grid-row: 1;
     }
 
     .dd-sheet__skills {
-        grid-column: 1;
-        grid-row: 2;
-    }
-
-    .dd-sheet__stage {
         grid-column: 2;
-        grid-row: 1 / span 2;
+        grid-row: 2;
     }
 }
 
 @media (max-width: 1099px) {
     .dd-sheet__dashboard {
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "stage"
+            "reference"
+            "skills";
     }
 
     .dd-sheet__reference-rail {
@@ -157,10 +164,6 @@
         grid-template-columns: 1fr;
         gap: var(--dd-sheet-space-3);
         min-height: auto;
-    }
-
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .dd-core-stats,
@@ -222,17 +225,12 @@
         font-size: 0.76rem;
     }
 
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .dd-sheet-header__summary-item {
         padding: 0.55rem;
     }
 
     .dd-primary-nav__button {
-        flex: 0 0 auto;
-        min-width: 7rem;
+        min-width: 0;
     }
 
     .dd-readonly-banner {
@@ -529,24 +527,27 @@
 /* Container-aware embedded Character Sheet composition */
 @container character-sheet (max-width: 78rem) {
     .dd-sheet__dashboard {
-        grid-template-columns: minmax(13.5rem, 16rem) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
+        grid-template-areas:
+            "stage reference"
+            "stage skills";
+    }
+
+    .dd-sheet__stage {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        order: initial;
     }
 
     .dd-sheet__reference-rail {
-        grid-column: 1;
+        grid-column: 2;
         grid-row: 1;
         order: initial;
     }
 
     .dd-sheet__skills {
-        grid-column: 1;
-        grid-row: 2;
-        order: initial;
-    }
-
-    .dd-sheet__stage {
         grid-column: 2;
-        grid-row: 1 / span 2;
+        grid-row: 2;
         order: initial;
     }
 }
@@ -554,6 +555,10 @@
 @container character-sheet (max-width: 62rem) {
     .dd-sheet__dashboard {
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "stage"
+            "reference"
+            "skills";
     }
 
     .dd-sheet__stage {
@@ -580,10 +585,6 @@
         min-height: auto;
     }
 
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
     .dd-core-stats,
     .dd-guided-builder__ability-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -591,9 +592,6 @@
 }
 
 @container character-sheet (max-width: 45rem) {
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 
     .dd-core-stats,
     .dd-guided-builder__ability-grid {
@@ -613,8 +611,7 @@
     }
 
     .dd-primary-nav__button {
-        flex: 0 0 auto;
-        min-width: 7rem;
+        min-width: 0;
     }
 }
 
@@ -711,4 +708,48 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--dd-sheet-space-2);
+}
+
+
+@media (max-width: 720px) {
+    .dd-sheet-header__details {
+        justify-self: stretch;
+    }
+
+    .dd-sheet-header__details-toggle {
+        width: 100%;
+        text-align: left;
+    }
+
+    .dd-sheet-header__details-grid {
+        position: static;
+        grid-template-columns: 1fr;
+        width: auto;
+        margin-top: var(--dd-sheet-space-2);
+        box-shadow: none;
+    }
+}
+
+@container character-sheet (max-width: 62rem) {
+    .dd-sheet-header {
+        grid-template-columns: 1fr auto;
+    }
+}
+
+@container character-sheet (max-width: 45rem) {
+    .dd-sheet-header {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-sheet-header__details {
+        justify-self: stretch;
+    }
+
+    .dd-sheet-header__details-grid {
+        position: static;
+        grid-template-columns: 1fr;
+        width: auto;
+        margin-top: var(--dd-sheet-space-2);
+        box-shadow: none;
+    }
 }

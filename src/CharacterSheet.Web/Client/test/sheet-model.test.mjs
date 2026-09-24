@@ -282,7 +282,9 @@ const featWorkflowSource = await readFile(new URL("../src/features/features/feat
 test("UI shell responds to the embedded Character Sheet width instead of only the viewport", () => {
     assert.match(css, /\.dd-sheet\s*\{[^}]*container-name:\s*character-sheet;[^}]*container-type:\s*inline-size;/s);
     assert.match(css, /\.dd-sheet__stage\s*\{[^}]*container-name:\s*character-stage;[^}]*container-type:\s*inline-size;/s);
-    assert.match(css, /@container character-sheet \(max-width: 78rem\)[\s\S]*?\.dd-sheet__dashboard/s);
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*grid-template-areas:[^}]*"stage reference"[^}]*"stage skills"/s);
+    assert.match(css, /@container character-sheet \(max-width: 78rem\)[\s\S]*?\.dd-sheet__dashboard[\s\S]*?"stage reference"/s);
+    assert.match(css, /@container character-sheet \(max-width: 62rem\)\s*\{[\s\S]*?\.dd-sheet__dashboard\s*\{[^}]*grid-template-areas:\s*"stage"\s*"reference"\s*"skills";/s);
     assert.match(css, /@container character-sheet \(max-width: 62rem\)[\s\S]*?\.dd-core-stats,[\s\S]*?repeat\(3,/s);
     assert.match(css, /@container character-sheet \(max-width: 45rem\)[\s\S]*?repeat\(2,/s);
 });
@@ -323,12 +325,12 @@ test("retired workspace grid selectors are removed after the reference-layout co
     assert.doesNotMatch(css, /\.dd-sheet__workspace\b/);
 });
 
-test("wide layout uses a full-width top strip, a persistent left rail, and a broad primary workspace", () => {
-    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(0,\s*1fr\)/s);
+test("wide layout uses a full-width top strip, a broad play workspace, and a compact right reference rail", () => {
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(0,\s*1fr\)[^}]*minmax\(19rem,\s*22rem\)[^}]*"stage reference"[^}]*"stage skills"/s);
     assert.match(css, /\.dd-sheet__top-row\s*\{[^}]*padding:/s);
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__reference-rail"\)/);
     assert.match(sheetSource, /createElement\("aside", "dd-sheet__skills"\)/);
-    assert.match(sheetSource, /dashboard\.append\(referenceRail, skillsColumn, stage\)/);
+    assert.match(sheetSource, /dashboard\.append\(stage, referenceRail, skillsColumn\)/);
     assert.match(sheetSource, /stage\.append\(primary\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
     assert.match(sheetSource, /renderCombatSummaryBand\([\s\S]*renderConditionsCard\(routine, readOnly, handlers\.routine\)/s);
@@ -346,9 +348,10 @@ test("responsive shell uses persistent presentation scaffolds without fabricatin
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 
-test("deployed-density polish keeps primary tabs readable and separates 3.x saves from Ability saves", () => {
-    assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*white-space:\s*nowrap;/s);
-    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*overflow-x:\s*visible;/s);
+test("deployed-density polish keeps primary tabs visible and separates 3.x saves from Ability saves", () => {
+    assert.match(css, /\.dd-primary-nav\s*\{[^}]*display:\s*grid;[^}]*repeat\(6,\s*minmax\(0,\s*1fr\)\)/s);
+    assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*white-space:\s*normal;/s);
+    assert.match(css, /@container character-stage \(max-width: 40rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*repeat\(3,/s);
     assert.match(css, /\.dd-sheet-mode-bar\s*\{[^}]*padding:\s*0\.4rem/s);
     assert.doesNotMatch(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
     assert.match(sheetSource, /renderSavingThrowsCard\(detachedSavingThrows, true\)/);
