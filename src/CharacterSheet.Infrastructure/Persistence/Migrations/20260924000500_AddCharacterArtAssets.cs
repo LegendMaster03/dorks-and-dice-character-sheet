@@ -37,9 +37,9 @@ public partial class AddCharacterArtAssets : Migration
             });
 
         migrationBuilder.CreateIndex(
-            name: "IX_character_art_assets_CharacterId",
+            name: "IX_character_art_assets_CharacterId_CreatedAt",
             table: "character_art_assets",
-            column: "CharacterId");
+            columns: new[] { "CharacterId", "CreatedAt" });
 
         migrationBuilder.CreateIndex(
             name: "IX_character_art_assets_StorageKey",
