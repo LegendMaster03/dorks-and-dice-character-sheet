@@ -14,8 +14,8 @@ public sealed class ProcessedLifecycleEvent
 
 public sealed class CharacterSheetLifecycleProcessor(
     CharacterSheetDbContext dbContext,
-    ICharacterArtStorage artStorage,
-    TimeProvider timeProvider) : ICharacterSheetLifecycleProcessor
+    TimeProvider timeProvider,
+    ICharacterArtStorage? artStorage = null) : ICharacterSheetLifecycleProcessor
 {
     public async Task<LifecycleProcessingStatus> ProcessAsync(
         ToolLifecycleContext lifecycleEvent,
@@ -75,13 +75,16 @@ public sealed class CharacterSheetLifecycleProcessor(
         Guid characterId,
         CancellationToken cancellationToken)
     {
-        var artKeys = await dbContext.CharacterArtAssets
-            .Where(item => item.CharacterId == characterId)
-            .Select(item => item.StorageKey)
-            .ToArrayAsync(cancellationToken);
-        foreach (var storageKey in artKeys)
+        if (artStorage is not null)
         {
-            await artStorage.DeleteAsync(storageKey, cancellationToken);
+            var artKeys = await dbContext.CharacterArtAssets
+                .Where(item => item.CharacterId == characterId)
+                .Select(item => item.StorageKey)
+                .ToArrayAsync(cancellationToken);
+            foreach (var storageKey in artKeys)
+            {
+                await artStorage.DeleteAsync(storageKey, cancellationToken);
+            }
         }
 
         var root = await dbContext.CharacterSheets.SingleOrDefaultAsync(
