@@ -315,7 +315,7 @@ function renderGuidedBuilder(
                 builder,
                 false,
                 handlers.structural,
-                { title: "Species", choices: ["raceSpecies"] }));
+                { title: "Identity", choices: ["raceSpecies", "background", "deity"] }));
             break;
         case "advancement":
             panel.append(renderCharacterBuilder(
@@ -546,6 +546,8 @@ export function renderCharacterHeader(
     const summary = createElement("dl", "dd-sheet-header__summary");
     summary.append(
         headerSummaryItem("Race / Species", model.raceSpecies.value, model.raceSpecies.detail),
+        headerSummaryItem("Background", model.background.value, model.background.detail),
+        headerSummaryItem("Deity", model.deity.value, model.deity.detail),
         headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
     );
     if (model.playerName !== null) {
