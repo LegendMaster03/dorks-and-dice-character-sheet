@@ -43,6 +43,8 @@ public sealed class CharacterSheetRoot
 
     public int? CurrentHitPoints { get; private set; }
 
+    public int? AdvancementProgress { get; private set; }
+
     public int DeathSaveSuccesses { get; private set; }
 
     public int DeathSaveFailures { get; private set; }
@@ -75,6 +77,17 @@ public sealed class CharacterSheetRoot
 
     public ICollection<CharacterCurrencyBalance> CurrencyBalances { get; private set; } =
         new List<CharacterCurrencyBalance>();
+
+    public void SetAdvancementProgress(int? value, DateTimeOffset changedAt)
+    {
+        if (value is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "Advancement progress can not be negative.");
+        }
+
+        AdvancementProgress = value;
+        Touch(changedAt);
+    }
 
     public CharacterCurrencyBalance SetCurrencyBalance(
         string currencyKey,
