@@ -95,7 +95,7 @@ export interface CharacterSheetHandlers {
     spells: KnownSpellCharacterHandlers;
     rules: RulesInputCharacterHandlers;
     routine: RoutineCharacterHandlers;
-    harvestingCrafting: HarvestingCraftingWorkflow;
+    harvestingCrafting?: HarvestingCraftingWorkflow;
     selectSection(section: SheetSection): void;
     enterEditMode(): void;
     leaveEditMode(): void;
