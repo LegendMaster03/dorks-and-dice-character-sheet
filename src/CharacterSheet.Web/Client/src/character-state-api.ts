@@ -200,6 +200,7 @@ export interface CharacterStateResponse {
     characterId: string;
     readOnly: boolean;
     currentHitPoints: number | null;
+    advancementProgress: number | null;
     deathSaves: CharacterDeathSavesResponse;
     inventoryItemOccurrences: CharacterInventoryItemOccurrenceResponse[];
     notes: CharacterNoteResponse[];
@@ -214,7 +215,7 @@ export interface CharacterStateResponse {
 export function buildCharacterStateBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    resource?: "currency" | "profile" | "health" | "death-saves" | "inventory" | "notes" | "conditions",
+    resource?: "progression" | "currency" | "profile" | "health" | "death-saves" | "inventory" | "notes" | "conditions",
     entryId?: string
 ): string {
     let path = `/api/characters/${encodeURIComponent(characterId)}/state`;
@@ -238,6 +239,20 @@ export async function loadCharacterState(
         "GET",
         undefined,
         "Unable to load Character routine state.");
+}
+
+export async function setCharacterAdvancementProgress(
+    environment: HostEnvironment,
+    characterId: string,
+    value: number | null,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "progression"),
+        "PUT",
+        { value },
+        "Unable to update Character advancement progress.");
 }
 
 export async function setCharacterCurrencyBalance(
