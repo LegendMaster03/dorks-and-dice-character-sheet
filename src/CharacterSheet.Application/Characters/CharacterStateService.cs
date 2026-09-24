@@ -107,6 +107,7 @@ public sealed record CharacterStateView(
     Guid CharacterId,
     bool ReadOnly,
     int? CurrentHitPoints,
+    int? AdvancementProgress,
     CharacterDeathSavesView DeathSaves,
     IReadOnlyList<CharacterInventoryItemOccurrenceView> InventoryItemOccurrences,
     IReadOnlyList<CharacterNoteView> Notes,
@@ -150,6 +151,19 @@ public sealed class CharacterStateService(
 
         return await ReadyAsync(root, access.Character!, cancellationToken);
     }
+
+    public Task<CharacterStateResult> SetAdvancementProgressAsync(
+        Guid characterId,
+        int? value,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.SetAdvancementProgressAsync(
+                characterId,
+                value,
+                changedAt,
+                token),
+            cancellationToken);
 
     public Task<CharacterStateResult> SetCurrencyBalanceAsync(
         Guid characterId,
@@ -547,6 +561,7 @@ public sealed class CharacterStateService(
             root.CharacterId,
             readOnly,
             root.CurrentHitPoints,
+            root.AdvancementProgress,
             new CharacterDeathSavesView(root.DeathSaveSuccesses, root.DeathSaveFailures),
             root.InventoryItemOccurrences
                 .OrderBy(value => value.CreatedAt)
