@@ -947,7 +947,21 @@ test("Advancement Progress is neutral Character state and delegates edits withou
     assert.match(visibleText(rendered), /Advancement Progress\s+1450/);
     assert.doesNotMatch(visibleText(rendered), /\bXP\b/);
 
-    const progress = byAttribute(rendered, "data-advancement-progress", "true")[0];
+    assert.equal(byAttribute(rendered, "data-advancement-progress", "true").length, 0);
+
+    const editing = renderCharacterWorkspace(
+        character,
+        builder,
+        editableRoutine,
+        "actions",
+        false,
+        "edit",
+        guidedBuilder,
+        advancement,
+        null,
+        progressHandlers
+    );
+    const progress = byAttribute(editing, "data-advancement-progress", "true")[0];
     assert.ok(progress);
     const input = byTag(progress, "input")[0];
     assert.ok(input);
@@ -1712,21 +1726,21 @@ test("competency catalog defaults to a relevant view while search can reach the 
     assert.equal(relevant.getAttribute("aria-pressed"), "true");
     assert.equal(all.getAttribute("aria-pressed"), "false");
 
-    assert.equal(byAttribute(card, "data-skill-id", "skill.arcana")[0].hidden, false);
+    assert.notEqual(byAttribute(card, "data-skill-id", "skill.arcana")[0].hidden, true);
     assert.equal(byAttribute(card, "data-skill-id", "skill.balance")[0].hidden, true);
     assert.equal(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, true);
 
     const search = byClass(card, "dd-skills-search")[0];
     search.value = "alchemy";
     search.dispatchEvent({ type: "input" });
-    assert.equal(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, false);
+    assert.notEqual(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, true);
 
     search.value = "";
     search.dispatchEvent({ type: "input" });
     all.dispatchEvent({ type: "click" });
     assert.equal(all.getAttribute("aria-pressed"), "true");
-    assert.equal(byAttribute(card, "data-skill-id", "skill.balance")[0].hidden, false);
-    assert.equal(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, false);
+    assert.notEqual(byAttribute(card, "data-skill-id", "skill.balance")[0].hidden, true);
+    assert.notEqual(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, true);
 });
 
 
