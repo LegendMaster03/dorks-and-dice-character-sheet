@@ -224,7 +224,9 @@ Race / Species, Background, Deity, Class, and Subclass are persisted only as sta
 
 Race / Species queries the global Rules Core race/species catalog. Background queries `entityType=background`; Deity queries `entityType=deity`; Starting Class queries `entityType=class`. `prestigeClass` is not treated as a Starting Class. Subclass selection remains attached to a Character-owned Class advancement occurrence and uses Rules Core parent-Class relationships rather than source-document parsing.
 
-The sheet also consumes transient Site-owned header identity. Player Name comes from the authenticated Site user display projection and Campaign names come from the Site Tool Host campaign projection. Character Sheet does not persist those values as substitute ownership or Campaign state.
+The sheet also consumes transient Site-owned display identity. Player Name comes from the authenticated Site user projection and remains represented by the Site account context rather than being duplicated in Character Sheet header chrome. Campaign names come from the Site Tool Host campaign projection and may be shown as sheet context. Character Sheet does not persist those values as substitute ownership or Campaign state.
+
+The normal Character header follows the D&D Beyond placement hierarchy used as the UI baseline: Character name, Race / Species, and compact Advancement identity stay together. Background and rule-backed Deity are presented in the Background tab with authored biography. Character-owned Advancement Progress is presented with Advancement details rather than as an unrelated header field.
 
 Build status remains `In progress`; the Guided Setup UI reports what it can verify without inventing an edition-specific completion state machine.
 

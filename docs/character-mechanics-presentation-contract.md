@@ -33,11 +33,11 @@ Character identity is composed from owner-specific sources rather than flattened
 | Data | Authority | Character Sheet behavior |
 | --- | --- | --- |
 | Character name | Site | Display transiently; never duplicate as local authoritative identity. |
-| Player Name | Site authenticated-user projection | Display when supplied; never infer it from local ownership state. |
+| Player Name | Site authenticated-user projection | Keep it in Site account context when supplied; never infer it from local ownership state or duplicate it in Character Sheet header chrome. |
 | Campaign name(s) | Site Tool Host campaign projection | Display safe names when supplied; raw Campaign IDs remain implementation identity. |
-| Race / Species | Character selection + Rules Core concept | Persist only the stable concept key; resolve presentation from Rules Core. |
-| Background | Character selection + Rules Core concept | Persist only the stable concept key; expose choose/replace/clear. |
-| Deity | Character selection + Rules Core concept | Persist only the stable concept key; keep authored profile Deity text separate for custom/legacy biography. |
+| Race / Species | Character selection + Rules Core concept | Persist only the stable concept key; resolve presentation from Rules Core and keep compact identity in the Character header. |
+| Background | Character selection + Rules Core concept | Persist only the stable concept key; expose choose/replace/clear and present it in the Background tab. |
+| Deity | Character selection + Rules Core concept | Persist only the stable concept key; present the rule-backed selection in the Background tab and keep authored profile Deity text separate for custom/legacy biography. |
 | Alignment | Character-authored profile today | Persist/display as authored text; do not pretend it is a canonical Rules Core concept until such a contract exists. |
 | Size | Rules Core Character mechanics projection | Render the authoritative projected value and any source details. |
 
@@ -47,7 +47,7 @@ A missing optional Site display projection is rendered as unavailable rather tha
 
 The routine Character state contains nullable `advancementProgress`, a nonnegative integer. This is intentionally a semantic-neutral storage slot rather than an XP model.
 
-The browser may display and edit it as **Advancement Progress**. It must not label the value XP, calculate thresholds, level the Character automatically, or send the value to Rules Core under an invented mechanic key. If Rules Core later supplies a progression label or ruleset-specific interpretation, that semantic layer may relabel the same Character-owned value without changing its storage identity.
+The browser may display and edit it as **Advancement Progress** within Advancement details. It must not place the generic value in the Character identity header, label the value XP, calculate thresholds, level the Character automatically, or send the value to Rules Core under an invented mechanic key. If Rules Core later supplies a progression label or ruleset-specific interpretation, that semantic layer may relabel the same Character-owned value without changing its storage identity.
 
 ## Character portrait and art
 

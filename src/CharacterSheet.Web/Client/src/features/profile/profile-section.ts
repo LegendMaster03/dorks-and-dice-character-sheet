@@ -24,7 +24,7 @@ interface ProfileField {
 
 const PROFILE_FIELDS: readonly ProfileField[] = [
     { key: "alignment", label: "Alignment", maxLength: 300 },
-    { key: "deity", label: "Deity", maxLength: 300 },
+    { key: "deity", label: "Custom / Historical Deity", maxLength: 300 },
     { key: "age", label: "Age", maxLength: 300 },
     { key: "height", label: "Height", maxLength: 300 },
     { key: "weight", label: "Weight", maxLength: 300 },
