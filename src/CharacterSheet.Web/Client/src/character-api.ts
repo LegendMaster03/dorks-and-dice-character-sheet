@@ -7,6 +7,11 @@ export interface CharacterSheetRootState {
     updatedAt: string;
 }
 
+export interface CharacterCampaignDisplay {
+    campaignId: string;
+    name: string;
+}
+
 export interface CharacterSheetBootstrapResponse {
     characterId: string;
     name: string;
@@ -15,6 +20,8 @@ export interface CharacterSheetBootstrapResponse {
     campaignIds: string[];
     hasRichSheet: boolean;
     sheet: CharacterSheetRootState | null;
+    playerName?: string | null;
+    campaigns?: CharacterCampaignDisplay[];
 }
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;

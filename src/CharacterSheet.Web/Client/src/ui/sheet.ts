@@ -548,6 +548,9 @@ export function renderCharacterHeader(
         headerSummaryItem("Race / Species", model.raceSpecies.value, model.raceSpecies.detail),
         headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
     );
+    if (model.playerName !== null) {
+        summary.append(headerSummaryItem("Player Name", model.playerName));
+    }
     if (model.readOnly) {
         summary.append(headerSummaryItem("Sheet state", "Read-only", "Restore the Character through the Site to edit."));
     }
