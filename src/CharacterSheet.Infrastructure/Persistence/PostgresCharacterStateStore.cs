@@ -13,6 +13,20 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         BuildQuery(tracking: false)
             .SingleOrDefaultAsync(value => value.CharacterId == characterId, cancellationToken);
 
+    public async Task<CharacterSheetRoot?> SetAdvancementProgressAsync(
+        Guid characterId,
+        int? value,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        root.SetAdvancementProgress(value, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> SetCurrencyBalanceAsync(
         Guid characterId,
         string currencyKey,
