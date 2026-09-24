@@ -859,7 +859,9 @@ test("Details renders Character-authored profile without inventing rule-derived 
     };
 
     const rendered = render("details", null, currentRoutine);
-    const text = visibleText(rendered);
+    const details = byClass(rendered, "dd-profile")[0];
+    assert.ok(details);
+    const text = visibleText(details);
 
     assert.match(text, /Alignment\s+Neutral/);
     assert.match(text, /Deity\s+The Traveler/);
