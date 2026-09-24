@@ -118,6 +118,44 @@ public sealed class CharacterStatePersistenceTests
     }
 
     [Fact]
+    public async Task AdvancementProgressPersistsWithoutAssumingXpSemantics()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+
+        await using (var firstContext = new CharacterSheetDbContext(options))
+        {
+            await firstContext.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(firstContext).GetOrCreateAsync(characterId);
+            await new PostgresCharacterStateStore(firstContext).SetAdvancementProgressAsync(
+                characterId,
+                1450,
+                DateTimeOffset.UtcNow);
+        }
+
+        await using (var secondContext = new CharacterSheetDbContext(options))
+        {
+            var store = new PostgresCharacterStateStore(secondContext);
+            var state = await store.GetAsync(characterId);
+            Assert.NotNull(state);
+            Assert.Equal(1450, state.AdvancementProgress);
+
+            await store.SetAdvancementProgressAsync(
+                characterId,
+                null,
+                DateTimeOffset.UtcNow.AddMinutes(1));
+        }
+
+        await using (var thirdContext = new CharacterSheetDbContext(options))
+        {
+            var state = await new PostgresCharacterStateStore(thirdContext).GetAsync(characterId);
+            Assert.NotNull(state);
+            Assert.Null(state.AdvancementProgress);
+        }
+    }
+
+    [Fact]
     public async Task CurrencyBalancesPersistWithoutApplyingConversionRules()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
