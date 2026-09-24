@@ -525,7 +525,7 @@ public sealed class CharacterStateService(
             return new CharacterStateResult(CharacterStateAccessStatus.SheetNotInitialized);
         }
 
-        return Ready(root, character);
+        return await ReadyAsync(root, character, cancellationToken);
     }
 
     private async Task<CharacterStateResult> ReadyAsync(
