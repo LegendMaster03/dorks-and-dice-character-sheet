@@ -325,20 +325,32 @@ test("retired workspace grid selectors are removed after the reference-layout co
     assert.doesNotMatch(css, /\.dd-sheet__workspace\b/);
 });
 
-test("wide landscape layout gives Skills its own column and spans top stats across the other three", () => {
+test("wide desktop layout is driven by usable sheet width and keeps the top row compact", () => {
     assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(0,\s*1fr\)/s);
-    assert.match(css, /@media \(min-aspect-ratio:\s*8 \/ 5\)[\s\S]*?@container character-sheet \(min-width:\s*96rem\)/s);
-    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(18rem,\s*21rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)/s);
+    assert.doesNotMatch(css, /min-aspect-ratio:\s*8 \/ 5/);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(18rem,\s*21rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)[^}]*grid-template-rows:\s*max-content\s+auto;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__top-row\s*\{[^}]*grid-column:\s*2 \/ -1;[^}]*grid-row:\s*1;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__skills\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 2;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__reference-rail\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__stage\s*\{[^}]*grid-column:\s*3 \/ -1;[^}]*grid-row:\s*2;/s);
     assert.match(sheetSource, /createElement\("div", "dd-sheet__body"\)/);
     assert.match(sheetSource, /body\.append\(topRow, dashboard\)/);
-    assert.match(sheetSource, /dashboard\.append\(referenceRail, skillsColumn, stage\)/);
-    assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
-    assert.match(sheetSource, /renderCombatSummaryBand\([\s\S]*renderConditionsCard\(routine, readOnly, handlers\.routine\)/s);
 });
+
+test("extra-wide desktop spends width to reduce the height of the Skills collection", () => {
+    assert.match(css, /@container character-sheet \(min-width:\s*112rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(26rem,\s*30rem\)/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*112rem\)[\s\S]*?\.dd-sheet__skills \.dd-skill-list\s*\{[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+    assert.match(css, /\.dd-sheet__skills \.dd-skill-disclosure--family,[\s\S]*?\.dd-sheet__skills \.dd-skill-disclosure--composite\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
+});
+
+test("wide primary navigation exposes compact section summaries without changing tab semantics", () => {
+    assert.match(css, /\.dd-primary-nav__summary\s*\{[^}]*display:\s*none;/s);
+    assert.match(css, /@container character-stage \(min-width:\s*64rem\)[\s\S]*?\.dd-primary-nav__summary\s*\{[^}]*display:\s*block;/s);
+    assert.match(primaryContentSource, /sectionOverviewSummary\(section\.id, builder, routine, mechanics\)/);
+    assert.match(primaryContentSource, /data-sheet-section-summary/);
+});
+
 
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
     assert.doesNotMatch(sheetSource, /renderSupportScaffoldCard/);
