@@ -97,7 +97,9 @@ export function renderSkillsCard(
     function updateFilterButtons(): void {
         for (const [key, button] of filterButtons) {
             const active = key === activeFilter;
-            button.classList.toggle("dd-skills-filter--active", active);
+            button.className = active
+                ? "dd-skills-filter dd-skills-filter--active"
+                : "dd-skills-filter";
             button.setAttribute("aria-pressed", active ? "true" : "false");
         }
     }
