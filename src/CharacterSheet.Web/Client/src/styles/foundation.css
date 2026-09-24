@@ -305,46 +305,74 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
     margin-top: 0;
 }
 
-.dd-movement-values__primary {
+.dd-movement-values__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    min-width: 0;
+    min-height: 5.15rem;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    border-top: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-movement-values__mode {
     display: grid;
     place-content: center;
     gap: 0.12rem;
     min-width: 0;
-    padding: 0.42rem 0.35rem 0.3rem;
+    padding: 0.34rem 0.18rem;
 }
 
-.dd-movement-values__primary::before {
-    content: "Movement";
+.dd-movement-values__mode--primary {
+    grid-column: 1 / -1;
+    padding-block: 0.4rem;
+}
+
+.dd-movement-values__grid > .dd-movement-values__mode:not(.dd-movement-values__mode--primary) {
+    border-top: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-movement-values__grid > .dd-movement-values__mode[data-movement-mode="climb"],
+.dd-movement-values__grid > .dd-movement-values__mode[data-movement-mode="swim"] {
+    border-left: 1px solid var(--dd-sheet-border-strong);
+}
+
+.dd-movement-values__mode-label {
+    min-width: 0;
+    overflow: hidden;
     color: var(--dd-sheet-muted);
-    font-size: 0.58rem;
+    font-size: 0.5rem;
     font-weight: 800;
-    letter-spacing: 0.035em;
-    text-transform: uppercase;
-}
-
-.dd-movement-values__primary-label {
-    color: var(--dd-sheet-muted);
-    font-size: 0.52rem;
-    font-weight: 750;
+    letter-spacing: 0.025em;
     line-height: 1;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 
-.dd-movement-values__primary-value {
+.dd-movement-values__mode-value {
+    min-width: 0;
     color: var(--dd-sheet-ink);
-    font-size: 1rem;
+    font-size: 0.74rem;
     font-weight: 850;
     font-variant-numeric: tabular-nums;
     line-height: 1;
+    white-space: nowrap;
+}
+
+.dd-movement-values__mode--primary .dd-movement-values__mode-value {
+    font-size: 0.92rem;
 }
 
 .dd-movement-values__details {
-    position: relative;
     min-width: 0;
     border-top: 1px solid var(--dd-sheet-border-strong);
 }
 
 .dd-movement-values__details-toggle {
-    padding: 0.32rem 0.25rem;
+    padding: 0.3rem 0.25rem;
     color: var(--dd-sheet-muted);
     cursor: pointer;
     font-size: 0.48rem;
@@ -367,49 +395,15 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
     content: " ▴";
 }
 
-.dd-movement-values__variants {
-    position: absolute;
-    z-index: 30;
-    top: calc(100% + 0.25rem);
-    left: 0;
+.dd-movement-values__extras {
     display: grid;
-    gap: 0;
-    width: max(11rem, 100%);
+    grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
     min-width: 0;
-    overflow: hidden;
-    background: var(--dd-sheet-surface-raised);
-    border: 1px solid var(--dd-sheet-border-strong);
-    border-radius: var(--dd-sheet-radius-sm);
-    box-shadow: var(--dd-sheet-shadow);
-}
-
-.dd-movement-values__variant {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    justify-content: space-between;
-    min-width: 0;
-    padding: 0.4rem 0.5rem;
-}
-
-.dd-movement-values__variant + .dd-movement-values__variant {
     border-top: 1px solid var(--dd-sheet-border);
 }
 
-.dd-movement-values__variant-label {
-    color: var(--dd-sheet-muted);
-    font-size: 0.55rem;
-    font-weight: 800;
-    line-height: 1;
-    text-transform: uppercase;
-}
-
-.dd-movement-values__variant-value {
-    color: var(--dd-sheet-ink);
-    font-size: 0.72rem;
-    font-weight: 850;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
+.dd-movement-values__extras > .dd-movement-values__mode + .dd-movement-values__mode {
+    border-left: 1px solid var(--dd-sheet-border);
 }
 
 .dd-stat {
