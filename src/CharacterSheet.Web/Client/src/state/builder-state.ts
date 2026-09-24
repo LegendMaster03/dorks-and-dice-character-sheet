@@ -296,6 +296,8 @@ export function createInitialBuilderState(): CharacterBuilderUiState {
         build: null,
         references: {
             raceSpecies: { status: "none" },
+            background: { status: "none" },
+            deity: { status: "none" },
             startingClass: { status: "none" },
             subclass: { status: "none" }
         },
@@ -320,6 +322,8 @@ function builderStateFromBuild(
         message: undefined,
         references: {
             raceSpecies: loadingRuleReference(build, "raceSpecies"),
+            background: loadingRuleReference(build, "background"),
+            deity: loadingRuleReference(build, "deity"),
             startingClass: loadingRuleReference(build, "startingClass"),
             subclass: loadingRuleReference(build, "subclass")
         },
