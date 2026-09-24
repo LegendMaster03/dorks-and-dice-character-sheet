@@ -157,9 +157,9 @@ test("full advancement renderer presents parent, kind, progression, grants, and 
 
 test("sheet header is generalized around Advancement rather than fixed Class and Subclass columns", async () => {
     const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
-    assert.match(sheetSource, /appendHeaderDetail\(detailGrid, "Advancement"/);
-    assert.doesNotMatch(sheetSource, /appendHeaderDetail\(detailGrid, "Class"/);
-    assert.doesNotMatch(sheetSource, /appendHeaderDetail\(detailGrid, "Subclass"/);
+    assert.match(sheetSource, /headerSummaryItem\("Advancement"/);
+    assert.doesNotMatch(sheetSource, /headerSummaryItem\("Class"/);
+    assert.doesNotMatch(sheetSource, /headerSummaryItem\("Subclass"/);
     assert.match(sheetSource, /createCompactAdvancementSummary\(advancement\)/);
 });
 
