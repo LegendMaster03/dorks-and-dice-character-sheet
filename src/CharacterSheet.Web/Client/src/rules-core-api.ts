@@ -148,3 +148,202 @@ async function readRulesCoreError(response: Response, fallback: string): Promise
         return fallback;
     }
 }
+
+
+export interface HarvestingSourceResponse {
+    workKey: string;
+    workDisplayName: string;
+    provider: string;
+    gameEdition: string;
+    releaseKind: string;
+    publicationDate: string;
+    referenceUri: string;
+}
+
+export interface HarvestingComponentResponse {
+    key: string;
+    displayName: string;
+    componentDc: number;
+    quantity: number | null;
+    origin: string | null;
+}
+
+export interface HarvestingCreatureTypeResponse {
+    key: string;
+    displayName: string;
+    competencyKey: string;
+    competencyDisplayName: string;
+    defaultComponents: HarvestingComponentResponse[];
+}
+
+export interface HarvestingProcedureCheckResponse {
+    mechanicKey: string;
+    abilityKey: string;
+    abilityDisplayName: string;
+    defaultRollMode: string;
+}
+
+export interface HarvestingProcedureResponse {
+    assessment: HarvestingProcedureCheckResponse;
+    carving: HarvestingProcedureCheckResponse;
+    totalMechanicKey: string;
+    sameActorRollMode: string;
+    componentDcAggregation: string;
+    awardMode: string;
+    helpers: {
+        maximumByCreatureSize: Record<string, number>;
+        standardHelpActionApplies: boolean;
+    };
+}
+
+export interface HarvestingRulesCatalogResponse {
+    source: HarvestingSourceResponse;
+    creatureTypes: HarvestingCreatureTypeResponse[];
+    procedure: HarvestingProcedureResponse;
+}
+
+export interface HarvestingComponentEditInput {
+    key: string;
+    displayName?: string | null;
+    componentDc?: number | null;
+    quantity?: number | null;
+}
+
+export interface HarvestingTableResolutionInput {
+    creatureConceptKey?: string | null;
+    creatureType?: string | null;
+    manualEdits?: {
+        removeComponentKeys?: string[] | null;
+        upsertComponents?: HarvestingComponentEditInput[] | null;
+    } | null;
+}
+
+export interface HarvestingResolvedTableResponse {
+    source: HarvestingSourceResponse;
+    creatureType: string;
+    creatureTypeDisplayName: string;
+    competencyKey: string;
+    competencyDisplayName: string;
+    components: HarvestingComponentResponse[];
+    creatureConceptKey: string | null;
+    creatureDisplayName: string | null;
+    creatureSize: string | null;
+    creatureOverridesApplied: boolean;
+    manualEditsApplied: boolean;
+}
+
+export interface HarvestingHelperInput {
+    proficiencyBonus: number;
+    isProficient: boolean;
+    participatedForEntireDuration?: boolean;
+    isAssessmentParticipant?: boolean;
+    isCarvingParticipant?: boolean;
+}
+
+export interface HarvestingOutcomeInput {
+    table: HarvestingTableResolutionInput;
+    assessmentResult: number;
+    carvingResult: number;
+    sameActor: boolean;
+    harvestOrderComponentKeys: string[];
+    creatureSize?: string | null;
+    helpers?: HarvestingHelperInput[] | null;
+}
+
+export interface HarvestingComponentOutcomeResponse {
+    key: string;
+    displayName: string;
+    componentDc: number;
+    harvestDc: number;
+    quantity: number | null;
+    origin: string | null;
+    awarded: boolean;
+}
+
+export interface HarvestingOutcomeResponse {
+    table: HarvestingResolvedTableResponse;
+    assessmentRollMode: string;
+    carvingRollMode: string;
+    creatureSize: string | null;
+    assessmentResult: number;
+    carvingResult: number;
+    helperCount: number;
+    helperContribution: number;
+    harvestingResult: number;
+    components: HarvestingComponentOutcomeResponse[];
+}
+
+export async function loadHarvestingRules(
+    environment: HostEnvironment,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<HarvestingRulesCatalogResponse> {
+    return await requestRulesCoreJson<HarvestingRulesCatalogResponse>(
+        environment,
+        "/api/rules/harvesting",
+        "GET",
+        undefined,
+        "Harvesting rules are unavailable.",
+        fetcher);
+}
+
+export async function resolveHarvestingTable(
+    environment: HostEnvironment,
+    input: HarvestingTableResolutionInput,
+    campaignId: string | null = null,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<HarvestingResolvedTableResponse> {
+    const path = campaignId === null
+        ? "/api/rules/harvesting/resolve"
+        : `/api/campaigns/${encodeURIComponent(campaignId)}/rules/harvesting/resolve`;
+    return await requestRulesCoreJson<HarvestingResolvedTableResponse>(
+        environment,
+        path,
+        "POST",
+        input,
+        "Harvesting table resolution failed.",
+        fetcher);
+}
+
+export async function resolveHarvestingOutcome(
+    environment: HostEnvironment,
+    input: HarvestingOutcomeInput,
+    campaignId: string | null = null,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<HarvestingOutcomeResponse> {
+    const path = campaignId === null
+        ? "/api/rules/harvesting/outcome"
+        : `/api/campaigns/${encodeURIComponent(campaignId)}/rules/harvesting/outcome`;
+    return await requestRulesCoreJson<HarvestingOutcomeResponse>(
+        environment,
+        path,
+        "POST",
+        input,
+        "Harvesting outcome resolution failed.",
+        fetcher);
+}
+
+async function requestRulesCoreJson<T>(
+    environment: HostEnvironment,
+    path: string,
+    method: "GET" | "POST",
+    body: object | undefined,
+    fallback: string,
+    fetcher: FetchLike
+): Promise<T> {
+    const response = await fetcher(buildRulesCoreUrl(environment, path), {
+        method,
+        headers: body === undefined
+            ? { Accept: "application/json" }
+            : {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (!response.ok) {
+        throw new RulesCoreApiError(
+            await readRulesCoreError(response, fallback),
+            response.status);
+    }
+    return await response.json() as T;
+}
