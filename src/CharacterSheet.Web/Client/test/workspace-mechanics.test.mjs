@@ -225,7 +225,7 @@ test("primary sheet tabs use roving tabindex and horizontal arrow-key selection"
     assert.equal(selectedSection, "notes");
 });
 
-test("section-tab CSS preserves long labels and delegates narrow overflow to the strip", async () => {
+test("section-tab CSS keeps every destination visible by using vertical space on narrow stages", async () => {
     const css = (await Promise.all([
         "../src/styles/foundation.css",
         "../src/styles/builder.css",
@@ -237,14 +237,15 @@ test("section-tab CSS preserves long labels and delegates narrow overflow to the
     const navBlock = css.match(/\.dd-primary-nav\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
     const buttonBlock = css.match(/\.dd-primary-nav__button\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
 
-    assert.match(navBlock, /overflow-x:\s*auto/);
-    assert.match(navBlock, /scrollbar-width:\s*thin/);
-    assert.match(buttonBlock, /flex:\s*1 0 auto/);
-    assert.match(buttonBlock, /min-width:\s*max-content/);
-    assert.doesNotMatch(buttonBlock, /min-width:\s*0/);
+    assert.match(navBlock, /display:\s*grid/);
+    assert.match(navBlock, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+    assert.match(navBlock, /overflow:\s*visible/);
+    assert.doesNotMatch(navBlock, /overflow-x:\s*auto/);
+    assert.match(buttonBlock, /min-width:\s*0/);
+    assert.match(buttonBlock, /white-space:\s*normal/);
     assert.match(buttonBlock, /border-inline-end:/);
-    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*overflow-x:\s*visible;/s);
-    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav__button\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*0;/s);
+    assert.match(css, /@container character-stage \(min-width: 50rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*repeat\(6,/s);
+    assert.match(css, /@container character-stage \(max-width: 30rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*repeat\(2,/s);
 });
 
 test("player-facing setup copy avoids architecture-first terminology", async () => {

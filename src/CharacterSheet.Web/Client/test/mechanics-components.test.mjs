@@ -382,7 +382,7 @@ test("procedure renderer accepts arbitrary component counts and displays only ba
     assert.match(visibleText(procedure), /Backend result/);
 });
 
-test("supplemental rule checks and required creator credit share the same disclosure", () => {
+test("supplemental rules use a source-identified compact disclosure with one creator credit", () => {
     const attribution = {
         key: "fixture-public",
         label: "Fixture Public Rules",
@@ -391,15 +391,21 @@ test("supplemental rule checks and required creator credit share the same disclo
         linkLabel: "Official rules",
         presentationRequired: true
     };
+    const sharedCheck = {
+        key: "external",
+        name: "External Check",
+        supplemental: true,
+        sourceAttributions: [attribution]
+    };
     const rendered = renderChecksAndProceduresPresentation(
         [
             { key: "core", name: "Core Check" },
-            { key: "external", name: "External Check", supplemental: true, sourceAttributions: [attribution] }
+            sharedCheck
         ],
         [{
             key: "external-procedure",
             name: "External Procedure",
-            components: [],
+            components: [sharedCheck],
             supplemental: true,
             sourceAttributions: [attribution]
         }]
@@ -411,11 +417,19 @@ test("supplemental rule checks and required creator credit share the same disclo
     assert.equal(disclosure.tagName, "DETAILS");
     assert.ok(credit);
     assert.equal(walk(disclosure).includes(credit), true);
-    assert.match(visibleText(disclosure), /External Check/);
+    assert.match(visibleText(disclosure), /Fixture Public Rules checks & procedures/);
     assert.match(visibleText(disclosure), /External Procedure/);
     assert.doesNotMatch(visibleText(disclosure), /Core Check/);
+
+    const externalChecks = byAttribute(disclosure, "data-check-key", "external");
+    assert.equal(externalChecks.length, 1);
+    assert.equal(byClass(disclosure, "dd-check-card--compact").length, 1);
+    assert.equal(byClass(disclosure, "dd-procedure-card--compact").length, 1);
+
     assert.match(visibleText(credit), /Fixture Public Rules/);
     assert.match(visibleText(credit), /Rules by Fixture Publisher/);
+    const allSourceBlocks = byClass(disclosure, "dd-source-attributions");
+    assert.equal(allSourceBlocks.length, 1);
     const links = byTag(credit, "a");
     assert.equal(links.length, 1);
     assert.equal(links[0].href, "https://example.test/public-rules");

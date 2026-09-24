@@ -218,11 +218,6 @@
         font-size: 0.76rem;
     }
 
-    .dd-primary-nav__button {
-        flex: 0 0 auto;
-        min-width: 7rem;
-    }
-
     .dd-readonly-banner {
         display: grid;
         gap: 0.25rem;
@@ -515,7 +510,7 @@
 
 
 /* Container-aware embedded Character Sheet composition */
-@container character-sheet (max-width: 78rem) {
+@container character-sheet (max-width: 96rem) {
     .dd-sheet__dashboard {
         grid-template-columns: minmax(13.5rem, 16rem) minmax(0, 1fr);
     }
