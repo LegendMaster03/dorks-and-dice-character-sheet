@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createInitialState, reduceAppState } from "../.test-dist/app-state.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
+    builderReferenceDisplay,
     getGuidedBuilderSectionStates,
     createCharacterHeaderModel,
     getAbilityScoreActionPolicy,
@@ -77,18 +78,19 @@ function builder(overrides = {}) {
     };
 }
 
-test("header model presents real Character name and resolved Race, Class, and Subclass", () => {
-    const model = createCharacterHeaderModel(character, builder(), false);
+test("header model presents real Character name plus resolved Race and Advancement identity", () => {
+    const currentBuilder = builder();
+    const model = createCharacterHeaderModel(character, currentBuilder, false);
     assert.equal(model.name, "Sai Cithreth");
     assert.equal(model.raceSpecies.value, "Human");
-    assert.equal(model.background.value, "Sage");
-    assert.equal(model.deity.value, "Pelor");
     assert.equal(model.startingClass.value, "Wizard");
     assert.equal(model.subclass.value, "School of Evocation");
     assert.equal(model.campaignContext, "1 Campaign association");
+    assert.equal(builderReferenceDisplay(currentBuilder, "background").value, "Sage");
+    assert.equal(builderReferenceDisplay(currentBuilder, "deity").value, "Pelor");
 });
 
-test("header uses Site-owned Player and Campaign display context when supplied", () => {
+test("header uses Site-owned Campaign display context without duplicating Player Name", () => {
     const model = createCharacterHeaderModel({
         ...character,
         playerName: "Kyle",
@@ -98,7 +100,7 @@ test("header uses Site-owned Player and Campaign display context when supplied",
         }]
     }, builder(), false);
 
-    assert.equal(model.playerName, "Kyle");
+    assert.equal("playerName" in model, false);
     assert.equal(model.campaignContext, "Humblewood");
 });
 

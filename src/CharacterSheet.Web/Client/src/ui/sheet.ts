@@ -81,8 +81,7 @@ export function renderCharacterWorkspace(
         builder,
         forceReadOnly,
         advancement,
-        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id),
-        routine.status === "ready" ? routine.state?.advancementProgress : undefined));
+        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = structuralEditing
             || (guidedBuilder.open
@@ -534,8 +533,7 @@ export function renderCharacterHeader(
     builder: CharacterBuilderUiState,
     forceReadOnly: boolean,
     advancement: CharacterAdvancementView | null = null,
-    portraitUrl: string | null = null,
-    advancementProgress: number | null | undefined = undefined
+    portraitUrl: string | null = null
 ): HTMLElement {
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
     const header = createElement("header", "dd-sheet-header");
@@ -552,8 +550,39 @@ export function renderCharacterHeader(
         image.alt = `${character.name} portrait`;
         portrait.append(image);
     }
+
     const text = createElement("div", "dd-sheet-header__text");
     const name = createElement("h1", "dd-sheet-header__name", model.name);
+
+    const advancementSummary = advancement === null
+        ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
+        : createCompactAdvancementSummary(advancement);
+    const headline = createElement("div", "dd-sheet-header__headline");
+    const raceSpecies = createElement(
+        "span",
+        "dd-sheet-header__headline-item",
+        model.raceSpecies.value);
+    raceSpecies.setAttribute("data-sheet-header-identity", "race-species");
+    raceSpecies.setAttribute("aria-label", `Race / Species: ${model.raceSpecies.value}`);
+    if (model.raceSpecies.detail !== undefined) {
+        raceSpecies.setAttribute("title", model.raceSpecies.detail);
+    }
+
+    const advancementText = advancementSummary.detail === undefined
+        ? advancementSummary.value
+        : `${advancementSummary.value} • ${advancementSummary.detail}`;
+    const advancementItem = createElement(
+        "span",
+        "dd-sheet-header__headline-item",
+        advancementText);
+    advancementItem.setAttribute("data-sheet-header-identity", "advancement");
+    advancementItem.setAttribute("aria-label", `Advancement: ${advancementText}`);
+
+    headline.append(
+        raceSpecies,
+        createElement("span", "dd-sheet-header__headline-separator", "•"),
+        advancementItem);
+
     const statusLine = createElement("div", "dd-sheet-header__status");
     statusLine.append(createElement("span", "dd-sheet-header__lifecycle", model.lifecycleLabel));
     const builderStatus = humanizeBuilderStatus(model.builderStatus);
@@ -565,32 +594,10 @@ export function renderCharacterHeader(
         statusLine.append(createElement("span", "dd-sheet-header__separator", "•"));
         statusLine.append(createElement("span", "dd-sheet-header__campaign", model.campaignContext));
     }
-    text.append(name, statusLine);
+
+    text.append(name, headline, statusLine);
     identity.append(portrait, text);
-
-    const advancementSummary = advancement === null
-        ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
-        : createCompactAdvancementSummary(advancement);
-    const summary = createElement("dl", "dd-sheet-header__summary");
-    summary.append(
-        headerSummaryItem("Race / Species", model.raceSpecies.value, model.raceSpecies.detail),
-        headerSummaryItem("Background", model.background.value, model.background.detail),
-        headerSummaryItem("Deity", model.deity.value, model.deity.detail),
-        headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
-    );
-    if (advancementProgress !== undefined) {
-        summary.append(headerSummaryItem(
-            "Advancement Progress",
-            advancementProgress === null ? "Not set" : String(advancementProgress)));
-    }
-    if (model.playerName !== null) {
-        summary.append(headerSummaryItem("Player Name", model.playerName));
-    }
-    if (model.readOnly) {
-        summary.append(headerSummaryItem("Sheet state", "Read-only", "Restore the Character through the Site to edit."));
-    }
-
-    header.append(identity, summary);
+    header.append(identity);
     return header;
 }
 
@@ -620,18 +627,6 @@ function legacyAdvancementHeaderSummary(
         value: values[0] ?? "-",
         detail: values.length > 1 ? values.slice(1).join(" • ") : undefined
     };
-}
-
-function headerSummaryItem(label: string, value: string, detail?: string): HTMLElement {
-    const item = createElement("div", "dd-sheet-header__summary-item");
-    const term = createElement("dt", "dd-sheet-header__summary-label", label);
-    const description = createElement("dd", "dd-sheet-header__summary-value", value);
-    item.append(term, description);
-    if (detail !== undefined) {
-        const meta = createElement("dd", "dd-sheet-header__summary-detail", detail);
-        item.append(meta);
-    }
-    return item;
 }
 
 function characterInitials(name: string): string {

@@ -75,6 +75,8 @@ const builder = {
     build: null,
     references: {
         raceSpecies: { status: "none" },
+        background: { status: "none" },
+        deity: { status: "none" },
         startingClass: { status: "none" },
         subclass: { status: "none" }
     },
@@ -825,7 +827,7 @@ test("null mechanics projection keeps the normal sheet structure and uses neutra
     assert.equal(byClass(rendered, "dd-health-quick").length, 1);
 });
 
-test("Details renders Rules Core character metadata generically with calculation detail", () => {
+test("Background renders Rules Core character metadata generically with calculation detail", () => {
     const rendered = render("details", {
         characterMetadata: [{
             key: "character.size-category",
@@ -841,10 +843,10 @@ test("Details renders Rules Core character metadata generically with calculation
 
     assert.ok(size);
     assert.match(visibleText(size), /Size\s+Medium/);
-    assert.match(visibleText(size), /Details/);
+    assert.match(visibleText(size), /Background/);
 });
 
-test("Details renders Character-authored profile without inventing rule-derived identity", () => {
+test("Background renders Character-authored profile separately from rule-derived identity", () => {
     const currentRoutine = routine([], {}, true);
     currentRoutine.state.profile = {
         alignment: "Neutral",
@@ -870,9 +872,30 @@ test("Details renders Character-authored profile without inventing rule-derived 
     const text = visibleText(details);
 
     assert.match(text, /Alignment\s+Neutral/);
-    assert.match(text, /Deity\s+The Traveler/);
+    assert.match(text, /Custom \/ Historical Deity\s+The Traveler/);
     assert.match(text, /Backstory\s+A long-form history/);
     assert.doesNotMatch(text, /Background|Size|Player Name|Campaign/);
+});
+
+test("header follows the Beyond identity hierarchy instead of metadata cards", () => {
+    const rendered = render("actions", null);
+    const header = byClass(rendered, "dd-sheet-header")[0];
+    assert.ok(header);
+
+    assert.equal(byAttribute(header, "data-sheet-header-identity", "race-species").length, 1);
+    assert.equal(byAttribute(header, "data-sheet-header-identity", "advancement").length, 1);
+    assert.equal(byClass(header, "dd-sheet-header__summary").length, 0);
+    assert.doesNotMatch(
+        visibleText(header),
+        /Background|Deity|Advancement Progress|Player Name/);
+});
+
+test("Background tab owns rule-backed Background and Deity placement", () => {
+    const rendered = render("details", null);
+    const identity = byAttribute(rendered, "data-background-identity", "true")[0];
+    assert.ok(identity);
+    assert.match(visibleText(identity), /Background/);
+    assert.match(visibleText(identity), /Deity/);
 });
 
 test("read-only Character art remains visible without mutation controls", () => {
@@ -957,7 +980,7 @@ test("Advancement Progress is neutral Character state and delegates edits withou
     assert.equal(savedProgress, 1600);
 });
 
-test("Details editing delegates one complete Character-authored profile mutation", () => {
+test("Background editing delegates one complete Character-authored profile mutation", () => {
     let savedProfile = null;
     const editableRoutine = routine([], {}, false);
     const profileHandlers = {

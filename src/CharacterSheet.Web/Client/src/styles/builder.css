@@ -159,10 +159,6 @@
         min-height: auto;
     }
 
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
     .dd-core-stats,
     .dd-guided-builder__ability-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -220,14 +216,6 @@
     .dd-sheet-header__status {
         gap: 0.35rem;
         font-size: 0.76rem;
-    }
-
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .dd-sheet-header__summary-item {
-        padding: 0.55rem;
     }
 
     .dd-primary-nav__button {
@@ -580,10 +568,6 @@
         min-height: auto;
     }
 
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
     .dd-core-stats,
     .dd-guided-builder__ability-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -591,9 +575,6 @@
 }
 
 @container character-sheet (max-width: 45rem) {
-    .dd-sheet-header__summary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 
     .dd-core-stats,
     .dd-guided-builder__ability-grid {
@@ -618,6 +599,52 @@
     }
 }
 
+
+.dd-background-identity {
+    margin: 0;
+    padding-bottom: var(--dd-sheet-space-3);
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
+.dd-background-identity__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: var(--dd-sheet-space-3);
+    margin: 0;
+}
+
+.dd-background-identity__item {
+    min-width: 0;
+}
+
+.dd-background-identity__label,
+.dd-background-identity__value,
+.dd-background-identity__detail {
+    margin: 0;
+}
+
+.dd-background-identity__label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.dd-background-identity__value {
+    margin-top: var(--dd-sheet-space-1);
+    color: var(--dd-sheet-ink);
+    font-size: 0.95rem;
+    font-weight: 750;
+    overflow-wrap: anywhere;
+}
+
+.dd-background-identity__detail {
+    margin-top: var(--dd-sheet-space-1);
+    color: var(--dd-sheet-muted);
+    font-size: 0.72rem;
+    overflow-wrap: anywhere;
+}
 
 .dd-profile {
     display: grid;

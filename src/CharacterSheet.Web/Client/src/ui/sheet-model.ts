@@ -45,9 +45,9 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     },
     {
         id: "details",
-        label: "Details",
-        emptyTitle: "No Character details yet",
-        emptyMessage: "Character-authored profile details appear here."
+        label: "Background",
+        emptyTitle: "No Background details yet",
+        emptyMessage: "Background, identity, and Character-authored profile details appear here."
     },
     {
         id: "notes",
@@ -293,10 +293,7 @@ export interface CharacterHeaderModel {
     readOnly: boolean;
     builderStatus: string | null;
     campaignContext: string | null;
-    playerName: string | null;
     raceSpecies: RuleReferenceDisplay;
-    background: RuleReferenceDisplay;
-    deity: RuleReferenceDisplay;
     startingClass: RuleReferenceDisplay;
     subclass: RuleReferenceDisplay;
 }
@@ -313,12 +310,9 @@ export function createCharacterHeaderModel(
         readOnly,
         builderStatus: builder.build?.builderStatus ?? character.sheet?.builderStatus ?? null,
         campaignContext: formatCampaignContext(character),
-        playerName: character.playerName?.trim() || null,
-        raceSpecies: headerReferenceDisplay(builder, "raceSpecies"),
-        background: headerReferenceDisplay(builder, "background"),
-        deity: headerReferenceDisplay(builder, "deity"),
-        startingClass: headerReferenceDisplay(builder, "startingClass"),
-        subclass: headerReferenceDisplay(builder, "subclass")
+        raceSpecies: builderReferenceDisplay(builder, "raceSpecies"),
+        startingClass: builderReferenceDisplay(builder, "startingClass"),
+        subclass: builderReferenceDisplay(builder, "subclass")
     };
 }
 
@@ -335,7 +329,7 @@ function formatCampaignContext(character: CharacterSheetBootstrapResponse): stri
         : `${character.campaignIds.length} Campaign associations`;
 }
 
-function headerReferenceDisplay(
+export function builderReferenceDisplay(
     builder: CharacterBuilderUiState,
     target: CharacterBuilderChoice
 ): RuleReferenceDisplay {

@@ -4,7 +4,11 @@ import type {
 } from "../app-state.js";
 import type { CharacterMechanicsView } from "./character-mechanics.js";
 import { createButton, createElement } from "./components.js";
-import { SHEET_SECTIONS, type SheetSection } from "./sheet-model.js";
+import {
+    builderReferenceDisplay,
+    SHEET_SECTIONS,
+    type SheetSection
+} from "./sheet-model.js";
 import type { CharacterSheetHandlers } from "./sheet-contracts.js";
 import { renderActionsPresentation } from "../features/actions/actions.js";
 import {
@@ -80,11 +84,13 @@ export function renderPrimaryContent(
 
     switch (definition.id) {
         case "details":
-            panel.append(renderProfileSection(
-                routine,
-                readOnly,
-                handlers.routine,
-                mechanics?.characterMetadata));
+            panel.append(
+                renderBackgroundIdentity(builder),
+                renderProfileSection(
+                    routine,
+                    readOnly,
+                    handlers.routine,
+                    mechanics?.characterMetadata));
             break;
         case "notes":
             panel.append(renderNotesSection(routine, readOnly, handlers.routine));
@@ -149,4 +155,39 @@ export function renderPrimaryContent(
 
     card.append(nav, panel);
     return card;
+}
+
+
+function renderBackgroundIdentity(builder: CharacterBuilderUiState): HTMLElement {
+    const identity = createElement("section", "dd-background-identity");
+    identity.setAttribute("aria-label", "Background identity");
+    identity.setAttribute("data-background-identity", "true");
+
+    const grid = createElement("dl", "dd-background-identity__grid");
+    grid.append(
+        backgroundIdentityItem(
+            "Background",
+            builderReferenceDisplay(builder, "background")),
+        backgroundIdentityItem(
+            "Deity",
+            builderReferenceDisplay(builder, "deity")));
+    identity.append(grid);
+    return identity;
+}
+
+function backgroundIdentityItem(
+    label: string,
+    display: ReturnType<typeof builderReferenceDisplay>
+): HTMLElement {
+    const item = createElement("div", "dd-background-identity__item");
+    item.append(
+        createElement("dt", "dd-background-identity__label", label),
+        createElement("dd", "dd-background-identity__value", display.value));
+    if (display.detail !== undefined) {
+        item.append(createElement(
+            "dd",
+            "dd-background-identity__detail",
+            display.detail));
+    }
+    return item;
 }
