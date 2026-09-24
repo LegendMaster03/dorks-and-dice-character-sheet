@@ -81,7 +81,8 @@ export function renderCharacterWorkspace(
         builder,
         forceReadOnly,
         advancement,
-        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
+        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id),
+        routine.status === "ready" ? routine.state?.advancementProgress : undefined));
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = structuralEditing
             || (guidedBuilder.open
@@ -91,7 +92,15 @@ export function renderCharacterWorkspace(
             advancement,
             builder,
             advancementEditing,
-            handlers.structural));
+            handlers.structural,
+            {
+                value: routine.status === "ready"
+                    ? routine.state?.advancementProgress
+                    : undefined,
+                readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+                saving: routine.mutation?.kind === "progression-update",
+                onSet: handlers.routine.setAdvancementProgress
+            }));
     }
     if (editable) {
         shell.append(renderModeControls(
@@ -525,7 +534,8 @@ export function renderCharacterHeader(
     builder: CharacterBuilderUiState,
     forceReadOnly: boolean,
     advancement: CharacterAdvancementView | null = null,
-    portraitUrl: string | null = null
+    portraitUrl: string | null = null,
+    advancementProgress: number | null | undefined = undefined
 ): HTMLElement {
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
     const header = createElement("header", "dd-sheet-header");
@@ -568,6 +578,11 @@ export function renderCharacterHeader(
         headerSummaryItem("Deity", model.deity.value, model.deity.detail),
         headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
     );
+    if (advancementProgress !== undefined) {
+        summary.append(headerSummaryItem(
+            "Advancement Progress",
+            advancementProgress === null ? "Not set" : String(advancementProgress)));
+    }
     if (model.playerName !== null) {
         summary.append(headerSummaryItem("Player Name", model.playerName));
     }
