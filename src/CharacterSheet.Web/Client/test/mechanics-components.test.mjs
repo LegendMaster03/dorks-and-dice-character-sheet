@@ -280,6 +280,15 @@ test("editable Hit Points card exposes direct and modifier controls while keepin
     assert.equal(saved.at(-1), -8);
 });
 
+test("recovery d20 UI preserves physical dice entry and exposes a manual roll-mode override", async () => {
+    const source = await readFile(new URL("../src/features/health/health.ts", import.meta.url), "utf8");
+    assert.match(source, /normalizeD20RollMode\(roll\.rollMode\)/);
+    assert.match(source, /data-roll-mode-override/);
+    assert.match(source, /Physical dice: enter the selected result directly/);
+    assert.match(source, /input\.placeholder = "Enter result from physical dice or use the roller"/);
+    assert.match(source, /rollD20\(normalizeD20RollMode\(mode\.value\)\)/);
+});
+
 test("recovery controls render nothing when Rules Core supplies no procedures", () => {
     assert.equal(renderRecoveryControls(undefined, false, false, undefined), null);
     assert.equal(renderRecoveryControls([], false, false, undefined), null);

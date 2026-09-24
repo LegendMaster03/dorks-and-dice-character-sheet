@@ -1183,6 +1183,25 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
     cursor: default;
     opacity: 0.55;
 }
+.dd-recovery-continuation__roll-controls {
+    display: flex;
+    gap: var(--dd-sheet-space-2);
+    align-items: center;
+    flex-wrap: wrap;
+    margin: var(--dd-sheet-space-1) 0;
+}
+
+.dd-recovery-continuation__roll-mode {
+    width: auto;
+    min-width: 8rem;
+}
+
+.dd-recovery-continuation__roll-audit {
+    color: var(--dd-sheet-muted);
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
 
 .dd-health-quick__adjust-input {
     width: 100%;
