@@ -83,17 +83,15 @@ export function renderCharacterWorkspace(
         advancement,
         portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id),
         routine.status === "ready" ? routine.state?.advancementProgress : undefined));
-    const advancementEditing = structuralEditing
-        || (guidedBuilder.open
-            && editable
-            && guidedBuilder.activeSection === "advancement");
-    if (advancement !== null
-        && advancement.occurrences.length > 0
-        && advancementEditing) {
+    if (advancement !== null && advancement.occurrences.length > 0) {
+        const advancementEditing = structuralEditing
+            || (guidedBuilder.open
+                && editable
+                && guidedBuilder.activeSection === "advancement");
         shell.append(renderAdvancementDetails(
             advancement,
             builder,
-            true,
+            advancementEditing,
             handlers.structural,
             {
                 value: routine.status === "ready"
@@ -225,7 +223,7 @@ export function renderCharacterWorkspace(
         handlers));
     stage.append(primary);
 
-    dashboard.append(stage, referenceRail, skillsColumn);
+    dashboard.append(referenceRail, skillsColumn, stage);
     shell.append(topRow, dashboard);
     return shell;
 }
@@ -542,10 +540,6 @@ export function renderCharacterHeader(
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
     const header = createElement("header", "dd-sheet-header");
 
-    const advancementSummary = advancement === null
-        ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
-        : createCompactAdvancementSummary(advancement);
-
     const identity = createElement("div", "dd-sheet-header__identity");
     const portrait = createElement("div", "dd-sheet-header__portrait");
     if (portraitUrl === null) {
@@ -558,14 +552,8 @@ export function renderCharacterHeader(
         image.alt = `${character.name} portrait`;
         portrait.append(image);
     }
-
     const text = createElement("div", "dd-sheet-header__text");
     const name = createElement("h1", "dd-sheet-header__name", model.name);
-    const headline = createElement("div", "dd-sheet-header__headline");
-    appendHeaderHeadlineValue(headline, model.raceSpecies.value);
-    appendHeaderHeadlineValue(headline, advancementSummary.value);
-    appendHeaderHeadlineValue(headline, model.background.value);
-
     const statusLine = createElement("div", "dd-sheet-header__status");
     statusLine.append(createElement("span", "dd-sheet-header__lifecycle", model.lifecycleLabel));
     const builderStatus = humanizeBuilderStatus(model.builderStatus);
@@ -577,69 +565,33 @@ export function renderCharacterHeader(
         statusLine.append(createElement("span", "dd-sheet-header__separator", "•"));
         statusLine.append(createElement("span", "dd-sheet-header__campaign", model.campaignContext));
     }
-
-    text.append(name);
-    if (headline.children.length > 0) text.append(headline);
-    text.append(statusLine);
+    text.append(name, statusLine);
     identity.append(portrait, text);
 
-    const details = createElement("details", "dd-sheet-header__details");
-    details.append(createElement("summary", "dd-sheet-header__details-toggle", "Character details"));
-    const detailGrid = createElement("dl", "dd-sheet-header__details-grid");
-    appendHeaderDetail(detailGrid, "Race / Species", model.raceSpecies.value, model.raceSpecies.detail);
-    appendHeaderDetail(detailGrid, "Background", model.background.value, model.background.detail);
-    appendHeaderDetail(detailGrid, "Deity", model.deity.value, model.deity.detail);
-    appendHeaderDetail(detailGrid, "Advancement", advancementSummary.value, advancementSummary.detail);
+    const advancementSummary = advancement === null
+        ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
+        : createCompactAdvancementSummary(advancement);
+    const summary = createElement("dl", "dd-sheet-header__summary");
+    summary.append(
+        headerSummaryItem("Race / Species", model.raceSpecies.value, model.raceSpecies.detail),
+        headerSummaryItem("Background", model.background.value, model.background.detail),
+        headerSummaryItem("Deity", model.deity.value, model.deity.detail),
+        headerSummaryItem("Advancement", advancementSummary.value, advancementSummary.detail)
+    );
     if (advancementProgress !== undefined) {
-        appendHeaderDetail(
-            detailGrid,
+        summary.append(headerSummaryItem(
             "Advancement Progress",
-            advancementProgress === null ? "Not set" : String(advancementProgress));
+            advancementProgress === null ? "Not set" : String(advancementProgress)));
     }
     if (model.playerName !== null) {
-        appendHeaderDetail(detailGrid, "Player Name", model.playerName);
+        summary.append(headerSummaryItem("Player Name", model.playerName));
     }
     if (model.readOnly) {
-        appendHeaderDetail(
-            detailGrid,
-            "Sheet state",
-            "Read-only",
-            "Restore the Character through the Site to edit.");
+        summary.append(headerSummaryItem("Sheet state", "Read-only", "Restore the Character through the Site to edit."));
     }
-    details.append(detailGrid);
 
-    header.append(identity, details);
+    header.append(identity, summary);
     return header;
-}
-
-function appendHeaderHeadlineValue(target: HTMLElement, value: string): void {
-    const normalized = value.trim();
-    if (normalized.length === 0
-        || normalized === "-"
-        || /^not selected$/i.test(normalized)
-        || /^no advancement/i.test(normalized)) {
-        return;
-    }
-    if (target.children.length > 0) {
-        target.append(createElement("span", "dd-sheet-header__headline-separator", "•"));
-    }
-    target.append(createElement("span", "dd-sheet-header__headline-item", normalized));
-}
-
-function appendHeaderDetail(
-    target: HTMLElement,
-    label: string,
-    value: string,
-    detail?: string
-): void {
-    const item = createElement("div", "dd-sheet-header__detail-item");
-    const term = createElement("dt", "dd-sheet-header__detail-label", label);
-    const description = createElement("dd", "dd-sheet-header__detail-value", value);
-    item.append(term, description);
-    if (detail !== undefined) {
-        item.append(createElement("dd", "dd-sheet-header__detail-meta", detail));
-    }
-    target.append(item);
 }
 
 function renderReadOnlyBanner(archived: boolean): HTMLElement {
@@ -668,6 +620,18 @@ function legacyAdvancementHeaderSummary(
         value: values[0] ?? "-",
         detail: values.length > 1 ? values.slice(1).join(" • ") : undefined
     };
+}
+
+function headerSummaryItem(label: string, value: string, detail?: string): HTMLElement {
+    const item = createElement("div", "dd-sheet-header__summary-item");
+    const term = createElement("dt", "dd-sheet-header__summary-label", label);
+    const description = createElement("dd", "dd-sheet-header__summary-value", value);
+    item.append(term, description);
+    if (detail !== undefined) {
+        const meta = createElement("dd", "dd-sheet-header__summary-detail", detail);
+        item.append(meta);
+    }
+    return item;
 }
 
 function characterInitials(name: string): string {
