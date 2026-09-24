@@ -8,6 +8,7 @@ import {
     RichSheetInitializationError,
     type CharacterSheetBootstrapResponse
 } from "./character-api.js";
+import { setCharacterAdvancementProgress } from "./character-state-api.js";
 import { resolveHostEnvironment } from "./host-environment.js";
 import { createApplication } from "./render-lifecycle.js";
 import { parseCharacterSheetRoute } from "./routes.js";
@@ -259,6 +260,15 @@ function renderWorkspace(
                     void inventoryWorkflow.removeCurrency(character.characterId, currencyKey),
                 setProfile: input =>
                     void profileWorkflow.save(character.characterId, input),
+                setAdvancementProgress: value =>
+                    void routineStateWorkflow.mutate(
+                        "progression-update",
+                        () => setCharacterAdvancementProgress(
+                            environment,
+                            character.characterId,
+                            value),
+                        undefined,
+                        { resolveReferences: false }),
                 uploadArt: file =>
                     void characterArtWorkflow.upload(character.characterId, file),
                 setPortrait: assetId =>
