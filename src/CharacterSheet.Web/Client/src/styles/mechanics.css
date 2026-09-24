@@ -253,6 +253,13 @@
     border-top: 1px solid var(--dd-sheet-border);
 }
 
+@container character-stage (min-width: 64rem) {
+    .dd-action-workflows {
+        grid-template-columns: minmax(18rem, 0.8fr) minmax(28rem, 1.2fr);
+        align-items: start;
+    }
+}
+
 .dd-check-procedure-presentation__checks,
 .dd-procedure-card__checks {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));

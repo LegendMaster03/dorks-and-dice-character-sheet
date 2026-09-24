@@ -11,27 +11,42 @@ import { createElement, createInlineState } from "./components.js";
 import { renderDisplayFields, renderFacts, renderMechanicalValue } from "./mechanics-components.js";
 import { renderSourceAttributions } from "./source-attribution.js";
 
-export function renderCheck(check: CharacterCheckView): HTMLElement {
-    const root = createElement("article", "dd-check-card");
+interface CheckProcedureRenderOptions {
+    compact?: boolean;
+    showSources?: boolean;
+}
+
+export function renderCheck(
+    check: CharacterCheckView,
+    options: CheckProcedureRenderOptions = {}
+): HTMLElement {
+    const root = createElement(
+        "article",
+        options.compact ? "dd-check-card dd-check-card--compact" : "dd-check-card");
     root.setAttribute("data-check-key", check.key);
     root.append(createElement("h4", "dd-check-card__name", check.name));
     const facts = renderFacts([fieldTuple(check.ability), fieldTuple(check.competencyOrTool), fieldTuple(check.target)]);
     if (facts !== null) root.append(facts);
     if (check.effectiveModifierOrResult) root.append(renderMechanicalValue(check.effectiveModifierOrResult, true));
-    appendSources(root, check.sourceAttributions);
+    if (options.showSources !== false) appendSources(root, check.sourceAttributions);
     return root;
 }
 
-export function renderProcedure(procedure: CharacterProcedureView): HTMLElement {
-    const root = createElement("article", "dd-procedure-card");
+export function renderProcedure(
+    procedure: CharacterProcedureView,
+    options: CheckProcedureRenderOptions = {}
+): HTMLElement {
+    const root = createElement(
+        "article",
+        options.compact ? "dd-procedure-card dd-procedure-card--compact" : "dd-procedure-card");
     root.setAttribute("data-procedure-key", procedure.key);
     root.append(createElement("h3", "dd-procedure-card__name", procedure.name));
     const checks = createElement("div", "dd-procedure-card__checks");
-    checks.append(...procedure.components.map(renderCheck));
+    checks.append(...procedure.components.map(component => renderCheck(component, options)));
     root.append(checks);
     const facts = renderFacts([fieldTuple(procedure.state), fieldTuple(procedure.result)]);
     if (facts !== null) root.append(facts);
-    appendSources(root, procedure.sourceAttributions);
+    if (options.showSources !== false) appendSources(root, procedure.sourceAttributions);
     return root;
 }
 
@@ -58,23 +73,37 @@ export function renderChecksAndProceduresPresentation(
     appendCheckProcedureGroups(root, primaryChecks, primaryProcedures);
 
     if (supplementalChecks.length > 0 || supplementalProcedures.length > 0) {
+        const supplementalSources = collectSourceAttributions(
+            supplementalChecks,
+            supplementalProcedures);
+        const nestedCheckKeys = new Set(
+            supplementalProcedures.flatMap(procedure =>
+                procedure.components.map(component => component.key)));
+        const standaloneSupplementalChecks = supplementalChecks.filter(
+            check => !nestedCheckKeys.has(check.key));
+
         const disclosure = createElement("details", "dd-check-procedure-presentation__supplemental");
         disclosure.append(createElement(
             "summary",
             "dd-check-procedure-presentation__supplemental-toggle",
-            "Supplemental checks & procedures"));
+            supplementalDisclosureLabel(
+                supplementalSources,
+                supplementalChecks.length,
+                supplementalProcedures.length)));
         const body = createElement("div", "dd-check-procedure-presentation__supplemental-body");
 
-        const sourceCredit = renderSourceAttributions(
-            collectSourceAttributions(supplementalChecks, supplementalProcedures),
-            true);
+        const sourceCredit = renderSourceAttributions(supplementalSources, true);
         if (sourceCredit !== null) {
             const credit = createElement("div", "dd-check-procedure-presentation__supplemental-credit");
             credit.append(sourceCredit);
             body.append(credit);
         }
 
-        appendCheckProcedureGroups(body, supplementalChecks, supplementalProcedures);
+        appendCheckProcedureGroups(
+            body,
+            standaloneSupplementalChecks,
+            supplementalProcedures,
+            { compact: true, showSources: false });
         disclosure.append(body);
         root.append(disclosure);
     }
@@ -91,18 +120,51 @@ export function renderChecksAndProceduresPresentation(
 function appendCheckProcedureGroups(
     target: HTMLElement,
     checks: readonly CharacterCheckView[],
-    procedures: readonly CharacterProcedureView[]
+    procedures: readonly CharacterProcedureView[],
+    options: CheckProcedureRenderOptions = {}
 ): void {
     if (checks.length > 0) {
         const group = createElement("div", "dd-check-procedure-presentation__checks");
-        group.append(...checks.map(renderCheck));
+        group.append(...checks.map(check => renderCheck(check, options)));
         target.append(group);
     }
     if (procedures.length > 0) {
         const group = createElement("div", "dd-check-procedure-presentation__procedures");
-        group.append(...procedures.map(renderProcedure));
+        group.append(...procedures.map(procedure => renderProcedure(procedure, options)));
         target.append(group);
     }
+}
+
+function supplementalDisclosureLabel(
+    sources: readonly SourceAttributionView[],
+    checkCount: number,
+    procedureCount: number
+): string {
+    const kind = checkCount > 0 && procedureCount > 0
+        ? "checks & procedures"
+        : checkCount > 0
+            ? "checks"
+            : "procedures";
+    const labels = [...new Set(
+        sources
+            .map(source => supplementalSourceLabel(source))
+            .filter(label => label.length > 0))];
+
+    if (labels.length === 1) return `${labels[0]} — ${kind}`;
+    if (labels.length > 1) return `Additional ${kind} — ${labels.join(" • ")}`;
+    return `Additional ${kind}`;
+}
+
+function supplementalSourceLabel(source: SourceAttributionView): string {
+    const label = source.label.trim();
+    const publisher = source.detail?.match(
+        /^Rules by\s+(.+?)(?:\s*[·•]\s*|$)/i)?.[1]?.trim();
+    if (publisher === undefined
+        || publisher.length === 0
+        || label.toLocaleLowerCase().includes(publisher.toLocaleLowerCase())) {
+        return label;
+    }
+    return `${label} · ${publisher}`;
 }
 
 function collectSourceAttributions(
@@ -112,7 +174,9 @@ function collectSourceAttributions(
     const byKey = new Map<string, SourceAttributionView>();
     for (const source of [
         ...checks.flatMap(value => value.sourceAttributions ?? []),
-        ...procedures.flatMap(value => value.sourceAttributions ?? [])
+        ...procedures.flatMap(value => value.sourceAttributions ?? []),
+        ...procedures.flatMap(value =>
+            value.components.flatMap(component => component.sourceAttributions ?? []))
     ]) {
         if (source.presentationRequired !== true) continue;
         if (!byKey.has(source.key)) byKey.set(source.key, source);
@@ -160,7 +224,7 @@ export function renderInventoryMechanics(mechanics: InventoryMechanicsView | und
     }
     if (mechanics.procedures?.length) {
         const section = subsection("Procedures");
-        section.append(...mechanics.procedures.map(renderProcedure));
+        section.append(...mechanics.procedures.map(procedure => renderProcedure(procedure)));
         root.append(section);
     }
     if (mechanics.crafting?.length) {

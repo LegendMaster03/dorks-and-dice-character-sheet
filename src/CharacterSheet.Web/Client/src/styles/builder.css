@@ -218,11 +218,6 @@
         font-size: 0.76rem;
     }
 
-    .dd-primary-nav__button {
-        flex: 0 0 auto;
-        min-width: 7rem;
-    }
-
     .dd-readonly-banner {
         display: grid;
         gap: 0.25rem;
@@ -591,11 +586,6 @@
 @container character-stage (max-width: 36rem) {
     .dd-combat-band {
         grid-template-columns: 1fr;
-    }
-
-    .dd-primary-nav__button {
-        flex: 0 0 auto;
-        min-width: 7rem;
     }
 }
 

@@ -348,9 +348,11 @@ test("responsive shell uses persistent presentation scaffolds without fabricatin
     assert.doesNotMatch(sheetSource, />?\s*(?:10|30|37)\s*(?:<|ft\.|HP|AC)/i);
 });
 
-test("deployed-density polish keeps primary tabs readable and separates 3.x saves from Ability saves", () => {
-    assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*white-space:\s*nowrap;/s);
-    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*overflow-x:\s*visible;/s);
+test("deployed-density polish keeps all primary tabs visible and separates 3.x saves from Ability saves", () => {
+    assert.match(css, /\.dd-primary-nav\s*\{[^}]*display:\s*grid;[^}]*repeat\(3,\s*minmax\(0,\s*1fr\)\)[^}]*overflow:\s*visible;/s);
+    assert.match(css, /\.dd-primary-nav__button\s*\{[^}]*min-width:\s*0;[^}]*white-space:\s*normal;/s);
+    assert.match(css, /@container character-stage \(min-width: 50rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*repeat\(6,/s);
+    assert.match(css, /@container character-stage \(max-width: 30rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*repeat\(2,/s);
     assert.match(css, /\.dd-sheet-mode-bar\s*\{[^}]*padding:\s*0\.4rem/s);
     assert.doesNotMatch(sheetSource, /renderSavingThrowsCard\(mechanics\?\.savingThrows\)/);
     assert.match(sheetSource, /renderSavingThrowsCard\(detachedSavingThrows, true\)/);
