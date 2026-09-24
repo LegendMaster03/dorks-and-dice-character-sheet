@@ -843,7 +843,7 @@ test("Background renders Rules Core character metadata generically with calculat
 
     assert.ok(size);
     assert.match(visibleText(size), /Size\s+Medium/);
-    assert.match(visibleText(size), /Background/);
+    assert.match(visibleText(size), /Details/);
 });
 
 test("Background renders Character-authored profile separately from rule-derived identity", () => {
@@ -966,13 +966,14 @@ test("Advancement Progress is neutral Character state and delegates edits withou
         progressHandlers
     );
 
-    assert.match(visibleText(rendered), /Advancement Progress\s+1450/);
+    assert.match(visibleText(rendered), /Advancement Progress/);
     assert.doesNotMatch(visibleText(rendered), /\bXP\b/);
 
     const progress = byAttribute(rendered, "data-advancement-progress", "true")[0];
     assert.ok(progress);
     const input = byTag(progress, "input")[0];
     assert.ok(input);
+    assert.equal(input.value, "1450");
     input.value = "1600";
     const save = byTag(progress, "button").find(button => button.textContent === "Save Progress");
     assert.ok(save);
