@@ -949,9 +949,21 @@ test("Advancement Progress is neutral Character state and delegates edits withou
 
     assert.equal(byAttribute(rendered, "data-advancement-progress", "true").length, 0);
 
+    const editableBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId,
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
     const editing = renderCharacterWorkspace(
         character,
-        builder,
+        editableBuilder,
         editableRoutine,
         "actions",
         false,
@@ -1726,21 +1738,24 @@ test("competency catalog defaults to a relevant view while search can reach the 
     assert.equal(relevant.getAttribute("aria-pressed"), "true");
     assert.equal(all.getAttribute("aria-pressed"), "false");
 
-    assert.notEqual(byAttribute(card, "data-skill-id", "skill.arcana")[0].hidden, true);
-    assert.equal(byAttribute(card, "data-skill-id", "skill.balance")[0].hidden, true);
-    assert.equal(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, true);
+    const arcanaDisclosure = byAttribute(card, "data-skill-disclosure", "skill.arcana")[0];
+    const balanceDisclosure = byAttribute(card, "data-skill-disclosure", "skill.balance")[0];
+    const craftDisclosure = byAttribute(card, "data-skill-family", "skill.craft")[0];
+    assert.notEqual(arcanaDisclosure.hidden, true);
+    assert.equal(balanceDisclosure.hidden, true);
+    assert.equal(craftDisclosure.hidden, true);
 
     const search = byClass(card, "dd-skills-search")[0];
     search.value = "alchemy";
     search.dispatchEvent({ type: "input" });
-    assert.notEqual(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, true);
+    assert.notEqual(craftDisclosure.hidden, true);
 
     search.value = "";
     search.dispatchEvent({ type: "input" });
     all.dispatchEvent({ type: "click" });
     assert.equal(all.getAttribute("aria-pressed"), "true");
-    assert.notEqual(byAttribute(card, "data-skill-id", "skill.balance")[0].hidden, true);
-    assert.notEqual(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, true);
+    assert.notEqual(balanceDisclosure.hidden, true);
+    assert.notEqual(craftDisclosure.hidden, true);
 });
 
 
