@@ -1,9 +1,10 @@
-import type {
-    CharacterBuilderUiState,
-    CharacterRoutineUiState,
-    GuidedBuilderUiState,
-    HarvestingCraftingUiState,
-    SheetMode
+import {
+    createInitialHarvestingCraftingState,
+    type CharacterBuilderUiState,
+    type CharacterRoutineUiState,
+    type GuidedBuilderUiState,
+    type HarvestingCraftingUiState,
+    type SheetMode
 } from "../app-state.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
@@ -61,8 +62,8 @@ export function renderCharacterWorkspace(
     guidedBuilder: GuidedBuilderUiState,
     advancement: CharacterAdvancementView | null,
     mechanics: CharacterMechanicsView | null,
-    harvestingCrafting: HarvestingCraftingUiState,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    harvestingCrafting: HarvestingCraftingUiState = createInitialHarvestingCraftingState()
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -92,7 +93,7 @@ export function renderCharacterWorkspace(
         shell.append(renderHarvestingCraftingWorkspace(
             character,
             harvestingCrafting,
-            handlers.harvestingCrafting,
+            handlers.harvestingCrafting!,
             readOnly));
         return shell;
     }
