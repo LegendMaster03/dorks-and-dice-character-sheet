@@ -46,8 +46,7 @@ public sealed class CharacterArtService(
     ICharacterSheetStore characterSheetStore,
     ICharacterArtStore artStore,
     ICharacterArtStorage storage,
-    TimeProvider timeProvider,
-    ILogger<CharacterArtService> logger)
+    TimeProvider timeProvider)
 {
     public const long MaxUploadBytes = 8 * 1024 * 1024;
 
@@ -159,7 +158,7 @@ public sealed class CharacterArtService(
     private async Task SafeDeleteStorageAsync(string storageKey, CancellationToken cancellationToken)
     {
         try { await storage.DeleteAsync(storageKey, cancellationToken); }
-        catch (Exception exception) { logger.LogWarning(exception, "Unable to remove orphaned Character art object {StorageKey}.", storageKey); }
+        catch { /* Metadata is authoritative; an orphaned file is safer than corrupt Character state. */ }
     }
 
     private static IReadOnlyList<CharacterArtAssetView> ToViews(IReadOnlyList<CharacterArtAsset> assets) =>
