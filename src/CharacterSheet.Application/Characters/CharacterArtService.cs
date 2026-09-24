@@ -81,6 +81,7 @@ public sealed class CharacterArtService(
         if (access.Status is not CharacterArtAccessStatus.Ready) return new(access.Status);
 
         var validated = await ValidateAndBufferAsync(content, declaredContentType, cancellationToken);
+        await using var bufferedContent = validated.Stream;
         var id = Guid.NewGuid();
         var storageKey = $"{characterId:N}/{id:N}";
         var asset = new CharacterArtAsset(
@@ -92,7 +93,7 @@ public sealed class CharacterArtService(
             validated.Length,
             timeProvider.GetUtcNow());
 
-        await storage.WriteAsync(storageKey, validated.Stream, cancellationToken);
+        await storage.WriteAsync(storageKey, bufferedContent, cancellationToken);
         try
         {
             await artStore.AddAsync(asset, cancellationToken);
