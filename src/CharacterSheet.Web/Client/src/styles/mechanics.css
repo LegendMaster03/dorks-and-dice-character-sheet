@@ -335,6 +335,38 @@
     border-radius: var(--dd-sheet-radius-sm);
 }
 
+/*
+ * On multi-column layouts, opening a Skill disclosure should not make the
+ * entire dashboard reflow. Keep the native details/summary interaction, but
+ * present the top-level disclosure body as an anchored floating panel.
+ *
+ * Nested disclosures inside a family remain in normal flow within that panel.
+ * Constrained/mobile layouts intentionally retain the inline behavior.
+ */
+@container character-sheet (min-width: 62rem) {
+    .dd-skill-list > .dd-skill-disclosure {
+        position: relative;
+    }
+
+    .dd-skill-list > .dd-skill-disclosure[open] {
+        z-index: 40;
+    }
+
+    .dd-skill-list > .dd-skill-disclosure > .dd-skill-disclosure__body {
+        position: absolute;
+        z-index: 40;
+        inset-block-start: calc(100% + 0.18rem);
+        inset-inline-start: 0;
+        width: max(100%, 24rem);
+        max-width: min(36rem, calc(100vw - 2rem));
+        max-height: min(70vh, 36rem);
+        margin-top: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
+        box-shadow: var(--dd-sheet-shadow);
+    }
+}
+
 .dd-skill-detail-content,
 .dd-skill-composite-details__competencies {
     display: grid;

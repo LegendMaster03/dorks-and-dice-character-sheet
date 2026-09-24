@@ -397,6 +397,13 @@ test("skill rows use stable single-line columns for proficiency, stat, name, and
     assert.doesNotMatch(css, /\.dd-skill-row__identity\s*\{/);
 });
 
+test("desktop Skill disclosures float without reflow while constrained layouts remain inline", () => {
+    assert.match(mechanicsCssSource, /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-skill-list > \.dd-skill-disclosure\s*\{[^}]*position:\s*relative;/s);
+    assert.match(mechanicsCssSource, /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-skill-list > \.dd-skill-disclosure > \.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;[^}]*inset-block-start:\s*calc\(100% \+ 0\.18rem\);[^}]*max-height:\s*min\(70vh,\s*36rem\);[^}]*overflow:\s*auto;/s);
+    assert.match(mechanicsCssSource, /\.dd-skill-disclosure__body\s*\{[^}]*display:\s*grid;[^}]*margin-top:\s*var\(--dd-sheet-space-1\);/s);
+    assert.doesNotMatch(mechanicsCssSource, /@container character-sheet \(max-width:[\s\S]*?\.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
+});
+
 test("desktop composite Skills retain the compact split parent-and-children layout", () => {
     assert.match(css, /\.dd-skill-group--composite\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.95fr\)\s+minmax\(0,\s*1\.05fr\)/s);
     assert.match(css, /\.dd-skill-group__parent\s*\{[^}]*grid-row:\s*1 \/ span var\(--dd-skill-component-count\);[^}]*border-right:/s);
