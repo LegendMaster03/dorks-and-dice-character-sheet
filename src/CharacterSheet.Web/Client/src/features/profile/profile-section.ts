@@ -23,8 +23,8 @@ interface ProfileField {
 }
 
 const PROFILE_FIELDS: readonly ProfileField[] = [
-    { key: "alignment", label: "Alignment (authored / legacy)", maxLength: 300 },
-    { key: "deity", label: "Custom / historical Deity", maxLength: 300 },
+    { key: "alignment", label: "Alignment", maxLength: 300 },
+    { key: "deity", label: "Deity", maxLength: 300 },
     { key: "age", label: "Age", maxLength: 300 },
     { key: "height", label: "Height", maxLength: 300 },
     { key: "weight", label: "Weight", maxLength: 300 },
@@ -201,7 +201,7 @@ function renderProfileForm(
     form.append(createElement(
         "p",
         "dd-routine-meta",
-        "These fields are Character-authored details. Rules-derived identity remains controlled by Rules Core."));
+        "These fields are Character-authored details. When Rules Core provides a canonical identity selection, the sheet presents that separately without overwriting authored values."));
 
     const grid = createElement("div", "dd-profile__grid");
     const controls = new Map<ProfileKey, HTMLInputElement | HTMLTextAreaElement>();
