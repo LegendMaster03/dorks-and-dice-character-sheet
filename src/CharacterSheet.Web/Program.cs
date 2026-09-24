@@ -198,6 +198,50 @@ app.MapDelete("/api/characters/{characterId:guid}/build/race-species", async (
         await service.ClearRaceSpeciesAsync(characterId, cancellationToken),
         mutating: true));
 
+app.MapPut("/api/characters/{characterId:guid}/build/background", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(await service.SetBackgroundAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/background", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(await service.ClearBackgroundAsync(characterId, cancellationToken), mutating: true));
+
+app.MapPut("/api/characters/{characterId:guid}/build/deity", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(await service.SetDeityAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/deity", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(await service.ClearDeityAsync(characterId, cancellationToken), mutating: true));
+
 app.MapPut("/api/characters/{characterId:guid}/build/ability-scores/{abilityKey}", async (
     Guid characterId,
     string abilityKey,
