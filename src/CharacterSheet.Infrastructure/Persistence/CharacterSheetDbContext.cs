@@ -340,7 +340,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         art.Property(value => value.CreatedAt).IsRequired();
         art.Property(value => value.UpdatedAt).IsRequired();
         art.HasIndex(value => value.StorageKey).IsUnique();
-        art.HasIndex(value => value.CharacterId);
+        art.HasIndex(value => new { value.CharacterId, value.CreatedAt });
         art.HasIndex(value => value.CharacterId)
             .HasDatabaseName("UX_character_art_assets_Portrait")
             .IsUnique()
