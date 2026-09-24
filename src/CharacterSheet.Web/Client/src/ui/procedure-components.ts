@@ -147,12 +147,24 @@ function supplementalDisclosureLabel(
             : "procedures";
     const labels = [...new Set(
         sources
-            .map(source => source.label.trim())
+            .map(source => supplementalSourceLabel(source))
             .filter(label => label.length > 0))];
 
-    if (labels.length === 1) return `${labels[0]} ${kind}`;
-    if (labels.length > 1) return `Additional ${kind} · ${labels.join(" • ")}`;
+    if (labels.length === 1) return `${labels[0]} — ${kind}`;
+    if (labels.length > 1) return `Additional ${kind} — ${labels.join(" • ")}`;
     return `Additional ${kind}`;
+}
+
+function supplementalSourceLabel(source: SourceAttributionView): string {
+    const label = source.label.trim();
+    const publisher = source.detail?.match(
+        /^Rules by\s+(.+?)(?:\s*[·•]\s*|$)/i)?.[1]?.trim();
+    if (publisher === undefined
+        || publisher.length === 0
+        || label.toLocaleLowerCase().includes(publisher.toLocaleLowerCase())) {
+        return label;
+    }
+    return `${label} · ${publisher}`;
 }
 
 function collectSourceAttributions(
@@ -212,7 +224,7 @@ export function renderInventoryMechanics(mechanics: InventoryMechanicsView | und
     }
     if (mechanics.procedures?.length) {
         const section = subsection("Procedures");
-        section.append(...mechanics.procedures.map(renderProcedure));
+        section.append(...mechanics.procedures.map(procedure => renderProcedure(procedure)));
         root.append(section);
     }
     if (mechanics.crafting?.length) {

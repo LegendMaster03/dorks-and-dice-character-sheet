@@ -417,7 +417,9 @@ test("supplemental rules use a source-identified compact disclosure with one cre
     assert.equal(disclosure.tagName, "DETAILS");
     assert.ok(credit);
     assert.equal(walk(disclosure).includes(credit), true);
-    assert.match(visibleText(disclosure), /Fixture Public Rules checks & procedures/);
+    assert.match(
+        visibleText(disclosure),
+        /Fixture Public Rules · Fixture Publisher — checks & procedures/);
     assert.match(visibleText(disclosure), /External Procedure/);
     assert.doesNotMatch(visibleText(disclosure), /Core Check/);
 

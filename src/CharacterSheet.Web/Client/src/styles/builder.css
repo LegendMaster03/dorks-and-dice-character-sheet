@@ -510,7 +510,7 @@
 
 
 /* Container-aware embedded Character Sheet composition */
-@container character-sheet (max-width: 96rem) {
+@container character-sheet (max-width: 78rem) {
     .dd-sheet__dashboard {
         grid-template-columns: minmax(13.5rem, 16rem) minmax(0, 1fr);
     }
@@ -586,11 +586,6 @@
 @container character-stage (max-width: 36rem) {
     .dd-combat-band {
         grid-template-columns: 1fr;
-    }
-
-    .dd-primary-nav__button {
-        flex: 0 0 auto;
-        min-width: 7rem;
     }
 }
 
