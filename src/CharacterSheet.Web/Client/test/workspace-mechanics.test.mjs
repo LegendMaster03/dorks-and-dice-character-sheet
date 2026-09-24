@@ -203,7 +203,7 @@ test("primary sheet tabs use roving tabindex and horizontal arrow-key selection"
     assert.equal(nav.getAttribute("aria-orientation"), "horizontal");
     assert.equal(tabs[0].tabIndex, 0);
     assert.deepEqual(tabs.slice(1).map(tab => tab.tabIndex), [-1, -1, -1, -1, -1]);
-    assert.equal(tabs[3].textContent, "Features & Traits");
+    assert.match(tabs[3].textContent, /^Features & Traits/);
     assert.equal(tabs[3].getAttribute("data-sheet-section-tab"), "features");
 
     let prevented = false;
@@ -223,6 +223,46 @@ test("primary sheet tabs use roving tabindex and horizontal arrow-key selection"
         preventDefault() {}
     });
     assert.equal(selectedSection, "notes");
+});
+
+test("primary section tabs expose compact overview data for large desktop layouts", () => {
+    const currentRoutine = routine([
+        { id: "item-1", quantity: 1, isEquipped: true }
+    ]);
+    currentRoutine.state.notes = [
+        { id: "note-1", content: "Fixture", createdAt: "now", updatedAt: "now" }
+    ];
+    currentRoutine.state.rulesInputs = [
+        {
+            id: "knownSpell:fixture",
+            kind: "knownSpell",
+            key: "spell.fixture",
+            integerValue: null,
+            booleanValue: null,
+            textValue: null,
+            createdAt: "now",
+            updatedAt: "now"
+        }
+    ];
+
+    const rendered = render("actions", {
+        actions: [{ key: "action.fixture", name: "Fixture Action" }],
+        checks: [{ key: "check.fixture", name: "Fixture Check" }],
+        procedures: [{ key: "procedure.fixture", name: "Fixture Procedure", components: [] }],
+        spellcastingProfiles: [{ key: "casting.fixture", label: "Fixture Casting" }],
+        features: [{ key: "feature.fixture", label: "Fixture Feature", kind: "feature", state: "resolved" }]
+    }, currentRoutine);
+
+    const nav = byClass(rendered, "dd-primary-nav")[0];
+    const summaries = byClass(nav, "dd-primary-nav__summary");
+    assert.equal(summaries.length, 6);
+
+    const summary = section => byAttribute(nav, "data-sheet-section-summary", section)[0];
+    assert.match(visibleText(summary("actions")), /1 action · 2 workflows/);
+    assert.match(visibleText(summary("spells")), /1 known spell · 1 casting profile/);
+    assert.match(visibleText(summary("inventory")), /1 entry · 1 equipped/);
+    assert.match(visibleText(summary("features")), /1 feature/);
+    assert.match(visibleText(summary("notes")), /1 note/);
 });
 
 test("section-tab CSS keeps every destination visible by using vertical space on narrow stages", async () => {

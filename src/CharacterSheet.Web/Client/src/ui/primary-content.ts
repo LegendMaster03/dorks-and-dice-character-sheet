@@ -52,6 +52,14 @@ export function renderPrimaryContent(
         button.setAttribute("aria-controls", `dd-sheet-panel-${section.id}`);
         button.setAttribute("data-sheet-section-tab", section.id);
         if (active) button.setAttribute("aria-current", "page");
+
+        const summary = createElement(
+            "span",
+            "dd-primary-nav__summary",
+            sectionOverviewSummary(section.id, builder, routine, mechanics));
+        summary.setAttribute("data-sheet-section-summary", section.id);
+        button.append(summary);
+
         tabs.push({ section: section.id, button });
         nav.append(button);
     }
@@ -155,6 +163,53 @@ export function renderPrimaryContent(
 
     card.append(nav, panel);
     return card;
+}
+
+
+function sectionOverviewSummary(
+    section: SheetSection,
+    builder: CharacterBuilderUiState,
+    routine: CharacterRoutineUiState,
+    mechanics: CharacterMechanicsView | null
+): string {
+    switch (section) {
+        case "actions": {
+            const actions = mechanics?.actions?.length ?? 0;
+            const workflows = (mechanics?.checks?.length ?? 0)
+                + (mechanics?.procedures?.length ?? 0);
+            return `${formatOverviewCount(actions, "action")} · ${formatOverviewCount(workflows, "workflow")}`;
+        }
+        case "spells": {
+            const knownSpells = routine.state?.rulesInputs
+                ?.filter(input => input.kind === "knownSpell").length ?? 0;
+            const profiles = mechanics?.spellcastingProfiles?.length ?? 0;
+            return `${formatOverviewCount(knownSpells, "known spell")} · ${formatOverviewCount(profiles, "casting profile")}`;
+        }
+        case "inventory": {
+            const entries = routine.state?.inventoryItemOccurrences.length ?? 0;
+            const equipped = routine.state?.inventoryItemOccurrences
+                .filter(item => item.isEquipped).length ?? 0;
+            return `${formatOverviewCount(entries, "entry", "entries")} · ${equipped} equipped`;
+        }
+        case "features":
+            return formatOverviewCount(mechanics?.features?.length ?? 0, "feature");
+        case "details": {
+            const background = builderReferenceDisplay(builder, "background");
+            return background.value === "Not selected"
+                ? "No background selected"
+                : background.value;
+        }
+        case "notes":
+            return formatOverviewCount(routine.state?.notes.length ?? 0, "note");
+    }
+}
+
+function formatOverviewCount(
+    count: number,
+    singular: string,
+    plural: string = `${singular}s`
+): string {
+    return `${count} ${count === 1 ? singular : plural}`;
 }
 
 
