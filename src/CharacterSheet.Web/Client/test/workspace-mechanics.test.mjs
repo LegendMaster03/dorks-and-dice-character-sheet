@@ -101,8 +101,14 @@ const handlers = {
     routine: {
         setInspiration() { return Promise.resolve(true); },
         setProfile() {},
+        setAdvancementProgress() {},
         setCurrencyBalance() {},
         removeCurrencyBalance() {},
+        uploadArt() {},
+        setPortrait() {},
+        clearPortrait() {},
+        deleteArt() {},
+        artContentUrl(assetId) { return `/art/${assetId}`; },
         setCurrentHitPoints() {},
         setDeathSaves() {},
         addNote() {}, updateNote() {}, deleteNote() {}, openInventoryChooser() {}, closeInventoryChooser() {},
@@ -867,6 +873,88 @@ test("Details renders Character-authored profile without inventing rule-derived 
     assert.match(text, /Deity\s+The Traveler/);
     assert.match(text, /Backstory\s+A long-form history/);
     assert.doesNotMatch(text, /Background|Size|Player Name|Campaign/);
+});
+
+test("read-only Character art remains visible without mutation controls", () => {
+    const currentRoutine = routine([], {}, true);
+    currentRoutine.state.artAssets = [{
+        id: "portrait-one",
+        originalFileName: "portrait.png",
+        contentType: "image/png",
+        byteLength: 100,
+        isPortrait: true,
+        createdAt: "now",
+        updatedAt: "now"
+    }, {
+        id: "scene-two",
+        originalFileName: "scene.webp",
+        contentType: "image/webp",
+        byteLength: 200,
+        isPortrait: false,
+        createdAt: "now",
+        updatedAt: "now"
+    }];
+
+    const rendered = render("details", null, currentRoutine);
+
+    assert.equal(byClass(rendered, "dd-character-art__asset").length, 2);
+    assert.equal(byClass(rendered, "dd-character-art__image").length, 2);
+    const portrait = byClass(rendered, "dd-sheet-header__portrait-image")[0];
+    assert.ok(portrait);
+    assert.equal(portrait.src, "/art/portrait-one");
+
+    const text = visibleText(rendered);
+    assert.match(text, /portrait\.png/);
+    assert.match(text, /scene\.webp/);
+    assert.doesNotMatch(text, /Upload Art|Use as Portrait|Clear Portrait|Delete/);
+});
+
+test("Advancement Progress is neutral Character state and delegates edits without XP semantics", () => {
+    let savedProgress = undefined;
+    const editableRoutine = routine([], {}, false);
+    editableRoutine.state.advancementProgress = 1450;
+    const progressHandlers = {
+        ...handlers,
+        routine: {
+            ...handlers.routine,
+            setAdvancementProgress(value) { savedProgress = value; }
+        }
+    };
+    const advancement = {
+        occurrences: [{
+            occurrenceId: "class-one",
+            conceptKey: "class:fighter",
+            kind: "Class",
+            displayName: "Fighter",
+            progression: { label: "Level", value: 3 }
+        }]
+    };
+
+    const rendered = renderCharacterWorkspace(
+        character,
+        builder,
+        editableRoutine,
+        "actions",
+        false,
+        "view",
+        guidedBuilder,
+        advancement,
+        null,
+        progressHandlers
+    );
+
+    assert.match(visibleText(rendered), /Advancement Progress\s+1450/);
+    assert.doesNotMatch(visibleText(rendered), /\bXP\b/);
+
+    const progress = byAttribute(rendered, "data-advancement-progress", "true")[0];
+    assert.ok(progress);
+    const input = byTag(progress, "input")[0];
+    assert.ok(input);
+    input.value = "1600";
+    const save = byTag(progress, "button").find(button => button.textContent === "Save Progress");
+    assert.ok(save);
+    save.dispatchEvent({ type: "click" });
+    assert.equal(savedProgress, 1600);
 });
 
 test("Details editing delegates one complete Character-authored profile mutation", () => {
