@@ -14,6 +14,27 @@ public static class CharacterStateEndpointExtensions
                 await service.GetAsync(characterId, cancellationToken),
                 mutating: false));
 
+        app.MapPut("/api/characters/{characterId:guid}/state/progression", async (
+            Guid characterId,
+            CharacterAdvancementProgressRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.SetAdvancementProgressAsync(
+                        characterId,
+                        request.Value,
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (ArgumentOutOfRangeException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPut("/api/characters/{characterId:guid}/state/currency", async (
             Guid characterId,
             CharacterCurrencyBalanceRequest request,
@@ -516,6 +537,8 @@ public static class CharacterStateEndpointExtensions
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
     };
 }
+
+public sealed record CharacterAdvancementProgressRequest(int? Value);
 
 public sealed record CharacterCurrencyBalanceRequest(string Key, long Amount);
 
