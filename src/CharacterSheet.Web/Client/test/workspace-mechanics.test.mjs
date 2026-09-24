@@ -223,7 +223,7 @@ test("primary sheet tabs use roving tabindex and horizontal arrow-key selection"
     assert.equal(selectedSection, "notes");
 });
 
-test("section-tab CSS preserves long labels and delegates narrow overflow to the strip", async () => {
+test("section-tab CSS keeps all primary destinations visible without horizontal scrolling", async () => {
     const css = (await Promise.all([
         "../src/styles/foundation.css",
         "../src/styles/builder.css",
@@ -235,14 +235,15 @@ test("section-tab CSS preserves long labels and delegates narrow overflow to the
     const navBlock = css.match(/\.dd-primary-nav\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
     const buttonBlock = css.match(/\.dd-primary-nav__button\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
 
-    assert.match(navBlock, /overflow-x:\s*auto/);
-    assert.match(navBlock, /scrollbar-width:\s*thin/);
-    assert.match(buttonBlock, /flex:\s*1 0 auto/);
-    assert.match(buttonBlock, /min-width:\s*max-content/);
-    assert.doesNotMatch(buttonBlock, /min-width:\s*0/);
+    assert.match(navBlock, /display:\s*grid/);
+    assert.match(navBlock, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
+    assert.match(navBlock, /overflow:\s*visible/);
+    assert.doesNotMatch(navBlock, /overflow-x:\s*auto/);
+    assert.match(buttonBlock, /min-width:\s*0/);
+    assert.match(buttonBlock, /white-space:\s*normal/);
     assert.match(buttonBlock, /border-inline-end:/);
-    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*overflow-x:\s*visible;/s);
-    assert.match(css, /@container character-stage \(min-width: 54rem\)[\s\S]*?\.dd-primary-nav__button\s*\{[^}]*flex:\s*1 1 0;[^}]*min-width:\s*0;/s);
+    assert.match(css, /@container character-stage \(max-width: 40rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*repeat\(3,/s);
+    assert.match(css, /@container character-stage \(max-width: 24rem\)[\s\S]*?\.dd-primary-nav\s*\{[^}]*repeat\(2,/s);
 });
 
 test("player-facing setup copy avoids architecture-first terminology", async () => {
@@ -1489,7 +1490,7 @@ test("effective Ability projection is separate from Character-owned base Ability
     const strength = byAttribute(rendered, "data-ability-key", "strength")[0];
     assert.equal(strength.getAttribute("data-effective-ability-state"), "resolved");
     assert.match(visibleText(strength), /18/);
-    assert.match(visibleText(strength), /Base input: 12/);
+    assert.match(visibleText(strength), /Base: 12/);
     assert.match(visibleText(strength), /Modifier \+4/);
     const modifier = byAttribute(strength, "data-ability-modifier", "strength");
     assert.equal(modifier.length, 1);
@@ -1674,6 +1675,60 @@ test("workspace renders specialized, composite, independent, and unconfigured co
         assert.equal(byAttribute(rendered, "data-skill-id", key)[0].getAttribute("data-skill-role"), "standalone");
     }
 });
+
+test("competency catalog defaults to a relevant view while search can reach the full universal catalog", () => {
+    const mechanics = {
+        competencies: {
+            entries: [
+                mechanical("skill.arcana", "Arcana", "+7", {
+                    kind: "skill",
+                    governingAbility: "intelligence",
+                    training: "Proficient"
+                }),
+                mechanical("skill.balance", "Balance", "+1", {
+                    kind: "skill",
+                    governingAbility: "dexterity",
+                    training: "Not Proficient"
+                }),
+                mechanical("skill.craft", "Craft", "-", {
+                    kind: "skill",
+                    family: "Craft",
+                    isFamily: true
+                }),
+                mechanical("skill.craft-alchemy", "Craft (Alchemy)", "-", {
+                    kind: "specialized-skill",
+                    family: "Craft",
+                    specialty: "alchemy"
+                })
+            ],
+            relationships: []
+        }
+    };
+
+    const rendered = render("actions", mechanics);
+    const card = byClass(rendered, "dd-skills-card")[0];
+    const relevant = byAttribute(card, "data-skills-filter", "relevant")[0];
+    const all = byAttribute(card, "data-skills-filter", "all")[0];
+    assert.equal(relevant.getAttribute("aria-pressed"), "true");
+    assert.equal(all.getAttribute("aria-pressed"), "false");
+
+    assert.equal(byAttribute(card, "data-skill-id", "skill.arcana")[0].hidden, false);
+    assert.equal(byAttribute(card, "data-skill-id", "skill.balance")[0].hidden, true);
+    assert.equal(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, true);
+
+    const search = byClass(card, "dd-skills-search")[0];
+    search.value = "alchemy";
+    search.dispatchEvent({ type: "input" });
+    assert.equal(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, false);
+
+    search.value = "";
+    search.dispatchEvent({ type: "input" });
+    all.dispatchEvent({ type: "click" });
+    assert.equal(all.getAttribute("aria-pressed"), "true");
+    assert.equal(byAttribute(card, "data-skill-id", "skill.balance")[0].hidden, false);
+    assert.equal(byAttribute(card, "data-skill-family", "skill.craft")[0].hidden, false);
+});
+
 
 test("workspace renders backend-supplied 3.x saving throws, defenses, combat, and nonlethal state without formulas", () => {
     const mechanics = {
