@@ -61,6 +61,15 @@ export interface HarvestingCraftingWorkflow {
     submitCraftingRoll(characterId: string): Promise<void>;
     rollCrafting(characterId: string): Promise<void>;
     chooseCraftingRoll(characterId: string, value: number): Promise<void>;
+    setCraftingRecipeName(value: string): void;
+    setCraftingOutputName(value: string): void;
+    setCraftingOutputQuantity(value: number): void;
+    setCraftingRequiresManufacturing(value: boolean): void;
+    setCraftingRequiresEnchanting(value: boolean): void;
+    addCraftingMaterial(occurrenceId: string): void;
+    updateCraftingMaterial(index: number, quantity: number): void;
+    removeCraftingMaterial(index: number): void;
+    completeCrafting(characterId: string): Promise<void>;
 }
 
 export function createHarvestingCraftingWorkflow(
@@ -161,6 +170,32 @@ export function createHarvestingCraftingWorkflow(
         };
     }
 
+    function invalidateCurrentCraftingStage(
+        state: HarvestingCraftingUiState
+    ): HarvestingCraftingUiState {
+        return {
+            ...state,
+            craftingManufacturingSucceeded: state.craftingProcedure === "manufacturing"
+                ? null
+                : state.craftingManufacturingSucceeded,
+            craftingEnchantingSucceeded: state.craftingProcedure === "enchanting"
+                ? null
+                : state.craftingEnchantingSucceeded,
+            craftingCompletionStatus: "idle",
+            craftingCompleted: false
+        };
+    }
+
+    function resetCraftingCompletion(
+        state: HarvestingCraftingUiState
+    ): HarvestingCraftingUiState {
+        return {
+            ...state,
+            craftingCompletionStatus: "idle",
+            craftingCompleted: false
+        };
+    }
+
     function craftingCompetency(
         state: HarvestingCraftingUiState
     ): CraftingCompetencyInput | null {
@@ -250,6 +285,20 @@ export function createHarvestingCraftingWorkflow(
                 craftingStatus: "ready",
                 craftingResolution: resolution,
                 craftingSelectedRoll: d20Roll,
+                craftingManufacturingSucceeded:
+                    state.craftingProcedure === "manufacturing" && d20Roll !== null
+                        ? resolution.meetsTarget
+                        : current.craftingManufacturingSucceeded,
+                craftingEnchantingSucceeded:
+                    state.craftingProcedure === "enchanting" && d20Roll !== null
+                        ? resolution.meetsTarget
+                        : current.craftingEnchantingSucceeded,
+                craftingCompletionStatus: d20Roll !== null
+                    ? "idle"
+                    : current.craftingCompletionStatus,
+                craftingCompleted: d20Roll !== null
+                    ? false
+                    : current.craftingCompleted,
                 message: undefined
             }));
         } catch (error) {
@@ -470,6 +519,108 @@ export function createHarvestingCraftingWorkflow(
         }
     }
 
+    async function completeCrafting(characterId: string): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        const recipeName = state.craftingRecipeName.trim();
+        const outputName = state.craftingOutputName.trim();
+
+        if (recipeName.length === 0 || outputName.length === 0) {
+            update(current => ({
+                ...current,
+                craftingCompletionStatus: "error",
+                message: "Enter a recipe name and crafted output before completing Crafting."
+            }));
+            return;
+        }
+        if (!Number.isInteger(state.craftingOutputQuantity) || state.craftingOutputQuantity <= 0) {
+            update(current => ({
+                ...current,
+                craftingCompletionStatus: "error",
+                message: "Crafted output quantity must be a positive whole number."
+            }));
+            return;
+        }
+        if (!state.craftingRequiresManufacturing && !state.craftingRequiresEnchanting) {
+            update(current => ({
+                ...current,
+                craftingCompletionStatus: "error",
+                message: "The recipe must require Manufacturing, Enchanting, or both."
+            }));
+            return;
+        }
+        if (state.craftingRequiresManufacturing && state.craftingManufacturingSucceeded !== true) {
+            update(current => ({
+                ...current,
+                craftingCompletionStatus: "error",
+                message: "Complete the required Manufacturing check successfully before finishing the recipe."
+            }));
+            return;
+        }
+        if (state.craftingRequiresEnchanting && state.craftingEnchantingSucceeded !== true) {
+            update(current => ({
+                ...current,
+                craftingCompletionStatus: "error",
+                message: "Complete the required Enchanting check successfully before finishing the recipe."
+            }));
+            return;
+        }
+
+        const inventory = routine.current().state?.inventoryItemOccurrences ?? [];
+        for (const material of state.craftingMaterials) {
+            const occurrence = inventory.find(item => item.id === material.occurrenceId);
+            if (occurrence === undefined || material.quantity <= 0 || occurrence.quantity < material.quantity) {
+                update(current => ({
+                    ...current,
+                    craftingCompletionStatus: "error",
+                    message: "One or more recipe materials are unavailable in the required quantity."
+                }));
+                return;
+            }
+        }
+
+        update(current => ({
+            ...current,
+            craftingCompletionStatus: "loading",
+            message: undefined
+        }));
+
+        const changed = await routine.mutate(
+            "inventory-transaction",
+            () => applyInventoryTransaction(
+                environment,
+                characterId,
+                {
+                    consumptions: state.craftingMaterials.map(material => ({
+                        occurrenceId: material.occurrenceId,
+                        quantity: material.quantity
+                    })),
+                    additions: [{
+                        customName: outputName,
+                        quantity: state.craftingOutputQuantity
+                    }]
+                }),
+            undefined,
+            { render: false });
+
+        if (!changed) {
+            update(current => ({
+                ...current,
+                craftingCompletionStatus: "error",
+                message: routine.current().mutationError
+                    ?? "The crafting inventory transaction could not be completed."
+            }));
+            return;
+        }
+
+        await presentation.load(characterId);
+        update(current => ({
+            ...current,
+            craftingCompletionStatus: "ready",
+            craftingCompleted: true,
+            message: `${recipeName} completed. Inventory materials were consumed and ${state.craftingOutputQuantity} × ${outputName} was added.`
+        }));
+    }
+
     return {
         open(): void {
             update(state => ({ ...state, open: true, message: undefined }));
@@ -631,73 +782,73 @@ export function createHarvestingCraftingWorkflow(
         },
 
         setCraftingCompetencyMode(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingCompetencyMode: value
-            }));
+            })));
         },
 
         setCraftingCompetencyKey(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingCompetencyKey: value
-            }));
+            })));
         },
 
         setCraftingManualName(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingManualName: value
-            }));
+            })));
         },
 
         setCraftingManualContribution(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingManualContribution: value
-            }));
+            })));
         },
 
         setCraftingManualQualified(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingManualQualified: value
-            }));
+            })));
         },
 
         setCraftingHasQualifiedGuidance(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingHasQualifiedGuidance: value
-            }));
+            })));
         },
 
         setCraftingCreatureType(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingCreatureType: value
-            }));
+            })));
         },
 
         setCraftingSpellcastingKey(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingSpellcastingKey: value
-            }));
+            })));
         },
 
         setCraftingTargetDc(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingTargetDc: value
-            }));
+            })));
         },
 
         setCraftingOtherModifier(value): void {
-            update(state => clearCraftingResult({
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingOtherModifier: value
-            }));
+            })));
         },
 
         async prepareCrafting(characterId): Promise<void> {
@@ -745,6 +896,82 @@ export function createHarvestingCraftingWorkflow(
                 message: undefined
             }));
             await resolveCrafting(characterId, value);
-        }
+        },
+
+        setCraftingRecipeName(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingRecipeName: value
+            }));
+        },
+
+        setCraftingOutputName(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingOutputName: value
+            }));
+        },
+
+        setCraftingOutputQuantity(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingOutputQuantity: value
+            }));
+        },
+
+        setCraftingRequiresManufacturing(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingRequiresManufacturing: value
+            }));
+        },
+
+        setCraftingRequiresEnchanting(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingRequiresEnchanting: value
+            }));
+        },
+
+        addCraftingMaterial(occurrenceId): void {
+            const normalized = occurrenceId.trim();
+            if (normalized.length === 0) return;
+            update(state => {
+                if (state.craftingMaterials.some(material => material.occurrenceId === normalized)) {
+                    return state;
+                }
+                return resetCraftingCompletion({
+                    ...state,
+                    craftingMaterials: [
+                        ...state.craftingMaterials,
+                        { occurrenceId: normalized, quantity: 1 }
+                    ]
+                });
+            });
+        },
+
+        updateCraftingMaterial(index, quantity): void {
+            update(state => {
+                if (index < 0 || index >= state.craftingMaterials.length) return state;
+                const materials = [...state.craftingMaterials];
+                materials[index] = {
+                    ...materials[index]!,
+                    quantity
+                };
+                return resetCraftingCompletion({
+                    ...state,
+                    craftingMaterials: materials
+                });
+            });
+        },
+
+        removeCraftingMaterial(index): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingMaterials: state.craftingMaterials.filter((_, current) => current !== index)
+            }));
+        },
+
+        completeCrafting
     };
 }
