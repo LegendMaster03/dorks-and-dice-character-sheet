@@ -82,7 +82,21 @@ export function createHarvestingCraftingWorkflow(
     function clearResolution(
         state: HarvestingCraftingUiState
     ): HarvestingCraftingUiState {
-        async function awardHarvest(characterId: string): Promise<void> {
+        return {
+            ...state,
+            tableStatus: "idle",
+            tableRequest: null,
+            table: null,
+            harvestOrder: [],
+            outcomeStatus: "idle",
+            outcome: null,
+            harvestInventoryStatus: "idle",
+            harvestInventoryAwarded: false,
+            message: undefined
+        };
+    }
+
+    async function awardHarvest(characterId: string): Promise<void> {
         const state = application.getState().harvestingCrafting;
         if (state.outcome === null || state.harvestInventoryAwarded) return;
 
@@ -131,20 +145,6 @@ export function createHarvestingCraftingWorkflow(
             harvestInventoryAwarded: true,
             message: `Added ${awarded.length} harvested component type${awarded.length === 1 ? "" : "s"} to Inventory.`
         }));
-    }
-
-    return {
-            ...state,
-            tableStatus: "idle",
-            tableRequest: null,
-            table: null,
-            harvestOrder: [],
-            outcomeStatus: "idle",
-            outcome: null,
-            harvestInventoryStatus: "idle",
-            harvestInventoryAwarded: false,
-            message: undefined
-        };
     }
 
     function clearCraftingResult(
