@@ -382,6 +382,128 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
     }
 
     [Fact]
+    public void CharacterProjectionPreservesUniversalCompetencyFacetsAndRankOwner()
+    {
+        var projection = EmptyProjection() with
+        {
+            Competencies =
+            [
+                new RulesCoreUniversalCompetencyView(
+                    "competency.alchemy",
+                    "alchemy",
+                    "Alchemy",
+                    "Craft",
+                    false,
+                    "competency.alchemy.training",
+                    [],
+                    [
+                        "competency.skill.alchemy",
+                        "competency.tool.alchemists-supplies"
+                    ],
+                    ["competency.skill.craft-alchemy"],
+                    ["Alchemy", "Craft (alchemy)", "Alchemist's Supplies"],
+                    [],
+                    [
+                        new RulesCoreCompetencyFacetView(
+                            "skill",
+                            [],
+                            true,
+                            true,
+                            true,
+                            ["competency.skill.alchemy"]),
+                        new RulesCoreCompetencyFacetView(
+                            "tool",
+                            [],
+                            false,
+                            false,
+                            true,
+                            ["competency.tool.alchemists-supplies"])
+                    ],
+                    [
+                        new RulesCoreCompetencyRelationshipView(
+                            "related-competency",
+                            "competency",
+                            "Herbalism",
+                            "materials",
+                            false)
+                    ],
+                    [],
+                    PresentationCategory: "competency")
+            ]
+        };
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            null,
+            projection);
+
+        var alchemy = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.Equal("competency.alchemy", alchemy.Key);
+        Assert.Equal("competency", alchemy.PresentationCategory);
+        Assert.True(alchemy.SupportsRanks);
+        Assert.True(alchemy.SupportsClassSkillState);
+        Assert.True(alchemy.SupportsTrainingState);
+        Assert.Equal("skill.alchemy", alchemy.RankInputKey);
+        Assert.Equal(
+            ["competency.skill.craft-alchemy"],
+            alchemy.CompatibilityMechanicKeys);
+
+        var facets = Assert.IsAssignableFrom<IReadOnlyList<CompetencyFacetPresentationView>>(
+            alchemy.Facets);
+        Assert.Equal(2, facets.Count);
+        Assert.Contains(facets, facet =>
+            facet.FacetType == "skill"
+            && facet.SupportsRanks
+            && facet.SupportsClassSkillState
+            && facet.SupportsTrainingState);
+        Assert.Contains(facets, facet =>
+            facet.FacetType == "tool"
+            && !facet.SupportsRanks
+            && !facet.SupportsClassSkillState
+            && facet.SupportsTrainingState);
+
+        var related = Assert.Single(alchemy.RelatedCompetencies!);
+        Assert.Equal("Herbalism", related.TargetName);
+        Assert.Equal("materials", related.Scope);
+    }
+
+    [Fact]
+    public void CatalogOnlyStandaloneCompetencyStillExposesTrainingCapability()
+    {
+        var projection = EmptyProjection() with
+        {
+            Competencies =
+            [
+                new RulesCoreUniversalCompetencyView(
+                    "competency.glassblowing",
+                    "glassblowing",
+                    "Glassblowing",
+                    null,
+                    false,
+                    "competency.glassblowing.training",
+                    [],
+                    [],
+                    [],
+                    ["Glassblower's Tools"],
+                    [],
+                    [],
+                    [],
+                    [],
+                    PresentationCategory: "competency")
+            ]
+        };
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            null,
+            projection);
+
+        var glassblowing = Assert.Single(mechanics.Competencies!.Entries);
+        Assert.False(glassblowing.SupportsRanks);
+        Assert.False(glassblowing.SupportsClassSkillState);
+        Assert.True(glassblowing.SupportsTrainingState);
+        Assert.Null(glassblowing.RankInputKey);
+    }
+
+    [Fact]
     public void AbilityProjectionUsesAxisKeysForStandardAndAdditionalAbilities()
     {
         var projection = EmptyProjection() with

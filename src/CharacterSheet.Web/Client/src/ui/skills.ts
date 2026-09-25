@@ -23,18 +23,6 @@ export function renderSkillsCard(
     return card;
 }
 
-export function renderCompetenciesCard(
-    items: readonly CompetencyPresentationItem[] | null,
-    control: CompetencyRankControlOptions = {}
-): HTMLElement {
-    const card = createSectionCard(
-        "Competencies",
-        "dd-support-card dd-skills-card dd-competencies-card");
-    card.setAttribute("data-competency-card", "competencies");
-    appendCompetencyContent(card, "competencies", items, control);
-    return card;
-}
-
 function appendCompetencyContent(
     container: HTMLElement,
     searchNoun: string,
