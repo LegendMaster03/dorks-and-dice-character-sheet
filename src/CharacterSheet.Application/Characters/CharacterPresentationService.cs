@@ -36,16 +36,17 @@ public sealed class CharacterPresentationService(
         }
 
         var advancement = await ProjectAdvancementAsync(build, diagnostics, cancellationToken);
-        var mechanics = await ProjectMechanicsAsync(diagnostics, cancellationToken);
         var ruleProjection = await ProjectCharacterRulesAsync(
             build,
             state,
             diagnostics,
             cancellationToken);
-        if (ruleProjection is not null)
-        {
-            mechanics = RulesCoreCharacterProjectionProjector.Apply(mechanics, ruleProjection, state);
-        }
+        var mechanics = ruleProjection is null
+            ? null
+            : RulesCoreCharacterProjectionProjector.Apply(
+                fallback: null,
+                ruleProjection,
+                state);
 
         var recoveryProcedures = await ProjectRecoveryProceduresAsync(
             ruleProjection,
@@ -87,31 +88,6 @@ public sealed class CharacterPresentationService(
         }
 
         return CharacterPresentationProjector.ProjectAdvancement(build, resolvedRules);
-    }
-
-    private async Task<CharacterMechanicsPresentationView?> ProjectMechanicsAsync(
-        ICollection<string> diagnostics,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var catalog = await rulesCoreGateway.GetGlobalMechanicsAsync(cancellationToken);
-            var request = CharacterPresentationProjector.BuildSafeAutomaticEvaluations(catalog);
-            RulesCoreMechanicsBatchEvaluationView? evaluation = null;
-            if (request.Evaluations.Count > 0)
-            {
-                evaluation = await rulesCoreGateway.EvaluateGlobalMechanicsAsync(
-                    request,
-                    cancellationToken);
-            }
-
-            return CharacterPresentationProjector.ProjectMechanics(catalog, evaluation);
-        }
-        catch (RulesCoreGatewayException exception)
-        {
-            diagnostics.Add($"mechanics:{exception.Message}");
-            return null;
-        }
     }
 
     private async Task<IReadOnlyList<CharacterRecoveryProcedurePresentationView>?> ProjectRecoveryProceduresAsync(

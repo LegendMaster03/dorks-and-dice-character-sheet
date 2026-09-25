@@ -56,6 +56,7 @@ public sealed record RulesCoreUniversalGoverningAbilityView(
     IReadOnlyList<string> AbilityKeys);
 
 public sealed record RulesCoreUniversalCompetencyMechanicsView(
+    string CompetencyKind,
     RulesCoreUniversalGoverningAbilityView GoverningAbility,
     bool SupportsRanks,
     bool SupportsClassSkillState,
@@ -340,13 +341,6 @@ public interface IRulesCoreGateway
         IReadOnlyCollection<string> conceptKeys,
         CancellationToken cancellationToken = default);
 
-    Task<RulesCoreMechanicsCatalogView> GetGlobalMechanicsAsync(
-        CancellationToken cancellationToken = default);
-
-    Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
-        RulesCoreMechanicsBatchEvaluationRequest request,
-        CancellationToken cancellationToken = default);
-
     Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
         RulesCoreCharacterSupportProjectionRequest request,
         CancellationToken cancellationToken = default);
@@ -363,23 +357,5 @@ public interface IRulesCoreGateway
     Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
         Guid campaignId,
         RulesCoreCharacterRulesProjectionRequest request,
-        CancellationToken cancellationToken = default);
-
-    Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalManufacturingAsync(
-        RulesCoreManufacturingResolutionRequest request,
-        CancellationToken cancellationToken = default);
-
-    Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignManufacturingAsync(
-        Guid campaignId,
-        RulesCoreManufacturingResolutionRequest request,
-        CancellationToken cancellationToken = default);
-
-    Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalEnchantingAsync(
-        RulesCoreEnchantingResolutionRequest request,
-        CancellationToken cancellationToken = default);
-
-    Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignEnchantingAsync(
-        Guid campaignId,
-        RulesCoreEnchantingResolutionRequest request,
         CancellationToken cancellationToken = default);
 }

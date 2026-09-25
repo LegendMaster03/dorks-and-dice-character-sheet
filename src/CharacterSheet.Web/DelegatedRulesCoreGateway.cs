@@ -60,26 +60,6 @@ public sealed class DelegatedRulesCoreGateway(
         return resolved;
     }
 
-    public Task<RulesCoreMechanicsCatalogView> GetGlobalMechanicsAsync(
-        CancellationToken cancellationToken = default) =>
-        SendJsonAsync<RulesCoreMechanicsCatalogView>(
-            HttpMethod.Get,
-            "/api/rules/mechanics",
-            content: null,
-            cancellationToken);
-
-    public Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
-        RulesCoreMechanicsBatchEvaluationRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreMechanicsBatchEvaluationView>(
-            HttpMethod.Post,
-            "/api/rules/mechanics/evaluate",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
-
     public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
         RulesCoreCharacterSupportProjectionRequest request,
         CancellationToken cancellationToken = default)
@@ -136,74 +116,6 @@ public sealed class DelegatedRulesCoreGateway(
             HttpMethod.Post,
             $"/api/campaigns/{campaignId:D}/rules/character-mechanics/resolve",
             JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
-
-    public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalManufacturingAsync(
-        RulesCoreManufacturingResolutionRequest request,
-        CancellationToken cancellationToken = default) =>
-        SendCraftingAsync(
-            "/api/rules/crafting/manufacturing/resolve",
-            request,
-            cancellationToken);
-
-    public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignManufacturingAsync(
-        Guid campaignId,
-        RulesCoreManufacturingResolutionRequest request,
-        CancellationToken cancellationToken = default) =>
-        SendCampaignCraftingAsync(
-            campaignId,
-            "manufacturing",
-            request,
-            cancellationToken);
-
-    public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalEnchantingAsync(
-        RulesCoreEnchantingResolutionRequest request,
-        CancellationToken cancellationToken = default) =>
-        SendCraftingAsync(
-            "/api/rules/crafting/enchanting/resolve",
-            request,
-            cancellationToken);
-
-    public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignEnchantingAsync(
-        Guid campaignId,
-        RulesCoreEnchantingResolutionRequest request,
-        CancellationToken cancellationToken = default) =>
-        SendCampaignCraftingAsync(
-            campaignId,
-            "enchanting",
-            request,
-            cancellationToken);
-
-    private Task<RulesCoreCraftingCheckResolutionView> SendCraftingAsync<TRequest>(
-        string path,
-        TRequest request,
-        CancellationToken cancellationToken)
-        where TRequest : class
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCraftingCheckResolutionView>(
-            HttpMethod.Post,
-            path,
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
-
-    private Task<RulesCoreCraftingCheckResolutionView> SendCampaignCraftingAsync<TRequest>(
-        Guid campaignId,
-        string procedure,
-        TRequest request,
-        CancellationToken cancellationToken)
-        where TRequest : class
-    {
-        if (campaignId == Guid.Empty)
-        {
-            throw new ArgumentException("Campaign ID can not be empty.", nameof(campaignId));
-        }
-
-        return SendCraftingAsync(
-            $"/api/campaigns/{campaignId:D}/rules/crafting/{procedure}/resolve",
-            request,
             cancellationToken);
     }
 
