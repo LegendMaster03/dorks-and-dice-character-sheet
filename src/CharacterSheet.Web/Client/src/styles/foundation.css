@@ -80,6 +80,7 @@
  * then releases that clipping only while a floating disclosure is open.
  */
 .dd-sheet:has(.dd-skill-disclosure[open]),
+.dd-sheet:has(.dd-competency-disclosure[open]),
 .dd-sheet:has(.dd-health-quick__details[open]) {
     overflow: visible;
 }
