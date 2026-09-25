@@ -1,6 +1,7 @@
 import type {
     HarvestingCraftingMode,
-    HarvestingCraftingUiState
+    HarvestingCraftingUiState,
+    HarvestingHelperUiState
 } from "../../app-state.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
@@ -18,6 +19,8 @@ import {
     type CraftingCompetencyInput
 } from "../../crafting-api.js";
 import { applyInventoryTransaction } from "../../character-state-api.js";
+import { loadCharacterPresentation } from "../../character-presentation-api.js";
+import { loadHostedCampaignContext } from "../../campaign-context-api.js";
 import type { RoutineStateWorkflow } from "../../core/application/routine-state-workflow.js";
 import type { PresentationWorkflow } from "../../core/application/presentation-workflow.js";
 import {
@@ -40,7 +43,8 @@ export interface HarvestingCraftingWorkflow {
     setSameActor(value: boolean): void;
     setCreatureSize(value: string): void;
     addHelper(): void;
-    updateHelper(index: number, helper: HarvestingHelperInput): void;
+    updateHelper(index: number, helper: HarvestingHelperUiState): void;
+    setHelperCharacter(index: number, characterId: string | null): Promise<void>;
     removeHelper(index: number): void;
     moveComponent(key: string, direction: -1 | 1): void;
     evaluate(): Promise<void>;
@@ -368,6 +372,159 @@ export function createHarvestingCraftingWorkflow(
         }
     }
 
+    async function ensureCampaignContext(campaignId: string | null): Promise<void> {
+        if (campaignId === null) {
+            update(state => ({
+                ...state,
+                campaignContextStatus: "idle",
+                campaignCharacters: []
+            }));
+            return;
+        }
+
+        update(state => ({
+            ...state,
+            campaignContextStatus: "loading",
+            campaignCharacters: []
+        }));
+        try {
+            const context = await loadHostedCampaignContext(environment, campaignId);
+            update(state => ({
+                ...state,
+                campaignContextStatus: "ready",
+                campaignCharacters: context.characters.map(character => ({
+                    characterId: character.characterId,
+                    name: character.name
+                })),
+                message: undefined
+            }));
+        } catch (error) {
+            update(state => ({
+                ...state,
+                campaignContextStatus: "error",
+                campaignCharacters: [],
+                message: `Campaign helper roster could not be loaded. Manual helper entry remains available. ${requestErrorMessage(error)}`
+            }));
+        }
+    }
+
+    function numericMechanicalValue(value: unknown): number | null {
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value !== "string") return null;
+        const normalized = value.trim().replace(/^\+/, "");
+        if (!/^-?\d+$/.test(normalized)) return null;
+        return Number.parseInt(normalized, 10);
+    }
+
+    async function setHelperCharacter(
+        index: number,
+        characterId: string | null
+    ): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        if (index < 0 || index >= state.helpers.length) return;
+
+        if (characterId === null || characterId.trim().length === 0) {
+            update(current => {
+                const helpers = [...current.helpers];
+                helpers[index] = {
+                    ...helpers[index]!,
+                    characterId: null,
+                    displayName: null,
+                    source: "manual",
+                    resolutionStatus: "idle"
+                };
+                return {
+                    ...current,
+                    helpers,
+                    outcomeStatus: "idle",
+                    outcome: null,
+                    message: undefined
+                };
+            });
+            return;
+        }
+
+        const normalized = characterId.trim();
+        const selected = state.campaignCharacters.find(
+            character => character.characterId === normalized);
+        update(current => {
+            const helpers = [...current.helpers];
+            helpers[index] = {
+                ...helpers[index]!,
+                characterId: normalized,
+                displayName: selected?.name ?? "Campaign Character",
+                source: "campaign-character",
+                resolutionStatus: "loading"
+            };
+            return { ...current, helpers, outcomeStatus: "idle", outcome: null };
+        });
+
+        try {
+            const presentation = await loadCharacterPresentation(environment, normalized);
+            const mechanics = presentation.mechanics;
+            const proficiency = mechanics?.combatFundamentals?.find(value =>
+                value.key === "proficiency.standard"
+                || value.key === "proficiency-bonus"
+                || value.label.trim().toLowerCase() === "proficiency bonus");
+            const proficiencyBonus = numericMechanicalValue(proficiency?.effectiveValue);
+            const competencyKey = application.getState().harvestingCrafting.table?.competencyKey;
+            const competency = competencyKey === undefined
+                ? undefined
+                : mechanics?.competencies?.entries.find(value =>
+                    value.key === competencyKey
+                    || value.identityKey === competencyKey.replace(/^competency\./, ""));
+            const training = competency?.training?.trim().toLowerCase();
+            const isProficient = training !== undefined
+                && (training.includes("proficient") || training.includes("trained"));
+
+            if (proficiencyBonus === null || competency === undefined) {
+                update(current => {
+                    const helpers = [...current.helpers];
+                    helpers[index] = {
+                        ...helpers[index]!,
+                        resolutionStatus: "error"
+                    };
+                    return {
+                        ...current,
+                        helpers,
+                        message: "The selected campaign Character does not expose enough resolved helper mechanics. Enter the helper values manually."
+                    };
+                });
+                return;
+            }
+
+            update(current => {
+                const helpers = [...current.helpers];
+                helpers[index] = {
+                    ...helpers[index]!,
+                    proficiencyBonus,
+                    isProficient,
+                    resolutionStatus: "ready"
+                };
+                return {
+                    ...current,
+                    helpers,
+                    outcomeStatus: "idle",
+                    outcome: null,
+                    message: undefined
+                };
+            });
+        } catch (error) {
+            update(current => {
+                const helpers = [...current.helpers];
+                helpers[index] = {
+                    ...helpers[index]!,
+                    resolutionStatus: "error"
+                };
+                return {
+                    ...current,
+                    helpers,
+                    message: `The selected campaign Character could not be resolved. Manual helper entry remains available. ${requestErrorMessage(error)}`
+                };
+            });
+        }
+    }
+
     async function searchMonsters(query: string): Promise<void> {
         const normalized = query.trim();
         update(state => ({
@@ -501,7 +658,13 @@ export function createHarvestingCraftingWorkflow(
                     creatureSize: state.creatureSize.trim().length > 0
                         ? state.creatureSize.trim()
                         : null,
-                    helpers: state.helpers
+                    helpers: state.helpers.map(helper => ({
+                        proficiencyBonus: helper.proficiencyBonus,
+                        isProficient: helper.isProficient,
+                        participatedForEntireDuration: helper.participatedForEntireDuration,
+                        isAssessmentParticipant: helper.isAssessmentParticipant,
+                        isCarvingParticipant: helper.isCarvingParticipant
+                    }))
                 },
                 state.scopeCampaignId);
             update(current => ({
@@ -638,8 +801,11 @@ export function createHarvestingCraftingWorkflow(
         setScope(campaignId): void {
             update(state => clearCraftingResult(clearResolution({
                 ...state,
-                scopeCampaignId: campaignId
+                scopeCampaignId: campaignId,
+                campaignContextStatus: campaignId === null ? "idle" : state.campaignContextStatus,
+                campaignCharacters: campaignId === null ? [] : state.campaignCharacters
             })));
+            void ensureCampaignContext(campaignId);
         },
 
         setSourceKind(kind): void {
@@ -720,7 +886,11 @@ export function createHarvestingCraftingWorkflow(
                         isProficient: false,
                         participatedForEntireDuration: true,
                         isAssessmentParticipant: false,
-                        isCarvingParticipant: false
+                        isCarvingParticipant: false,
+                        characterId: null,
+                        displayName: null,
+                        source: "manual",
+                        resolutionStatus: "idle"
                     }
                 ],
                 outcomeStatus: "idle",
@@ -743,6 +913,8 @@ export function createHarvestingCraftingWorkflow(
                 };
             });
         },
+
+        setHelperCharacter,
 
         removeHelper(index): void {
             update(state => ({
