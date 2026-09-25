@@ -105,6 +105,7 @@ builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
+builder.Services.AddScoped<CharacterCraftingService>();
 builder.Services.AddScoped<CharacterPresentationService>();
 builder.Services.AddHealthChecks();
 
