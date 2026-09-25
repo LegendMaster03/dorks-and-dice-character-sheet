@@ -300,6 +300,21 @@ public sealed class CharacterStateService(
                 token),
             cancellationToken);
 
+    public Task<CharacterStateResult> ApplyInventoryTransactionAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterInventoryConsumption> consumptions,
+        IReadOnlyList<CharacterInventoryAddition> additions,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.ApplyInventoryTransactionAsync(
+                characterId,
+                consumptions,
+                additions,
+                changedAt,
+                token),
+            cancellationToken);
+
     public Task<CharacterStateResult> UpdateInventoryItemOccurrenceAsync(
         Guid characterId,
         Guid occurrenceId,
