@@ -10,7 +10,8 @@ import {
     resolveHarvestingOutcome,
     resolveHarvestingTable,
     searchResolvedRules,
-    type HarvestingHelperInput
+    type HarvestingComponentEditInput,
+    type HarvestingTableResolutionInput
 } from "../../rules-core-api.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
 import {
@@ -38,6 +39,13 @@ export interface HarvestingCraftingWorkflow {
     searchMonsters(query: string): Promise<void>;
     selectMonster(conceptKey: string): void;
     resolveTable(): Promise<void>;
+    setHarvestManualComponentName(value: string): void;
+    setHarvestManualComponentDc(value: number | null): void;
+    setHarvestManualComponentQuantity(value: number | null): void;
+    editHarvestComponent(key: string, componentDc: number, quantity: number | null): Promise<void>;
+    removeHarvestComponent(key: string): Promise<void>;
+    addHarvestComponent(): Promise<void>;
+    resetHarvestEdits(): Promise<void>;
     setAssessmentResult(value: number | null): void;
     setCarvingResult(value: number | null): void;
     setSameActor(value: boolean): void;
@@ -650,6 +658,174 @@ export function createHarvestingCraftingWorkflow(
         }
     }
 
+    async function applyHarvestTableRequest(
+        request: HarvestingTableResolutionInput,
+        clearDraft = false
+    ): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        const previousOrder = state.harvestOrder;
+        update(current => ({
+            ...current,
+            tableStatus: "loading",
+            outcomeStatus: "idle",
+            outcome: null,
+            harvestInventoryStatus: "idle",
+            harvestInventoryAwarded: false,
+            message: undefined
+        }));
+        try {
+            const table = await resolveHarvestingTable(
+                environment,
+                request,
+                state.scopeCampaignId);
+            const availableKeys = new Set(table.components.map(component => component.key));
+            const retainedOrder = previousOrder.filter(key => availableKeys.has(key));
+            const retainedKeys = new Set(retainedOrder);
+            const harvestOrder = [
+                ...retainedOrder,
+                ...table.components
+                    .map(component => component.key)
+                    .filter(key => !retainedKeys.has(key))
+            ];
+            update(current => ({
+                ...current,
+                tableStatus: "ready",
+                tableRequest: request,
+                table,
+                creatureSize: table.creatureSize ?? current.creatureSize,
+                harvestOrder,
+                harvestManualComponentName: clearDraft ? "" : current.harvestManualComponentName,
+                harvestManualComponentDc: clearDraft ? null : current.harvestManualComponentDc,
+                harvestManualComponentQuantity: clearDraft ? null : current.harvestManualComponentQuantity,
+                message: undefined
+            }));
+        } catch (error) {
+            update(current => ({
+                ...current,
+                tableStatus: "error",
+                message: requestErrorMessage(error)
+            }));
+        }
+    }
+
+    function nextHarvestEdits(
+        state: HarvestingCraftingUiState,
+        key: string,
+        edit: HarvestingComponentEditInput | null,
+        remove: boolean
+    ): HarvestingTableResolutionInput["manualEdits"] {
+        const previous = state.tableRequest?.manualEdits;
+        const removals = new Set(previous?.removeComponentKeys ?? []);
+        const upserts = (previous?.upsertComponents ?? [])
+            .filter(value => value.key !== key);
+
+        if (remove) {
+            removals.add(key);
+        } else {
+            removals.delete(key);
+            if (edit !== null) upserts.push(edit);
+        }
+
+        return {
+            removeComponentKeys: [...removals],
+            upsertComponents: upserts
+        };
+    }
+
+    async function editHarvestComponent(
+        key: string,
+        componentDc: number,
+        quantity: number | null
+    ): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        const request = state.tableRequest;
+        const component = state.table?.components.find(value => value.key === key);
+        if (request === null || component === undefined) return;
+        if (!Number.isInteger(componentDc) || componentDc <= 0
+            || (quantity !== null && (!Number.isInteger(quantity) || quantity <= 0))) {
+            update(current => ({
+                ...current,
+                message: "Component DC and quantity must be positive whole numbers."
+            }));
+            return;
+        }
+
+        await applyHarvestTableRequest({
+            ...request,
+            manualEdits: nextHarvestEdits(
+                state,
+                key,
+                {
+                    key,
+                    displayName: component.displayName,
+                    componentDc,
+                    quantity
+                },
+                false)
+        });
+    }
+
+    async function removeHarvestComponent(key: string): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        if (state.tableRequest === null) return;
+        await applyHarvestTableRequest({
+            ...state.tableRequest,
+            manualEdits: nextHarvestEdits(state, key, null, true)
+        });
+    }
+
+    async function addHarvestComponent(): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        if (state.tableRequest === null) return;
+        const displayName = state.harvestManualComponentName.trim();
+        const componentDc = state.harvestManualComponentDc;
+        const quantity = state.harvestManualComponentQuantity;
+        if (displayName.length === 0 || componentDc === null
+            || !Number.isInteger(componentDc) || componentDc <= 0
+            || (quantity !== null && (!Number.isInteger(quantity) || quantity <= 0))) {
+            update(current => ({
+                ...current,
+                message: "Enter a component name, a positive whole-number Component DC, and an optional positive whole-number quantity."
+            }));
+            return;
+        }
+
+        const slug = displayName.toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+        if (slug.length === 0) {
+            update(current => ({
+                ...current,
+                message: "The component name can not be converted to a usable key."
+            }));
+            return;
+        }
+        const key = `manual-${slug}`;
+        if (state.table?.components.some(component => component.key === key)) {
+            update(current => ({
+                ...current,
+                message: "A manual component with that name already exists. Edit the existing row instead."
+            }));
+            return;
+        }
+
+        await applyHarvestTableRequest({
+            ...state.tableRequest,
+            manualEdits: nextHarvestEdits(
+                state,
+                key,
+                { key, displayName, componentDc, quantity },
+                false)
+        }, true);
+    }
+
+    async function resetHarvestEdits(): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        if (state.tableRequest === null) return;
+        const { manualEdits: _manualEdits, ...baseRequest } = state.tableRequest;
+        await applyHarvestTableRequest(baseRequest, true);
+    }
+
     async function evaluate(): Promise<void> {
         const state = application.getState().harvestingCrafting;
         if (state.table === null || state.tableRequest === null) {
@@ -930,6 +1106,23 @@ export function createHarvestingCraftingWorkflow(
         },
 
         resolveTable,
+
+        setHarvestManualComponentName(value): void {
+            update(state => ({ ...state, harvestManualComponentName: value, message: undefined }));
+        },
+
+        setHarvestManualComponentDc(value): void {
+            update(state => ({ ...state, harvestManualComponentDc: value, message: undefined }));
+        },
+
+        setHarvestManualComponentQuantity(value): void {
+            update(state => ({ ...state, harvestManualComponentQuantity: value, message: undefined }));
+        },
+
+        editHarvestComponent,
+        removeHarvestComponent,
+        addHarvestComponent,
+        resetHarvestEdits,
 
         setAssessmentResult(value): void {
             update(state => ({
