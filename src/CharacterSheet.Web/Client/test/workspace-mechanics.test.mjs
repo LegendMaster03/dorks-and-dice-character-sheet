@@ -856,7 +856,8 @@ test("support surfaces stay neutral when unavailable and consume supplied values
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
     const rendered = render("actions", null);
     const text = visibleText(rendered);
-    assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 2);
+    assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 1);
+    assert.equal(byClass(rendered, "dd-competency-row--placeholder").length, 1);
     assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available|Resolved actions and attacks are not available/);
     assert.equal(byAttribute(rendered, "data-action-state", "unavailable").length, 1);
 
