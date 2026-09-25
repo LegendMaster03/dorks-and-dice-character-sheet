@@ -165,6 +165,7 @@ app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
 app.MapCharacterStateEndpoints();
 app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
+app.MapCharacterCraftingEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,
