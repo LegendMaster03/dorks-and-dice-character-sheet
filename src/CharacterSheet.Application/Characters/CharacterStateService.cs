@@ -18,14 +18,14 @@ public enum CharacterStateAccessStatus
 public sealed record CharacterInventoryItemOccurrenceView(
     Guid Id,
     string? RuleConceptKey,
-    string? CustomName,
     DateTimeOffset CreatedAt,
     int Quantity = 1,
     bool IsCarried = true,
     bool IsEquipped = false,
     bool IsAttuned = false,
     Guid? ContainerOccurrenceId = null,
-    DateTimeOffset? UpdatedAt = null);
+    DateTimeOffset? UpdatedAt = null,
+    string? CustomName = null);
 
 public sealed record CharacterNoteView(
     Guid Id,
@@ -582,14 +582,14 @@ public sealed class CharacterStateService(
                 .Select(value => new CharacterInventoryItemOccurrenceView(
                     value.Id,
                     value.RuleConceptKey,
-                    value.CustomName,
                     value.CreatedAt,
                     value.Quantity,
                     value.IsCarried,
                     value.IsEquipped,
                     value.IsAttuned,
                     value.ContainerOccurrenceId,
-                    value.UpdatedAt))
+                    value.UpdatedAt,
+                    value.CustomName))
                 .ToArray(),
             root.Notes
                 .OrderBy(value => value.CreatedAt)
