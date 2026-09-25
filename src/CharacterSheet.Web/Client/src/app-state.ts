@@ -236,6 +236,16 @@ export interface HarvestingCraftingUiState {
     craftingRolls: number[];
     craftingSelectedRoll: number | null;
     craftingRollTie: boolean;
+    craftingRecipeName: string;
+    craftingOutputName: string;
+    craftingOutputQuantity: number;
+    craftingRequiresManufacturing: boolean;
+    craftingRequiresEnchanting: boolean;
+    craftingMaterials: Array<{ occurrenceId: string; quantity: number }>;
+    craftingManufacturingSucceeded: boolean | null;
+    craftingEnchantingSucceeded: boolean | null;
+    craftingCompletionStatus: "idle" | "loading" | "ready" | "error";
+    craftingCompleted: boolean;
     message?: string;
 }
 
@@ -547,7 +557,17 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
         craftingResolution: null,
         craftingRolls: [],
         craftingSelectedRoll: null,
-        craftingRollTie: false
+        craftingRollTie: false,
+        craftingRecipeName: "",
+        craftingOutputName: "",
+        craftingOutputQuantity: 1,
+        craftingRequiresManufacturing: true,
+        craftingRequiresEnchanting: false,
+        craftingMaterials: [],
+        craftingManufacturingSucceeded: null,
+        craftingEnchantingSucceeded: null,
+        craftingCompletionStatus: "idle",
+        craftingCompleted: false
     };
 }
 
