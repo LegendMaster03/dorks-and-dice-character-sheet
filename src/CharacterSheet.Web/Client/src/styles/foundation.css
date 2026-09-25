@@ -74,6 +74,16 @@
     overflow: clip;
 }
 
+/*
+ * Floating breakouts are intentionally allowed to escape the Character Sheet
+ * boundary. The sheet clips by default so its rounded shell remains clean,
+ * then releases that clipping only while a floating disclosure is open.
+ */
+.dd-sheet:has(.dd-skill-disclosure[open]),
+.dd-sheet:has(.dd-health-quick__details[open]) {
+    overflow: visible;
+}
+
 .dd-sheet button,
 .dd-sheet input,
 .dd-sheet-screen button,
