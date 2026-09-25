@@ -46,7 +46,8 @@ export interface CharacterHitPointGainStateResponse {
 
 export interface CharacterInventoryItemOccurrenceResponse {
     id: string;
-    ruleConceptKey: string;
+    ruleConceptKey: string | null;
+    customName: string | null;
     createdAt: string;
     quantity: number;
     isCarried: boolean;
@@ -437,6 +438,21 @@ export async function addInventoryItemOccurrence(
         "POST",
         { conceptKey },
         "Unable to add inventory item.");
+}
+
+export async function addCustomInventoryItemOccurrence(
+    environment: HostEnvironment,
+    characterId: string,
+    customName: string,
+    quantity = 1,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterStateBackendUrl(environment, characterId, "inventory"),
+        "POST",
+        { customName, quantity },
+        "Unable to add custom inventory item.");
 }
 
 export async function updateInventoryItemOccurrence(
