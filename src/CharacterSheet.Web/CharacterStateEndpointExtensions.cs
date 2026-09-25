@@ -283,6 +283,7 @@ public static class CharacterStateEndpointExtensions
                         request.CustomName
                             ?? throw new ArgumentException(
                                 "A custom inventory item name is required when conceptKey is omitted."),
+                        request.Quantity,
                         cancellationToken);
                 return ToApiResult(result, mutating: true);
             }
@@ -574,7 +575,8 @@ public sealed record CharacterHitPointGainRequest(int HitDieValue);
 
 public sealed record CharacterInventoryItemOccurrenceRequest(
     string? ConceptKey = null,
-    string? CustomName = null);
+    string? CustomName = null,
+    int Quantity = 1);
 
 public sealed record CharacterInventoryItemOccurrenceStateRequest(
     int Quantity,
