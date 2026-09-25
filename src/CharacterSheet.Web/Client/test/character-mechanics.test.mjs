@@ -229,6 +229,8 @@ test("Rules Core presentation categories split Skills from broader Competencies 
         entries: [
             value("competency.arcana", "Arcana", "+7", { presentationCategory: "skill" }),
             value("competency.alchemy", "Alchemy", "+6", { presentationCategory: "competency" }),
+            value("competency.craft", "Craft", "-", { presentationCategory: "supporting" }),
+            value("competency.blacksmithing", "Blacksmithing", "-", { presentationCategory: "supporting" }),
             value("competency.future", "Opaque Future Capability", "-", { presentationCategory: "future-surface" }),
             value("legacy.skill", "Legacy Skill", "+2")
         ],
@@ -246,6 +248,8 @@ test("Rules Core presentation categories split Skills from broader Competencies 
     assert.deepEqual(
         partition.competencies.entries.map(entry => entry.key),
         ["competency.alchemy", "competency.future"]);
+    assert.ok(!partition.skills.entries.some(entry => entry.presentationCategory === "supporting"));
+    assert.ok(!partition.competencies.entries.some(entry => entry.presentationCategory === "supporting"));
     assert.equal(partition.skills.relationships.length, 1);
     assert.equal(partition.competencies.relationships, undefined);
 });
