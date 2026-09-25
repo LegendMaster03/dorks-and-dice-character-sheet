@@ -74,7 +74,19 @@ export function createHarvestingCraftingWorkflow(
     function clearResolution(
         state: HarvestingCraftingUiState
     ): HarvestingCraftingUiState {
-        function clearCraftingResult(
+        return {
+            ...state,
+            tableStatus: "idle",
+            tableRequest: null,
+            table: null,
+            harvestOrder: [],
+            outcomeStatus: "idle",
+            outcome: null,
+            message: undefined
+        };
+    }
+
+    function clearCraftingResult(
         state: HarvestingCraftingUiState
     ): HarvestingCraftingUiState {
         return {
@@ -216,18 +228,6 @@ export function createHarvestingCraftingWorkflow(
             message: undefined
         }));
         await resolveCrafting(characterId, selection.selected);
-    }
-
-    return {
-            ...state,
-            tableStatus: "idle",
-            tableRequest: null,
-            table: null,
-            harvestOrder: [],
-            outcomeStatus: "idle",
-            outcome: null,
-            message: undefined
-        };
     }
 
     async function ensureCatalog(): Promise<void> {
