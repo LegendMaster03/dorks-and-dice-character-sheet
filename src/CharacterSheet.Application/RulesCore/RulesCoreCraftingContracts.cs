@@ -40,4 +40,9 @@ public sealed record RulesCoreCraftingCheckResolutionView(
     int? D20Roll,
     int? Total,
     int? TargetDc,
-    bool? MeetsTarget);
+    bool? MeetsTarget,
+    string Outcome = "pending",
+    int? Margin = null,
+    int? FlawCount = null,
+    bool InputsConsumed = false,
+    bool ProducesFunctionalOutput = false);
