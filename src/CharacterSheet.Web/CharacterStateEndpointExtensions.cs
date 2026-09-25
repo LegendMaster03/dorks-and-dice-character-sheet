@@ -293,6 +293,40 @@ public static class CharacterStateEndpointExtensions
             }
         });
 
+        app.MapPost("/api/characters/{characterId:guid}/state/inventory/transaction", async (
+            Guid characterId,
+            CharacterInventoryTransactionRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.ApplyInventoryTransactionAsync(
+                        characterId,
+                        (request.Consumptions ?? [])
+                            .Select(value => new CharacterInventoryConsumption(
+                                value.OccurrenceId,
+                                value.Quantity))
+                            .ToArray(),
+                        (request.Additions ?? [])
+                            .Select(value => new CharacterInventoryAddition(
+                                value.ConceptKey,
+                                value.CustomName,
+                                value.Quantity))
+                            .ToArray(),
+                        cancellationToken),
+                    mutating: true);
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException
+                or InvalidOperationException
+                or OverflowException)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
         app.MapPut("/api/characters/{characterId:guid}/state/inventory/{occurrenceId:guid}", async (
             Guid characterId,
             Guid occurrenceId,
@@ -577,6 +611,19 @@ public sealed record CharacterInventoryItemOccurrenceRequest(
     string? ConceptKey = null,
     string? CustomName = null,
     int Quantity = 1);
+
+public sealed record CharacterInventoryConsumptionRequest(
+    Guid OccurrenceId,
+    int Quantity);
+
+public sealed record CharacterInventoryAdditionRequest(
+    string? ConceptKey = null,
+    string? CustomName = null,
+    int Quantity = 1);
+
+public sealed record CharacterInventoryTransactionRequest(
+    IReadOnlyList<CharacterInventoryConsumptionRequest>? Consumptions = null,
+    IReadOnlyList<CharacterInventoryAdditionRequest>? Additions = null);
 
 public sealed record CharacterInventoryItemOccurrenceStateRequest(
     int Quantity,
