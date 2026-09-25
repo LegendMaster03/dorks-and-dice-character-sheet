@@ -168,3 +168,39 @@ test("campaign helper selection is optional and preserves manual fallback", asyn
     assert.match(workflow, /Manual helper entry remains available/);
     assert.match(campaignApi, /\/api\/campaigns\/\$\{encodeURIComponent\(campaignId\)\}\/context/);
 });
+
+
+test("Harvesting UI does not expose Rules Core resolution controls", async () => {
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+    const workflow = await source("features/harvesting/harvesting-workflow.ts");
+    const rulesApi = await source("rules-core-api.ts");
+
+    for (const internalLabel of [
+        "Effective rules",
+        "Resolve Harvesting Table",
+        "Resolved Harvesting Rule",
+        "Resolve Check",
+        "Rules Core competency"
+    ]) {
+        assert.doesNotMatch(
+            workspace,
+            new RegExp(internalLabel),
+            `${internalLabel} is an implementation detail, not a player workflow control`);
+    }
+
+    assert.match(workflow, /function typeTable\(/);
+    assert.match(workflow, /void resolveTable\(\)/);
+    assert.match(rulesApi, /input\.creatureConceptKey/);
+});
+
+test("Crafting UI is organized around project and crafting steps", async () => {
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+
+    assert.match(workspace, /Crafting Project/);
+    assert.match(workspace, /Required steps/);
+    assert.match(workspace, /Roll Manufacturing/);
+    assert.match(workspace, /Roll Enchanting/);
+    assert.match(workspace, /Finish & Update Inventory/);
+    assert.doesNotMatch(workspace, /Crafting Procedure/);
+    assert.doesNotMatch(workspace, /Universal competency/);
+});
