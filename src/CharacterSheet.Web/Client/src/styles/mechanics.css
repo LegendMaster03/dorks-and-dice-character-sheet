@@ -463,6 +463,36 @@
     border-radius: var(--dd-sheet-radius-sm);
 }
 
+/*
+ * On wide layouts, Competency disclosures follow the same interaction model
+ * as Skill disclosures: opening details does not reflow the reference rail.
+ * The competency-specific content remains distinct, but the breakout floats
+ * from its row and may extend beyond the Character Sheet boundary.
+ */
+@container character-sheet (min-width: 62rem) {
+    .dd-competency-list > .dd-competency-disclosure {
+        position: relative;
+    }
+
+    .dd-competency-list > .dd-competency-disclosure[open] {
+        z-index: 40;
+    }
+
+    .dd-competency-list > .dd-competency-disclosure > .dd-competency-disclosure__body {
+        position: absolute;
+        z-index: 40;
+        inset-block-start: calc(100% + 0.18rem);
+        inset-inline-start: 0;
+        width: max(100%, 22rem);
+        max-width: min(34rem, calc(100vw - 2rem));
+        max-height: min(70vh, 36rem);
+        margin-top: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
+        box-shadow: var(--dd-sheet-shadow);
+    }
+}
+
 .dd-competency-breakout-title,
 .dd-competency-detail-section__title {
     margin: 0;
