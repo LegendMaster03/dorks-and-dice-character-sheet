@@ -796,23 +796,41 @@ public sealed class CharacterSheetRoot
 
     public CharacterInventoryItemOccurrence AddCustomInventoryItemOccurrence(
         string customName,
-        DateTimeOffset createdAt) =>
+        DateTimeOffset createdAt,
+        int quantity = 1) =>
         AddInventoryItemOccurrence(
             ruleConceptKey: null,
             customName,
-            createdAt);
+            createdAt,
+            quantity);
 
     private CharacterInventoryItemOccurrence AddInventoryItemOccurrence(
         string? ruleConceptKey,
         string? customName,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        int quantity = 1)
     {
+        if (quantity <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(quantity), "Inventory quantity must be positive.");
+        }
+
         var occurrence = new CharacterInventoryItemOccurrence(
             Guid.NewGuid(),
             CharacterId,
             ruleConceptKey,
             customName,
             createdAt);
+        if (quantity != 1)
+        {
+            occurrence.ReplaceState(
+                quantity,
+                isCarried: true,
+                isEquipped: false,
+                isAttuned: false,
+                containerOccurrenceId: null,
+                createdAt);
+        }
         InventoryItemOccurrences.Add(occurrence);
         Touch(createdAt);
         return occurrence;
