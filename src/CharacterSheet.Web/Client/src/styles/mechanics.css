@@ -509,7 +509,6 @@
 }
 
 .dd-competency-facts,
-.dd-competency-facets,
 .dd-competency-relations {
     display: grid;
     gap: 1px;
@@ -522,7 +521,6 @@
 }
 
 .dd-competency-fact,
-.dd-competency-facet,
 .dd-competency-relation {
     display: grid;
     gap: 0.12rem;
@@ -539,7 +537,6 @@
 }
 
 .dd-competency-fact__term,
-.dd-competency-facet__capabilities,
 .dd-competency-relation__kind,
 .dd-competency-relation__training {
     color: var(--dd-sheet-muted);
@@ -547,13 +544,11 @@
 }
 
 .dd-competency-fact__value,
-.dd-competency-facet__name,
 .dd-competency-relation__name {
     color: var(--dd-sheet-ink);
     font-size: 0.68rem;
 }
 
-.dd-competency-facet__name,
 .dd-competency-relation__name {
     font-weight: 750;
 }
