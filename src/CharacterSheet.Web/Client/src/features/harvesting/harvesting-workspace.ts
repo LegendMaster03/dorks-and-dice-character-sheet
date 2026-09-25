@@ -18,6 +18,49 @@ import { toRuleReferenceDisplay } from "../../ui/sheet-model.js";
 
 const SIZE_OPTIONS = ["Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"];
 
+export function renderHarvestingCraftingOverlay(
+    character: CharacterSheetBootstrapResponse,
+    state: HarvestingCraftingUiState,
+    handlers: HarvestingCraftingWorkflow,
+    readOnly: boolean,
+    mechanics: CharacterMechanicsView | null = null,
+    routine: CharacterRoutineUiState | null = null
+): HTMLElement {
+    const overlay = createElement("div", "dd-harvesting-overlay");
+    overlay.setAttribute("data-harvesting-crafting-overlay", "true");
+
+    const dialog = createElement("section", "dd-harvesting-dialog");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "dd-harvesting-dialog-title");
+
+    const workspace = renderHarvestingCraftingWorkspace(
+        character,
+        state,
+        handlers,
+        readOnly,
+        mechanics,
+        routine);
+    const title = workspace.querySelector(".dd-harvesting-workspace__title");
+    if (title instanceof HTMLElement) {
+        title.id = "dd-harvesting-dialog-title";
+    }
+
+    dialog.append(workspace);
+    overlay.append(dialog);
+
+    overlay.addEventListener("click", event => {
+        if (event.target === overlay) handlers.close();
+    });
+    overlay.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        handlers.close();
+    });
+
+    return overlay;
+}
+
 export function renderHarvestingCraftingWorkspace(
     character: CharacterSheetBootstrapResponse,
     state: HarvestingCraftingUiState,
