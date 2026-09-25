@@ -244,6 +244,9 @@ export function createHarvestingCraftingWorkflow(
                 creatureType: state.creatureType.length > 0
                     ? state.creatureType
                     : (catalog.creatureTypes[0]?.key ?? ""),
+                craftingCreatureType: state.craftingCreatureType.length > 0
+                    ? state.craftingCreatureType
+                    : (catalog.creatureTypes[0]?.key ?? ""),
                 message: undefined
             }));
         } catch (error) {
