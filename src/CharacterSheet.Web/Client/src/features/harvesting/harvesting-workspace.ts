@@ -743,46 +743,133 @@ function renderCraftingPanel(
     mechanics: CharacterMechanicsView | null,
     routine: CharacterRoutineUiState | null
 ): HTMLElement {
-    const panel = createElement("div", "dd-harvesting-workspace__panel");
+    const panel = createElement("div", "dd-harvesting-workspace__panel dd-crafting-workshop");
 
-    panel.append(renderCraftingProject(state, handlers, readOnly, routine));
+    const sidebar = createElement("aside", "dd-crafting-workshop__sidebar");
+    sidebar.setAttribute("aria-label", "Crafting project and progress");
+    sidebar.append(
+        renderCraftingProject(state, handlers, readOnly, routine),
+        renderCraftingTracker(state));
 
+    const work = createElement("div", "dd-crafting-workshop__work");
     if (!state.craftingRequiresManufacturing && !state.craftingRequiresEnchanting) {
-        panel.append(createInlineState(
-            "Choose at least one crafting step: Manufacturing, Enchanting, or both.",
+        work.append(createInlineState(
+            "Choose Manufacturing, Enchanting, or both for this project.",
             "warning"));
-        return panel;
+    } else {
+        work.append(renderCraftingStage(
+            character,
+            state,
+            handlers,
+            readOnly,
+            mechanics));
     }
-
-    if (state.craftingRequiresManufacturing && state.craftingRequiresEnchanting) {
-        const progress = createSectionCard("Crafting Progress", "dd-crafting-procedure");
-        const facts = createElement("dl", "dd-harvesting-facts");
-        appendFact(
-            facts,
-            "1. Manufacturing",
-            stageState(true, state.craftingManufacturingSucceeded));
-        appendFact(
-            facts,
-            "2. Enchanting",
-            stageState(true, state.craftingEnchantingSucceeded));
-        progress.append(facts);
-        panel.append(progress);
-    }
-
-    panel.append(renderCraftingStage(
-        character,
-        state,
-        handlers,
-        readOnly,
-        mechanics));
-
-    panel.append(renderCraftingCompletion(
+    work.append(renderCraftingCompletion(
         character,
         state,
         handlers,
         readOnly));
 
+    panel.append(sidebar, work);
     return panel;
+}
+
+function renderCraftingTracker(
+    state: HarvestingCraftingUiState
+): HTMLElement {
+    const card = createSectionCard("Current Project", "dd-crafting-tracker");
+    const name = state.craftingRecipeName.trim();
+    const output = state.craftingOutputName.trim();
+
+    card.append(createElement(
+        "strong",
+        "dd-crafting-tracker__name",
+        name.length > 0 ? name : "Unnamed crafting project"));
+    card.append(createElement(
+        "p",
+        "dd-harvesting-field__help",
+        output.length > 0
+            ? `Produces ${state.craftingOutputQuantity} × ${output}`
+            : "Choose the output item for this project."));
+
+    const stages = createElement("div", "dd-crafting-tracker__stages");
+    if (state.craftingRequiresManufacturing) {
+        stages.append(renderCraftingTrackerStage(
+            "1. Manufacturing",
+            state.craftingManufacturingSucceeded,
+            state.craftingManufacturingCompletedHours,
+            state.craftingManufacturingRequiredHours,
+            state.craftingProcedure === "manufacturing"));
+    }
+    if (state.craftingRequiresEnchanting) {
+        const waiting =
+            state.craftingRequiresManufacturing
+            && state.craftingManufacturingSucceeded !== true;
+        stages.append(renderCraftingTrackerStage(
+            "2. Enchanting",
+            state.craftingEnchantingSucceeded,
+            state.craftingEnchantingCompletedHours,
+            state.craftingEnchantingRequiredHours,
+            state.craftingProcedure === "enchanting",
+            waiting
+                ? state.craftingManufacturingSucceeded === false
+                    ? "Skipped after Manufacturing failure"
+                    : "Waiting for Manufacturing"
+                : undefined));
+    }
+    if (stages.childElementCount === 0) {
+        stages.append(createElement(
+            "p",
+            "dd-harvesting-field__help",
+            "No crafting steps selected."));
+    }
+    card.append(stages);
+    return card;
+}
+
+function renderCraftingTrackerStage(
+    label: string,
+    succeeded: boolean | null,
+    completedHours: number,
+    requiredHours: number | null,
+    active: boolean,
+    overrideStatus?: string
+): HTMLElement {
+    const stage = createElement(
+        "section",
+        active
+            ? "dd-crafting-tracker__stage dd-crafting-tracker__stage--active"
+            : "dd-crafting-tracker__stage");
+    const heading = createElement("div", "dd-crafting-tracker__stage-heading");
+    heading.append(
+        createElement("strong", "", label),
+        createElement(
+            "span",
+            "",
+            overrideStatus ?? stageState(true, succeeded)));
+    stage.append(heading);
+
+    if (requiredHours !== null && requiredHours > 0) {
+        const progress = document.createElement("progress");
+        progress.className = "dd-crafting-tracker__progress";
+        progress.max = requiredHours;
+        progress.value = Math.min(Math.max(completedHours, 0), requiredHours);
+        progress.setAttribute(
+            "aria-label",
+            `${label} time: ${completedHours} of ${requiredHours} hours`);
+        stage.append(
+            progress,
+            createElement(
+                "span",
+                "dd-crafting-tracker__time",
+                `${completedHours} / ${requiredHours} hours`));
+    } else {
+        stage.append(createElement(
+            "span",
+            "dd-crafting-tracker__time",
+            "Time not entered"));
+    }
+    return stage;
 }
 
 function renderCraftingStage(
@@ -801,7 +888,7 @@ function renderCraftingStage(
         "p",
         "dd-harvesting-field__help",
         manufacturing
-            ? "Make the physical item. Choose the tool or competency, Ability, and DC required by the recipe."
+            ? "Make the physical item. Choose the required tool or skill, Ability, and DC from the recipe."
             : "Enchant the finished item. Choose the component's creature type and the spellcasting source used for the check."));
 
     if (manufacturing) {
@@ -907,7 +994,7 @@ function renderCraftingStage(
 
         if (!resolution.isQualified && resolution.rollMode === "disadvantage") {
             card.append(createInlineState(
-                "This Character is not qualified for the selected competency and has no qualified guidance, so the check uses disadvantage.",
+                "This Character is not qualified with the selected tool or skill and has no qualified guidance, so the check uses disadvantage.",
                 "warning"));
         }
         if (resolution.total !== null && resolution.inputsConsumed) {
@@ -977,17 +1064,17 @@ function renderManufacturingInputs(
     if (state.craftingCompetencyMode === "manual") {
         group.append(
             textField(
-                "Tool or competency",
+                "Tool or skill",
                 state.craftingManualName,
                 handlers.setCraftingManualName,
                 readOnly),
             numberField(
-                "Tool / competency modifier",
+                "Tool / skill modifier",
                 state.craftingManualContribution,
                 handlers.setCraftingManualContribution,
                 readOnly),
             booleanField(
-                "Qualified with this tool or competency",
+                "Qualified with this tool or skill",
                 state.craftingManualQualified,
                 handlers.setCraftingManualQualified,
                 readOnly),
@@ -998,7 +1085,7 @@ function renderManufacturingInputs(
                 readOnly));
     } else {
         const label = createElement("label", "dd-harvesting-field");
-        label.append(createElement("span", "dd-harvesting-field__label", "Tool or competency"));
+        label.append(createElement("span", "dd-harvesting-field__label", "Tool or skill"));
         const select = createElement("select", "dd-harvesting-field__control");
         const placeholder = createElement("option");
         placeholder.value = "";
@@ -1019,7 +1106,7 @@ function renderManufacturingInputs(
         group.append(
             label,
             createButton(
-                "Enter Tool / Competency Manually",
+                "Enter Tool / Skill Manually",
                 "dd-button dd-button--ghost",
                 () => handlers.setCraftingCompetencyMode("manual"),
                 readOnly));
