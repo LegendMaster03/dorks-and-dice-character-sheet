@@ -782,9 +782,24 @@ function renderCraftingPanel(
             const result = createElement("dl", "dd-harvesting-facts");
             appendFact(result, "Selected d20", String(resolution.d20Roll));
             appendFact(result, "Total", String(resolution.total));
-            if (resolution.meetsTarget !== null) {
-                appendFact(result, "Result", resolution.meetsTarget ? "Success" : "Failure");
+            appendFact(result, "Outcome", humanize(resolution.outcome));
+            if (resolution.margin !== null) {
+                appendFact(result, "Margin", signed(resolution.margin));
             }
+            if (resolution.flawCount !== null && resolution.flawCount > 0) {
+                appendFact(
+                    result,
+                    "Flaws",
+                    String(resolution.flawCount));
+            }
+            appendFact(
+                result,
+                "Inputs",
+                resolution.inputsConsumed ? "Consumed" : "Not consumed");
+            appendFact(
+                result,
+                "Functional output",
+                resolution.producesFunctionalOutput ? "Yes" : "No");
             resolved.append(result);
         }
 
@@ -944,15 +959,15 @@ function renderCraftingCompletion(
         card.append(createElement(
             "p",
             "dd-harvesting-field__help",
-            "Completion is explicit. It uses one atomic Inventory transaction so materials are not consumed unless the output can also be recorded."));
+            "Finalization is explicit. It uses one atomic Inventory transaction: successful or flaw-bearing results record the output, while a nonfunctional result consumes the selected inputs without creating an output."));
     }
 
     card.append(createButton(
         state.craftingCompletionStatus === "loading"
             ? "Completing…"
             : state.craftingCompleted
-                ? "Crafting Completed"
-                : "Complete Recipe",
+                ? "Attempt Finalized"
+                : "Finalize Recipe Attempt",
         "dd-button dd-button--primary",
         () => void handlers.completeCrafting(character.characterId),
         readOnly
