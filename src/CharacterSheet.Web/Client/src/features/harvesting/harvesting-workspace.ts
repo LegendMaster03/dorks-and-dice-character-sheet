@@ -939,7 +939,7 @@ function renderCraftingCompletion(
     if (state.craftingCompleted) {
         card.append(createInlineState(
             "This recipe output has been added to Inventory and the selected materials have been consumed.",
-            "success"));
+            "neutral"));
     } else {
         card.append(createElement(
             "p",
