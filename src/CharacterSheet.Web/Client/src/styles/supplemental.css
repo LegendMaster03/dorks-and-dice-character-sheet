@@ -17,7 +17,7 @@
     display: grid;
     place-items: center;
     padding: clamp(0.75rem, 2vw, 2rem);
-    background: rgb(0 0 0 / 0.58);
+    background: color-mix(in srgb, var(--dd-sheet-ink-strong) 58%, transparent);
     backdrop-filter: blur(2px);
 }
 
