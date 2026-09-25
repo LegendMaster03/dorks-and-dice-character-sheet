@@ -14,6 +14,7 @@ import {
 import { renderAdvancementDetails } from "./advancement.js";
 import {
     buildCompetencyPresentation,
+    partitionCompetencyCollection,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
 import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
@@ -25,7 +26,7 @@ import {
     createInlineState,
     createSectionCard
 } from "./components.js";
-import { renderSkillsCard } from "./skills.js";
+import { renderCompetenciesCard, renderSkillsCard } from "./skills.js";
 import {
     renderSensesSummaryCard,
     renderTrainingCard
@@ -128,9 +129,15 @@ export function renderCharacterWorkspace(
     const mechanicsSources = renderCharacterMechanicsSources(mechanics);
     if (mechanicsSources !== null) shell.append(mechanicsSources);
 
-    const competencyPresentation = mechanics?.competencies === undefined
+    const competencyCollections = mechanics?.competencies === undefined
         ? null
-        : buildCompetencyPresentation(mechanics.competencies);
+        : partitionCompetencyCollection(mechanics.competencies);
+    const skillPresentation = competencyCollections === null
+        ? null
+        : buildCompetencyPresentation(competencyCollections.skills);
+    const broaderCompetencyPresentation = competencyCollections === null
+        ? null
+        : buildCompetencyPresentation(competencyCollections.competencies);
 
     const topRow = createElement("div", "dd-sheet__top-row");
     topRow.append(renderCoreStats(
@@ -183,20 +190,21 @@ export function renderCharacterWorkspace(
 
     const skillsColumn = createElement("aside", "dd-sheet__skills");
     skillsColumn.setAttribute("aria-label", "Skills and competencies");
-    skillsColumn.append(renderSkillsCard(
-        competencyPresentation,
-        {
-            readOnly: readOnly || routine.status !== "ready" || routine.state === null,
-            savingKey: routine.mutation?.kind === "rules-input-update"
+    const competencyRankControls = {
+        readOnly: readOnly || routine.status !== "ready" || routine.state === null,
+        savingKey: routine.mutation?.kind === "rules-input-update"
+            && routine.mutation.entryId?.startsWith("competencyRank:")
+            ? routine.mutation.entryId.slice("competencyRank:".length)
+            : routine.mutation?.kind === "rules-input-delete"
                 && routine.mutation.entryId?.startsWith("competencyRank:")
                 ? routine.mutation.entryId.slice("competencyRank:".length)
-                : routine.mutation?.kind === "rules-input-delete"
-                    && routine.mutation.entryId?.startsWith("competencyRank:")
-                    ? routine.mutation.entryId.slice("competencyRank:".length)
-                    : null,
-            onSetRank: handlers.rules.setCompetencyRank,
-            onClearRank: handlers.rules.clearCompetencyRank
-        }));
+                : null,
+        onSetRank: handlers.rules.setCompetencyRank,
+        onClearRank: handlers.rules.clearCompetencyRank
+    };
+    skillsColumn.append(
+        renderSkillsCard(skillPresentation, competencyRankControls),
+        renderCompetenciesCard(broaderCompetencyPresentation, competencyRankControls));
 
     const stage = createElement("div", "dd-sheet__stage");
     stage.append(renderCombatSummaryBand(
