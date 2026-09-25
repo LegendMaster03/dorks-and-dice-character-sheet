@@ -840,14 +840,17 @@ test("support surfaces stay neutral when unavailable and consume supplied values
     });
     assert.match(visibleText(supplied), /Awareness\s+17/);
     assert.match(visibleText(supplied), /Darkvision\s+60 ft\./);
-    assert.match(visibleText(supplied), /Light Armor\s+Proficient/);
-    assert.match(visibleText(supplied), /Alchemist's Supplies\s+Proficient/);
+    const suppliedText = visibleText(supplied);
+    assert.match(suppliedText, /Light Armor\s+Proficient/);
+    assert.match(suppliedText, /Competencies/);
+    assert.match(suppliedText, /Alchemist's Supplies/);
+    assert.match(suppliedText, /Training\s+Proficient/);
 });
 
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
     const rendered = render("actions", null);
     const text = visibleText(rendered);
-    assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 1);
+    assert.equal(byClass(rendered, "dd-skill-row--placeholder").length, 2);
     assert.doesNotMatch(text, /Saving throw mechanics are not available|Resolved competencies are not available|Combat mechanics are not available|Movement mechanics are not available|Resolved checks and procedures are not available|Resolved actions and attacks are not available/);
     assert.equal(byAttribute(rendered, "data-action-state", "unavailable").length, 1);
 

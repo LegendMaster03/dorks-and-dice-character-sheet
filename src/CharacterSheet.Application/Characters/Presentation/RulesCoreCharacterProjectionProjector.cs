@@ -88,7 +88,9 @@ internal static class RulesCoreCharacterProjectionProjector
                 value.RelatedConceptKeys))
             .ToArray();
         var effectiveCompetencyFallback = fallback?.Competencies
-            ?? ProjectEffectiveCompetencyMetadata(projection.Competencies);
+            ?? ProjectEffectiveCompetencyMetadata(
+                projection.Competencies,
+                projection.CompetencyRelationships);
         var competencies = ProjectCompetencies(
             effectiveCompetencyFallback,
             projection.Mechanics,
@@ -484,7 +486,8 @@ internal static class RulesCoreCharacterProjectionProjector
     }
 
     private static CompetencyCollectionPresentationView? ProjectEffectiveCompetencyMetadata(
-        IReadOnlyList<RulesCoreUniversalCompetencyView>? competencies)
+        IReadOnlyList<RulesCoreUniversalCompetencyView>? competencies,
+        IReadOnlyList<RulesCoreMechanicRelationshipView>? competencyRelationships)
     {
         if (competencies is null || competencies.Count == 0)
         {
@@ -545,11 +548,15 @@ internal static class RulesCoreCharacterProjectionProjector
                     MechanicKeys: value.MechanicKeys.Count == 0
                         ? null
                         : value.MechanicKeys,
+                    PresentationCategory: value.PresentationCategory,
                     RankInputKey: rankInputKey);
             })
             .ToArray();
 
-        return new CompetencyCollectionPresentationView(entries);
+        var relationships = CompetencyProjector.ProjectUniversalRelationships(
+            competencies,
+            competencyRelationships);
+        return new CompetencyCollectionPresentationView(entries, relationships);
     }
 
     private static string? ResolveEffectiveGoverningAbility(

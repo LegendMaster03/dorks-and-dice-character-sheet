@@ -2,9 +2,13 @@ import {
     formatMechanicalValue,
     type CalculatedMechanicalValueView,
     type CharacterMechanicsView,
-    type CompetencyView
+    type CompetencyPresentationItem
 } from "../../ui/character-mechanics.js";
 import { createElement, createSectionCard } from "../../ui/components.js";
+import {
+    renderCompetenciesSection,
+    type CompetencyRankControlOptions
+} from "../../ui/skills.js";
 
 export function renderPassiveValuesCard(mechanics: CharacterMechanicsView | null): HTMLElement {
     return renderSupportValuesCard("Passive Values", "passive", mechanics?.passiveValues);
@@ -31,15 +35,17 @@ export function renderSensesSummaryCard(mechanics: CharacterMechanicsView | null
     return card;
 }
 
-export function renderTrainingCard(mechanics: CharacterMechanicsView | null): HTMLElement {
-    const competencyRows = (mechanics?.competencies?.entries ?? [])
-        .filter(isNonSkillTraining)
-        .map(value => ({ key: value.key, label: value.label, value: value.training! }));
-    return renderSupportValuesCard(
+export function renderTrainingCard(
+    mechanics: CharacterMechanicsView | null,
+    competencies: readonly CompetencyPresentationItem[] | null = null,
+    competencyControl: CompetencyRankControlOptions = {}
+): HTMLElement {
+    const card = renderSupportValuesCard(
         "Proficiencies & Training",
         "training",
-        mechanics?.training,
-        competencyRows);
+        mechanics?.training);
+    card.append(renderCompetenciesSection(competencies, competencyControl));
+    return card;
 }
 
 function renderSupportGroup(
@@ -111,9 +117,3 @@ function renderSupportValuesCard(
     return card;
 }
 
-function isNonSkillTraining(value: CompetencyView): boolean {
-    const training = value.training?.trim();
-    return training !== undefined
-        && training.length > 0
-        && value.kind?.trim().toLowerCase() !== "skill";
-}

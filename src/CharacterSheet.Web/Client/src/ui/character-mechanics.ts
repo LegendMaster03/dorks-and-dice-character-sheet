@@ -82,6 +82,7 @@ export interface ArmorCheckPenaltyView {
 }
 
 export type CompetencyKind = ExtensiblePresentationKey<"skill" | "specialized-skill" | "tool" | "other">;
+export type CompetencyPresentationCategory = ExtensiblePresentationKey<"skill" | "competency" | "supporting">;
 
 export interface CompetencyFacetView {
     facetType: string;
@@ -121,6 +122,7 @@ export interface CompetencyView extends CalculatedMechanicalValueView {
     childCompetencyKeys?: readonly string[];
     mechanicKeys?: readonly string[];
     compatibilityMechanicKeys?: readonly string[];
+    presentationCategory?: CompetencyPresentationCategory;
     rankInputKey?: string;
 }
 
@@ -377,6 +379,48 @@ export function hasMechanicalDetails(value: CalculatedMechanicalValueView): bool
     return (value.breakdown?.length ?? 0) > 0
         || (value.relatedValues?.length ?? 0) > 0
         || (value.sourceAttributions?.length ?? 0) > 0;
+}
+
+export interface CompetencyCollectionPartition {
+    skills: CompetencyCollectionView;
+    competencies: CompetencyCollectionView;
+}
+
+export function partitionCompetencyCollection(
+    collection: CompetencyCollectionView
+): CompetencyCollectionPartition {
+    const skillKeys = new Set(
+        collection.entries
+            .filter(entry =>
+                entry.presentationCategory === undefined
+                || entry.presentationCategory === "skill")
+            .map(entry => entry.key));
+    const competencyKeys = new Set(
+        collection.entries
+            .filter(entry =>
+                entry.presentationCategory !== undefined
+                && entry.presentationCategory !== "skill"
+                && entry.presentationCategory !== "supporting")
+            .map(entry => entry.key));
+
+    return {
+        skills: filterCompetencyCollection(collection, skillKeys),
+        competencies: filterCompetencyCollection(collection, competencyKeys)
+    };
+}
+
+function filterCompetencyCollection(
+    collection: CompetencyCollectionView,
+    keys: ReadonlySet<string>
+): CompetencyCollectionView {
+    const entries = collection.entries.filter(entry => keys.has(entry.key));
+    const relationships = (collection.relationships ?? []).filter(relationship =>
+        keys.has(relationship.parentKey)
+        && relationship.componentKeys.every(key => keys.has(key)));
+    return {
+        entries,
+        relationships: relationships.length === 0 ? undefined : relationships
+    };
 }
 
 export function buildCompetencyPresentation(

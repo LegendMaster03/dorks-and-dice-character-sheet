@@ -17,25 +17,52 @@ export function renderSkillsCard(
     items: readonly CompetencyPresentationItem[] | null,
     control: CompetencyRankControlOptions = {}
 ): HTMLElement {
-    const card = createSectionCard("Skills & Competencies", "dd-support-card dd-skills-card");
+    const card = createSectionCard("Skills", "dd-support-card dd-skills-card");
+    card.setAttribute("data-competency-card", "skills");
+    appendCompetencyContent(card, "skills", items, control);
+    return card;
+}
 
+export function renderCompetenciesSection(
+    items: readonly CompetencyPresentationItem[] | null,
+    control: CompetencyRankControlOptions = {}
+): HTMLElement {
+    const section = createElement(
+        "section",
+        "dd-support-values__group dd-competencies-section");
+    section.setAttribute("data-support-group", "competencies");
+    section.setAttribute("data-competency-card", "competencies");
+    section.append(createElement(
+        "h3",
+        "dd-support-values__group-title",
+        "Competencies"));
+    appendCompetencyContent(section, "competencies", items, control);
+    return section;
+}
+
+function appendCompetencyContent(
+    container: HTMLElement,
+    searchNoun: string,
+    items: readonly CompetencyPresentationItem[] | null,
+    control: CompetencyRankControlOptions
+): void {
     if (items === null) {
-        card.setAttribute("data-skills-state", "unavailable");
-        card.append(renderUnavailableSkillValue());
-        return card;
+        container.setAttribute("data-skills-state", "unavailable");
+        container.append(renderUnavailableSkillValue());
+        return;
     }
 
-    card.setAttribute("data-skills-state", "resolved");
+    container.setAttribute("data-skills-state", "resolved");
     if (items.length === 0) {
-        card.append(renderUnavailableSkillValue());
-        return card;
+        container.append(renderUnavailableSkillValue());
+        return;
     }
 
     const controls = createElement("div", "dd-skills-controls");
     const search = createElement("input", "dd-skills-search");
     search.type = "search";
-    search.placeholder = "Search skills";
-    search.setAttribute("aria-label", "Search skills and competencies");
+    search.placeholder = `Search ${searchNoun}`;
+    search.setAttribute("aria-label", `Search ${searchNoun}`);
     controls.append(search);
 
     const list = createElement("div", "dd-skill-list");
@@ -55,7 +82,7 @@ export function renderSkillsCard(
     const noMatches = createElement(
         "p",
         "dd-skills-no-matches",
-        "No skills match this search.");
+        `No ${searchNoun} match this search.`);
     noMatches.hidden = true;
 
     search.addEventListener("input", () => {
@@ -69,8 +96,7 @@ export function renderSkillsCard(
         noMatches.hidden = visible !== 0;
     });
 
-    card.append(controls, list, noMatches);
-    return card;
+    container.append(controls, list, noMatches);
 }
 
 function renderUnavailableSkillValue(): HTMLElement {
