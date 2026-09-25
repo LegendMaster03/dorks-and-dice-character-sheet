@@ -196,6 +196,18 @@ export interface CharacterPresentationUiState {
 
 export type HarvestingCraftingMode = "harvesting" | "crafting";
 
+export interface HarvestingHelperUiState extends HarvestingHelperInput {
+    characterId?: string | null;
+    displayName?: string | null;
+    source?: "manual" | "campaign-character";
+    resolutionStatus?: "idle" | "loading" | "ready" | "error";
+}
+
+export interface HarvestingCampaignCharacterOption {
+    characterId: string;
+    name: string;
+}
+
 export interface HarvestingCraftingUiState {
     open: boolean;
     mode: HarvestingCraftingMode;
@@ -216,7 +228,9 @@ export interface HarvestingCraftingUiState {
     sameActor: boolean;
     creatureSize: string;
     harvestOrder: string[];
-    helpers: HarvestingHelperInput[];
+    helpers: HarvestingHelperUiState[];
+    campaignContextStatus: "idle" | "loading" | "ready" | "error";
+    campaignCharacters: HarvestingCampaignCharacterOption[];
     outcomeStatus: "idle" | "loading" | "ready" | "error";
     outcome: HarvestingOutcomeResponse | null;
     harvestInventoryStatus: "idle" | "loading" | "ready" | "error";
@@ -539,6 +553,8 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
         creatureSize: "",
         harvestOrder: [],
         helpers: [],
+        campaignContextStatus: "idle",
+        campaignCharacters: [],
         outcomeStatus: "idle",
         outcome: null,
         harvestInventoryStatus: "idle",
