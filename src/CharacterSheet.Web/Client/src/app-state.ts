@@ -4,6 +4,7 @@ import type {
     CharacterBuilderChoice
 } from "./builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "./character-api.js";
+import type { CraftingCheckResolutionResponse } from "./crafting-api.js";
 import type { CharacterPresentationResponse } from "./character-presentation-api.js";
 import type {
     CharacterRecoveryRequestInput,
@@ -11,7 +12,14 @@ import type {
     CharacterStateResponse
 } from "./character-state-api.js";
 import type { RuleReferenceState } from "./builder-rules.js";
-import type { ResolvedRuleCatalogItem } from "./rules-core-api.js";
+import type {
+    HarvestingHelperInput,
+    HarvestingOutcomeResponse,
+    HarvestingResolvedTableResponse,
+    HarvestingRulesCatalogResponse,
+    HarvestingTableResolutionInput,
+    ResolvedRuleCatalogItem
+} from "./rules-core-api.js";
 import type { CharacterSheetRoute } from "./routes.js";
 import type { GuidedBuilderSection, SheetSection } from "./ui/sheet-model.js";
 import {
@@ -104,6 +112,7 @@ export type RoutineMutationKind =
     | "note-update"
     | "note-delete"
     | "inventory-add"
+    | "inventory-transaction"
     | "inventory-update"
     | "inventory-delete"
     | "rules-input-update"
@@ -185,12 +194,93 @@ export interface CharacterPresentationUiState {
     message?: string;
 }
 
+export type HarvestingCraftingMode = "harvesting" | "crafting";
+
+export interface HarvestingHelperUiState extends HarvestingHelperInput {
+    characterId?: string | null;
+    displayName?: string | null;
+    source?: "manual" | "campaign-character";
+    resolutionStatus?: "idle" | "loading" | "ready" | "error";
+}
+
+export interface HarvestingCampaignCharacterOption {
+    characterId: string;
+    name: string;
+}
+
+export interface HarvestingCraftingUiState {
+    open: boolean;
+    mode: HarvestingCraftingMode;
+    scopeCampaignId: string | null;
+    catalogStatus: "idle" | "loading" | "ready" | "error";
+    catalog: HarvestingRulesCatalogResponse | null;
+    monsterQuery: string;
+    monsterStatus: "idle" | "loading" | "ready" | "error";
+    monsterResults: ResolvedRuleCatalogItem[];
+    sourceKind: "creature-type" | "monster";
+    creatureType: string;
+    creatureConceptKey: string;
+    tableStatus: "idle" | "loading" | "ready" | "error";
+    tableRequest: HarvestingTableResolutionInput | null;
+    table: HarvestingResolvedTableResponse | null;
+    assessmentResult: number | null;
+    carvingResult: number | null;
+    sameActor: boolean;
+    creatureSize: string;
+    harvestOrder: string[];
+    harvestManualComponentName: string;
+    harvestManualComponentDc: number | null;
+    harvestManualComponentQuantity: number | null;
+    helpers: HarvestingHelperUiState[];
+    campaignContextStatus: "idle" | "loading" | "ready" | "error";
+    campaignCharacters: HarvestingCampaignCharacterOption[];
+    outcomeStatus: "idle" | "loading" | "ready" | "error";
+    outcome: HarvestingOutcomeResponse | null;
+    harvestInventoryStatus: "idle" | "loading" | "ready" | "error";
+    harvestInventoryAwarded: boolean;
+    craftingProcedure: "manufacturing" | "enchanting";
+    craftingCompetencyMode: "resolved" | "manual";
+    craftingCompetencyKey: string;
+    craftingManualName: string;
+    craftingManualContribution: number | null;
+    craftingManualQualified: boolean;
+    craftingHasQualifiedGuidance: boolean;
+    craftingManufacturingAbilityMode: "character" | "manual";
+    craftingManufacturingAbilityKey: string;
+    craftingManufacturingManualAbilityModifier: number | null;
+    craftingCreatureType: string;
+    craftingSpellcastingKey: string;
+    craftingTargetDc: number | null;
+    craftingOtherModifier: number;
+    craftingStatus: "idle" | "loading" | "ready" | "error";
+    craftingResolution: CraftingCheckResolutionResponse | null;
+    craftingRolls: number[];
+    craftingSelectedRoll: number | null;
+    craftingRollTie: boolean;
+    craftingRecipeName: string;
+    craftingOutputName: string;
+    craftingOutputQuantity: number;
+    craftingRequiresManufacturing: boolean;
+    craftingRequiresEnchanting: boolean;
+    craftingManufacturingRequiredHours: number | null;
+    craftingManufacturingCompletedHours: number;
+    craftingEnchantingRequiredHours: number | null;
+    craftingEnchantingCompletedHours: number;
+    craftingMaterials: Array<{ occurrenceId: string; quantity: number }>;
+    craftingManufacturingSucceeded: boolean | null;
+    craftingEnchantingSucceeded: boolean | null;
+    craftingCompletionStatus: "idle" | "loading" | "ready" | "error";
+    craftingCompleted: boolean;
+    message?: string;
+}
+
 export interface CharacterSheetAppState {
     route: CharacterSheetRoute;
     screen: CharacterSheetScreen;
     builder: CharacterBuilderUiState;
     routine: CharacterRoutineUiState;
     presentation: CharacterPresentationUiState;
+    harvestingCrafting: HarvestingCraftingUiState;
     activeSheetSection: SheetSection;
     sheetMode: SheetMode;
     guidedBuilder: GuidedBuilderUiState;
@@ -271,6 +361,7 @@ export type CharacterSheetAction =
     | { type: "guided-builder-closed" }
     | { type: "guided-builder-section-selected"; section: GuidedBuilderSection }
     | { type: "sheet-section-selected"; section: SheetSection }
+    | { type: "harvesting-crafting-updated"; state: HarvestingCraftingUiState }
     | { type: "rerender" };
 
 export function createInitialState(route: CharacterSheetRoute): CharacterSheetAppState {
@@ -293,6 +384,7 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
         builder: createInitialBuilderState(),
         routine: createInitialRoutineState(),
         presentation: createInitialPresentationState(),
+        harvestingCrafting: createInitialHarvestingCraftingState(),
         activeSheetSection: "actions",
         sheetMode: "view",
         guidedBuilder: createInitialGuidedBuilderState(),
@@ -308,6 +400,7 @@ export function reduceAppState(
     let builder = reduceBuilderState(state.builder, action);
     let routine = reduceRoutineState(state.routine, action);
     let presentation = reducePresentationState(state.presentation, action);
+    let harvestingCrafting = state.harvestingCrafting;
     let activeSheetSection = state.activeSheetSection;
     let sheetMode = state.sheetMode;
     let guidedBuilder = state.guidedBuilder;
@@ -317,6 +410,7 @@ export function reduceAppState(
             builder = createInitialBuilderState();
             routine = createInitialRoutineState();
             presentation = createInitialPresentationState();
+            harvestingCrafting = createInitialHarvestingCraftingState();
             activeSheetSection = "actions";
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
@@ -335,6 +429,7 @@ export function reduceAppState(
             builder = createInitialBuilderState();
             routine = createInitialRoutineState();
             presentation = createInitialPresentationState();
+            harvestingCrafting = createInitialHarvestingCraftingState();
             sheetMode = "view";
             guidedBuilder = createInitialGuidedBuilderState();
             break;
@@ -424,6 +519,9 @@ export function reduceAppState(
         case "sheet-section-selected":
             activeSheetSection = action.section;
             break;
+        case "harvesting-crafting-updated":
+            harvestingCrafting = action.state;
+            break;
         case "rerender":
             break;
 
@@ -435,10 +533,78 @@ export function reduceAppState(
         builder,
         routine,
         presentation,
+        harvestingCrafting,
         activeSheetSection,
         sheetMode,
         guidedBuilder,
         renderRevision: state.renderRevision + 1
+    };
+}
+
+export function createInitialHarvestingCraftingState(): HarvestingCraftingUiState {
+    return {
+        open: false,
+        mode: "harvesting",
+        scopeCampaignId: null,
+        catalogStatus: "idle",
+        catalog: null,
+        monsterQuery: "",
+        monsterStatus: "idle",
+        monsterResults: [],
+        sourceKind: "creature-type",
+        creatureType: "",
+        creatureConceptKey: "",
+        tableStatus: "idle",
+        tableRequest: null,
+        table: null,
+        assessmentResult: null,
+        carvingResult: null,
+        sameActor: false,
+        creatureSize: "",
+        harvestOrder: [],
+        harvestManualComponentName: "",
+        harvestManualComponentDc: null,
+        harvestManualComponentQuantity: null,
+        helpers: [],
+        campaignContextStatus: "idle",
+        campaignCharacters: [],
+        outcomeStatus: "idle",
+        outcome: null,
+        harvestInventoryStatus: "idle",
+        harvestInventoryAwarded: false,
+        craftingProcedure: "manufacturing",
+        craftingCompetencyMode: "resolved",
+        craftingCompetencyKey: "",
+        craftingManualName: "",
+        craftingManualContribution: null,
+        craftingManualQualified: false,
+        craftingHasQualifiedGuidance: false,
+        craftingManufacturingAbilityMode: "character",
+        craftingManufacturingAbilityKey: "",
+        craftingManufacturingManualAbilityModifier: null,
+        craftingCreatureType: "",
+        craftingSpellcastingKey: "",
+        craftingTargetDc: null,
+        craftingOtherModifier: 0,
+        craftingStatus: "idle",
+        craftingResolution: null,
+        craftingRolls: [],
+        craftingSelectedRoll: null,
+        craftingRollTie: false,
+        craftingRecipeName: "",
+        craftingOutputName: "",
+        craftingOutputQuantity: 1,
+        craftingRequiresManufacturing: true,
+        craftingRequiresEnchanting: false,
+        craftingManufacturingRequiredHours: null,
+        craftingManufacturingCompletedHours: 0,
+        craftingEnchantingRequiredHours: null,
+        craftingEnchantingCompletedHours: 0,
+        craftingMaterials: [],
+        craftingManufacturingSucceeded: null,
+        craftingEnchantingSucceeded: null,
+        craftingCompletionStatus: "idle",
+        craftingCompleted: false
     };
 }
 

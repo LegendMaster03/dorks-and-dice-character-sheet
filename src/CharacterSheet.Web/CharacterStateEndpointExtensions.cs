@@ -1,4 +1,5 @@
 using CharacterSheet.Application.Characters;
+using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Web;
 
@@ -273,14 +274,55 @@ public static class CharacterStateEndpointExtensions
         {
             try
             {
-                return ToApiResult(
-                    await service.AddInventoryItemOccurrenceAsync(
+                var result = !string.IsNullOrWhiteSpace(request.ConceptKey)
+                    ? await service.AddInventoryItemOccurrenceAsync(
                         characterId,
                         request.ConceptKey,
+                        cancellationToken)
+                    : await service.AddCustomInventoryItemOccurrenceAsync(
+                        characterId,
+                        request.CustomName
+                            ?? throw new ArgumentException(
+                                "A custom inventory item name is required when conceptKey is omitted."),
+                        request.Quantity,
+                        cancellationToken);
+                return ToApiResult(result, mutating: true);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
+
+        app.MapPost("/api/characters/{characterId:guid}/state/inventory/transaction", async (
+            Guid characterId,
+            CharacterInventoryTransactionRequest request,
+            CharacterStateService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return ToApiResult(
+                    await service.ApplyInventoryTransactionAsync(
+                        characterId,
+                        (request.Consumptions ?? [])
+                            .Select(value => new CharacterInventoryConsumption(
+                                value.OccurrenceId,
+                                value.Quantity))
+                            .ToArray(),
+                        (request.Additions ?? [])
+                            .Select(value => new CharacterInventoryAddition(
+                                value.ConceptKey,
+                                value.CustomName,
+                                value.Quantity))
+                            .ToArray(),
                         cancellationToken),
                     mutating: true);
             }
-            catch (ArgumentException exception)
+            catch (Exception exception) when (
+                exception is ArgumentException
+                or InvalidOperationException
+                or OverflowException)
             {
                 return Results.BadRequest(new { error = exception.Message });
             }
@@ -566,7 +608,23 @@ public sealed record CharacterRulesInputStateRequest(
 
 public sealed record CharacterHitPointGainRequest(int HitDieValue);
 
-public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
+public sealed record CharacterInventoryItemOccurrenceRequest(
+    string? ConceptKey = null,
+    string? CustomName = null,
+    int Quantity = 1);
+
+public sealed record CharacterInventoryConsumptionRequest(
+    Guid OccurrenceId,
+    int Quantity);
+
+public sealed record CharacterInventoryAdditionRequest(
+    string? ConceptKey = null,
+    string? CustomName = null,
+    int Quantity = 1);
+
+public sealed record CharacterInventoryTransactionRequest(
+    IReadOnlyList<CharacterInventoryConsumptionRequest>? Consumptions = null,
+    IReadOnlyList<CharacterInventoryAdditionRequest>? Additions = null);
 
 public sealed record CharacterInventoryItemOccurrenceStateRequest(
     int Quantity,

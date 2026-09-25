@@ -17,14 +17,15 @@ public enum CharacterStateAccessStatus
 
 public sealed record CharacterInventoryItemOccurrenceView(
     Guid Id,
-    string RuleConceptKey,
+    string? RuleConceptKey,
     DateTimeOffset CreatedAt,
     int Quantity = 1,
     bool IsCarried = true,
     bool IsEquipped = false,
     bool IsAttuned = false,
     Guid? ContainerOccurrenceId = null,
-    DateTimeOffset? UpdatedAt = null);
+    DateTimeOffset? UpdatedAt = null,
+    string? CustomName = null);
 
 public sealed record CharacterNoteView(
     Guid Id,
@@ -280,6 +281,36 @@ public sealed class CharacterStateService(
             (changedAt, token) => stateStore.AddInventoryItemOccurrenceAsync(
                 characterId,
                 ruleConceptKey,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> AddCustomInventoryItemOccurrenceAsync(
+        Guid characterId,
+        string customName,
+        int quantity = 1,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.AddCustomInventoryItemOccurrenceAsync(
+                characterId,
+                customName,
+                quantity,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> ApplyInventoryTransactionAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterInventoryConsumption> consumptions,
+        IReadOnlyList<CharacterInventoryAddition> additions,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.ApplyInventoryTransactionAsync(
+                characterId,
+                consumptions,
+                additions,
                 changedAt,
                 token),
             cancellationToken);
@@ -574,7 +605,8 @@ public sealed class CharacterStateService(
                     value.IsEquipped,
                     value.IsAttuned,
                     value.ContainerOccurrenceId,
-                    value.UpdatedAt))
+                    value.UpdatedAt,
+                    value.CustomName))
                 .ToArray(),
             root.Notes
                 .OrderBy(value => value.CreatedAt)

@@ -350,6 +350,7 @@ function routineStateFromResponse(state: CharacterStateResponse): CharacterRouti
     };
     const references: Record<string, RuleReferenceState> = {};
     for (const occurrence of normalizedState.inventoryItemOccurrences) {
+        if (occurrence.ruleConceptKey === null) continue;
         references[occurrence.id] = {
             status: "loading",
             conceptKey: occurrence.ruleConceptKey

@@ -161,6 +161,42 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    public async Task<CharacterSheetRoot?> AddCustomInventoryItemOccurrenceAsync(
+        Guid characterId,
+        string customName,
+        int quantity,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.AddCustomInventoryItemOccurrence(customName, changedAt, quantity);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> ApplyInventoryTransactionAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterInventoryConsumption> consumptions,
+        IReadOnlyList<CharacterInventoryAddition> additions,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        root.ApplyInventoryTransaction(consumptions, additions, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
     public async Task<CharacterSheetRoot?> UpdateInventoryItemOccurrenceAsync(
         Guid characterId,
         Guid occurrenceId,

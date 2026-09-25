@@ -20,6 +20,7 @@ import { renderInventorySection } from "../features/inventory/inventory-section.
 import { renderNotesSection } from "../features/notes/notes-section.js";
 import { renderKnownSpellsSection } from "../features/spells/known-spells.js";
 import { renderProfileSection } from "../features/profile/profile-section.js";
+import { renderHarvestingLauncher } from "../features/harvesting/harvesting-workspace.js";
 
 export function renderPrimaryContent(
     activeSection: SheetSection,
@@ -125,6 +126,11 @@ export function renderPrimaryContent(
                 renderChecksAndProceduresPresentation(
                     mechanics?.checks,
                     mechanics?.procedures));
+            if (handlers.harvestingCrafting !== undefined) {
+                presentation.append(renderHarvestingLauncher(
+                    handlers.harvestingCrafting,
+                    readOnly));
+            }
             panel.append(presentation);
             break;
         }

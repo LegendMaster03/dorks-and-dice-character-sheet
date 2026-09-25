@@ -1,8 +1,10 @@
-import type {
-    CharacterBuilderUiState,
-    CharacterRoutineUiState,
-    GuidedBuilderUiState,
-    SheetMode
+import {
+    createInitialHarvestingCraftingState,
+    type CharacterBuilderUiState,
+    type CharacterRoutineUiState,
+    type GuidedBuilderUiState,
+    type HarvestingCraftingUiState,
+    type SheetMode
 } from "../app-state.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
@@ -49,6 +51,7 @@ import { renderPrimaryContent } from "./primary-content.js";
 import { renderCombatSummaryBand } from "../features/combat/combat-summary.js";
 import { renderConditionsCard } from "../features/conditions/conditions.js";
 import type { CharacterSheetHandlers } from "./sheet-contracts.js";
+import { renderHarvestingCraftingWorkspace } from "../features/harvesting/harvesting-workspace.js";
 
 export function renderCharacterWorkspace(
     character: CharacterSheetBootstrapResponse,
@@ -60,7 +63,8 @@ export function renderCharacterWorkspace(
     guidedBuilder: GuidedBuilderUiState,
     advancement: CharacterAdvancementView | null,
     mechanics: CharacterMechanicsView | null,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    harvestingCrafting: HarvestingCraftingUiState = createInitialHarvestingCraftingState()
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -83,6 +87,19 @@ export function renderCharacterWorkspace(
         forceReadOnly,
         advancement,
         portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
+    if (harvestingCrafting.open) {
+        if (readOnly) {
+            shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
+        }
+        shell.append(renderHarvestingCraftingWorkspace(
+            character,
+            harvestingCrafting,
+            handlers.harvestingCrafting!,
+            readOnly,
+            mechanics,
+            routine));
+        return shell;
+    }
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = structuralEditing
             || (guidedBuilder.open

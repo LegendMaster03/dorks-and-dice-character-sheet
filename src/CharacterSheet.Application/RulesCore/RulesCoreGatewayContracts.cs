@@ -359,4 +359,22 @@ public interface IRulesCoreGateway
         Guid campaignId,
         RulesCoreCharacterRulesProjectionRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalManufacturingAsync(
+        RulesCoreManufacturingResolutionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignManufacturingAsync(
+        Guid campaignId,
+        RulesCoreManufacturingResolutionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalEnchantingAsync(
+        RulesCoreEnchantingResolutionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignEnchantingAsync(
+        Guid campaignId,
+        RulesCoreEnchantingResolutionRequest request,
+        CancellationToken cancellationToken = default);
 }

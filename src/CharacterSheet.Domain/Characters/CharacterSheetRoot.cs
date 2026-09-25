@@ -788,16 +788,140 @@ public sealed class CharacterSheetRoot
 
     public CharacterInventoryItemOccurrence AddInventoryItemOccurrence(
         string ruleConceptKey,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        int quantity = 1) =>
+        AddInventoryItemOccurrence(
+            ruleConceptKey,
+            customName: null,
+            createdAt,
+            quantity);
+
+    public CharacterInventoryItemOccurrence AddCustomInventoryItemOccurrence(
+        string customName,
+        DateTimeOffset createdAt,
+        int quantity = 1) =>
+        AddInventoryItemOccurrence(
+            ruleConceptKey: null,
+            customName,
+            createdAt,
+            quantity);
+
+    private CharacterInventoryItemOccurrence AddInventoryItemOccurrence(
+        string? ruleConceptKey,
+        string? customName,
+        DateTimeOffset createdAt,
+        int quantity = 1)
     {
+        if (quantity <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(quantity), "Inventory quantity must be positive.");
+        }
+
         var occurrence = new CharacterInventoryItemOccurrence(
             Guid.NewGuid(),
             CharacterId,
-            CharacterRuleReference.NormalizeConceptKey(ruleConceptKey),
+            ruleConceptKey,
+            customName,
             createdAt);
+        if (quantity != 1)
+        {
+            occurrence.ReplaceState(
+                quantity,
+                isCarried: true,
+                isEquipped: false,
+                isAttuned: false,
+                containerOccurrenceId: null,
+                createdAt);
+        }
         InventoryItemOccurrences.Add(occurrence);
         Touch(createdAt);
         return occurrence;
+    }
+
+    public void ApplyInventoryTransaction(
+        IReadOnlyList<CharacterInventoryConsumption> consumptions,
+        IReadOnlyList<CharacterInventoryAddition> additions,
+        DateTimeOffset changedAt)
+    {
+        ArgumentNullException.ThrowIfNull(consumptions);
+        ArgumentNullException.ThrowIfNull(additions);
+
+        var requested = consumptions
+            .GroupBy(value => value.OccurrenceId)
+            .Select(group => new CharacterInventoryConsumption(
+                group.Key,
+                checked(group.Sum(value => value.Quantity))))
+            .ToArray();
+
+        foreach (var consumption in requested)
+        {
+            if (consumption.OccurrenceId == Guid.Empty)
+            {
+                throw new ArgumentException("Inventory consumption occurrence ID can not be empty.");
+            }
+            if (consumption.Quantity <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(consumptions),
+                    "Inventory consumption quantity must be positive.");
+            }
+
+            var occurrence = InventoryItemOccurrences.SingleOrDefault(
+                value => value.Id == consumption.OccurrenceId)
+                ?? throw new KeyNotFoundException("Inventory occurrence was not found.");
+            if (occurrence.Quantity < consumption.Quantity)
+            {
+                throw new InvalidOperationException(
+                    $"Inventory occurrence '{consumption.OccurrenceId:D}' does not contain enough quantity.");
+            }
+        }
+
+        foreach (var addition in additions)
+        {
+            if (addition.Quantity <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(additions),
+                    "Inventory addition quantity must be positive.");
+            }
+            var hasRule = !string.IsNullOrWhiteSpace(addition.RuleConceptKey);
+            var hasCustom = !string.IsNullOrWhiteSpace(addition.CustomName);
+            if (hasRule == hasCustom)
+            {
+                throw new ArgumentException(
+                    "Each inventory addition must identify exactly one Rules Core item or custom item name.");
+            }
+        }
+
+        foreach (var consumption in requested)
+        {
+            var occurrence = InventoryItemOccurrences.Single(value =>
+                value.Id == consumption.OccurrenceId);
+            if (occurrence.Quantity == consumption.Quantity)
+            {
+                RemoveInventoryItemOccurrence(occurrence.Id, changedAt);
+                continue;
+            }
+
+            occurrence.ReplaceState(
+                occurrence.Quantity - consumption.Quantity,
+                occurrence.IsCarried,
+                occurrence.IsEquipped,
+                occurrence.IsAttuned,
+                occurrence.ContainerOccurrenceId,
+                changedAt);
+        }
+
+        foreach (var addition in additions)
+        {
+            AddInventoryItemOccurrence(
+                addition.RuleConceptKey,
+                addition.CustomName,
+                changedAt,
+                addition.Quantity);
+        }
+
+        Touch(changedAt);
     }
 
     public bool RemoveInventoryItemOccurrence(

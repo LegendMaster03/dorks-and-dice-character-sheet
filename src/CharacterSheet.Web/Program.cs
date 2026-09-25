@@ -105,6 +105,7 @@ builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
+builder.Services.AddScoped<CharacterCraftingService>();
 builder.Services.AddScoped<CharacterPresentationService>();
 builder.Services.AddHealthChecks();
 
@@ -164,6 +165,7 @@ app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
 app.MapCharacterStateEndpoints();
 app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
+app.MapCharacterCraftingEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,

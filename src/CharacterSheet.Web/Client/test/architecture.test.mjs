@@ -136,3 +136,35 @@ test("stylesheet entrypoint is composition-only", async () => {
         '@import "./styles/supplemental.css";'
     ]);
 });
+
+
+test("Harvesting and Crafting keeps rule resolution, inventory mutation, and source attribution behind their owners", async () => {
+    const workflow = await source("features/harvesting/harvesting-workflow.ts");
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+    const craftingApi = await source("crafting-api.ts");
+
+    assert.match(workflow, /applyInventoryTransaction/);
+    assert.match(workflow, /resolution\.producesFunctionalOutput/);
+    assert.match(workflow, /craftingManufacturingRequiredHours/);
+    assert.match(workflow, /craftingEnchantingRequiredHours/);
+    assert.match(workflow, /abilityKey:/);
+    assert.match(craftingApi, /abilityKey\?: string \| null/);
+    assert.match(craftingApi, /manualAbilityModifier\?: number \| null/);
+
+    assert.match(workspace, /state\.catalog\?\.source/);
+    assert.match(workspace, /renderRulesSource/);
+    assert.doesNotMatch(
+        workspace,
+        /patreon\.com\/LootTavern\/posts\/helianas-and-to-107406117/,
+        "the frontend must consume Rules Core attribution instead of hard-coding the Loot Tavern URL");
+});
+
+test("campaign helper selection is optional and preserves manual fallback", async () => {
+    const workflow = await source("features/harvesting/harvesting-workflow.ts");
+    const campaignApi = await source("campaign-context-api.ts");
+
+    assert.match(workflow, /loadHostedCampaignContext/);
+    assert.match(workflow, /setHelperCharacter/);
+    assert.match(workflow, /Manual helper entry remains available/);
+    assert.match(campaignApi, /\/api\/campaigns\/\$\{encodeURIComponent\(campaignId\)\}\/context/);
+});
