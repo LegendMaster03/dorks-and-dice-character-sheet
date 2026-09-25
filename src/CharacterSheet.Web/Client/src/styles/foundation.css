@@ -610,8 +610,9 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 .dd-sheet__dashboard {
     display: grid;
     grid-template-columns:
-        minmax(13.5rem, 16rem)
         minmax(20rem, 23rem)
+        minmax(15rem, 18rem)
+        minmax(13.5rem, 16rem)
         minmax(0, 1fr);
     gap: var(--dd-sheet-space-3);
     align-items: start;
@@ -620,6 +621,7 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 
 .dd-sheet__reference-rail,
 .dd-sheet__skills,
+.dd-sheet__competencies,
 .dd-sheet__stage,
 .dd-sheet__support,
 .dd-sheet__mechanics,
@@ -629,6 +631,7 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
 
 .dd-sheet__reference-rail,
 .dd-sheet__skills,
+.dd-sheet__competencies,
 .dd-sheet__support,
 .dd-sheet__mechanics,
 .dd-sheet__main {
@@ -652,7 +655,9 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
  * the minimum core-stat strip while giving Skills its own vertical lane.
  *
  * max-content keeps the core-stat row compact. The tall Skills lane spans both
- * rows without forcing empty vertical space between the stat strip and the
+ * rows, while Competencies gets an adjacent lane below the stat strip. This
+ * deliberately spends some former stage width on the two dense character-facing
+ * lists without forcing empty vertical space between the stat strip and the
  * combat/main workspace.
  */
 @container character-sheet (min-width: 96rem) {
@@ -660,8 +665,9 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
         display: grid;
         grid-template-columns:
             minmax(18rem, 21rem)
+            minmax(15rem, 18rem)
             minmax(13.5rem, 16rem)
-            repeat(2, minmax(0, 1fr));
+            minmax(0, 1fr);
         grid-template-rows: max-content auto;
         gap: var(--dd-sheet-space-3);
         align-items: start;
@@ -683,13 +689,18 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
         grid-row: 1 / span 2;
     }
 
-    .dd-sheet__reference-rail {
+    .dd-sheet__competencies {
         grid-column: 2;
         grid-row: 2;
     }
 
+    .dd-sheet__reference-rail {
+        grid-column: 3;
+        grid-row: 2;
+    }
+
     .dd-sheet__stage {
-        grid-column: 3 / -1;
+        grid-column: 4;
         grid-row: 2;
     }
 }
@@ -703,8 +714,9 @@ button.dd-inspiration__indicator[aria-pressed="true"] {
     .dd-sheet__body {
         grid-template-columns:
             minmax(26rem, 30rem)
+            minmax(15rem, 18rem)
             minmax(13.5rem, 16rem)
-            repeat(2, minmax(0, 1fr));
+            minmax(0, 1fr);
     }
 
     .dd-sheet__skills .dd-skill-list {
