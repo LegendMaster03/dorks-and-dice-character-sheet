@@ -9,7 +9,44 @@
 }
 
 
-/* Harvesting & Crafting is a dedicated workflow. Keep the Actions entry compact. */
+/* Harvesting & Crafting is a dedicated workflow layered over the Character Sheet. */
+.dd-harvesting-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: grid;
+    place-items: center;
+    padding: clamp(0.75rem, 2vw, 2rem);
+    background: rgb(0 0 0 / 0.58);
+    backdrop-filter: blur(2px);
+}
+
+.dd-harvesting-dialog {
+    width: min(94vw, 88rem);
+    max-height: min(92dvh, 64rem);
+    overflow: hidden;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-raised);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-lg);
+    box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 0.35);
+}
+
+.dd-harvesting-dialog .dd-harvesting-workspace {
+    max-height: min(92dvh, 64rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.dd-harvesting-dialog .dd-harvesting-workspace__header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: 0.75rem;
+    background: var(--dd-sheet-surface-raised);
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
 .dd-harvesting-launcher {
     display: grid;
     gap: 0.75rem;
@@ -203,6 +240,19 @@
 }
 
 @media (max-width: 720px) {
+    .dd-harvesting-overlay {
+        padding: 0;
+    }
+
+    .dd-harvesting-dialog,
+    .dd-harvesting-dialog .dd-harvesting-workspace {
+        width: 100vw;
+        max-width: none;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
     .dd-harvesting-workspace__header {
         align-items: stretch;
         flex-direction: column;
