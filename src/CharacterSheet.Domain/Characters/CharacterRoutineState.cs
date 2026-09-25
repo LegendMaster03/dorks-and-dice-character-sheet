@@ -2,6 +2,8 @@ namespace CharacterSheet.Domain.Characters;
 
 public sealed class CharacterInventoryItemOccurrence
 {
+    public const int MaxCustomNameLength = 200;
+
     private CharacterInventoryItemOccurrence()
     {
     }
@@ -9,7 +11,8 @@ public sealed class CharacterInventoryItemOccurrence
     internal CharacterInventoryItemOccurrence(
         Guid id,
         Guid characterId,
-        string ruleConceptKey,
+        string? ruleConceptKey,
+        string? customName,
         DateTimeOffset createdAt)
     {
         if (id == Guid.Empty)
@@ -21,9 +24,22 @@ public sealed class CharacterInventoryItemOccurrence
             throw new ArgumentException("Site CharacterId can not be empty.", nameof(characterId));
         }
 
+        var hasRule = !string.IsNullOrWhiteSpace(ruleConceptKey);
+        var hasCustom = !string.IsNullOrWhiteSpace(customName);
+        if (hasRule == hasCustom)
+        {
+            throw new ArgumentException(
+                "An inventory occurrence must identify exactly one Rules Core item or custom item name.");
+        }
+
         Id = id;
         CharacterId = characterId;
-        RuleConceptKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
+        RuleConceptKey = hasRule
+            ? CharacterRuleReference.NormalizeConceptKey(ruleConceptKey!)
+            : null;
+        CustomName = hasCustom
+            ? RequireCustomName(customName!)
+            : null;
         Quantity = 1;
         IsCarried = true;
         IsEquipped = false;
@@ -37,10 +53,12 @@ public sealed class CharacterInventoryItemOccurrence
     public Guid CharacterId { get; private set; }
 
     /// <summary>
-    /// Stable Rules Core RuleConcept.Key. This occurrence means only that the Character owns the
-    /// referenced item occurrence. Display names and copied mechanics are intentionally not persisted.
+    /// Stable Rules Core RuleConcept.Key when this is a catalog-backed item.
+    /// Custom/manual inventory occurrences use CustomName instead.
     /// </summary>
-    public string RuleConceptKey { get; private set; } = string.Empty;
+    public string? RuleConceptKey { get; private set; }
+
+    public string? CustomName { get; private set; }
 
     public int Quantity { get; private set; }
 
@@ -84,6 +102,22 @@ public sealed class CharacterInventoryItemOccurrence
         {
             UpdatedAt = changedAt;
         }
+    }
+
+    private static string RequireCustomName(string value)
+    {
+        var normalized = value.Trim();
+        if (normalized.Length == 0)
+        {
+            throw new ArgumentException("Custom inventory item name can not be blank.", nameof(value));
+        }
+        if (normalized.Length > MaxCustomNameLength)
+        {
+            throw new ArgumentException(
+                $"Custom inventory item name can not exceed {MaxCustomNameLength} characters.",
+                nameof(value));
+        }
+        return normalized;
     }
 }
 
