@@ -565,6 +565,45 @@ public sealed class CharacterPresentationWorkflowTests
             return Task.FromResult(EmptyProjection("campaign", campaignId));
         }
 
+        public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalManufacturingAsync(
+            RulesCoreManufacturingResolutionRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CraftingResolution("manufacturing"));
+
+        public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignManufacturingAsync(
+            Guid campaignId,
+            RulesCoreManufacturingResolutionRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CraftingResolution("manufacturing"));
+
+        public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalEnchantingAsync(
+            RulesCoreEnchantingResolutionRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CraftingResolution("enchanting"));
+
+        public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignEnchantingAsync(
+            Guid campaignId,
+            RulesCoreEnchantingResolutionRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CraftingResolution("enchanting"));
+
+        private static RulesCoreCraftingCheckResolutionView CraftingResolution(string procedure) =>
+            new(
+                procedure,
+                procedure,
+                "competency.test",
+                "Test Competency",
+                false,
+                true,
+                "normal",
+                0,
+                0,
+                0,
+                null,
+                null,
+                null,
+                null);
+
         private static RulesCoreCharacterRulesProjectionView EmptyProjection(
             string scope,
             Guid? campaignId) =>
