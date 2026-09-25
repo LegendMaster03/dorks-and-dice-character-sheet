@@ -417,16 +417,31 @@ test("desktop Skill disclosures float without reflow while constrained layouts r
     assert.doesNotMatch(mechanicsCssSource, /@container character-sheet \(max-width:[\s\S]*?\.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
 });
 
+test("Competency rows use one stable wrapper and spacing token", () => {
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-list,[\s\S]*?gap:\s*var\(--dd-sheet-space-1\);/s);
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-list-item\s*\{[^}]*display:\s*block;[^}]*margin:\s*0;/s);
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-row\s*\{[^}]*min-height:\s*1\.5rem;[^}]*padding:\s*0\.125rem\s+0\.25rem;/s);
+    assert.doesNotMatch(
+        mechanicsCssSource,
+        /\.dd-competency-list,[\s\S]*?gap:\s*0\.18rem;/s);
+});
+
 test("desktop Competency disclosures float without reflow while constrained layouts remain inline", () => {
     assert.match(
         mechanicsCssSource,
         /\.dd-competency-row__name\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
     assert.match(
         mechanicsCssSource,
-        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list > \.dd-competency-disclosure\s*\{[^}]*position:\s*relative;/s);
+        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list-item > \.dd-competency-disclosure\s*\{[^}]*position:\s*relative;/s);
     assert.match(
         mechanicsCssSource,
-        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list > \.dd-competency-disclosure > \.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;[^}]*inset-block-start:\s*calc\(100% \+ 0\.18rem\);[^}]*max-height:\s*min\(70vh,\s*36rem\);[^}]*overflow:\s*auto;/s);
+        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list-item > \.dd-competency-disclosure > \.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;[^}]*inset-block-start:\s*calc\(100% \+ var\(--dd-sheet-space-1\)\);[^}]*max-height:\s*min\(70vh,\s*36rem\);[^}]*overflow:\s*auto;/s);
     assert.match(
         mechanicsCssSource,
         /\.dd-competency-disclosure__body\s*\{[^}]*display:\s*grid;[^}]*max-width:\s*100%;/s);

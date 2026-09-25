@@ -35,11 +35,14 @@ export function renderCompetenciesCard(
     controls.append(search);
 
     const list = createElement("div", "dd-competency-list");
-    const rendered = items.map((item, index) => {
-        const element = renderPresentationItem(item, index, control);
-        list.append(element);
+    const orderedItems = [...items].sort(comparePresentationItems);
+    const rendered = orderedItems.map((item, index) => {
+        const wrapper = createElement("div", "dd-competency-list-item");
+        wrapper.setAttribute("data-competency-list-item", presentationItemKey(item));
+        wrapper.append(renderPresentationItem(item, index, control));
+        list.append(wrapper);
         return {
-            element,
+            element: wrapper,
             searchText: competencySearchText(item)
         };
     });
@@ -63,6 +66,32 @@ export function renderCompetenciesCard(
 
     card.append(controls, list, noMatches);
     return card;
+}
+
+function comparePresentationItems(
+    left: CompetencyPresentationItem,
+    right: CompetencyPresentationItem
+): number {
+    const leftLabel = presentationItemLabel(left).trim().toLocaleLowerCase("en-US");
+    const rightLabel = presentationItemLabel(right).trim().toLocaleLowerCase("en-US");
+    if (leftLabel < rightLabel) return -1;
+    if (leftLabel > rightLabel) return 1;
+
+    const leftKey = presentationItemKey(left);
+    const rightKey = presentationItemKey(right);
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+}
+
+function presentationItemLabel(item: CompetencyPresentationItem): string {
+    return item.kind === "standalone"
+        ? item.competency.label
+        : item.parent.label;
+}
+
+function presentationItemKey(item: CompetencyPresentationItem): string {
+    return item.kind === "standalone"
+        ? item.competency.key
+        : item.parent.key;
 }
 
 function renderPresentationItem(
