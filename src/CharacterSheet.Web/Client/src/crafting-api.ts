@@ -24,6 +24,8 @@ export interface ManufacturingResolutionInput {
     d20Roll?: number | null;
     otherModifier?: number;
     targetDc?: number | null;
+    abilityKey?: string | null;
+    manualAbilityModifier?: number | null;
 }
 
 export interface EnchantingResolutionInput {
