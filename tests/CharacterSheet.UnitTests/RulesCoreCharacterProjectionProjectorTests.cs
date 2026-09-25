@@ -382,7 +382,7 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
     }
 
     [Fact]
-    public void CharacterProjectionPreservesUniversalCompetencyFacetsAndRankOwner()
+    public void CharacterProjectionUsesUniversalFacetsButKeepsThemOutOfCharacterFacingCompetencyDetails()
     {
         var projection = EmptyProjection() with
         {
@@ -438,28 +438,20 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
 
         var alchemy = Assert.Single(mechanics.Competencies!.Entries);
         Assert.Equal("competency.alchemy", alchemy.Key);
+        Assert.Equal("competency", alchemy.Kind);
         Assert.Equal("competency", alchemy.PresentationCategory);
         Assert.True(alchemy.SupportsRanks);
         Assert.True(alchemy.SupportsClassSkillState);
         Assert.True(alchemy.SupportsTrainingState);
+        Assert.Equal("competency.alchemy.training", alchemy.SharedTrainingKey);
         Assert.Equal("skill.alchemy", alchemy.RankInputKey);
         Assert.Equal(
             ["competency.skill.craft-alchemy"],
             alchemy.CompatibilityMechanicKeys);
-
-        var facets = Assert.IsAssignableFrom<IReadOnlyList<CompetencyFacetPresentationView>>(
-            alchemy.Facets);
-        Assert.Equal(2, facets.Count);
-        Assert.Contains(facets, facet =>
-            facet.FacetType == "skill"
-            && facet.SupportsRanks
-            && facet.SupportsClassSkillState
-            && facet.SupportsTrainingState);
-        Assert.Contains(facets, facet =>
-            facet.FacetType == "tool"
-            && !facet.SupportsRanks
-            && !facet.SupportsClassSkillState
-            && facet.SupportsTrainingState);
+        Assert.Null(alchemy.Family);
+        Assert.Null(alchemy.Specialty);
+        Assert.Null(alchemy.Facets);
+        Assert.Null(alchemy.SourceAttributions);
 
         var related = Assert.Single(alchemy.RelatedCompetencies!);
         Assert.Equal("Herbalism", related.TargetName);

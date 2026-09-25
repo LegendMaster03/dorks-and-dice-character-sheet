@@ -263,7 +263,8 @@ public sealed class CharacterPresentationProjectorTests
                             ["competency.tool.alchemists-supplies"])
                     ],
                     [],
-                    []),
+                    [],
+                    PresentationCategory: "competency"),
                 new(
                     "competency.blacksmithing",
                     "blacksmithing",
@@ -320,12 +321,15 @@ public sealed class CharacterPresentationProjectorTests
             mechanics.Competencies.Entries,
             value => value.Key == "competency.alchemy");
         Assert.Equal("Alchemy", alchemy.Label);
-        Assert.Equal("specialized-skill", alchemy.Kind);
-        Assert.Equal("Craft", alchemy.Family);
+        Assert.Equal("competency", alchemy.Kind);
+        Assert.Null(alchemy.Family);
+        Assert.Null(alchemy.Specialty);
+        Assert.Null(alchemy.Facets);
+        Assert.Null(alchemy.SourceAttributions);
         Assert.Equal("competency.alchemy.training", alchemy.SharedTrainingKey);
         Assert.Equal("skill.craft-alchemy", alchemy.RankInputKey);
         Assert.True(alchemy.SupportsRanks);
-        Assert.Equal(2, alchemy.Facets!.Count);
+        Assert.True(alchemy.SupportsTrainingState);
         Assert.Equal(
             ["competency.skill.craft-alchemy", "competency.tool.alchemists-supplies"],
             alchemy.MechanicKeys);
