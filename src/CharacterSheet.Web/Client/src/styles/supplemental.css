@@ -176,6 +176,17 @@
     flex-wrap: wrap;
 }
 
+.dd-harvesting-component {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(5.5rem, 7rem) minmax(6.5rem, 8rem) auto;
+    align-items: end;
+}
+
+.dd-harvesting-component__actions {
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .dd-harvesting-component__identity,
 .dd-harvesting-outcome__component {
     display: grid;
@@ -192,13 +203,18 @@
 }
 
 @media (max-width: 720px) {
-    .dd-harvesting-workspace__header,
-    .dd-harvesting-component {
+    .dd-harvesting-workspace__header {
         align-items: stretch;
         flex-direction: column;
     }
 
+    .dd-harvesting-component {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
     .dd-harvesting-component__actions {
         width: 100%;
+        justify-content: flex-start;
     }
 }
