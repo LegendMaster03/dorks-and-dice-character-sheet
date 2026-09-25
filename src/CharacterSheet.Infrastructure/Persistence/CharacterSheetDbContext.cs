@@ -148,8 +148,9 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .ValueGeneratedNever()
             .IsRequired();
         inventoryItemOccurrence.Property(value => value.RuleConceptKey)
-            .HasMaxLength(CharacterRuleReference.MaxConceptKeyLength)
-            .IsRequired();
+            .HasMaxLength(CharacterRuleReference.MaxConceptKeyLength);
+        inventoryItemOccurrence.Property(value => value.CustomName)
+            .HasMaxLength(CharacterInventoryItemOccurrence.MaxCustomNameLength);
         inventoryItemOccurrence.Property(value => value.Quantity)
             .HasDefaultValue(1)
             .IsRequired();
@@ -168,6 +169,9 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         inventoryItemOccurrence.Property(value => value.UpdatedAt)
             .IsRequired();
         inventoryItemOccurrence.HasIndex(value => new { value.CharacterId, value.RuleConceptKey });
+        inventoryItemOccurrence.ToTable(table => table.HasCheckConstraint(
+            "CK_character_inventory_item_occurrences_Identity",
+            "(\"RuleConceptKey\" IS NOT NULL) <> (\"CustomName\" IS NOT NULL)"));
         inventoryItemOccurrence.HasIndex(value => new { value.CharacterId, value.ContainerOccurrenceId });
         root.HasMany(value => value.InventoryItemOccurrences)
             .WithOne()
