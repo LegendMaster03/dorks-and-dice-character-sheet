@@ -1524,13 +1524,16 @@ export function createHarvestingCraftingWorkflow(
                     && state.craftingRequiresEnchanting
                     ? "enchanting"
                     : value
-                        && !state.craftingRequiresEnchanting
                         ? "manufacturing"
                         : state.craftingProcedure;
                 const changedStage = procedure !== state.craftingProcedure;
                 const next = resetCraftingCompletion({
                     ...state,
                     craftingRequiresManufacturing: value,
+                    craftingManufacturingSucceeded:
+                        value === state.craftingRequiresManufacturing
+                            ? state.craftingManufacturingSucceeded
+                            : null,
                     craftingProcedure: procedure
                 });
                 return changedStage
@@ -1562,6 +1565,10 @@ export function createHarvestingCraftingWorkflow(
                 const next = resetCraftingCompletion({
                     ...state,
                     craftingRequiresEnchanting: value,
+                    craftingEnchantingSucceeded:
+                        value === state.craftingRequiresEnchanting
+                            ? state.craftingEnchantingSucceeded
+                            : null,
                     craftingProcedure: procedure
                 });
                 return changedStage
