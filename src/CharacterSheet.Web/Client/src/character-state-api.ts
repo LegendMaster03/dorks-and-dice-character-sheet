@@ -65,6 +65,22 @@ export interface CharacterInventoryItemOccurrenceStateInput {
     containerOccurrenceId?: string | null;
 }
 
+export interface CharacterInventoryConsumptionInput {
+    occurrenceId: string;
+    quantity: number;
+}
+
+export interface CharacterInventoryAdditionInput {
+    conceptKey?: string | null;
+    customName?: string | null;
+    quantity?: number;
+}
+
+export interface CharacterInventoryTransactionInput {
+    consumptions?: CharacterInventoryConsumptionInput[];
+    additions?: CharacterInventoryAdditionInput[];
+}
+
 export interface CharacterNoteResponse {
     id: string;
     content: string;
@@ -453,6 +469,22 @@ export async function addCustomInventoryItemOccurrence(
         "POST",
         { customName, quantity },
         "Unable to add custom inventory item.");
+}
+
+export async function applyInventoryTransaction(
+    environment: HostEnvironment,
+    characterId: string,
+    input: CharacterInventoryTransactionInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<CharacterStateResponse> {
+    return await requestState(
+        fetcher,
+        buildCharacterSheetApiUrl(
+            environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/inventory/transaction`),
+        "POST",
+        input,
+        "Unable to apply inventory transaction.");
 }
 
 export async function updateInventoryItemOccurrence(
