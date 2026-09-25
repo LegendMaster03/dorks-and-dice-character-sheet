@@ -840,8 +840,11 @@ test("support surfaces stay neutral when unavailable and consume supplied values
     });
     assert.match(visibleText(supplied), /Awareness\s+17/);
     assert.match(visibleText(supplied), /Darkvision\s+60 ft\./);
-    assert.match(visibleText(supplied), /Light Armor\s+Proficient/);
-    assert.match(visibleText(supplied), /Alchemist's Supplies\s+Proficient/);
+    const suppliedText = visibleText(supplied);
+    assert.match(suppliedText, /Light Armor\s+Proficient/);
+    assert.match(suppliedText, /Competencies/);
+    assert.match(suppliedText, /Alchemist's Supplies/);
+    assert.match(suppliedText, /Training\s+Proficient/);
 });
 
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
