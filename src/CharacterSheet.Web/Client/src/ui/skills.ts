@@ -389,8 +389,6 @@ function renderCompactCompetencyMechanics(competency: CompetencyView): HTMLEleme
                 ? competency.armorCheckPenalty.formattedEffect ?? "Applies"
                 : "Does not apply");
     }
-    appendOptionalFact(facts, "Family", competency.family);
-    appendOptionalFact(facts, "Specialty", competency.specialty);
     for (const contribution of competency.breakdown ?? []) {
         appendOptionalFact(facts, contribution.label, formatMechanicalValue(contribution));
     }
@@ -588,8 +586,6 @@ function hasCompetencyMechanicalDetails(competency: CompetencyView): boolean {
         || competency.classSkill !== undefined
         || competency.trainedOnly !== undefined
         || competency.armorCheckPenalty !== undefined
-        || competency.family !== undefined
-        || competency.specialty !== undefined
         || competency.supportsRanks === true
         || competency.supportsClassSkillState === true
         || competency.supportsTrainingState === true
