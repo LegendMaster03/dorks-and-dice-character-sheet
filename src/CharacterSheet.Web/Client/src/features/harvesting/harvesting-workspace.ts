@@ -774,7 +774,8 @@ function renderCraftingPanel(
         character,
         state,
         handlers,
-        readOnly));
+        readOnly,
+        routine));
 
     panel.append(sidebar, work);
     return panel;
@@ -1403,7 +1404,8 @@ function renderCraftingCompletion(
     character: CharacterSheetBootstrapResponse,
     state: HarvestingCraftingUiState,
     handlers: HarvestingCraftingWorkflow,
-    readOnly: boolean
+    readOnly: boolean,
+    routine: CharacterRoutineUiState | null
 ): HTMLElement {
     const card = createSectionCard("Finish Crafting", "dd-crafting-completion");
 
@@ -1435,9 +1437,15 @@ function renderCraftingCompletion(
     const hasStep =
         state.craftingRequiresManufacturing
         || state.craftingRequiresEnchanting;
+    const inventory = routine?.state?.inventoryItemOccurrences ?? [];
+    const materialsReady = state.craftingMaterials.every(material => {
+        const occurrence = inventory.find(item => item.id === material.occurrenceId);
+        return occurrence !== undefined && occurrence.quantity >= material.quantity;
+    });
     const readyToFinalize =
         projectNamed
         && hasStep
+        && materialsReady
         && manufacturingResolved
         && manufacturingTimeReady
         && enchantingResolved
@@ -1468,7 +1476,9 @@ function renderCraftingCompletion(
                 "dd-harvesting-field__help",
                 readyToFinalize
                     ? "The attempt is ready to finalize. Inventory will be updated in one transaction."
-                    : "Complete the required crafting steps and time before finalizing the attempt."));
+                    : !materialsReady
+                        ? "The selected Inventory does not contain enough of every required material."
+                        : "Complete the required crafting steps and time before finalizing the attempt."));
     }
 
     card.append(createButton(
