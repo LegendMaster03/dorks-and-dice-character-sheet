@@ -51,6 +51,11 @@ export interface CraftingCheckResolutionResponse {
     total: number | null;
     targetDc: number | null;
     meetsTarget: boolean | null;
+    outcome: "pending" | "completed" | "failed" | "completed-with-flaws" | "destroyed" | string;
+    margin: number | null;
+    flawCount: number | null;
+    inputsConsumed: boolean;
+    producesFunctionalOutput: boolean;
 }
 
 export async function resolveCharacterManufacturing(
