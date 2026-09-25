@@ -222,3 +222,19 @@ test("Harvesting and Crafting opens as a modal over the Character Sheet", async 
     assert.match(css, /\.dd-harvesting-overlay\s*\{[\s\S]*position:\s*fixed/);
     assert.match(css, /\.dd-harvesting-dialog\s*\{[\s\S]*width:\s*min\(94vw, 88rem\)/);
 });
+
+
+test("Loot Tavern modal uses worksheet and workshop layouts", async () => {
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+    const css = await source("styles/supplemental.css");
+
+    assert.match(workspace, /dd-harvesting-worksheet/);
+    assert.match(workspace, /dd-crafting-workshop/);
+    assert.match(workspace, /Current Project/);
+    assert.match(workspace, /required · \$\{availableQuantity\} available/);
+    assert.match(workspace, /document\.createElement\("progress"\)/);
+
+    assert.match(css, /\.dd-harvesting-worksheet\s*\{[\s\S]*grid-template-columns/);
+    assert.match(css, /\.dd-crafting-workshop\s*\{[\s\S]*grid-template-columns/);
+    assert.match(css, /\.dd-crafting-material--short/);
+});
