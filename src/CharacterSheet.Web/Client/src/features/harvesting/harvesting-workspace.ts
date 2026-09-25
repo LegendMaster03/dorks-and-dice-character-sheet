@@ -701,294 +701,37 @@ function renderCraftingPanel(
 ): HTMLElement {
     const panel = createElement("div", "dd-harvesting-workspace__panel");
 
-    panel.append(renderManualRecipe(state, handlers, readOnly, routine));
+    panel.append(renderCraftingProject(state, handlers, readOnly, routine));
 
-    const procedure = createSectionCard("Crafting Procedure", "dd-crafting-procedure");
-    const procedureChoices = createElement("div", "dd-harvesting-choice-row");
-    procedureChoices.append(
-        sourceButton(
-            "Manufacturing",
-            state.craftingProcedure === "manufacturing",
-            () => handlers.setCraftingProcedure("manufacturing")),
-        sourceButton(
-            "Enchanting",
-            state.craftingProcedure === "enchanting",
-            () => handlers.setCraftingProcedure("enchanting")));
-    procedure.append(
-        procedureChoices,
-        createElement(
-            "p",
-            "dd-harvesting-field__help",
-            state.craftingProcedure === "manufacturing"
-                ? "Manufacturing uses the effective universal competency resolved by Rules Core."
-                : "Enchanting uses the effective creature-derived competency with the Character's resolved spellcasting ability."));
-    panel.append(procedure);
-
-    const competencyCard = createSectionCard("Competency", "dd-crafting-competency");
-    const competencyMode = createElement("div", "dd-harvesting-choice-row");
-    competencyMode.append(
-        sourceButton(
-            "Rules Core competency",
-            state.craftingCompetencyMode === "resolved",
-            () => handlers.setCraftingCompetencyMode("resolved")),
-        sourceButton(
-            "Manual entry",
-            state.craftingCompetencyMode === "manual",
-            () => handlers.setCraftingCompetencyMode("manual")));
-    competencyCard.append(competencyMode);
-
-    if (state.craftingCompetencyMode === "manual") {
-        const name = createElement("label", "dd-harvesting-field");
-        name.append(createElement("span", "dd-harvesting-field__label", "Competency name"));
-        const input = createElement("input", "dd-harvesting-field__control");
-        input.type = "text";
-        input.value = state.craftingManualName;
-        input.disabled = readOnly;
-        input.addEventListener("change", () => handlers.setCraftingManualName(input.value));
-        name.append(input);
-        competencyCard.append(
-            name,
-            numberField(
-                "Effective modifier",
-                state.craftingManualContribution,
-                handlers.setCraftingManualContribution,
-                readOnly),
-            booleanField(
-                "Qualified for this competency",
-                state.craftingManualQualified,
-                handlers.setCraftingManualQualified,
-                readOnly));
-    } else {
-        const label = createElement("label", "dd-harvesting-field");
-        label.append(createElement("span", "dd-harvesting-field__label", "Universal competency"));
-        const select = createElement("select", "dd-harvesting-field__control");
-        const placeholder = createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = state.craftingProcedure === "enchanting"
-            ? "Use creature-type competency"
-            : "Choose competency";
-        select.append(placeholder);
-        for (const competency of mechanics?.competencies?.entries ?? []) {
-            if (competency.isFamily === true) continue;
-            const option = createElement("option");
-            option.value = competency.key;
-            option.textContent = competency.label;
-            select.append(option);
-        }
-        select.value = state.craftingCompetencyKey;
-        select.disabled = readOnly;
-        select.addEventListener("change", () =>
-            handlers.setCraftingCompetencyKey(select.value));
-        label.append(select);
-        competencyCard.append(label);
-
-        if (state.craftingProcedure === "enchanting"
-            && state.craftingCompetencyKey.trim().length === 0) {
-            const creature = createElement("label", "dd-harvesting-field");
-            creature.append(createElement("span", "dd-harvesting-field__label", "Creature type"));
-            const creatureSelect = createElement("select", "dd-harvesting-field__control");
-            for (const creatureType of state.catalog?.creatureTypes ?? []) {
-                const option = createElement("option");
-                option.value = creatureType.key;
-                option.textContent = creatureType.displayName;
-                creatureSelect.append(option);
-            }
-            creatureSelect.value = state.craftingCreatureType;
-            creatureSelect.disabled = readOnly;
-            creatureSelect.addEventListener("change", () =>
-                handlers.setCraftingCreatureType(creatureSelect.value));
-            creature.append(creatureSelect);
-            competencyCard.append(creature);
-        }
-    }
-    panel.append(competencyCard);
-
-    const check = createSectionCard("Check", "dd-crafting-check");
-    if (state.craftingProcedure === "manufacturing") {
-        const abilityMode = createElement("div", "dd-harvesting-choice-row");
-        abilityMode.append(
-            sourceButton(
-                "Character Ability",
-                state.craftingManufacturingAbilityMode === "character",
-                () => handlers.setCraftingManufacturingAbilityMode("character")),
-            sourceButton(
-                "Manual Ability modifier",
-                state.craftingManufacturingAbilityMode === "manual",
-                () => handlers.setCraftingManufacturingAbilityMode("manual")));
-        check.append(
-            createElement(
-                "p",
-                "dd-harvesting-field__help",
-                "Choose the Ability required by the recipe's tool/product. Rules Core resolves a selected Character Ability modifier; the browser does not calculate it."),
-            abilityMode);
-
-        if (state.craftingManufacturingAbilityMode === "character") {
-            const ability = createElement("label", "dd-harvesting-field");
-            ability.append(createElement("span", "dd-harvesting-field__label", "Manufacturing Ability"));
-            const select = createElement("select", "dd-harvesting-field__control");
-            const placeholder = createElement("option");
-            placeholder.value = "";
-            placeholder.textContent = "Choose Ability";
-            select.append(placeholder);
-            for (const value of mechanics?.abilityValues ?? []) {
-                const option = createElement("option");
-                option.value = value.key;
-                option.textContent = value.label;
-                select.append(option);
-            }
-            select.value = state.craftingManufacturingAbilityKey;
-            select.disabled = readOnly;
-            select.addEventListener("change", () =>
-                handlers.setCraftingManufacturingAbilityKey(select.value));
-            ability.append(select);
-            check.append(ability);
-        } else {
-            check.append(numberField(
-                "Manual Ability modifier",
-                state.craftingManufacturingManualAbilityModifier,
-                handlers.setCraftingManufacturingManualAbilityModifier,
-                readOnly));
-        }
-
-        check.append(booleanField(
-            "Qualified guidance is available",
-            state.craftingHasQualifiedGuidance,
-            handlers.setCraftingHasQualifiedGuidance,
-            readOnly));
-    } else {
-        const spellcasting = mechanics?.spellcastingProfiles ?? [];
-        if (spellcasting.length > 0) {
-            const casting = createElement("label", "dd-harvesting-field");
-            casting.append(createElement("span", "dd-harvesting-field__label", "Spellcasting profile"));
-            const select = createElement("select", "dd-harvesting-field__control");
-            const automatic = createElement("option");
-            automatic.value = "";
-            automatic.textContent = spellcasting.length === 1
-                ? "Use resolved spellcasting"
-                : "Choose spellcasting profile";
-            select.append(automatic);
-            for (const profile of spellcasting) {
-                const option = createElement("option");
-                option.value = profile.key;
-                option.textContent = profile.label;
-                select.append(option);
-            }
-            select.value = state.craftingSpellcastingKey;
-            select.disabled = readOnly;
-            select.addEventListener("change", () =>
-                handlers.setCraftingSpellcastingKey(select.value));
-            casting.append(select);
-            check.append(casting);
-        }
-    }
-
-    check.append(
-        numberField(
-            "Target DC",
-            state.craftingTargetDc,
-            handlers.setCraftingTargetDc,
-            readOnly,
-            1),
-        numberField(
-            "Other modifier",
-            state.craftingOtherModifier,
-            value => handlers.setCraftingOtherModifier(value ?? 0),
-            readOnly),
-        createButton(
-            state.craftingStatus === "loading" ? "Resolving…" : "Resolve Check",
-            "dd-button dd-button--secondary",
-            () => void handlers.prepareCrafting(character.characterId),
-            readOnly || state.craftingStatus === "loading"));
-    panel.append(check);
-
-    if (state.craftingStatus === "loading") {
-        panel.append(createInlineState("Rules Core is resolving the effective crafting check…", "loading"));
+    if (!state.craftingRequiresManufacturing && !state.craftingRequiresEnchanting) {
+        panel.append(createInlineState(
+            "Choose at least one crafting step: Manufacturing, Enchanting, or both.",
+            "warning"));
         return panel;
     }
 
-    if (state.craftingResolution !== null) {
-        const resolution = state.craftingResolution;
-        const resolved = createSectionCard("Resolved Check", "dd-crafting-resolution");
-        const facts = createElement("dl", "dd-harvesting-facts");
-        appendFact(facts, "Competency", resolution.competencyDisplayName);
-        appendFact(facts, "Qualified", resolution.isQualified ? "Yes" : "No");
-        appendFact(facts, "Ability contribution", signed(resolution.abilityContribution));
-        appendFact(facts, "Competency contribution", signed(resolution.competencyContribution));
-        appendFact(facts, "Other modifier", signed(resolution.otherModifier));
-        appendFact(facts, "Roll mode", humanize(resolution.rollMode));
-        if (resolution.targetDc !== null) {
-            appendFact(facts, "Target DC", String(resolution.targetDc));
-        }
-        resolved.append(facts);
-
-        if (resolution.total === null) {
-            const rollControls = createElement("div", "dd-harvesting-choice-row");
-            rollControls.append(
-                numberField(
-                    "Manual d20",
-                    state.craftingSelectedRoll,
-                    handlers.setCraftingSelectedRoll,
-                    readOnly,
-                    1),
-                createButton(
-                    "Use Manual Roll",
-                    "dd-button dd-button--secondary",
-                    () => void handlers.submitCraftingRoll(character.characterId),
-                    readOnly || state.craftingSelectedRoll === null),
-                createButton(
-                    "Roll d20",
-                    "dd-button dd-button--primary",
-                    () => void handlers.rollCrafting(character.characterId),
-                    readOnly));
-            resolved.append(rollControls);
-        } else {
-            const result = createElement("dl", "dd-harvesting-facts");
-            appendFact(result, "Selected d20", String(resolution.d20Roll));
-            appendFact(result, "Total", String(resolution.total));
-            appendFact(result, "Outcome", humanize(resolution.outcome));
-            if (resolution.margin !== null) {
-                appendFact(result, "Margin", signed(resolution.margin));
-            }
-            if (resolution.flawCount !== null && resolution.flawCount > 0) {
-                appendFact(
-                    result,
-                    "Flaws",
-                    String(resolution.flawCount));
-            }
-            appendFact(
-                result,
-                "Inputs",
-                resolution.inputsConsumed ? "Consumed" : "Not consumed");
-            appendFact(
-                result,
-                "Functional output",
-                resolution.producesFunctionalOutput ? "Yes" : "No");
-            resolved.append(result);
-        }
-
-        if (state.craftingRolls.length > 0) {
-            resolved.append(createElement(
-                "p",
-                "dd-harvesting-field__help",
-                `Rolled: ${state.craftingRolls.join(", ")}`));
-        }
-        if (state.craftingRollTie) {
-            const tie = createElement("div", "dd-harvesting-choice-row");
-            for (const value of state.craftingRolls) {
-                tie.append(createButton(
-                    `Use ${value}`,
-                    "dd-button dd-button--secondary",
-                    () => void handlers.chooseCraftingRoll(character.characterId, value),
-                    readOnly));
-            }
-            resolved.append(
-                createInlineState(
-                    "The roll-selection rule produced a tie. Choose the die result to use.",
-                    "warning"),
-                tie);
-        }
-        panel.append(resolved);
+    if (state.craftingRequiresManufacturing && state.craftingRequiresEnchanting) {
+        const steps = createSectionCard("Crafting Steps", "dd-crafting-procedure");
+        const choices = createElement("div", "dd-harvesting-choice-row");
+        choices.append(
+            sourceButton(
+                `1. Manufacturing · ${stageState(true, state.craftingManufacturingSucceeded)}`,
+                state.craftingProcedure === "manufacturing",
+                () => handlers.setCraftingProcedure("manufacturing")),
+            sourceButton(
+                `2. Enchanting · ${stageState(true, state.craftingEnchantingSucceeded)}`,
+                state.craftingProcedure === "enchanting",
+                () => handlers.setCraftingProcedure("enchanting")));
+        steps.append(choices);
+        panel.append(steps);
     }
+
+    panel.append(renderCraftingStage(
+        character,
+        state,
+        handlers,
+        readOnly,
+        mechanics));
 
     panel.append(renderCraftingCompletion(
         character,
@@ -999,47 +742,27 @@ function renderCraftingPanel(
     return panel;
 }
 
-function renderManualRecipe(
+function renderCraftingStage(
+    character: CharacterSheetBootstrapResponse,
     state: HarvestingCraftingUiState,
     handlers: HarvestingCraftingWorkflow,
     readOnly: boolean,
-    routine: CharacterRoutineUiState | null
+    mechanics: CharacterMechanicsView | null
 ): HTMLElement {
-    const card = createSectionCard("Recipe", "dd-crafting-recipe");
+    const manufacturing = state.craftingProcedure === "manufacturing";
+    const card = createSectionCard(
+        manufacturing ? "Manufacturing" : "Enchanting",
+        manufacturing ? "dd-crafting-manufacturing" : "dd-crafting-enchanting");
+
     card.append(createElement(
         "p",
         "dd-harvesting-field__help",
-        "Manual recipe entry keeps this workflow usable without copying source recipe tables. Rules Core still resolves the required checks."));
+        manufacturing
+            ? "Make the physical item. Choose the tool or competency, Ability, and DC required by the recipe."
+            : "Enchant the finished item. Choose the component's creature type and the spellcasting source used for the check."));
 
-    card.append(
-        textField(
-            "Recipe name",
-            state.craftingRecipeName,
-            handlers.setCraftingRecipeName,
-            readOnly),
-        textField(
-            "Crafted output",
-            state.craftingOutputName,
-            handlers.setCraftingOutputName,
-            readOnly),
-        numberField(
-            "Output quantity",
-            state.craftingOutputQuantity,
-            value => handlers.setCraftingOutputQuantity(value ?? 1),
-            readOnly,
-            1),
-        booleanField(
-            "Requires Manufacturing",
-            state.craftingRequiresManufacturing,
-            handlers.setCraftingRequiresManufacturing,
-            readOnly),
-        booleanField(
-            "Requires Enchanting",
-            state.craftingRequiresEnchanting,
-            handlers.setCraftingRequiresEnchanting,
-            readOnly));
-
-    if (state.craftingRequiresManufacturing) {
+    if (manufacturing) {
+        card.append(renderManufacturingInputs(state, handlers, readOnly, mechanics));
         card.append(
             decimalField(
                 "Manufacturing time required (hours)",
@@ -1053,9 +776,8 @@ function renderManualRecipe(
                 value => handlers.setCraftingManufacturingCompletedHours(value ?? 0),
                 readOnly,
                 0));
-    }
-
-    if (state.craftingRequiresEnchanting) {
+    } else {
+        card.append(renderEnchantingInputs(state, handlers, readOnly, mechanics));
         card.append(
             decimalField(
                 "Enchanting time required (hours)",
@@ -1071,14 +793,366 @@ function renderManualRecipe(
                 0));
     }
 
-    const stages = createElement("dl", "dd-harvesting-facts");
-    appendFact(stages, "Manufacturing", stageState(
-        state.craftingRequiresManufacturing,
-        state.craftingManufacturingSucceeded));
-    appendFact(stages, "Enchanting", stageState(
-        state.craftingRequiresEnchanting,
-        state.craftingEnchantingSucceeded));
-    card.append(stages);
+    card.append(
+        numberField(
+            "Crafting DC",
+            state.craftingTargetDc,
+            handlers.setCraftingTargetDc,
+            readOnly,
+            1),
+        numberField(
+            "Additional modifier",
+            state.craftingOtherModifier,
+            value => handlers.setCraftingOtherModifier(value ?? 0),
+            readOnly));
+
+    const actions = createElement("div", "dd-harvesting-choice-row");
+    actions.append(
+        numberField(
+            "d20 result",
+            state.craftingSelectedRoll,
+            handlers.setCraftingSelectedRoll,
+            readOnly,
+            1),
+        createButton(
+            "Use Entered Roll",
+            "dd-button dd-button--secondary",
+            () => void handlers.submitCraftingRoll(character.characterId),
+            readOnly
+                || state.craftingSelectedRoll === null
+                || state.craftingStatus === "loading"),
+        createButton(
+            state.craftingStatus === "loading"
+                ? "Calculating…"
+                : manufacturing
+                    ? "Roll Manufacturing"
+                    : "Roll Enchanting",
+            "dd-button dd-button--primary",
+            () => void handlers.rollCrafting(character.characterId),
+            readOnly || state.craftingStatus === "loading"));
+    card.append(actions);
+
+    if (state.craftingStatus === "loading") {
+        card.append(createInlineState("Calculating the crafting check…", "loading"));
+        return card;
+    }
+
+    if (state.craftingResolution !== null) {
+        const resolution = state.craftingResolution;
+        const result = createElement("dl", "dd-harvesting-facts");
+        const checkModifier =
+            resolution.abilityContribution
+            + resolution.competencyContribution
+            + resolution.otherModifier;
+        appendFact(result, "Tool / skill", resolution.competencyDisplayName);
+        appendFact(result, "Check modifier", signed(checkModifier));
+        if (resolution.rollMode !== "normal") {
+            appendFact(result, "Roll", humanize(resolution.rollMode));
+        }
+        if (resolution.total !== null) {
+            appendFact(result, "d20", String(resolution.d20Roll));
+            appendFact(result, "Total", String(resolution.total));
+            if (resolution.targetDc !== null) {
+                appendFact(result, "DC", String(resolution.targetDc));
+            }
+            appendFact(result, "Outcome", humanize(resolution.outcome));
+            if (resolution.flawCount !== null && resolution.flawCount > 0) {
+                appendFact(result, "Flaws", String(resolution.flawCount));
+            }
+        }
+        card.append(result);
+
+        if (!resolution.isQualified && resolution.rollMode === "disadvantage") {
+            card.append(createInlineState(
+                "This Character is not qualified for the selected competency and has no qualified guidance, so the check uses disadvantage.",
+                "warning"));
+        }
+        if (resolution.total !== null && resolution.inputsConsumed) {
+            card.append(createElement(
+                "p",
+                "dd-harvesting-field__help",
+                "The selected materials will be consumed when this crafting attempt is finalized."));
+        }
+    }
+
+    if (state.craftingRolls.length > 0) {
+        card.append(createElement(
+            "p",
+            "dd-harvesting-field__help",
+            `Dice: ${state.craftingRolls.join(", ")}`));
+    }
+    if (state.craftingRollTie) {
+        const tie = createElement("div", "dd-harvesting-choice-row");
+        for (const value of state.craftingRolls) {
+            tie.append(createButton(
+                `Use ${value}`,
+                "dd-button dd-button--secondary",
+                () => void handlers.chooseCraftingRoll(character.characterId, value),
+                readOnly));
+        }
+        card.append(
+            createInlineState(
+                "The roll-selection rule is tied. Choose which d20 result to use.",
+                "warning"),
+            tie);
+    }
+
+    return card;
+}
+
+function renderManufacturingInputs(
+    state: HarvestingCraftingUiState,
+    handlers: HarvestingCraftingWorkflow,
+    readOnly: boolean,
+    mechanics: CharacterMechanicsView | null
+): HTMLElement {
+    const group = createElement("div", "dd-crafting-stage-inputs");
+
+    if (state.craftingCompetencyMode === "manual") {
+        group.append(
+            textField(
+                "Tool or competency",
+                state.craftingManualName,
+                handlers.setCraftingManualName,
+                readOnly),
+            numberField(
+                "Tool / competency modifier",
+                state.craftingManualContribution,
+                handlers.setCraftingManualContribution,
+                readOnly),
+            booleanField(
+                "Qualified with this tool or competency",
+                state.craftingManualQualified,
+                handlers.setCraftingManualQualified,
+                readOnly),
+            createButton(
+                "Choose From Character",
+                "dd-button dd-button--ghost",
+                () => handlers.setCraftingCompetencyMode("resolved"),
+                readOnly));
+    } else {
+        const label = createElement("label", "dd-harvesting-field");
+        label.append(createElement("span", "dd-harvesting-field__label", "Tool or competency"));
+        const select = createElement("select", "dd-harvesting-field__control");
+        const placeholder = createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose from this Character";
+        select.append(placeholder);
+        for (const competency of mechanics?.competencies?.entries ?? []) {
+            if (competency.isFamily === true) continue;
+            const option = createElement("option");
+            option.value = competency.key;
+            option.textContent = competency.label;
+            select.append(option);
+        }
+        select.value = state.craftingCompetencyKey;
+        select.disabled = readOnly;
+        select.addEventListener("change", () =>
+            handlers.setCraftingCompetencyKey(select.value));
+        label.append(select);
+        group.append(
+            label,
+            createButton(
+                "Enter Tool / Competency Manually",
+                "dd-button dd-button--ghost",
+                () => handlers.setCraftingCompetencyMode("manual"),
+                readOnly));
+    }
+
+    if (state.craftingManufacturingAbilityMode === "manual") {
+        group.append(
+            numberField(
+                "Ability modifier",
+                state.craftingManufacturingManualAbilityModifier,
+                handlers.setCraftingManufacturingManualAbilityModifier,
+                readOnly),
+            createButton(
+                "Choose Character Ability",
+                "dd-button dd-button--ghost",
+                () => handlers.setCraftingManufacturingAbilityMode("character"),
+                readOnly));
+    } else {
+        const ability = createElement("label", "dd-harvesting-field");
+        ability.append(createElement("span", "dd-harvesting-field__label", "Ability"));
+        const select = createElement("select", "dd-harvesting-field__control");
+        const placeholder = createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose the Ability required by the recipe";
+        select.append(placeholder);
+        for (const value of mechanics?.abilityValues ?? []) {
+            const option = createElement("option");
+            option.value = value.key;
+            option.textContent = value.label;
+            select.append(option);
+        }
+        select.value = state.craftingManufacturingAbilityKey;
+        select.disabled = readOnly;
+        select.addEventListener("change", () =>
+            handlers.setCraftingManufacturingAbilityKey(select.value));
+        ability.append(select);
+        group.append(
+            ability,
+            createButton(
+                "Enter Ability Modifier Manually",
+                "dd-button dd-button--ghost",
+                () => handlers.setCraftingManufacturingAbilityMode("manual"),
+                readOnly));
+    }
+
+    group.append(booleanField(
+        "A qualified crafter is guiding this attempt",
+        state.craftingHasQualifiedGuidance,
+        handlers.setCraftingHasQualifiedGuidance,
+        readOnly));
+
+    return group;
+}
+
+function renderEnchantingInputs(
+    state: HarvestingCraftingUiState,
+    handlers: HarvestingCraftingWorkflow,
+    readOnly: boolean,
+    mechanics: CharacterMechanicsView | null
+): HTMLElement {
+    const group = createElement("div", "dd-crafting-stage-inputs");
+
+    if (state.craftingCompetencyMode === "manual") {
+        group.append(
+            textField(
+                "Enchanting skill",
+                state.craftingManualName,
+                handlers.setCraftingManualName,
+                readOnly),
+            numberField(
+                "Skill modifier",
+                state.craftingManualContribution,
+                handlers.setCraftingManualContribution,
+                readOnly),
+            booleanField(
+                "Qualified with this skill",
+                state.craftingManualQualified,
+                handlers.setCraftingManualQualified,
+                readOnly),
+            createButton(
+                "Use Creature Type",
+                "dd-button dd-button--ghost",
+                () => {
+                    handlers.setCraftingCompetencyKey("");
+                    handlers.setCraftingCompetencyMode("resolved");
+                },
+                readOnly));
+    } else {
+        const creature = createElement("label", "dd-harvesting-field");
+        creature.append(createElement(
+            "span",
+            "dd-harvesting-field__label",
+            "Component creature type"));
+        const creatureSelect = createElement("select", "dd-harvesting-field__control");
+        const placeholder = createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose creature type";
+        creatureSelect.append(placeholder);
+        for (const creatureType of state.catalog?.creatureTypes ?? []) {
+            const option = createElement("option");
+            option.value = creatureType.key;
+            option.textContent = creatureType.displayName;
+            creatureSelect.append(option);
+        }
+        creatureSelect.value = state.craftingCreatureType;
+        creatureSelect.disabled = readOnly;
+        creatureSelect.addEventListener("change", () => {
+            handlers.setCraftingCompetencyKey("");
+            handlers.setCraftingCreatureType(creatureSelect.value);
+        });
+        creature.append(creatureSelect);
+        group.append(
+            creature,
+            createButton(
+                "Enter Skill Manually",
+                "dd-button dd-button--ghost",
+                () => handlers.setCraftingCompetencyMode("manual"),
+                readOnly));
+    }
+
+    const spellcasting = mechanics?.spellcastingProfiles ?? [];
+    if (spellcasting.length === 0) {
+        group.append(createInlineState(
+            "This Character does not currently have a resolved spellcasting Ability for Enchanting.",
+            "warning"));
+    } else if (spellcasting.length === 1) {
+        group.append(createElement(
+            "p",
+            "dd-harvesting-field__help",
+            `Spellcasting: ${spellcasting[0]!.label}`));
+    } else {
+        const casting = createElement("label", "dd-harvesting-field");
+        casting.append(createElement("span", "dd-harvesting-field__label", "Spellcasting"));
+        const select = createElement("select", "dd-harvesting-field__control");
+        const placeholder = createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose spellcasting source";
+        select.append(placeholder);
+        for (const profile of spellcasting) {
+            const option = createElement("option");
+            option.value = profile.key;
+            option.textContent = profile.label;
+            select.append(option);
+        }
+        select.value = state.craftingSpellcastingKey;
+        select.disabled = readOnly;
+        select.addEventListener("change", () =>
+            handlers.setCraftingSpellcastingKey(select.value));
+        casting.append(select);
+        group.append(casting);
+    }
+
+    return group;
+}
+
+function renderCraftingProject(
+    state: HarvestingCraftingUiState,
+    handlers: HarvestingCraftingWorkflow,
+    readOnly: boolean,
+    routine: CharacterRoutineUiState | null
+): HTMLElement {
+    const card = createSectionCard("Crafting Project", "dd-crafting-recipe");
+    card.append(createElement(
+        "p",
+        "dd-harvesting-field__help",
+        "Enter the recipe details from your source, then work through the required crafting steps."));
+
+    card.append(
+        textField(
+            "Recipe / project",
+            state.craftingRecipeName,
+            handlers.setCraftingRecipeName,
+            readOnly),
+        textField(
+            "Output item",
+            state.craftingOutputName,
+            handlers.setCraftingOutputName,
+            readOnly),
+        numberField(
+            "Output quantity",
+            state.craftingOutputQuantity,
+            value => handlers.setCraftingOutputQuantity(value ?? 1),
+            readOnly,
+            1));
+
+    const steps = createElement("div", "dd-crafting-materials");
+    steps.append(createElement("strong", "", "Required steps"));
+    steps.append(
+        booleanField(
+            "Manufacturing",
+            state.craftingRequiresManufacturing,
+            handlers.setCraftingRequiresManufacturing,
+            readOnly),
+        booleanField(
+            "Enchanting",
+            state.craftingRequiresEnchanting,
+            handlers.setCraftingRequiresEnchanting,
+            readOnly));
+    card.append(steps);
 
     const inventory = routine?.state?.inventoryItemOccurrences ?? [];
     const materials = createElement("div", "dd-crafting-materials");
@@ -1098,7 +1172,7 @@ function renderManualRecipe(
                 readOnly,
                 1),
             createButton(
-                "Remove Material",
+                "Remove",
                 "dd-button dd-button--ghost",
                 () => handlers.removeCraftingMaterial(index),
                 readOnly));
@@ -1109,11 +1183,11 @@ function renderManualRecipe(
         !state.craftingMaterials.some(material => material.occurrenceId === item.id));
     if (available.length > 0) {
         const addLabel = createElement("label", "dd-harvesting-field");
-        addLabel.append(createElement("span", "dd-harvesting-field__label", "Add material from Inventory"));
+        addLabel.append(createElement("span", "dd-harvesting-field__label", "Add material"));
         const select = createElement("select", "dd-harvesting-field__control");
         const placeholder = createElement("option");
         placeholder.value = "";
-        placeholder.textContent = "Choose inventory item";
+        placeholder.textContent = "Choose from Inventory";
         select.append(placeholder);
         for (const occurrence of available) {
             const option = createElement("option");
@@ -1133,8 +1207,9 @@ function renderManualRecipe(
         materials.append(createElement(
             "p",
             "dd-harvesting-field__help",
-            "No Character Inventory items are currently available. A recipe can still be resolved without material consumption."));
+            "This Character has no Inventory items available to select as materials."));
     }
+
     card.append(materials);
     return card;
 }
@@ -1145,24 +1220,38 @@ function renderCraftingCompletion(
     handlers: HarvestingCraftingWorkflow,
     readOnly: boolean
 ): HTMLElement {
-    const card = createSectionCard("Complete Crafting", "dd-crafting-completion");
+    const card = createSectionCard("Finish Crafting", "dd-crafting-completion");
+
     if (state.craftingCompleted) {
         card.append(createInlineState(
-            "This recipe output has been added to Inventory and the selected materials have been consumed.",
+            "This crafting attempt has been finalized and Inventory has been updated.",
             "neutral"));
     } else {
-        card.append(createElement(
-            "p",
-            "dd-harvesting-field__help",
-            "Finalization is explicit. It uses one atomic Inventory transaction: successful or flaw-bearing results record the output, while a nonfunctional result consumes the selected inputs without creating an output."));
+        const status = createElement("dl", "dd-harvesting-facts");
+        if (state.craftingRequiresManufacturing) {
+            appendFact(status, "Manufacturing", stageState(
+                true,
+                state.craftingManufacturingSucceeded));
+        }
+        if (state.craftingRequiresEnchanting) {
+            appendFact(status, "Enchanting", stageState(
+                true,
+                state.craftingEnchantingSucceeded));
+        }
+        card.append(
+            status,
+            createElement(
+                "p",
+                "dd-harvesting-field__help",
+                "When you finish, the selected materials are consumed and the crafted output is added to Inventory if the resolved result produced a functional item."));
     }
 
     card.append(createButton(
         state.craftingCompletionStatus === "loading"
-            ? "Completing…"
+            ? "Updating Inventory…"
             : state.craftingCompleted
-                ? "Attempt Finalized"
-                : "Finalize Recipe Attempt",
+                ? "Crafting Finalized"
+                : "Finish & Update Inventory",
         "dd-button dd-button--primary",
         () => void handlers.completeCrafting(character.characterId),
         readOnly
