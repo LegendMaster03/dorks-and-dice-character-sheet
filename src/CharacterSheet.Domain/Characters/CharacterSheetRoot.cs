@@ -788,12 +788,30 @@ public sealed class CharacterSheetRoot
 
     public CharacterInventoryItemOccurrence AddInventoryItemOccurrence(
         string ruleConceptKey,
+        DateTimeOffset createdAt) =>
+        AddInventoryItemOccurrence(
+            ruleConceptKey,
+            customName: null,
+            createdAt);
+
+    public CharacterInventoryItemOccurrence AddCustomInventoryItemOccurrence(
+        string customName,
+        DateTimeOffset createdAt) =>
+        AddInventoryItemOccurrence(
+            ruleConceptKey: null,
+            customName,
+            createdAt);
+
+    private CharacterInventoryItemOccurrence AddInventoryItemOccurrence(
+        string? ruleConceptKey,
+        string? customName,
         DateTimeOffset createdAt)
     {
         var occurrence = new CharacterInventoryItemOccurrence(
             Guid.NewGuid(),
             CharacterId,
-            CharacterRuleReference.NormalizeConceptKey(ruleConceptKey),
+            ruleConceptKey,
+            customName,
             createdAt);
         InventoryItemOccurrences.Add(occurrence);
         Touch(createdAt);
