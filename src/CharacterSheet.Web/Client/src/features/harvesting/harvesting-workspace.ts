@@ -99,7 +99,7 @@ export function renderHarvestingLauncher(
         createElement(
             "p",
             "dd-harvesting-launcher__copy",
-            "Resolve creature harvesting, helpers, cumulative Harvest DCs, and Loot Tavern crafting without expanding the Character Sheet Actions list."),
+            "Harvest components from creatures and craft items using the Loot Tavern Harvesting & Crafting rules."),
         createButton(
             "Open Harvesting & Crafting",
             "dd-button dd-button--secondary",
@@ -156,7 +156,7 @@ function renderHarvestingPanel(
     }
     if (state.catalog === null) {
         panel.append(createInlineState(
-            "Harvesting rules could not be loaded from Rules Core.",
+            "Harvesting rules could not be loaded.",
             "error"));
         return panel;
     }
@@ -507,10 +507,10 @@ function renderHelperInputs(
             row.append(source);
 
             if (helper.resolutionStatus === "loading") {
-                row.append(createInlineState("Resolving helper mechanics…", "loading"));
+                row.append(createInlineState("Loading helper Character…", "loading"));
             } else if (helper.resolutionStatus === "error") {
                 row.append(createInlineState(
-                    "Resolved helper data is incomplete. Manual values below remain editable.",
+                    "Helper Character data is incomplete. Enter the values below manually.",
                     "warning"));
             }
         }
@@ -524,7 +524,7 @@ function renderHelperInputs(
                 readOnly,
                 0));
         row.append(booleanField(
-            "Proficient in the associated competency",
+            "Proficient with the required skill",
             helper.isProficient,
             value => handlers.updateHelper(index, { ...helper, isProficient: value }),
             readOnly));
@@ -571,7 +571,7 @@ function renderHarvestOrder(
     card.append(createElement(
         "p",
         "dd-harvesting-field__help",
-        "Order matters. Rules Core adds each Component DC to all previous Component DCs to produce the cumulative Harvest DC."));
+        "Order matters. Each Component DC is added to the previous Component DCs to produce the cumulative Harvest DC."));
 
     const byKey = new Map(
         state.table?.components.map(component => [component.key, component]) ?? []);
@@ -611,7 +611,7 @@ function renderOutcome(
     readOnly: boolean
 ): HTMLElement {
     if (state.outcomeStatus === "loading") {
-        return createInlineState("Rules Core is calculating the Harvesting outcome…", "loading");
+        return createInlineState("Calculating the Harvesting result…", "loading");
     }
     if (state.outcome === null) {
         return createElement("div");
@@ -670,7 +670,7 @@ function renderRulesSource(state: HarvestingCraftingUiState): HTMLElement {
         "p",
         "dd-harvesting-workspace__source",
         source === undefined
-            ? "Rules Core resolves the effective Harvesting & Crafting mechanics."
+            ? "Loading Harvesting & Crafting rules."
             : `Rules: ${source.provider} — ${source.workDisplayName}. `);
     if (source !== undefined && isSafeHttpsUrl(source.referenceUri)) {
         const link = document.createElement("a");
