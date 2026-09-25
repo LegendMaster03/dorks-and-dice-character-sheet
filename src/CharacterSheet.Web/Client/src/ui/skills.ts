@@ -452,8 +452,6 @@ function renderCompetencyDetailContent(competency: CompetencyView): HTMLElement 
         facts,
         "Training",
         competency.training ?? (competency.supportsTrainingState === true ? "-" : undefined));
-    appendOptionalFact(facts, "Family", competency.family);
-    appendOptionalFact(facts, "Specialty", competency.specialty);
     if (competency.classSkill !== undefined) {
         appendOptionalFact(facts, "Class skill", competency.classSkill ? "Yes" : "No");
     } else if (competency.supportsClassSkillState === true) {
@@ -599,8 +597,6 @@ function hasCompetencyDetails(competency: CompetencyView): boolean {
         || competency.classSkill !== undefined
         || competency.trainedOnly !== undefined
         || competency.armorCheckPenalty !== undefined
-        || competency.family !== undefined
-        || competency.specialty !== undefined
         || competency.supportsRanks === true
         || competency.supportsClassSkillState === true
         || competency.supportsTrainingState === true
