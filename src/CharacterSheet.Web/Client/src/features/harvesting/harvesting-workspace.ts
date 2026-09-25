@@ -706,19 +706,18 @@ function renderCraftingPanel(
     }
 
     if (state.craftingRequiresManufacturing && state.craftingRequiresEnchanting) {
-        const steps = createSectionCard("Crafting Steps", "dd-crafting-procedure");
-        const choices = createElement("div", "dd-harvesting-choice-row");
-        choices.append(
-            sourceButton(
-                `1. Manufacturing · ${stageState(true, state.craftingManufacturingSucceeded)}`,
-                state.craftingProcedure === "manufacturing",
-                () => handlers.setCraftingProcedure("manufacturing")),
-            sourceButton(
-                `2. Enchanting · ${stageState(true, state.craftingEnchantingSucceeded)}`,
-                state.craftingProcedure === "enchanting",
-                () => handlers.setCraftingProcedure("enchanting")));
-        steps.append(choices);
-        panel.append(steps);
+        const progress = createSectionCard("Crafting Progress", "dd-crafting-procedure");
+        const facts = createElement("dl", "dd-harvesting-facts");
+        appendFact(
+            facts,
+            "1. Manufacturing",
+            stageState(true, state.craftingManufacturingSucceeded));
+        appendFact(
+            facts,
+            "2. Enchanting",
+            stageState(true, state.craftingEnchantingSucceeded));
+        progress.append(facts);
+        panel.append(progress);
     }
 
     panel.append(renderCraftingStage(
@@ -867,6 +866,29 @@ function renderCraftingStage(
                 "p",
                 "dd-harvesting-field__help",
                 "The selected materials will be consumed when this crafting attempt is finalized."));
+        }
+
+        const manufacturingTimeComplete =
+            state.craftingManufacturingRequiredHours !== null
+            && state.craftingManufacturingRequiredHours > 0
+            && state.craftingManufacturingCompletedHours
+                >= state.craftingManufacturingRequiredHours;
+        if (manufacturing
+            && resolution.total !== null
+            && resolution.producesFunctionalOutput
+            && state.craftingRequiresEnchanting
+            && state.craftingEnchantingSucceeded === null) {
+            if (manufacturingTimeComplete) {
+                card.append(createButton(
+                    "Continue to Enchanting",
+                    "dd-button dd-button--primary",
+                    () => handlers.setCraftingProcedure("enchanting"),
+                    readOnly));
+            } else {
+                card.append(createInlineState(
+                    "Finish the required Manufacturing time before moving to Enchanting.",
+                    "warning"));
+            }
         }
     }
 
