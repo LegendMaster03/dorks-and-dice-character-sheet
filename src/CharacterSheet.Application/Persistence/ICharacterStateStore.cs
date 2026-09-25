@@ -77,6 +77,7 @@ public interface ICharacterStateStore
     Task<CharacterSheetRoot?> AddCustomInventoryItemOccurrenceAsync(
         Guid characterId,
         string customName,
+        int quantity,
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
