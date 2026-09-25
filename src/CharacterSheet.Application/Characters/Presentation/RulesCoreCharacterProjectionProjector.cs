@@ -502,21 +502,29 @@ internal static class RulesCoreCharacterProjectionProjector
                     ? null
                     : ResolveEffectiveGoverningAbility(mechanics.GoverningAbility);
                 var rankInputKey = ResolveUniversalRankInputKey(value);
+                var presentAsCompetency = string.Equals(
+                    value.PresentationCategory,
+                    "competency",
+                    StringComparison.OrdinalIgnoreCase);
 
                 return new CompetencyPresentationView(
                     value.SemanticKey,
                     value.DisplayName,
                     CharacterMechanicsProjector.Unconfigured,
-                    Kind: value.IsFamily
-                        ? "family"
-                        : mechanics?.CompetencyKind ?? "competency",
+                    Kind: presentAsCompetency
+                        ? "competency"
+                        : value.IsFamily
+                            ? "family"
+                            : mechanics?.CompetencyKind ?? "competency",
                     GoverningAbility: governingAbility,
                     TrainedOnly: mechanics?.TrainedOnly,
                     ArmorCheckPenalty: mechanics?.ArmorCheckPenaltyApplies is bool applies
                         ? new ArmorCheckPenaltyPresentationView(applies)
                         : null,
-                    Family: value.FamilyName,
-                    Specialty: value.IsFamily || value.FamilyName is null
+                    Family: presentAsCompetency ? null : value.FamilyName,
+                    Specialty: presentAsCompetency
+                        || value.IsFamily
+                        || value.FamilyName is null
                         ? null
                         : value.DisplayName,
                     SupportsRanks:
@@ -532,12 +540,16 @@ internal static class RulesCoreCharacterProjectionProjector
                         && (mechanics?.SupportsTrainingState == true
                             || value.Facets.Any(facet => facet.SupportsTrainingState)
                             || !string.IsNullOrWhiteSpace(value.TrainingStateKey)),
-                    SourceAttributions: SourceAttributionMapper.Map(value.SourceAttributions),
+                    SourceAttributions: presentAsCompetency
+                        ? null
+                        : SourceAttributionMapper.Map(value.SourceAttributions),
                     IdentityKey: value.IdentityKey,
                     IdentityName: value.DisplayName,
                     SharedTrainingKey: value.TrainingStateKey,
                     IsFamily: value.IsFamily,
-                    Facets: CompetencyProjector.ProjectFacets(value.Facets),
+                    Facets: presentAsCompetency
+                        ? null
+                        : CompetencyProjector.ProjectFacets(value.Facets),
                     RelatedCompetencies:
                         CompetencyProjector.ProjectRelatedCompetencies(
                             value.RelatedCompetencies),
