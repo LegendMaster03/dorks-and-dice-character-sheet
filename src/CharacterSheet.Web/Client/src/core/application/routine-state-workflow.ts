@@ -35,8 +35,8 @@ export function createRoutineStateWorkflow(
         const inventoryReferences = state.inventoryItemOccurrences
             .filter(occurrence => occurrence.ruleConceptKey !== null)
             .map(async occurrence => {
+            const conceptKey = occurrence.ruleConceptKey!;
             try {
-                const conceptKey = occurrence.ruleConceptKey!;
                 const rule = await resolveRuleConcept(
                     environment,
                     conceptKey);
