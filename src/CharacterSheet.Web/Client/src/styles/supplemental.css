@@ -112,6 +112,61 @@
     gap: 0.75rem;
 }
 
+.dd-crafting-workshop {
+    grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1.55fr);
+    align-items: start;
+}
+
+.dd-crafting-workshop__sidebar,
+.dd-crafting-workshop__work,
+.dd-crafting-tracker__stages {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.dd-crafting-workshop__sidebar {
+    position: sticky;
+    top: 5.75rem;
+}
+
+.dd-crafting-tracker__name {
+    font-size: 1rem;
+}
+
+.dd-crafting-tracker__stage {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.7rem;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-crafting-tracker__stage--active {
+    border-color: var(--dd-sheet-accent-border);
+    box-shadow: inset 0.2rem 0 0 var(--dd-sheet-accent);
+}
+
+.dd-crafting-tracker__stage-heading {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.dd-crafting-tracker__stage-heading span,
+.dd-crafting-tracker__time {
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+}
+
+.dd-crafting-tracker__progress {
+    width: 100%;
+    min-height: 0.6rem;
+    accent-color: var(--dd-sheet-accent);
+}
+
 .dd-crafting-stage-inputs {
     grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
@@ -237,6 +292,16 @@
 
 .dd-harvesting-outcome__component--awarded {
     border-width: 2px;
+}
+
+@media (max-width: 960px) {
+    .dd-crafting-workshop {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-crafting-workshop__sidebar {
+        position: static;
+    }
 }
 
 @media (max-width: 720px) {
