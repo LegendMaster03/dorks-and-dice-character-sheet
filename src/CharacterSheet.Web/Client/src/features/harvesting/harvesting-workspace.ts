@@ -923,13 +923,13 @@ function renderManualRecipe(
 
     if (state.craftingRequiresManufacturing) {
         card.append(
-            numberField(
+            decimalField(
                 "Manufacturing time required (hours)",
                 state.craftingManufacturingRequiredHours,
                 handlers.setCraftingManufacturingRequiredHours,
                 readOnly,
-                1),
-            numberField(
+                0.01),
+            decimalField(
                 "Manufacturing time completed (hours)",
                 state.craftingManufacturingCompletedHours,
                 value => handlers.setCraftingManufacturingCompletedHours(value ?? 0),
@@ -939,13 +939,13 @@ function renderManualRecipe(
 
     if (state.craftingRequiresEnchanting) {
         card.append(
-            numberField(
+            decimalField(
                 "Enchanting time required (hours)",
                 state.craftingEnchantingRequiredHours,
                 handlers.setCraftingEnchantingRequiredHours,
                 readOnly,
-                1),
-            numberField(
+                0.01),
+            decimalField(
                 "Enchanting time completed (hours)",
                 state.craftingEnchantingCompletedHours,
                 value => handlers.setCraftingEnchantingCompletedHours(value ?? 0),
@@ -1090,6 +1090,34 @@ function textField(
     input.value = value;
     input.disabled = readOnly;
     input.addEventListener("change", () => onChange(input.value));
+    label.append(input);
+    return label;
+}
+
+function decimalField(
+    labelText: string,
+    value: number | null,
+    onChange: (value: number | null) => void,
+    readOnly: boolean,
+    minimum?: number
+): HTMLElement {
+    const label = createElement("label", "dd-harvesting-field");
+    label.append(createElement("span", "dd-harvesting-field__label", labelText));
+    const input = createElement("input", "dd-harvesting-field__control");
+    input.type = "number";
+    input.step = "any";
+    if (minimum !== undefined) input.min = String(minimum);
+    input.value = value === null ? "" : String(value);
+    input.disabled = readOnly;
+    input.addEventListener("change", () => {
+        const normalized = input.value.trim();
+        if (normalized.length === 0) {
+            onChange(null);
+            return;
+        }
+        const parsed = Number.parseFloat(normalized);
+        onChange(Number.isFinite(parsed) ? parsed : null);
+    });
     label.append(input);
     return label;
 }
