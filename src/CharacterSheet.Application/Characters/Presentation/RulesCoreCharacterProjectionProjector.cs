@@ -533,21 +533,20 @@ internal static class RulesCoreCharacterProjectionProjector
                     IdentityName: value.DisplayName,
                     SharedTrainingKey: value.TrainingStateKey,
                     IsFamily: value.IsFamily,
-                    RelatedCompetencies: value.RelatedCompetencies.Count == 0
-                        ? null
-                        : value.RelatedCompetencies.Select(related =>
-                            new RelatedCompetencyPresentationView(
-                                related.Kind,
-                                related.TargetType,
-                                related.TargetName,
-                                related.Scope,
-                                related.SharesTrainingState)).ToArray(),
+                    Facets: CompetencyProjector.ProjectFacets(value.Facets),
+                    RelatedCompetencies:
+                        CompetencyProjector.ProjectRelatedCompetencies(
+                            value.RelatedCompetencies),
                     ChildCompetencyKeys: value.ChildCompetencyKeys.Count == 0
                         ? null
                         : value.ChildCompetencyKeys,
                     MechanicKeys: value.MechanicKeys.Count == 0
                         ? null
                         : value.MechanicKeys,
+                    CompatibilityMechanicKeys:
+                        value.CompatibilityMechanicKeys.Count == 0
+                            ? null
+                            : value.CompatibilityMechanicKeys,
                     PresentationCategory: value.PresentationCategory,
                     RankInputKey: rankInputKey);
             })
