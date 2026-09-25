@@ -591,11 +591,6 @@ function renderHarvestOrder(
             readOnly));
     }
 
-    card.append(createButton(
-        state.outcomeStatus === "loading" ? "Calculating…" : "Calculate Harvest",
-        "dd-button dd-button--primary",
-        () => void handlers.evaluate(),
-        readOnly || state.outcomeStatus === "loading"));
     return card;
 }
 
@@ -609,11 +604,22 @@ function renderOutcome(
         return createInlineState("Calculating the Harvesting result…", "loading");
     }
     if (state.outcome === null) {
-        return createElement("div");
+        const card = createSectionCard("Harvest Result", "dd-harvesting-outcome");
+        card.append(
+            createElement(
+                "p",
+                "dd-harvesting-field__help",
+                "After the harvest order, checks, creature size, and helpers are set, calculate which components were recovered."),
+            createButton(
+                "Calculate Harvest",
+                "dd-button dd-button--primary",
+                () => void handlers.evaluate(),
+                readOnly));
+        return card;
     }
 
     const outcome = state.outcome;
-    const card = createSectionCard("Harvesting Result", "dd-harvesting-outcome");
+    const card = createSectionCard("Harvest Result", "dd-harvesting-outcome");
     const summary = createElement("dl", "dd-harvesting-facts");
     appendFact(summary, "Assessment", String(outcome.assessmentResult));
     appendFact(summary, "Carving", String(outcome.carvingResult));
@@ -1239,6 +1245,42 @@ function renderCraftingCompletion(
 ): HTMLElement {
     const card = createSectionCard("Finish Crafting", "dd-crafting-completion");
 
+    const manufacturingResolved =
+        !state.craftingRequiresManufacturing
+        || state.craftingManufacturingSucceeded !== null;
+    const manufacturingTimeReady =
+        !state.craftingRequiresManufacturing
+        || (state.craftingManufacturingRequiredHours !== null
+            && state.craftingManufacturingRequiredHours > 0
+            && state.craftingManufacturingCompletedHours
+                >= state.craftingManufacturingRequiredHours);
+    const enchantingRequired =
+        state.craftingRequiresEnchanting
+        && (!state.craftingRequiresManufacturing
+            || state.craftingManufacturingSucceeded === true);
+    const enchantingResolved =
+        !enchantingRequired
+        || state.craftingEnchantingSucceeded !== null;
+    const enchantingTimeReady =
+        !enchantingRequired
+        || (state.craftingEnchantingRequiredHours !== null
+            && state.craftingEnchantingRequiredHours > 0
+            && state.craftingEnchantingCompletedHours
+                >= state.craftingEnchantingRequiredHours);
+    const projectNamed =
+        state.craftingRecipeName.trim().length > 0
+        && state.craftingOutputName.trim().length > 0;
+    const hasStep =
+        state.craftingRequiresManufacturing
+        || state.craftingRequiresEnchanting;
+    const readyToFinalize =
+        projectNamed
+        && hasStep
+        && manufacturingResolved
+        && manufacturingTimeReady
+        && enchantingResolved
+        && enchantingTimeReady;
+
     if (state.craftingCompleted) {
         card.append(createInlineState(
             "This crafting attempt has been finalized and Inventory has been updated.",
@@ -1251,16 +1293,20 @@ function renderCraftingCompletion(
                 state.craftingManufacturingSucceeded));
         }
         if (state.craftingRequiresEnchanting) {
-            appendFact(status, "Enchanting", stageState(
-                true,
-                state.craftingEnchantingSucceeded));
+            appendFact(status, "Enchanting", enchantingRequired
+                ? stageState(true, state.craftingEnchantingSucceeded)
+                : state.craftingManufacturingSucceeded === false
+                    ? "Skipped after Manufacturing failure"
+                    : "Waiting for Manufacturing");
         }
         card.append(
             status,
             createElement(
                 "p",
                 "dd-harvesting-field__help",
-                "When you finish, the selected materials are consumed and the crafted output is added to Inventory if the resolved result produced a functional item."));
+                readyToFinalize
+                    ? "The attempt is ready to finalize. Inventory will be updated in one transaction."
+                    : "Complete the required crafting steps and time before finalizing the attempt."));
     }
 
     card.append(createButton(
@@ -1272,6 +1318,7 @@ function renderCraftingCompletion(
         "dd-button dd-button--primary",
         () => void handlers.completeCrafting(character.characterId),
         readOnly
+            || !readyToFinalize
             || state.craftingCompletionStatus === "loading"
             || state.craftingCompleted));
     return card;
