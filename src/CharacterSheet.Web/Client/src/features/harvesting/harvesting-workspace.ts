@@ -59,7 +59,8 @@ export function renderHarvestingCraftingWorkspace(
     }
     workspace.append(modeNav);
 
-    workspace.append(renderRulesScope(character, state, handlers));
+    const campaignContext = renderCampaignContext(character, state, handlers);
+    if (campaignContext !== null) workspace.append(campaignContext);
 
     if (state.message !== undefined) {
         workspace.append(createInlineState(
@@ -107,37 +108,37 @@ export function renderHarvestingLauncher(
     return card;
 }
 
-function renderRulesScope(
+function renderCampaignContext(
     character: CharacterSheetBootstrapResponse,
     state: HarvestingCraftingUiState,
     handlers: HarvestingCraftingWorkflow
-): HTMLElement {
-    const card = createSectionCard("Rules Scope", "dd-harvesting-scope");
+): HTMLElement | null {
+    const campaigns = character.campaigns ?? [];
+    if (campaigns.length <= 1) return null;
+
+    const card = createSectionCard("Campaign", "dd-harvesting-scope");
     const label = createElement("label", "dd-harvesting-field");
-    label.append(createElement("span", "dd-harvesting-field__label", "Effective rules"));
+    label.append(createElement(
+        "span",
+        "dd-harvesting-field__label",
+        "This attempt belongs to"));
 
     const select = createElement("select", "dd-harvesting-field__control");
-    const global = createElement("option");
-    global.value = "";
-    global.textContent = "Global rules";
-    select.append(global);
-
-    for (const campaign of character.campaigns ?? []) {
+    for (const campaign of campaigns) {
         const option = createElement("option");
         option.value = campaign.campaignId;
         option.textContent = campaign.name;
         select.append(option);
     }
-    select.value = state.scopeCampaignId ?? "";
-    select.addEventListener("change", () =>
-        handlers.setScope(select.value.length === 0 ? null : select.value));
+    select.value = state.scopeCampaignId ?? campaigns[0]?.campaignId ?? "";
+    select.addEventListener("change", () => handlers.setScope(select.value));
     label.append(select);
     card.append(
         label,
         createElement(
             "p",
             "dd-harvesting-field__help",
-            "Campaign rules are used only when you explicitly select a campaign here."));
+            "This Character belongs to more than one campaign. Choose the campaign for this Harvesting or Crafting attempt."));
     return card;
 }
 
@@ -163,7 +164,7 @@ function renderHarvestingPanel(
     panel.append(renderCreatureSelection(state, handlers));
 
     if (state.tableStatus === "loading") {
-        panel.append(createInlineState("Resolving the effective Harvesting table…", "loading"));
+        panel.append(createInlineState("Loading harvestable components…", "loading"));
         return panel;
     }
     if (state.table === null) {
@@ -171,7 +172,6 @@ function renderHarvestingPanel(
     }
 
     panel.append(
-        renderResolvedTableSummary(state),
         renderAvailableHarvestComponents(state, handlers, readOnly),
         renderHarvestingInputs(state, handlers, readOnly),
         renderHelperInputs(state, handlers, readOnly),
@@ -217,7 +217,7 @@ function renderCreatureSelection(
         const searchRow = createElement("div", "dd-harvesting-search");
         const input = createElement("input", "dd-harvesting-field__control");
         input.type = "search";
-        input.placeholder = "Search Rules Core monsters";
+        input.placeholder = "Search creatures";
         input.value = state.monsterQuery;
         input.setAttribute("aria-label", "Search creatures");
         const search = createButton(
@@ -251,25 +251,18 @@ function renderCreatureSelection(
         }
     }
 
-    card.append(createButton(
-        state.tableStatus === "loading" ? "Resolving…" : "Resolve Harvesting Table",
-        "dd-button dd-button--primary",
-        () => void handlers.resolveTable(),
-        state.tableStatus === "loading"));
-    return card;
-}
+    if (state.table !== null) {
+        const facts = createElement("dl", "dd-harvesting-facts");
+        appendFact(
+            facts,
+            "Harvesting skill",
+            state.table.competencyDisplayName);
+        if (state.table.creatureSize !== null) {
+            appendFact(facts, "Size", state.table.creatureSize);
+        }
+        card.append(facts);
+    }
 
-function renderResolvedTableSummary(state: HarvestingCraftingUiState): HTMLElement {
-    const table = state.table!;
-    const card = createSectionCard("Resolved Harvesting Rule", "dd-harvesting-rule-summary");
-    const facts = createElement("dl", "dd-harvesting-facts");
-    appendFact(facts, "Creature", table.creatureDisplayName ?? table.creatureTypeDisplayName);
-    appendFact(facts, "Creature type", table.creatureTypeDisplayName);
-    appendFact(facts, "Competency", table.competencyDisplayName);
-    appendFact(facts, "Universal key", table.competencyKey);
-    appendFact(facts, "Size", table.creatureSize ?? "Not supplied by source");
-    appendFact(facts, "GM edits", table.manualEditsApplied ? "Applied" : "None");
-    card.append(facts);
     return card;
 }
 
@@ -405,7 +398,7 @@ function renderHarvestingInputs(
     card.append(createElement(
         "p",
         "dd-harvesting-field__help",
-        "Enter the resolved check totals. Manual entry remains available even when a Character or competency is not represented in the digital sheet."));
+        "Enter the final Assessment and Carving totals. These can come from physical dice, another roller, or the Character's resolved modifiers."));
 
     const grid = createElement("div", "dd-harvesting-input-grid");
     grid.append(
@@ -451,16 +444,16 @@ function renderHarvestingInputs(
         createElement(
             "span",
             "",
-            "The same creature performs both Assessment and Carving"));
+            "The same character performs both Assessment and Carving"));
     card.append(sameActor);
 
-    const rollMode = state.sameActor
-        ? state.catalog?.procedure.sameActorRollMode ?? "disadvantage"
-        : state.catalog?.procedure.assessment.defaultRollMode ?? "normal";
+    const competency = state.table?.competencyDisplayName ?? "the associated skill";
     card.append(createElement(
         "p",
         "dd-harvesting-field__help",
-        `Effective roll mode for both checks: ${humanize(rollMode)}.`));
+        state.sameActor
+            ? `The same character is doing both jobs, so both checks use disadvantage. Assessment uses Intelligence + ${competency}; Carving uses Dexterity + ${competency}.`
+            : `Assessment uses Intelligence + ${competency}; Carving uses Dexterity + ${competency}.`));
     return card;
 }
 
