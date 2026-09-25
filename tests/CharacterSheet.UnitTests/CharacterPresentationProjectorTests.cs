@@ -280,6 +280,7 @@ public sealed class CharacterPresentationProjectorTests
                     [],
                     [],
                     new RulesCoreUniversalCompetencyMechanicsView(
+                        "skill",
                         new RulesCoreUniversalGoverningAbilityView(
                             "fixed",
                             "intelligence",
@@ -372,6 +373,7 @@ public sealed class CharacterPresentationProjectorTests
             [],
             [],
             new RulesCoreUniversalCompetencyMechanicsView(
+                "skill",
                 new RulesCoreUniversalGoverningAbilityView(
                     "fixed",
                     "wis",
@@ -429,6 +431,7 @@ public sealed class CharacterPresentationProjectorTests
             [],
             [],
             new RulesCoreUniversalCompetencyMechanicsView(
+                "skill",
                 new RulesCoreUniversalGoverningAbilityView(
                     "none",
                     null,

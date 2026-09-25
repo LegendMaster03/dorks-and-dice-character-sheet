@@ -87,8 +87,10 @@ internal static class RulesCoreCharacterProjectionProjector
                 value.RelatedMechanicKeys,
                 value.RelatedConceptKeys))
             .ToArray();
+        var effectiveCompetencyFallback = fallback?.Competencies
+            ?? ProjectEffectiveCompetencyMetadata(projection.Competencies);
         var competencies = ProjectCompetencies(
-            fallback?.Competencies,
+            effectiveCompetencyFallback,
             projection.Mechanics,
             state);
         var inventory = ProjectInventory(state, projection.Equipment);
@@ -478,6 +480,95 @@ internal static class RulesCoreCharacterProjectionProjector
         return occurrences.Length == 0
             ? null
             : new InventoryMechanicsPresentationView(occurrences);
+    }
+
+    private static CompetencyCollectionPresentationView? ProjectEffectiveCompetencyMetadata(
+        IReadOnlyList<RulesCoreUniversalCompetencyView>? competencies)
+    {
+        if (competencies is null || competencies.Count == 0)
+        {
+            return null;
+        }
+
+        var entries = competencies
+            .Select(value =>
+            {
+                var mechanics = value.Mechanics;
+                var governingAbility = mechanics?.GoverningAbility is null
+                    ? null
+                    : ResolveEffectiveGoverningAbility(mechanics.GoverningAbility);
+                var rankInputKey = mechanics?.SupportsRanks == true
+                    ? value.MechanicKeys
+                        .Select(ConceptKeyFromCompetencyMechanicKey)
+                        .FirstOrDefault(key => key is not null)
+                    : null;
+
+                return new CompetencyPresentationView(
+                    value.SemanticKey,
+                    value.DisplayName,
+                    CharacterMechanicsProjector.Unconfigured,
+                    Kind: value.IsFamily
+                        ? "family"
+                        : mechanics?.CompetencyKind ?? "competency",
+                    GoverningAbility: governingAbility,
+                    TrainedOnly: mechanics?.TrainedOnly,
+                    ArmorCheckPenalty: mechanics?.ArmorCheckPenaltyApplies is bool applies
+                        ? new ArmorCheckPenaltyPresentationView(applies)
+                        : null,
+                    Family: value.FamilyName,
+                    Specialty: value.IsFamily || value.FamilyName is null
+                        ? null
+                        : value.DisplayName,
+                    SupportsRanks: !value.IsFamily && mechanics?.SupportsRanks == true,
+                    SupportsClassSkillState:
+                        !value.IsFamily && mechanics?.SupportsClassSkillState == true,
+                    SupportsTrainingState:
+                        !value.IsFamily && mechanics?.SupportsTrainingState == true,
+                    SourceAttributions: SourceAttributionMapper.Map(value.SourceAttributions),
+                    IdentityKey: value.IdentityKey,
+                    IdentityName: value.DisplayName,
+                    SharedTrainingKey: value.TrainingStateKey,
+                    IsFamily: value.IsFamily,
+                    RelatedCompetencies: value.RelatedCompetencies.Count == 0
+                        ? null
+                        : value.RelatedCompetencies.Select(related =>
+                            new RelatedCompetencyPresentationView(
+                                related.Kind,
+                                related.TargetType,
+                                related.TargetName,
+                                related.Scope,
+                                related.SharesTrainingState)).ToArray(),
+                    ChildCompetencyKeys: value.ChildCompetencyKeys.Count == 0
+                        ? null
+                        : value.ChildCompetencyKeys,
+                    MechanicKeys: value.MechanicKeys.Count == 0
+                        ? null
+                        : value.MechanicKeys,
+                    RankInputKey: rankInputKey);
+            })
+            .ToArray();
+
+        return new CompetencyCollectionPresentationView(entries);
+    }
+
+    private static string? ResolveEffectiveGoverningAbility(
+        RulesCoreUniversalGoverningAbilityView governingAbility)
+    {
+        if (string.Equals(governingAbility.ResolutionKind, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(governingAbility.FixedAbilityKey))
+        {
+            return governingAbility.FixedAbilityKey;
+        }
+
+        var values = governingAbility.AbilityKeys
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return values.Length == 0 ? null : string.Join(" / ", values);
     }
 
     private static CompetencyCollectionPresentationView? ProjectCompetencies(

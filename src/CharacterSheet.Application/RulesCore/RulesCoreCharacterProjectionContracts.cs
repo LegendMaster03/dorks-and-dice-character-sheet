@@ -254,6 +254,13 @@ public sealed record RulesCoreCharacterProjectionConflictView(
     IReadOnlyList<string> RelatedMechanicKeys,
     IReadOnlyList<string> RelatedConceptKeys);
 
+public sealed record RulesCoreCharacterRuleResolutionView(
+    string ConceptKey,
+    string State,
+    bool RequiresAdjudication,
+    Guid SourceEntityRevisionId,
+    int SourceRevisionNumber);
+
 public sealed record RulesCoreCharacterRulesProjectionView(
     string Scope,
     Guid? CampaignId,
@@ -273,4 +280,6 @@ public sealed record RulesCoreCharacterRulesProjectionView(
     IReadOnlyList<RulesCoreCharacterChoiceView> Choices,
     IReadOnlyList<RulesCoreCharacterPrerequisiteView> Prerequisites,
     IReadOnlyList<RulesCoreCharacterProjectionConflictView> Conflicts,
-    IReadOnlyList<RulesCoreCharacterEquipmentDefinitionView> Equipment);
+    IReadOnlyList<RulesCoreCharacterEquipmentDefinitionView> Equipment,
+    IReadOnlyList<RulesCoreUniversalCompetencyView>? Competencies = null,
+    IReadOnlyList<RulesCoreCharacterRuleResolutionView>? RuleResolutions = null);

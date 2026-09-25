@@ -36,28 +36,6 @@ public sealed class DelegatedRulesCoreGatewayTests
                 return new HttpResponseMessage(HttpStatusCode.NotFound);
             }
 
-            if (path.EndsWith("/api/rules/mechanics", StringComparison.Ordinal)
-                && request.Method == HttpMethod.Get)
-            {
-                return Ok(new RulesCoreMechanicsCatalogView(
-                    "global",
-                    null,
-                    1,
-                    DateTimeOffset.UtcNow,
-                    []));
-            }
-
-            if (path.EndsWith("/api/rules/mechanics/evaluate", StringComparison.Ordinal)
-                && request.Method == HttpMethod.Post)
-            {
-                return Ok(new RulesCoreMechanicsBatchEvaluationView(
-                    "global",
-                    null,
-                    1,
-                    DateTimeOffset.UtcNow,
-                    []));
-            }
-
             throw new InvalidOperationException($"Unexpected delegated request: {request.Method} {path}");
         });
         var httpContext = await AuthenticatedContextAsync(withDelegation: true);
@@ -68,14 +46,11 @@ public sealed class DelegatedRulesCoreGatewayTests
 
         var resolved = await gateway.ResolveGlobalRulesAsync(
             ["feat:alert", "position.acquisitions-documancer", "missing:rule"]);
-        await gateway.GetGlobalMechanicsAsync();
-        await gateway.EvaluateGlobalMechanicsAsync(new RulesCoreMechanicsBatchEvaluationRequest([]));
-
         Assert.Equal(2, resolved.Count);
         Assert.Equal("feat", resolved["feat:alert"].EntityType);
         Assert.Equal("charoption", resolved["position.acquisitions-documancer"].EntityType);
         Assert.False(resolved.ContainsKey("missing:rule"));
-        Assert.Equal(5, handler.Requests.Count);
+        Assert.Equal(3, handler.Requests.Count);
         Assert.All(handler.Requests, request =>
         {
             Assert.Equal(
@@ -104,7 +79,9 @@ public sealed class DelegatedRulesCoreGatewayTests
             new HttpContextAccessor { HttpContext = httpContext },
             NullLogger<DelegatedRulesCoreGateway>.Instance);
 
-        await Assert.ThrowsAsync<RulesCoreGatewayException>(() => gateway.GetGlobalMechanicsAsync());
+        await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+            gateway.ResolveGlobalCharacterMechanicsAsync(
+                new RulesCoreCharacterRulesProjectionRequest()));
 
         Assert.Empty(handler.Requests);
     }
