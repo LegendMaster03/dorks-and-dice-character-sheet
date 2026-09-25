@@ -450,14 +450,21 @@ test("production Character Sheet drives competencies from the nullable mechanics
 });
 
 
-test("Skills and Competencies render as independent cards with independent presentation systems", () => {
+test("Competency details show one shared proficiency plus only play-relevant mechanics", () => {
     const skills = renderSkillsCard([standalone(competency("arcana", "Arcana", "+7"))]);
     const competencies = renderCompetenciesCard([
         standalone(competency("alchemy", "Alchemy", "-", {
+            training: "Proficient",
+            ranks: 4,
             supportsRanks: true,
             supportsClassSkillState: true,
             supportsTrainingState: true,
             governingAbility: "intelligence",
+            classSkill: true,
+            trainedOnly: false,
+            armorCheckPenalty: { applies: false },
+            family: "Craft",
+            specialty: "Alchemy",
             facets: [
                 {
                     facetType: "skill",
@@ -471,6 +478,9 @@ test("Skills and Competencies render as independent cards with independent prese
                     supportsClassSkillState: false,
                     supportsTrainingState: true
                 }
+            ],
+            sourceAttributions: [
+                { key: "history", label: "Historical source" }
             ],
             relatedCompetencies: [
                 {
@@ -490,16 +500,50 @@ test("Skills and Competencies render as independent cards with independent prese
     assert.equal(byClass(competencies, "dd-skills-card").length, 0);
     assert.equal(byClass(competencies, "dd-skill-row").length, 0);
     assert.equal(byClass(competencies, "dd-competency-row").length, 1);
+
+    const text = visibleText(competencies);
     assert.match(visibleText(skills), /Skills/);
-    assert.match(visibleText(competencies), /Competencies/);
-    assert.match(visibleText(competencies), /Competency details/);
-    assert.match(visibleText(competencies), /Implementations/);
-    assert.match(visibleText(competencies), /Skill/);
-    assert.match(visibleText(competencies), /Tool/);
-    assert.match(visibleText(competencies), /Related competencies/);
-    assert.doesNotMatch(visibleText(competencies), /Skill rules/);
+    assert.match(text, /Competencies/);
+    assert.match(text, /Competency details/);
+    assert.match(text, /Training \/ Proficiency\s+Proficient/);
+    assert.match(text, /Ranks\s+4/);
+    assert.match(text, /Ability\s+intelligence/);
+    assert.match(text, /Class skill\s+Yes/);
+    assert.match(text, /Trained only\s+No/);
+    assert.match(text, /Armor Check Penalty\s+Does not apply/);
+    assert.match(text, /Related competencies/);
+    assert.match(text, /Herbalism/);
+    assert.doesNotMatch(text, /Implementations/);
+    assert.doesNotMatch(text, /Family\s+Craft/);
+    assert.doesNotMatch(text, /Specialty\s+Alchemy/);
+    assert.doesNotMatch(text, /Historical source|Sources/);
+    assert.doesNotMatch(text, /Skill rules/);
     assert.equal(byClass(skills, "dd-skills-search")[0].placeholder, "Search skills");
     assert.equal(byClass(competencies, "dd-competency-search")[0].placeholder, "Search competencies");
+});
+
+test("a competency with only shared training state stays a simple row without a redundant breakout", () => {
+    const card = renderCompetenciesCard([
+        standalone(competency("glassblowing", "Glassblowing", "-", {
+            training: "Proficient",
+            supportsTrainingState: true,
+            family: "Craft",
+            specialty: "Glassblowing",
+            facets: [{
+                facetType: "tool",
+                supportsRanks: false,
+                supportsClassSkillState: false,
+                supportsTrainingState: true
+            }],
+            sourceAttributions: [{ key: "source", label: "Source history" }]
+        }))
+    ]);
+
+    assert.equal(byClass(card, "dd-competency-row--standalone").length, 1);
+    assert.equal(byClass(card, "dd-competency-disclosure").length, 0);
+    assert.match(visibleText(card), /Glassblowing/);
+    assert.match(visibleText(card), /Proficient/);
+    assert.doesNotMatch(visibleText(card), /Competency details|Craft|Source history/);
 });
 
 test("category routing remains generic and does not parse tool or Craft names", async () => {
