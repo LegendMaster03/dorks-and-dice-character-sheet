@@ -80,7 +80,7 @@ export function renderHarvestingCraftingWorkspace(
     header.append(
         heading,
         createButton(
-            "Back to Character Sheet",
+            "Close",
             "dd-button dd-button--ghost",
             handlers.close));
     workspace.append(header);
