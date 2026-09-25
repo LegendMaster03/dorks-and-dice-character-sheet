@@ -77,7 +77,7 @@ export function renderHarvestingCraftingWorkspace(
         return workspace;
     }
 
-    workspace.append(renderHarvestingPanel(state, handlers, readOnly));
+    workspace.append(renderHarvestingPanel(character, state, handlers, readOnly));
     return workspace;
 }
 
@@ -137,6 +137,7 @@ function renderRulesScope(
 }
 
 function renderHarvestingPanel(
+    character: CharacterSheetBootstrapResponse,
     state: HarvestingCraftingUiState,
     handlers: HarvestingCraftingWorkflow,
     readOnly: boolean
