@@ -212,15 +212,18 @@ export function renderCharacterWorkspace(
     referenceRail.append(
         renderSavingThrowsCard(detachedSavingThrows, true),
         renderSensesSummaryCard(mechanics),
-        renderTrainingCard(mechanics),
-        renderCompetenciesCard(
-            broaderCompetencyPresentation,
-            competencyRankControls)
+        renderTrainingCard(mechanics)
     );
 
     const skillsColumn = createElement("aside", "dd-sheet__skills");
     skillsColumn.setAttribute("aria-label", "Skills");
     skillsColumn.append(renderSkillsCard(skillPresentation, competencyRankControls));
+
+    const competenciesColumn = createElement("aside", "dd-sheet__competencies");
+    competenciesColumn.setAttribute("aria-label", "Competencies");
+    competenciesColumn.append(renderCompetenciesCard(
+        broaderCompetencyPresentation,
+        competencyRankControls));
 
     const stage = createElement("div", "dd-sheet__stage");
     stage.append(renderCombatSummaryBand(
@@ -246,7 +249,7 @@ export function renderCharacterWorkspace(
         handlers));
     stage.append(primary);
 
-    dashboard.append(referenceRail, skillsColumn, stage);
+    dashboard.append(skillsColumn, competenciesColumn, referenceRail, stage);
 
     const body = createElement("div", "dd-sheet__body");
     body.append(topRow, dashboard);

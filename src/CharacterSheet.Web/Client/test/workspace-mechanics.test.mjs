@@ -792,18 +792,22 @@ test("Defense and combat fundamentals stay above the tabs instead of trailing Sk
     assert.match(visibleText(band), /Spell Resistance/);
 });
 
-test("wide shell uses a Beyond-style reference rail beside Skills and the primary stage", () => {
+test("wide shell gives Competencies an adjacent lane rather than burying it in the reference rail", () => {
     const rendered = render("actions", null);
     const body = byClass(rendered, "dd-sheet__body")[0];
     const dashboard = byClass(rendered, "dd-sheet__dashboard")[0];
     const rail = byClass(rendered, "dd-sheet__reference-rail")[0];
     const skills = byClass(rendered, "dd-sheet__skills")[0];
+    const competencies = byClass(rendered, "dd-sheet__competencies")[0];
+    const competencyCard = byAttribute(rendered, "data-competency-card", "competencies")[0];
     const topRow = byClass(rendered, "dd-sheet__top-row")[0];
     const main = byClass(rendered, "dd-sheet__main")[0];
     assert.ok(body);
     assert.ok(dashboard);
     assert.ok(rail);
     assert.ok(skills);
+    assert.ok(competencies);
+    assert.ok(competencyCard);
     assert.ok(topRow);
     assert.ok(main);
     assert.equal(walk(body).includes(topRow), true);
@@ -811,6 +815,8 @@ test("wide shell uses a Beyond-style reference rail beside Skills and the primar
     assert.equal(byClass(topRow, "dd-health-quick").length, 1);
     assert.equal(walk(rail).includes(byClass(rendered, "dd-saving-throws-card")[0]), true);
     assert.equal(walk(rail).includes(byClass(rendered, "dd-senses-summary-card")[0]), true);
+    assert.equal(walk(rail).includes(competencyCard), false);
+    assert.equal(walk(competencies).includes(competencyCard), true);
     assert.equal(walk(skills).includes(main), false);
     assert.equal(byClass(rendered, "dd-defense-card").length, 0);
     assert.equal(byClass(rendered, "dd-combat-fundamentals-card").length, 0);

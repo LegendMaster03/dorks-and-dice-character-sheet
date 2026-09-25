@@ -325,15 +325,18 @@ test("retired workspace grid selectors are removed after the reference-layout co
     assert.doesNotMatch(css, /\.dd-sheet__workspace\b/);
 });
 
-test("wide desktop layout is driven by usable sheet width and keeps the top row compact", () => {
-    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(0,\s*1fr\)/s);
+test("wide desktop layout gives Competencies its own lane beside Skills and narrows the primary stage", () => {
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(15rem,\s*18rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(0,\s*1fr\)/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)/s);
     assert.doesNotMatch(css, /min-aspect-ratio:\s*8 \/ 5/);
-    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(18rem,\s*21rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)[^}]*grid-template-rows:\s*max-content\s+auto;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(18rem,\s*21rem\)[^}]*minmax\(15rem,\s*18rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*max-content\s+auto;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__top-row\s*\{[^}]*grid-column:\s*2 \/ -1;[^}]*grid-row:\s*1;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__skills\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 2;/s);
-    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__reference-rail\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
-    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__stage\s*\{[^}]*grid-column:\s*3 \/ -1;[^}]*grid-row:\s*2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__competencies\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__reference-rail\s*\{[^}]*grid-column:\s*3;[^}]*grid-row:\s*2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__stage\s*\{[^}]*grid-column:\s*4;[^}]*grid-row:\s*2;/s);
+    assert.match(sheetSource, /createElement\("aside", "dd-sheet__competencies"\)/);
+    assert.match(sheetSource, /dashboard\.append\(skillsColumn, competenciesColumn, referenceRail, stage\)/);
     assert.match(sheetSource, /createElement\("div", "dd-sheet__body"\)/);
     assert.match(sheetSource, /body\.append\(topRow, dashboard\)/);
 });
@@ -398,6 +401,15 @@ test("skill rows use stable single-line columns for proficiency, stat, name, and
     assert.doesNotMatch(css, /\.dd-skill-row__identity\s*\{/);
 });
 
+test("open floating breakouts can escape the Character Sheet clipping boundary", () => {
+    assert.match(
+        css,
+        /\.dd-sheet\s*\{[^}]*overflow:\s*clip;/s);
+    assert.match(
+        css,
+        /\.dd-sheet:has\(\.dd-skill-disclosure\[open\]\)[\s\S]*?\.dd-sheet:has\(\.dd-competency-disclosure\[open\]\)[\s\S]*?\.dd-sheet:has\(\.dd-health-quick__details\[open\]\)\s*\{[^}]*overflow:\s*visible;/s);
+});
+
 test("desktop Skill disclosures float without reflow while constrained layouts remain inline", () => {
     assert.match(mechanicsCssSource, /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-skill-list > \.dd-skill-disclosure\s*\{[^}]*position:\s*relative;/s);
     assert.match(mechanicsCssSource, /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-skill-list > \.dd-skill-disclosure > \.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;[^}]*inset-block-start:\s*calc\(100% \+ 0\.18rem\);[^}]*max-height:\s*min\(70vh,\s*36rem\);[^}]*overflow:\s*auto;/s);
@@ -405,16 +417,22 @@ test("desktop Skill disclosures float without reflow while constrained layouts r
     assert.doesNotMatch(mechanicsCssSource, /@container character-sheet \(max-width:[\s\S]*?\.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
 });
 
-test("Competencies use an inline narrow-rail breakout instead of the desktop Skill popover", () => {
+test("desktop Competency disclosures float without reflow while constrained layouts remain inline", () => {
     assert.match(
         mechanicsCssSource,
         /\.dd-competency-row__name\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
     assert.match(
         mechanicsCssSource,
-        /\.dd-competency-disclosure__body\s*\{[^}]*max-width:\s*100%;[^}]*overflow:\s*visible;/s);
+        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list > \.dd-competency-disclosure\s*\{[^}]*position:\s*relative;/s);
+    assert.match(
+        mechanicsCssSource,
+        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list > \.dd-competency-disclosure > \.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;[^}]*inset-block-start:\s*calc\(100% \+ 0\.18rem\);[^}]*max-height:\s*min\(70vh,\s*36rem\);[^}]*overflow:\s*auto;/s);
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-disclosure__body\s*\{[^}]*display:\s*grid;[^}]*max-width:\s*100%;/s);
     assert.doesNotMatch(
         mechanicsCssSource,
-        /\.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
+        /@container character-sheet \(max-width:[\s\S]*?\.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
     assert.match(
         mechanicsCssSource,
         /\.dd-competency-fact\s*,[\s\S]*?grid[^}]*gap:/s);
