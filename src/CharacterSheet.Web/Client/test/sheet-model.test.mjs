@@ -404,7 +404,7 @@ test("open floating breakouts can escape the Character Sheet clipping boundary",
         /\.dd-sheet\s*\{[^}]*overflow:\s*clip;/s);
     assert.match(
         css,
-        /\.dd-sheet:has\(\.dd-skill-disclosure\[open\]\)[\s\S]*?\.dd-sheet:has\(\.dd-health-quick__details\[open\]\)\s*\{[^}]*overflow:\s*visible;/s);
+        /\.dd-sheet:has\(\.dd-skill-disclosure\[open\]\)[\s\S]*?\.dd-sheet:has\(\.dd-competency-disclosure\[open\]\)[\s\S]*?\.dd-sheet:has\(\.dd-health-quick__details\[open\]\)\s*\{[^}]*overflow:\s*visible;/s);
 });
 
 test("desktop Skill disclosures float without reflow while constrained layouts remain inline", () => {
@@ -414,16 +414,22 @@ test("desktop Skill disclosures float without reflow while constrained layouts r
     assert.doesNotMatch(mechanicsCssSource, /@container character-sheet \(max-width:[\s\S]*?\.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
 });
 
-test("Competencies use an inline narrow-rail breakout instead of the desktop Skill popover", () => {
+test("desktop Competency disclosures float without reflow while constrained layouts remain inline", () => {
     assert.match(
         mechanicsCssSource,
         /\.dd-competency-row__name\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
     assert.match(
         mechanicsCssSource,
-        /\.dd-competency-disclosure__body\s*\{[^}]*max-width:\s*100%;[^}]*overflow:\s*visible;/s);
+        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list > \.dd-competency-disclosure\s*\{[^}]*position:\s*relative;/s);
+    assert.match(
+        mechanicsCssSource,
+        /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-competency-list > \.dd-competency-disclosure > \.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;[^}]*inset-block-start:\s*calc\(100% \+ 0\.18rem\);[^}]*max-height:\s*min\(70vh,\s*36rem\);[^}]*overflow:\s*auto;/s);
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-disclosure__body\s*\{[^}]*display:\s*grid;[^}]*max-width:\s*100%;/s);
     assert.doesNotMatch(
         mechanicsCssSource,
-        /\.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
+        /@container character-sheet \(max-width:[\s\S]*?\.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
     assert.match(
         mechanicsCssSource,
         /\.dd-competency-fact\s*,[\s\S]*?grid[^}]*gap:/s);
