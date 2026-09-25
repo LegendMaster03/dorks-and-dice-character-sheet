@@ -546,6 +546,30 @@ test("a competency with only shared training state stays a simple row without a 
     assert.doesNotMatch(visibleText(card), /Competency details|Craft|Source history/);
 });
 
+test("Competencies are globally alphabetized by visible name and share one top-level wrapper shape", () => {
+    const card = renderCompetenciesCard([
+        standalone(competency("woodcarving", "Woodcarving", "-", { supportsTrainingState: true })),
+        standalone(competency("brewing", "Brewing", "-", { supportsTrainingState: true })),
+        standalone(competency("alchemy", "Alchemy", "-", {
+            supportsRanks: true,
+            supportsTrainingState: true,
+            governingAbility: "intelligence"
+        })),
+        standalone(competency("cartography", "Cartography", "-", { supportsTrainingState: true }))
+    ]);
+
+    const items = byClass(card, "dd-competency-list-item");
+    assert.equal(items.length, 4);
+    assert.deepEqual(
+        items.map(item => visibleText(item).match(/Alchemy|Brewing|Cartography|Woodcarving/)?.[0]),
+        ["Alchemy", "Brewing", "Cartography", "Woodcarving"]);
+    assert.deepEqual(
+        items.map(item => item.getAttribute("data-competency-list-item")),
+        ["alchemy", "brewing", "cartography", "woodcarving"]);
+    assert.equal(byClass(items[0], "dd-competency-disclosure").length, 1);
+    assert.equal(byClass(items[1], "dd-competency-row--standalone").length, 1);
+});
+
 test("category routing remains generic and does not parse tool or Craft names", async () => {
     const mechanicsSource = await readFile(new URL("../src/ui/character-mechanics.ts", import.meta.url), "utf8");
     assert.doesNotMatch(mechanicsSource, /Craft\s*\(|Smith's Tools|\bKit\b|\bSupplies\b/);
