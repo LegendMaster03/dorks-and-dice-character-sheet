@@ -1,5 +1,14 @@
 namespace CharacterSheet.Domain.Characters;
 
+public sealed record CharacterInventoryConsumption(
+    Guid OccurrenceId,
+    int Quantity);
+
+public sealed record CharacterInventoryAddition(
+    string? RuleConceptKey,
+    string? CustomName,
+    int Quantity = 1);
+
 public sealed class CharacterInventoryItemOccurrence
 {
     public const int MaxCustomNameLength = 200;
