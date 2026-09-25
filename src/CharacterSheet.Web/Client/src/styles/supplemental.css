@@ -29,7 +29,7 @@
     background: var(--dd-sheet-surface-raised);
     border: 1px solid var(--dd-sheet-border);
     border-radius: var(--dd-sheet-radius-lg);
-    box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 0.35);
+    box-shadow: var(--dd-sheet-shadow);
 }
 
 .dd-harvesting-dialog .dd-harvesting-workspace {
