@@ -659,11 +659,25 @@ function renderCraftingPanel(
         resolved.append(facts);
 
         if (resolution.total === null) {
-            resolved.append(createButton(
-                "Roll d20",
-                "dd-button dd-button--primary",
-                () => void handlers.rollCrafting(character.characterId),
-                readOnly));
+            const rollControls = createElement("div", "dd-harvesting-choice-row");
+            rollControls.append(
+                numberField(
+                    "Manual d20",
+                    state.craftingSelectedRoll,
+                    handlers.setCraftingSelectedRoll,
+                    readOnly,
+                    1),
+                createButton(
+                    "Use Manual Roll",
+                    "dd-button dd-button--secondary",
+                    () => void handlers.submitCraftingRoll(character.characterId),
+                    readOnly || state.craftingSelectedRoll === null),
+                createButton(
+                    "Roll d20",
+                    "dd-button dd-button--primary",
+                    () => void handlers.rollCrafting(character.characterId),
+                    readOnly));
+            resolved.append(rollControls);
         } else {
             const result = createElement("dl", "dd-harvesting-facts");
             appendFact(result, "Selected d20", String(resolution.d20Roll));
