@@ -398,6 +398,15 @@ test("skill rows use stable single-line columns for proficiency, stat, name, and
     assert.doesNotMatch(css, /\.dd-skill-row__identity\s*\{/);
 });
 
+test("open floating breakouts can escape the Character Sheet clipping boundary", () => {
+    assert.match(
+        css,
+        /\.dd-sheet\s*\{[^}]*overflow:\s*clip;/s);
+    assert.match(
+        css,
+        /\.dd-sheet:has\(\.dd-skill-disclosure\[open\]\)[\s\S]*?\.dd-sheet:has\(\.dd-health-quick__details\[open\]\)\s*\{[^}]*overflow:\s*visible;/s);
+});
+
 test("desktop Skill disclosures float without reflow while constrained layouts remain inline", () => {
     assert.match(mechanicsCssSource, /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-skill-list > \.dd-skill-disclosure\s*\{[^}]*position:\s*relative;/s);
     assert.match(mechanicsCssSource, /@container character-sheet \(min-width:\s*62rem\)[\s\S]*?\.dd-skill-list > \.dd-skill-disclosure > \.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;[^}]*inset-block-start:\s*calc\(100% \+ 0\.18rem\);[^}]*max-height:\s*min\(70vh,\s*36rem\);[^}]*overflow:\s*auto;/s);
