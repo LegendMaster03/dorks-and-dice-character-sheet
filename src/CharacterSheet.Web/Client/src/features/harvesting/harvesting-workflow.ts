@@ -1152,13 +1152,26 @@ export function createHarvestingCraftingWorkflow(
         },
 
         setScope(campaignId): void {
-            update(state => clearCraftingResult(clearResolution({
-                ...state,
-                scopeCampaignId: campaignId,
-                campaignContextStatus: campaignId === null ? "idle" : state.campaignContextStatus,
-                campaignCharacters: campaignId === null ? [] : state.campaignCharacters
-            })));
+            update(state => {
+                const scoped = {
+                    ...state,
+                    scopeCampaignId: campaignId,
+                    campaignContextStatus: campaignId === null
+                        ? "idle" as const
+                        : state.campaignContextStatus,
+                    campaignCharacters: campaignId === null ? [] : state.campaignCharacters
+                };
+                const harvesting = state.sourceKind === "creature-type"
+                    ? selectCreatureType(scoped, state.creatureType)
+                    : clearResolution(scoped);
+                return clearCraftingResult(harvesting);
+            });
             void ensureCampaignContext(campaignId);
+            const current = application.getState().harvestingCrafting;
+            if (current.sourceKind === "monster"
+                && current.creatureConceptKey.trim().length > 0) {
+                void resolveTable();
+            }
         },
 
         setSourceKind(kind): void {
