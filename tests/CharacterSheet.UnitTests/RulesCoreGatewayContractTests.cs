@@ -211,7 +211,7 @@ public sealed class RulesCoreGatewayContractTests
             "relatedCompetencies": [],
             "sourceAttributions": [],
             "mechanics": null,
-            "presentationCategory": "competency"
+            "presentationCategory": "supporting"
           }, {
             "semanticKey": "competency.alchemy",
             "identityKey": "alchemy",
@@ -260,7 +260,7 @@ public sealed class RulesCoreGatewayContractTests
         Assert.NotNull(catalog.Competencies);
         var craft = Assert.Single(catalog.Competencies, value => value.SemanticKey == "competency.craft");
         Assert.True(craft.IsFamily);
-        Assert.Equal("competency", craft.PresentationCategory);
+        Assert.Equal("supporting", craft.PresentationCategory);
         Assert.Equal(["competency.alchemy", "competency.blacksmithing"], craft.ChildCompetencyKeys);
 
         var alchemy = Assert.Single(catalog.Competencies, value => value.SemanticKey == "competency.alchemy");
