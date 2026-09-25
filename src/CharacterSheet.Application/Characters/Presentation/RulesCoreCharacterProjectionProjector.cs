@@ -421,7 +421,8 @@ internal static class RulesCoreCharacterProjectionProjector
         var occurrences = state.InventoryItemOccurrences
             .Select(occurrence =>
             {
-                if (!byConcept.TryGetValue(occurrence.RuleConceptKey, out var definition))
+                if (string.IsNullOrWhiteSpace(occurrence.RuleConceptKey)
+                    || !byConcept.TryGetValue(occurrence.RuleConceptKey, out var definition))
                 {
                     return null;
                 }
