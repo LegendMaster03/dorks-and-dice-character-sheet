@@ -420,7 +420,7 @@ internal static class CompetencyProjector
             RankInputKey: competency.SupportsRanks ? mechanic.ConceptKey : null);
     }
 
-    private static IReadOnlyList<CompetencyFacetPresentationView>? ProjectFacets(
+    internal static IReadOnlyList<CompetencyFacetPresentationView>? ProjectFacets(
         IReadOnlyList<RulesCoreCompetencyFacetView>? facets)
     {
         if (facets is null || facets.Count == 0)
@@ -438,7 +438,7 @@ internal static class CompetencyProjector
             .ToArray();
     }
 
-    private static IReadOnlyList<RelatedCompetencyPresentationView>? ProjectRelatedCompetencies(
+    internal static IReadOnlyList<RelatedCompetencyPresentationView>? ProjectRelatedCompetencies(
         IReadOnlyList<RulesCoreCompetencyRelationshipView>? relatedCompetencies)
     {
         if (relatedCompetencies is null || relatedCompetencies.Count == 0)
