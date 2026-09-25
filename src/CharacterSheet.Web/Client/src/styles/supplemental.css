@@ -117,6 +117,18 @@
     align-items: start;
 }
 
+.dd-harvesting-worksheet {
+    grid-template-columns: minmax(24rem, 1.05fr) minmax(22rem, 0.95fr);
+    align-items: start;
+}
+
+.dd-harvesting-worksheet__plan,
+.dd-harvesting-worksheet__checks {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
 .dd-crafting-workshop__sidebar,
 .dd-crafting-workshop__work,
 .dd-crafting-tracker__stages {
@@ -332,7 +344,8 @@
 }
 
 @media (max-width: 960px) {
-    .dd-crafting-workshop {
+    .dd-crafting-workshop,
+    .dd-harvesting-worksheet {
         grid-template-columns: 1fr;
     }
 
