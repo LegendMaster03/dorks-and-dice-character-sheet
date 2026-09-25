@@ -228,6 +228,9 @@ export interface HarvestingCraftingUiState {
     sameActor: boolean;
     creatureSize: string;
     harvestOrder: string[];
+    harvestManualComponentName: string;
+    harvestManualComponentDc: number | null;
+    harvestManualComponentQuantity: number | null;
     helpers: HarvestingHelperUiState[];
     campaignContextStatus: "idle" | "loading" | "ready" | "error";
     campaignCharacters: HarvestingCampaignCharacterOption[];
@@ -559,6 +562,9 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
         sameActor: false,
         creatureSize: "",
         harvestOrder: [],
+        harvestManualComponentName: "",
+        harvestManualComponentDc: null,
+        harvestManualComponentQuantity: null,
         helpers: [],
         campaignContextStatus: "idle",
         campaignCharacters: [],
