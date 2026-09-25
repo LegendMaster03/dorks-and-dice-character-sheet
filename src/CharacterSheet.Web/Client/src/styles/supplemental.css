@@ -59,6 +59,58 @@
     gap: 1rem;
 }
 
+.dd-harvesting-workspace {
+    max-width: 78rem;
+    margin: 0 auto;
+}
+
+.dd-harvesting-workspace__mode-nav {
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
+.dd-crafting-stage-inputs,
+.dd-crafting-materials {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.dd-crafting-stage-inputs {
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.dd-crafting-stage-inputs > .dd-harvesting-field__help,
+.dd-crafting-stage-inputs > .dd-inline-state,
+.dd-crafting-stage-inputs > .dd-harvesting-choice-row {
+    grid-column: 1 / -1;
+}
+
+.dd-crafting-materials > strong {
+    font-size: 0.95rem;
+}
+
+.dd-crafting-recipe,
+.dd-crafting-manufacturing,
+.dd-crafting-enchanting,
+.dd-crafting-completion {
+    scroll-margin-top: 1rem;
+}
+
+.dd-crafting-procedure .dd-harvesting-choice-row {
+    align-items: stretch;
+}
+
+.dd-crafting-procedure .dd-button {
+    flex: 1 1 15rem;
+    justify-content: center;
+}
+
+.dd-harvesting-creature .dd-harvesting-facts {
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--dd-sheet-border);
+}
+
 .dd-harvesting-field {
     display: grid;
     gap: 0.35rem;
