@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { renderSkillsCard } from "../.test-dist/ui/skills.js";
+import { renderCompetenciesCard, renderSkillsCard } from "../.test-dist/ui/skills.js";
 import { buildCompetencyPresentation } from "../.test-dist/ui/character-mechanics.js";
 
 class FakeStyle {
@@ -436,8 +436,35 @@ test("production Character Sheet drives competencies from the nullable mechanics
     const sheetSource = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     assert.doesNotMatch(sheetSource, /renderSkillsCard\(null\)/);
     assert.match(sheetSource, /mechanics\?\.competencies === undefined/);
-    assert.match(sheetSource, /buildCompetencyPresentation\(mechanics\.competencies\)/);
-    assert.match(sheetSource, /renderSkillsCard\(\s*competencyPresentation,\s*\{/);
+    assert.match(sheetSource, /partitionCompetencyCollection\(mechanics\.competencies\)/);
+    assert.match(sheetSource, /buildCompetencyPresentation\(competencyCollections\.skills\)/);
+    assert.match(sheetSource, /buildCompetencyPresentation\(competencyCollections\.competencies\)/);
+    assert.match(sheetSource, /renderSkillsCard\(skillPresentation/);
+    assert.match(sheetSource, /renderCompetenciesCard\(broaderCompetencyPresentation/);
     assert.match(sheetSource, /onSetRank:\s*handlers\.rules\.setCompetencyRank/);
     assert.match(sheetSource, /onClearRank:\s*handlers\.rules\.clearCompetencyRank/);
+});
+
+
+test("Skills and Competencies render as separate cards with category-specific search labels", () => {
+    const skills = renderSkillsCard([standalone(competency("arcana", "Arcana", "+7"))]);
+    const competencies = renderCompetenciesCard([
+        standalone(competency("glassblowing", "Glassblowing", "Proficient", {
+            supportsRanks: false,
+            supportsTrainingState: true,
+            training: "Proficient"
+        }))
+    ]);
+
+    assert.equal(byAttribute(skills, "data-competency-card", "skills").length, 1);
+    assert.equal(byAttribute(competencies, "data-competency-card", "competencies").length, 1);
+    assert.match(visibleText(skills), /Skills/);
+    assert.match(visibleText(competencies), /Competencies/);
+    assert.equal(byClass(skills, "dd-skills-search")[0].placeholder, "Search skills");
+    assert.equal(byClass(competencies, "dd-skills-search")[0].placeholder, "Search competencies");
+});
+
+test("category routing remains generic and does not parse tool or Craft names", async () => {
+    const mechanicsSource = await readFile(new URL("../src/ui/character-mechanics.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(mechanicsSource, /Craft\s*\(|Smith's Tools|\bKit\b|\bSupplies\b/);
 });

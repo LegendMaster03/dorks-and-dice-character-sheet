@@ -6,7 +6,8 @@ import {
     findItemOccurrenceMechanics,
     formatHealthTrack,
     formatMechanicalValue,
-    hasMechanicalDetails
+    hasMechanicalDetails,
+    partitionCompetencyCollection
 } from "../.test-dist/ui/character-mechanics.js";
 
 const value = (key, label, effectiveValue, extra = {}) => ({ key, label, effectiveValue, ...extra });
@@ -220,4 +221,31 @@ test("composite presentation inherits a unanimous component governing ability fo
     assert.equal(items.length, 1);
     assert.equal(items[0].kind, "composite");
     assert.equal(items[0].parent.governingAbility, "dexterity");
+});
+
+
+test("Rules Core presentation categories split Skills from broader Competencies without name parsing", () => {
+    const collection = {
+        entries: [
+            value("competency.arcana", "Arcana", "+7", { presentationCategory: "skill" }),
+            value("competency.alchemy", "Alchemy", "+6", { presentationCategory: "competency" }),
+            value("competency.future", "Opaque Future Capability", "-", { presentationCategory: "future-surface" }),
+            value("legacy.skill", "Legacy Skill", "+2")
+        ],
+        relationships: [{
+            parentKey: "competency.arcana",
+            componentKeys: ["legacy.skill"],
+            resolutionKind: "derive-parent"
+        }]
+    };
+
+    const partition = partitionCompetencyCollection(collection);
+    assert.deepEqual(
+        partition.skills.entries.map(entry => entry.key),
+        ["competency.arcana", "legacy.skill"]);
+    assert.deepEqual(
+        partition.competencies.entries.map(entry => entry.key),
+        ["competency.alchemy", "competency.future"]);
+    assert.equal(partition.skills.relationships.length, 1);
+    assert.equal(partition.competencies.relationships, undefined);
 });
