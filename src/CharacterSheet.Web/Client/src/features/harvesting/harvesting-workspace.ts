@@ -1237,7 +1237,7 @@ function renderEnchantingInputs(
     const spellcasting = mechanics?.spellcastingProfiles ?? [];
     if (spellcasting.length === 0) {
         group.append(createInlineState(
-            "This Character does not currently have a resolved spellcasting Ability for Enchanting.",
+            "This Character does not currently have a spellcasting Ability available for Enchanting.",
             "warning"));
     } else if (spellcasting.length === 1) {
         group.append(createElement(
