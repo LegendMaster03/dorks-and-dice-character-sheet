@@ -172,10 +172,9 @@ function renderHarvestingPanel(
     }
 
     panel.append(
-        renderAvailableHarvestComponents(state, handlers, readOnly),
+        renderHarvestOrder(state, handlers, readOnly),
         renderHarvestingInputs(state, handlers, readOnly),
         renderHelperInputs(state, handlers, readOnly),
-        renderHarvestOrder(state, handlers, readOnly),
         renderOutcome(character, state, handlers, readOnly));
 
     return panel;
@@ -263,129 +262,6 @@ function renderCreatureSelection(
         card.append(facts);
     }
 
-    return card;
-}
-
-function renderAvailableHarvestComponents(
-    state: HarvestingCraftingUiState,
-    handlers: HarvestingCraftingWorkflow,
-    readOnly: boolean
-): HTMLElement {
-    const card = createSectionCard("Available Components", "dd-harvesting-components");
-    card.append(createElement(
-        "p",
-        "dd-harvesting-field__help",
-        "Adjust this specific corpse before building the harvest list. Removing or editing a component applies only to this Harvesting attempt."));
-
-    for (const component of state.table?.components ?? []) {
-        const row = createElement("div", "dd-harvesting-helper");
-        row.append(createElement("strong", "dd-harvesting-helper__title", component.displayName));
-
-        const dc = createElement("input", "dd-harvesting-field__control");
-        dc.type = "number";
-        dc.min = "1";
-        dc.step = "1";
-        dc.value = String(component.componentDc);
-        dc.disabled = readOnly;
-
-        const quantity = createElement("input", "dd-harvesting-field__control");
-        quantity.type = "number";
-        quantity.min = "1";
-        quantity.step = "1";
-        quantity.value = component.quantity === null ? "" : String(component.quantity);
-        quantity.placeholder = "GM decides";
-        quantity.disabled = readOnly;
-
-        const apply = async (): Promise<void> => {
-            const parsedDc = Number.parseInt(dc.value, 10);
-            const normalizedQuantity = quantity.value.trim();
-            const parsedQuantity = normalizedQuantity.length === 0
-                ? null
-                : Number.parseInt(normalizedQuantity, 10);
-            await handlers.editHarvestComponent(
-                component.key,
-                parsedDc,
-                parsedQuantity);
-        };
-        dc.addEventListener("change", () => void apply());
-        quantity.addEventListener("change", () => void apply());
-
-        const dcLabel = createElement("label", "dd-harvesting-field");
-        dcLabel.append(
-            createElement("span", "dd-harvesting-field__label", "Component DC"),
-            dc);
-        const quantityLabel = createElement("label", "dd-harvesting-field");
-        quantityLabel.append(
-            createElement("span", "dd-harvesting-field__label", "Quantity"),
-            quantity);
-
-        row.append(
-            dcLabel,
-            quantityLabel,
-            createButton(
-                "Unavailable",
-                "dd-button dd-button--ghost",
-                () => void handlers.removeHarvestComponent(component.key),
-                readOnly));
-        card.append(row);
-    }
-
-    const add = createElement("div", "dd-harvesting-helper");
-    add.append(createElement("strong", "dd-harvesting-helper__title", "Add encounter-specific component"));
-    const name = createElement("input", "dd-harvesting-field__control");
-    name.type = "text";
-    name.placeholder = "Component name";
-    name.value = state.harvestManualComponentName;
-    name.disabled = readOnly;
-    name.addEventListener("change", () =>
-        handlers.setHarvestManualComponentName(name.value));
-
-    const dc = createElement("input", "dd-harvesting-field__control");
-    dc.type = "number";
-    dc.min = "1";
-    dc.step = "1";
-    dc.placeholder = "Component DC";
-    dc.value = state.harvestManualComponentDc === null
-        ? ""
-        : String(state.harvestManualComponentDc);
-    dc.disabled = readOnly;
-    dc.addEventListener("change", () =>
-        handlers.setHarvestManualComponentDc(
-            dc.value.trim().length === 0 ? null : Number.parseInt(dc.value, 10)));
-
-    const quantity = createElement("input", "dd-harvesting-field__control");
-    quantity.type = "number";
-    quantity.min = "1";
-    quantity.step = "1";
-    quantity.placeholder = "Quantity (optional)";
-    quantity.value = state.harvestManualComponentQuantity === null
-        ? ""
-        : String(state.harvestManualComponentQuantity);
-    quantity.disabled = readOnly;
-    quantity.addEventListener("change", () =>
-        handlers.setHarvestManualComponentQuantity(
-            quantity.value.trim().length === 0
-                ? null
-                : Number.parseInt(quantity.value, 10)));
-
-    add.append(
-        name,
-        dc,
-        quantity,
-        createButton(
-            "Add Component",
-            "dd-button dd-button--secondary",
-            () => void handlers.addHarvestComponent(),
-            readOnly));
-    card.append(add);
-
-    if (state.table?.manualEditsApplied) {
-        card.append(createButton(
-            "Reset GM Component Edits",
-            "dd-button dd-button--ghost",
-            () => void handlers.resetHarvestEdits(),
-            readOnly));
-    }
     return card;
 }
 
@@ -571,15 +447,65 @@ function renderHarvestOrder(
     card.append(createElement(
         "p",
         "dd-harvesting-field__help",
-        "Order matters. Each Component DC is added to the previous Component DCs to produce the cumulative Harvest DC."));
+        "Put the parts in the order you want to harvest them. Earlier parts are easier to secure because Harvest DC is cumulative. Set quantities before adding successful results to Inventory."));
 
     const byKey = new Map(
         state.table?.components.map(component => [component.key, component]) ?? []);
+    let cumulativeDc = 0;
+
     state.harvestOrder.forEach((key, index) => {
         const component = byKey.get(key);
         if (component === undefined) return;
+        cumulativeDc += component.componentDc;
+
         const row = createElement("div", "dd-harvesting-component");
-        row.append(componentIdentity(component));
+        const identity = createElement("div", "dd-harvesting-component__identity");
+        identity.append(
+            createElement("strong", "", `${index + 1}. ${component.displayName}`),
+            createElement(
+                "span",
+                "",
+                `Component DC ${component.componentDc} · Harvest DC ${cumulativeDc}`));
+        row.append(identity);
+
+        const dc = createElement("input", "dd-harvesting-field__control");
+        dc.type = "number";
+        dc.min = "1";
+        dc.step = "1";
+        dc.value = String(component.componentDc);
+        dc.disabled = readOnly;
+
+        const quantity = createElement("input", "dd-harvesting-field__control");
+        quantity.type = "number";
+        quantity.min = "1";
+        quantity.step = "1";
+        quantity.value = component.quantity === null ? "" : String(component.quantity);
+        quantity.placeholder = "Set quantity";
+        quantity.disabled = readOnly;
+
+        const apply = async (): Promise<void> => {
+            const parsedDc = Number.parseInt(dc.value, 10);
+            const normalizedQuantity = quantity.value.trim();
+            const parsedQuantity = normalizedQuantity.length === 0
+                ? null
+                : Number.parseInt(normalizedQuantity, 10);
+            await handlers.editHarvestComponent(
+                component.key,
+                parsedDc,
+                parsedQuantity);
+        };
+        dc.addEventListener("change", () => void apply());
+        quantity.addEventListener("change", () => void apply());
+
+        const dcLabel = createElement("label", "dd-harvesting-field");
+        dcLabel.append(
+            createElement("span", "dd-harvesting-field__label", "DC"),
+            dc);
+        const quantityLabel = createElement("label", "dd-harvesting-field");
+        quantityLabel.append(
+            createElement("span", "dd-harvesting-field__label", "Quantity"),
+            quantity);
+
         const actions = createElement("div", "dd-harvesting-component__actions");
         actions.append(
             createButton(
@@ -591,10 +517,79 @@ function renderHarvestOrder(
                 "Down",
                 "dd-button dd-button--ghost",
                 () => handlers.moveComponent(key, 1),
-                readOnly || index === state.harvestOrder.length - 1));
-        row.append(actions);
+                readOnly || index === state.harvestOrder.length - 1),
+            createButton(
+                "Unavailable",
+                "dd-button dd-button--ghost",
+                () => void handlers.removeHarvestComponent(component.key),
+                readOnly));
+
+        row.append(dcLabel, quantityLabel, actions);
         card.append(row);
     });
+
+    const add = createElement("div", "dd-harvesting-helper");
+    add.append(createElement(
+        "strong",
+        "dd-harvesting-helper__title",
+        "Add encounter-specific component"));
+
+    const name = createElement("input", "dd-harvesting-field__control");
+    name.type = "text";
+    name.placeholder = "Component name";
+    name.value = state.harvestManualComponentName;
+    name.disabled = readOnly;
+    name.addEventListener("change", () =>
+        handlers.setHarvestManualComponentName(name.value));
+
+    const dc = createElement("input", "dd-harvesting-field__control");
+    dc.type = "number";
+    dc.min = "1";
+    dc.step = "1";
+    dc.placeholder = "Component DC";
+    dc.value = state.harvestManualComponentDc === null
+        ? ""
+        : String(state.harvestManualComponentDc);
+    dc.disabled = readOnly;
+    dc.addEventListener("change", () =>
+        handlers.setHarvestManualComponentDc(
+            dc.value.trim().length === 0
+                ? null
+                : Number.parseInt(dc.value, 10)));
+
+    const quantity = createElement("input", "dd-harvesting-field__control");
+    quantity.type = "number";
+    quantity.min = "1";
+    quantity.step = "1";
+    quantity.placeholder = "Quantity";
+    quantity.value = state.harvestManualComponentQuantity === null
+        ? ""
+        : String(state.harvestManualComponentQuantity);
+    quantity.disabled = readOnly;
+    quantity.addEventListener("change", () =>
+        handlers.setHarvestManualComponentQuantity(
+            quantity.value.trim().length === 0
+                ? null
+                : Number.parseInt(quantity.value, 10)));
+
+    add.append(
+        name,
+        dc,
+        quantity,
+        createButton(
+            "Add Component",
+            "dd-button dd-button--secondary",
+            () => void handlers.addHarvestComponent(),
+            readOnly));
+    card.append(add);
+
+    if (state.table?.manualEditsApplied) {
+        card.append(createButton(
+            "Reset Component Changes",
+            "dd-button dd-button--ghost",
+            () => void handlers.resetHarvestEdits(),
+            readOnly));
+    }
 
     card.append(createButton(
         state.outcomeStatus === "loading" ? "Calculating…" : "Calculate Harvest",
