@@ -181,6 +181,43 @@
     font-size: 0.95rem;
 }
 
+.dd-crafting-materials__status {
+    color: var(--dd-sheet-success);
+    font-size: 0.78rem;
+    font-weight: 750;
+}
+
+.dd-crafting-materials__status--short {
+    color: var(--dd-sheet-warning);
+}
+
+.dd-crafting-material {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) minmax(8rem, auto) minmax(6.5rem, 8rem) auto;
+    gap: 0.65rem;
+    align-items: end;
+    padding: 0.7rem;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-crafting-material--short {
+    border-color: var(--dd-sheet-warning-border);
+    background: var(--dd-sheet-warning-surface);
+}
+
+.dd-crafting-material__identity {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-weight: 700;
+}
+
+.dd-crafting-material__availability {
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+}
+
 .dd-crafting-recipe,
 .dd-crafting-manufacturing,
 .dd-crafting-enchanting,
@@ -305,6 +342,11 @@
 }
 
 @media (max-width: 720px) {
+    .dd-crafting-material {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
     .dd-harvesting-overlay {
         padding: 0;
     }
