@@ -17,7 +17,8 @@ public enum CharacterStateAccessStatus
 
 public sealed record CharacterInventoryItemOccurrenceView(
     Guid Id,
-    string RuleConceptKey,
+    string? RuleConceptKey,
+    string? CustomName,
     DateTimeOffset CreatedAt,
     int Quantity = 1,
     bool IsCarried = true,
@@ -280,6 +281,19 @@ public sealed class CharacterStateService(
             (changedAt, token) => stateStore.AddInventoryItemOccurrenceAsync(
                 characterId,
                 ruleConceptKey,
+                changedAt,
+                token),
+            cancellationToken);
+
+    public Task<CharacterStateResult> AddCustomInventoryItemOccurrenceAsync(
+        Guid characterId,
+        string customName,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            (changedAt, token) => stateStore.AddCustomInventoryItemOccurrenceAsync(
+                characterId,
+                customName,
                 changedAt,
                 token),
             cancellationToken);
@@ -568,6 +582,7 @@ public sealed class CharacterStateService(
                 .Select(value => new CharacterInventoryItemOccurrenceView(
                     value.Id,
                     value.RuleConceptKey,
+                    value.CustomName,
                     value.CreatedAt,
                     value.Quantity,
                     value.IsCarried,
