@@ -137,6 +137,14 @@ export function createHarvestingCraftingWorkflow(
             }));
             return;
         }
+        if (awarded.some(component => component.quantity === null)) {
+            update(current => ({
+                ...current,
+                harvestInventoryStatus: "error",
+                message: "Set a quantity for every harvested component before adding the harvest to Inventory."
+            }));
+            return;
+        }
 
         update(current => ({
             ...current,
@@ -151,7 +159,7 @@ export function createHarvestingCraftingWorkflow(
                 {
                     additions: awarded.map(component => ({
                         customName: component.displayName,
-                        quantity: component.quantity ?? 1
+                        quantity: component.quantity!
                     }))
                 }),
             undefined,
