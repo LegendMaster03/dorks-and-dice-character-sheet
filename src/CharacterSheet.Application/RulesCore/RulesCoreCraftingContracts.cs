@@ -15,7 +15,9 @@ public sealed record RulesCoreManufacturingResolutionRequest(
     bool HasQualifiedGuidance = false,
     int? D20Roll = null,
     int OtherModifier = 0,
-    int? TargetDc = null);
+    int? TargetDc = null,
+    string? AbilityKey = null,
+    int? ManualAbilityModifier = null);
 
 public sealed record RulesCoreEnchantingResolutionRequest(
     RulesCoreCharacterRulesProjectionRequest Character,
