@@ -218,6 +218,8 @@ export interface HarvestingCraftingUiState {
     helpers: HarvestingHelperInput[];
     outcomeStatus: "idle" | "loading" | "ready" | "error";
     outcome: HarvestingOutcomeResponse | null;
+    harvestInventoryStatus: "idle" | "loading" | "ready" | "error";
+    harvestInventoryAwarded: boolean;
     craftingProcedure: "manufacturing" | "enchanting";
     craftingCompetencyMode: "resolved" | "manual";
     craftingCompetencyKey: string;
@@ -528,6 +530,8 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
         helpers: [],
         outcomeStatus: "idle",
         outcome: null,
+        harvestInventoryStatus: "idle",
+        harvestInventoryAwarded: false,
         craftingProcedure: "manufacturing",
         craftingCompetencyMode: "resolved",
         craftingCompetencyKey: "",
