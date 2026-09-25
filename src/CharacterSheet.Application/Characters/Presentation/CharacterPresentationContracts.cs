@@ -218,6 +218,8 @@ public sealed record CompetencyPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<string>? CompatibilityMechanicKeys = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PresentationCategory = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? RankInputKey = null);
 
 public sealed record CompetencyRelationshipPresentationView(

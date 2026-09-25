@@ -544,6 +544,7 @@ internal static class RulesCoreCharacterProjectionProjector
                     MechanicKeys: value.MechanicKeys.Count == 0
                         ? null
                         : value.MechanicKeys,
+                    PresentationCategory: value.PresentationCategory,
                     RankInputKey: rankInputKey);
             })
             .ToArray();

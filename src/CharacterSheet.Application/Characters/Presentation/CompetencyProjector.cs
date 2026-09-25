@@ -179,6 +179,7 @@ internal static class CompetencyProjector
             CompatibilityMechanicKeys: universal.CompatibilityMechanicKeys.Count == 0
                 ? null
                 : universal.CompatibilityMechanicKeys,
+            PresentationCategory: universal.PresentationCategory,
             RankInputKey: ResolveRankInputKey(universal, mechanicByKey));
     }
 
