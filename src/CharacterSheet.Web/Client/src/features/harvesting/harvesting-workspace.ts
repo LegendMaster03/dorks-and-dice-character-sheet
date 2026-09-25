@@ -687,6 +687,51 @@ function renderCraftingPanel(
 
     const check = createSectionCard("Check", "dd-crafting-check");
     if (state.craftingProcedure === "manufacturing") {
+        const abilityMode = createElement("div", "dd-harvesting-choice-row");
+        abilityMode.append(
+            sourceButton(
+                "Character Ability",
+                state.craftingManufacturingAbilityMode === "character",
+                () => handlers.setCraftingManufacturingAbilityMode("character")),
+            sourceButton(
+                "Manual Ability modifier",
+                state.craftingManufacturingAbilityMode === "manual",
+                () => handlers.setCraftingManufacturingAbilityMode("manual")));
+        check.append(
+            createElement(
+                "p",
+                "dd-harvesting-field__help",
+                "Choose the Ability required by the recipe's tool/product. Rules Core resolves a selected Character Ability modifier; the browser does not calculate it."),
+            abilityMode);
+
+        if (state.craftingManufacturingAbilityMode === "character") {
+            const ability = createElement("label", "dd-harvesting-field");
+            ability.append(createElement("span", "dd-harvesting-field__label", "Manufacturing Ability"));
+            const select = createElement("select", "dd-harvesting-field__control");
+            const placeholder = createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Choose Ability";
+            select.append(placeholder);
+            for (const value of mechanics?.abilityValues ?? []) {
+                const option = createElement("option");
+                option.value = value.key;
+                option.textContent = value.label;
+                select.append(option);
+            }
+            select.value = state.craftingManufacturingAbilityKey;
+            select.disabled = readOnly;
+            select.addEventListener("change", () =>
+                handlers.setCraftingManufacturingAbilityKey(select.value));
+            ability.append(select);
+            check.append(ability);
+        } else {
+            check.append(numberField(
+                "Manual Ability modifier",
+                state.craftingManufacturingManualAbilityModifier,
+                handlers.setCraftingManufacturingManualAbilityModifier,
+                readOnly));
+        }
+
         check.append(booleanField(
             "Qualified guidance is available",
             state.craftingHasQualifiedGuidance,
