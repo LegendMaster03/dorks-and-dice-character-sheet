@@ -32,37 +32,40 @@ export function createRoutineStateWorkflow(
     environment: HostEnvironment
 ): RoutineStateWorkflow {
     async function resolveReferences(state: CharacterStateResponse): Promise<void> {
-        const inventoryReferences = state.inventoryItemOccurrences.map(async occurrence => {
+        const inventoryReferences = state.inventoryItemOccurrences
+            .filter(occurrence => occurrence.ruleConceptKey !== null)
+            .map(async occurrence => {
             try {
+                const conceptKey = occurrence.ruleConceptKey!;
                 const rule = await resolveRuleConcept(
                     environment,
-                    occurrence.ruleConceptKey);
+                    conceptKey);
                 const reference = rule !== null
                     && rule.entityType === "item"
-                    && rule.conceptKey === occurrence.ruleConceptKey
+                    && rule.conceptKey === conceptKey
                     ? {
                         status: "resolved" as const,
-                        conceptKey: occurrence.ruleConceptKey,
+                        conceptKey,
                         rule
                     }
                     : {
                         status: "unavailable" as const,
-                        conceptKey: occurrence.ruleConceptKey
+                        conceptKey
                     };
                 application.dispatch({
                     type: "routine-reference-resolved",
                     occurrenceId: occurrence.id,
-                    conceptKey: occurrence.ruleConceptKey,
+                    conceptKey,
                     reference
                 });
             } catch (error) {
                 application.dispatch({
                     type: "routine-reference-resolved",
                     occurrenceId: occurrence.id,
-                    conceptKey: occurrence.ruleConceptKey,
+                    conceptKey,
                     reference: {
                         status: "error",
-                        conceptKey: occurrence.ruleConceptKey,
+                        conceptKey,
                         message: requestErrorMessage(error)
                     }
                 });
