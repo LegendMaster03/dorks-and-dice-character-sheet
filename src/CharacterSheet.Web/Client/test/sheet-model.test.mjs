@@ -325,15 +325,18 @@ test("retired workspace grid selectors are removed after the reference-layout co
     assert.doesNotMatch(css, /\.dd-sheet__workspace\b/);
 });
 
-test("wide desktop layout is driven by usable sheet width and keeps the top row compact", () => {
-    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(0,\s*1fr\)/s);
+test("wide desktop layout gives Competencies its own lane beside Skills and narrows the primary stage", () => {
+    assert.match(css, /\.dd-sheet__dashboard\s*\{[^}]*minmax\(20rem,\s*23rem\)[^}]*minmax\(15rem,\s*18rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(0,\s*1fr\)/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)/s);
     assert.doesNotMatch(css, /min-aspect-ratio:\s*8 \/ 5/);
-    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(18rem,\s*21rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*repeat\(2,\s*minmax\(0,\s*1fr\)\)[^}]*grid-template-rows:\s*max-content\s+auto;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__body\s*\{[^}]*minmax\(18rem,\s*21rem\)[^}]*minmax\(15rem,\s*18rem\)[^}]*minmax\(13\.5rem,\s*16rem\)[^}]*minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*max-content\s+auto;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__top-row\s*\{[^}]*grid-column:\s*2 \/ -1;[^}]*grid-row:\s*1;/s);
     assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__skills\s*\{[^}]*grid-column:\s*1;[^}]*grid-row:\s*1 \/ span 2;/s);
-    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__reference-rail\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
-    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__stage\s*\{[^}]*grid-column:\s*3 \/ -1;[^}]*grid-row:\s*2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__competencies\s*\{[^}]*grid-column:\s*2;[^}]*grid-row:\s*2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__reference-rail\s*\{[^}]*grid-column:\s*3;[^}]*grid-row:\s*2;/s);
+    assert.match(css, /@container character-sheet \(min-width:\s*96rem\)[\s\S]*?\.dd-sheet__stage\s*\{[^}]*grid-column:\s*4;[^}]*grid-row:\s*2;/s);
+    assert.match(sheetSource, /createElement\("aside", "dd-sheet__competencies"\)/);
+    assert.match(sheetSource, /dashboard\.append\(skillsColumn, competenciesColumn, referenceRail, stage\)/);
     assert.match(sheetSource, /createElement\("div", "dd-sheet__body"\)/);
     assert.match(sheetSource, /body\.append\(topRow, dashboard\)/);
 });
