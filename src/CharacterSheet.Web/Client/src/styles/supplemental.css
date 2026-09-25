@@ -9,7 +9,44 @@
 }
 
 
-/* Harvesting & Crafting is a dedicated workflow. Keep the Actions entry compact. */
+/* Harvesting & Crafting is a dedicated workflow layered over the Character Sheet. */
+.dd-harvesting-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: grid;
+    place-items: center;
+    padding: clamp(0.75rem, 2vw, 2rem);
+    background: color-mix(in srgb, var(--dd-sheet-ink-strong) 58%, transparent);
+    backdrop-filter: blur(2px);
+}
+
+.dd-harvesting-dialog {
+    width: min(94vw, 88rem);
+    max-height: min(92dvh, 64rem);
+    overflow: hidden;
+    color: var(--dd-sheet-ink);
+    background: var(--dd-sheet-surface-raised);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-lg);
+    box-shadow: var(--dd-sheet-shadow);
+}
+
+.dd-harvesting-dialog .dd-harvesting-workspace {
+    max-height: min(92dvh, 64rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.dd-harvesting-dialog .dd-harvesting-workspace__header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: 0.75rem;
+    background: var(--dd-sheet-surface-raised);
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
 .dd-harvesting-launcher {
     display: grid;
     gap: 0.75rem;
@@ -57,6 +94,162 @@
 .dd-harvesting-workspace__panel {
     display: grid;
     gap: 1rem;
+}
+
+.dd-harvesting-workspace {
+    max-width: 78rem;
+    margin: 0 auto;
+}
+
+.dd-harvesting-workspace__mode-nav {
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--dd-sheet-border);
+}
+
+.dd-crafting-stage-inputs,
+.dd-crafting-materials {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.dd-crafting-workshop {
+    grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1.55fr);
+    align-items: start;
+}
+
+.dd-harvesting-worksheet {
+    grid-template-columns: minmax(24rem, 1.05fr) minmax(22rem, 0.95fr);
+    align-items: start;
+}
+
+.dd-harvesting-worksheet__plan,
+.dd-harvesting-worksheet__checks {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.dd-crafting-workshop__sidebar,
+.dd-crafting-workshop__work,
+.dd-crafting-tracker__stages {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.dd-crafting-workshop__sidebar {
+    position: sticky;
+    top: 5.75rem;
+}
+
+.dd-crafting-tracker__name {
+    font-size: 1rem;
+}
+
+.dd-crafting-tracker__stage {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.7rem;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-crafting-tracker__stage--active {
+    border-color: var(--dd-sheet-accent-border);
+    box-shadow: inset 0.2rem 0 0 var(--dd-sheet-accent);
+}
+
+.dd-crafting-tracker__stage-heading {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.dd-crafting-tracker__stage-heading span,
+.dd-crafting-tracker__time {
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+}
+
+.dd-crafting-tracker__progress {
+    width: 100%;
+    min-height: 0.6rem;
+    accent-color: var(--dd-sheet-accent);
+}
+
+.dd-crafting-stage-inputs {
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.dd-crafting-stage-inputs > .dd-harvesting-field__help,
+.dd-crafting-stage-inputs > .dd-inline-state,
+.dd-crafting-stage-inputs > .dd-harvesting-choice-row {
+    grid-column: 1 / -1;
+}
+
+.dd-crafting-materials > strong {
+    font-size: 0.95rem;
+}
+
+.dd-crafting-materials__status {
+    color: var(--dd-sheet-success);
+    font-size: 0.78rem;
+    font-weight: 750;
+}
+
+.dd-crafting-materials__status--short {
+    color: var(--dd-sheet-warning);
+}
+
+.dd-crafting-material {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) minmax(8rem, auto) minmax(6.5rem, 8rem) auto;
+    gap: 0.65rem;
+    align-items: end;
+    padding: 0.7rem;
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-crafting-material--short {
+    border-color: var(--dd-sheet-warning-border);
+    background: var(--dd-sheet-warning-surface);
+}
+
+.dd-crafting-material__identity {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-weight: 700;
+}
+
+.dd-crafting-material__availability {
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+}
+
+.dd-crafting-recipe,
+.dd-crafting-manufacturing,
+.dd-crafting-enchanting,
+.dd-crafting-completion {
+    scroll-margin-top: 1rem;
+}
+
+.dd-crafting-procedure .dd-harvesting-choice-row {
+    align-items: stretch;
+}
+
+.dd-crafting-procedure .dd-button {
+    flex: 1 1 15rem;
+    justify-content: center;
+}
+
+.dd-harvesting-creature .dd-harvesting-facts {
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--dd-sheet-border);
 }
 
 .dd-harvesting-field {
@@ -124,6 +317,17 @@
     flex-wrap: wrap;
 }
 
+.dd-harvesting-component {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(5.5rem, 7rem) minmax(6.5rem, 8rem) auto;
+    align-items: end;
+}
+
+.dd-harvesting-component__actions {
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .dd-harvesting-component__identity,
 .dd-harvesting-outcome__component {
     display: grid;
@@ -139,14 +343,48 @@
     border-width: 2px;
 }
 
+@media (max-width: 960px) {
+    .dd-crafting-workshop,
+    .dd-harvesting-worksheet {
+        grid-template-columns: 1fr;
+    }
+
+    .dd-crafting-workshop__sidebar {
+        position: static;
+    }
+}
+
 @media (max-width: 720px) {
-    .dd-harvesting-workspace__header,
-    .dd-harvesting-component {
+    .dd-crafting-material {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .dd-harvesting-overlay {
+        padding: 0;
+    }
+
+    .dd-harvesting-dialog,
+    .dd-harvesting-dialog .dd-harvesting-workspace {
+        width: 100vw;
+        max-width: none;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
+    .dd-harvesting-workspace__header {
         align-items: stretch;
         flex-direction: column;
     }
 
+    .dd-harvesting-component {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
     .dd-harvesting-component__actions {
         width: 100%;
+        justify-content: flex-start;
     }
 }

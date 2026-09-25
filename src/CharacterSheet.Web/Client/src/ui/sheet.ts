@@ -51,7 +51,7 @@ import { renderPrimaryContent } from "./primary-content.js";
 import { renderCombatSummaryBand } from "../features/combat/combat-summary.js";
 import { renderConditionsCard } from "../features/conditions/conditions.js";
 import type { CharacterSheetHandlers } from "./sheet-contracts.js";
-import { renderHarvestingCraftingWorkspace } from "../features/harvesting/harvesting-workspace.js";
+import { renderHarvestingCraftingOverlay } from "../features/harvesting/harvesting-workspace.js";
 
 export function renderCharacterWorkspace(
     character: CharacterSheetBootstrapResponse,
@@ -87,19 +87,6 @@ export function renderCharacterWorkspace(
         forceReadOnly,
         advancement,
         portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
-    if (harvestingCrafting.open) {
-        if (readOnly) {
-            shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
-        }
-        shell.append(renderHarvestingCraftingWorkspace(
-            character,
-            harvestingCrafting,
-            handlers.harvestingCrafting!,
-            readOnly,
-            mechanics,
-            routine));
-        return shell;
-    }
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = structuralEditing
             || (guidedBuilder.open
@@ -140,6 +127,15 @@ export function renderCharacterWorkspace(
             advancement,
             mechanics,
             handlers));
+        if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
+            shell.append(renderHarvestingCraftingOverlay(
+                character,
+                harvestingCrafting,
+                handlers.harvestingCrafting,
+                readOnly,
+                mechanics,
+                routine));
+        }
         return shell;
     }
 
@@ -254,6 +250,15 @@ export function renderCharacterWorkspace(
     const body = createElement("div", "dd-sheet__body");
     body.append(topRow, dashboard);
     shell.append(body);
+    if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
+        shell.append(renderHarvestingCraftingOverlay(
+            character,
+            harvestingCrafting,
+            handlers.harvestingCrafting,
+            readOnly,
+            mechanics,
+            routine));
+    }
     return shell;
 }
 

@@ -168,3 +168,73 @@ test("campaign helper selection is optional and preserves manual fallback", asyn
     assert.match(workflow, /Manual helper entry remains available/);
     assert.match(campaignApi, /\/api\/campaigns\/\$\{encodeURIComponent\(campaignId\)\}\/context/);
 });
+
+
+test("Harvesting UI does not expose Rules Core resolution controls", async () => {
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+    const workflow = await source("features/harvesting/harvesting-workflow.ts");
+    const rulesApi = await source("rules-core-api.ts");
+
+    for (const internalLabel of [
+        "Effective rules",
+        "Resolve Harvesting Table",
+        "Resolved Harvesting Rule",
+        "Resolve Check",
+        "Rules Core competency"
+    ]) {
+        assert.doesNotMatch(
+            workspace,
+            new RegExp(internalLabel),
+            `${internalLabel} is an implementation detail, not a player workflow control`);
+    }
+
+    assert.match(workflow, /function typeTable\(/);
+    assert.match(workflow, /void resolveTable\(\)/);
+    assert.match(rulesApi, /input\.creatureConceptKey/);
+});
+
+test("Crafting UI is organized around project and crafting steps", async () => {
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+
+    assert.match(workspace, /Crafting Project/);
+    assert.match(workspace, /Required steps/);
+    assert.match(workspace, /Roll Manufacturing/);
+    assert.match(workspace, /Roll Enchanting/);
+    assert.match(workspace, /Finish & Update Inventory/);
+    assert.doesNotMatch(workspace, /Crafting Procedure/);
+    assert.doesNotMatch(workspace, /Universal competency/);
+});
+
+
+test("Harvesting and Crafting opens as a modal over the Character Sheet", async () => {
+    const sheet = await source("ui/sheet.ts");
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+    const css = await source("styles/supplemental.css");
+
+    assert.match(sheet, /renderHarvestingCraftingOverlay/);
+    assert.doesNotMatch(
+        sheet,
+        /if \(harvestingCrafting\.open\)[\s\S]{0,600}return shell;/,
+        "opening Harvesting & Crafting must not replace the Character Sheet");
+    assert.match(workspace, /aria-modal", "true"/);
+    assert.match(workspace, /event\.key !== "Escape"/);
+    assert.match(workspace, /event\.target === overlay/);
+    assert.match(css, /\.dd-harvesting-overlay\s*\{[\s\S]*position:\s*fixed/);
+    assert.match(css, /\.dd-harvesting-dialog\s*\{[\s\S]*width:\s*min\(94vw, 88rem\)/);
+});
+
+
+test("Loot Tavern modal uses worksheet and workshop layouts", async () => {
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+    const css = await source("styles/supplemental.css");
+
+    assert.match(workspace, /dd-harvesting-worksheet/);
+    assert.match(workspace, /dd-crafting-workshop/);
+    assert.match(workspace, /Current Project/);
+    assert.match(workspace, /required · \$\{availableQuantity\} available/);
+    assert.match(workspace, /document\.createElement\("progress"\)/);
+
+    assert.match(css, /\.dd-harvesting-worksheet\s*\{[\s\S]*grid-template-columns/);
+    assert.match(css, /\.dd-crafting-workshop\s*\{[\s\S]*grid-template-columns/);
+    assert.match(css, /\.dd-crafting-material--short/);
+});

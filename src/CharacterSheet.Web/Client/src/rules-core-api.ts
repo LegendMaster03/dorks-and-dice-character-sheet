@@ -292,9 +292,13 @@ export async function resolveHarvestingTable(
     campaignId: string | null = null,
     fetcher: FetchLike = window.fetch.bind(window)
 ): Promise<HarvestingResolvedTableResponse> {
-    const path = campaignId === null
-        ? "/api/rules/harvesting/resolve"
-        : `/api/campaigns/${encodeURIComponent(campaignId)}/rules/harvesting/resolve`;
+    const campaignScoped = campaignId !== null
+        && input.creatureConceptKey !== undefined
+        && input.creatureConceptKey !== null
+        && input.creatureConceptKey.trim().length > 0;
+    const path = campaignScoped
+        ? `/api/campaigns/${encodeURIComponent(campaignId!)}/rules/harvesting/resolve`
+        : "/api/rules/harvesting/resolve";
     return await requestRulesCoreJson<HarvestingResolvedTableResponse>(
         environment,
         path,
@@ -310,9 +314,13 @@ export async function resolveHarvestingOutcome(
     campaignId: string | null = null,
     fetcher: FetchLike = window.fetch.bind(window)
 ): Promise<HarvestingOutcomeResponse> {
-    const path = campaignId === null
-        ? "/api/rules/harvesting/outcome"
-        : `/api/campaigns/${encodeURIComponent(campaignId)}/rules/harvesting/outcome`;
+    const campaignScoped = campaignId !== null
+        && input.table.creatureConceptKey !== undefined
+        && input.table.creatureConceptKey !== null
+        && input.table.creatureConceptKey.trim().length > 0;
+    const path = campaignScoped
+        ? `/api/campaigns/${encodeURIComponent(campaignId!)}/rules/harvesting/outcome`
+        : "/api/rules/harvesting/outcome";
     return await requestRulesCoreJson<HarvestingOutcomeResponse>(
         environment,
         path,
