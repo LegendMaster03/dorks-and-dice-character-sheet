@@ -182,13 +182,16 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasColumnType("boolean")
                 .HasDefaultValue(false);
 
+            b.Property<string>("CustomName")
+                .HasMaxLength(200)
+                .HasColumnType("character varying(200)");
+
             b.Property<int>("Quantity")
                 .ValueGeneratedOnAdd()
                 .HasColumnType("integer")
                 .HasDefaultValue(1);
 
             b.Property<string>("RuleConceptKey")
-                .IsRequired()
                 .HasMaxLength(300)
                 .HasColumnType("character varying(300)");
 
@@ -201,7 +204,12 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
 
             b.HasIndex("CharacterId", "RuleConceptKey");
 
-            b.ToTable("character_inventory_item_occurrences");
+            b.ToTable("character_inventory_item_occurrences", t =>
+                {
+                    t.HasCheckConstraint(
+                        "CK_character_inventory_item_occurrences_Identity",
+                        "(\"RuleConceptKey\" IS NOT NULL) <> (\"CustomName\" IS NOT NULL)");
+                });
         });
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterNote", b =>
