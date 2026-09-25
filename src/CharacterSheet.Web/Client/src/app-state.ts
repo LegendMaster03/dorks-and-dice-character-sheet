@@ -242,6 +242,9 @@ export interface HarvestingCraftingUiState {
     craftingManualContribution: number | null;
     craftingManualQualified: boolean;
     craftingHasQualifiedGuidance: boolean;
+    craftingManufacturingAbilityMode: "character" | "manual";
+    craftingManufacturingAbilityKey: string;
+    craftingManufacturingManualAbilityModifier: number | null;
     craftingCreatureType: string;
     craftingSpellcastingKey: string;
     craftingTargetDc: number | null;
@@ -566,6 +569,9 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
         craftingManualContribution: null,
         craftingManualQualified: false,
         craftingHasQualifiedGuidance: false,
+        craftingManufacturingAbilityMode: "character",
+        craftingManufacturingAbilityKey: "",
+        craftingManufacturingManualAbilityModifier: null,
         craftingCreatureType: "",
         craftingSpellcastingKey: "",
         craftingTargetDc: null,
