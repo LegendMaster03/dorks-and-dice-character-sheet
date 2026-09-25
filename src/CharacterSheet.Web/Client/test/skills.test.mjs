@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { renderCompetenciesCard, renderSkillsCard } from "../.test-dist/ui/skills.js";
+import { renderSkillsCard } from "../.test-dist/ui/skills.js";
+import { renderCompetenciesCard } from "../.test-dist/ui/competencies.js";
 import { buildCompetencyPresentation } from "../.test-dist/ui/character-mechanics.js";
 
 class FakeStyle {
@@ -449,13 +450,36 @@ test("production Character Sheet drives competencies from the nullable mechanics
 });
 
 
-test("Skills and Competencies render as independent cards", () => {
+test("Skills and Competencies render as independent cards with independent presentation systems", () => {
     const skills = renderSkillsCard([standalone(competency("arcana", "Arcana", "+7"))]);
     const competencies = renderCompetenciesCard([
-        standalone(competency("glassblowing", "Glassblowing", "Proficient", {
-            supportsRanks: false,
+        standalone(competency("alchemy", "Alchemy", "-", {
+            supportsRanks: true,
+            supportsClassSkillState: true,
             supportsTrainingState: true,
-            training: "Proficient"
+            governingAbility: "intelligence",
+            facets: [
+                {
+                    facetType: "skill",
+                    supportsRanks: true,
+                    supportsClassSkillState: true,
+                    supportsTrainingState: true
+                },
+                {
+                    facetType: "tool",
+                    supportsRanks: false,
+                    supportsClassSkillState: false,
+                    supportsTrainingState: true
+                }
+            ],
+            relatedCompetencies: [
+                {
+                    kind: "related-competency",
+                    targetType: "competency",
+                    targetName: "Herbalism",
+                    scope: "materials"
+                }
+            ]
         }))
     ]);
 
@@ -463,10 +487,19 @@ test("Skills and Competencies render as independent cards", () => {
     assert.equal(byAttribute(competencies, "data-competency-card", "competencies").length, 1);
     assert.match(competencies.className, /dd-support-card/);
     assert.match(competencies.className, /dd-competencies-card/);
+    assert.equal(byClass(competencies, "dd-skills-card").length, 0);
+    assert.equal(byClass(competencies, "dd-skill-row").length, 0);
+    assert.equal(byClass(competencies, "dd-competency-row").length, 1);
     assert.match(visibleText(skills), /Skills/);
     assert.match(visibleText(competencies), /Competencies/);
+    assert.match(visibleText(competencies), /Competency details/);
+    assert.match(visibleText(competencies), /Implementations/);
+    assert.match(visibleText(competencies), /Skill/);
+    assert.match(visibleText(competencies), /Tool/);
+    assert.match(visibleText(competencies), /Related competencies/);
+    assert.doesNotMatch(visibleText(competencies), /Skill rules/);
     assert.equal(byClass(skills, "dd-skills-search")[0].placeholder, "Search skills");
-    assert.equal(byClass(competencies, "dd-skills-search")[0].placeholder, "Search competencies");
+    assert.equal(byClass(competencies, "dd-competency-search")[0].placeholder, "Search competencies");
 });
 
 test("category routing remains generic and does not parse tool or Craft names", async () => {
