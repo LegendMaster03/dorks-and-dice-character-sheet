@@ -11,6 +11,8 @@ import {
     resolveHarvestingTable,
     searchResolvedRules,
     type HarvestingComponentEditInput,
+    type HarvestingResolvedTableResponse,
+    type HarvestingRulesCatalogResponse,
     type HarvestingTableResolutionInput
 } from "../../rules-core-api.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
@@ -397,6 +399,59 @@ export function createHarvestingCraftingWorkflow(
         await resolveCrafting(characterId, selection.selected);
     }
 
+    function inferredCampaignScope(): string | null {
+        const screen = application.getState().screen;
+        if (screen.kind !== "rich-character" && screen.kind !== "archived") {
+            return null;
+        }
+
+        const campaignIds = screen.character.campaignIds;
+        if (campaignIds.length === 0) return null;
+
+        const current = application.getState().harvestingCrafting.scopeCampaignId;
+        return current !== null && campaignIds.includes(current)
+            ? current
+            : campaignIds[0] ?? null;
+    }
+
+    function typeTable(
+        catalog: HarvestingRulesCatalogResponse,
+        creatureType: string
+    ): HarvestingResolvedTableResponse | null {
+        const definition = catalog.creatureTypes.find(value => value.key === creatureType);
+        if (definition === undefined) return null;
+        return {
+            source: catalog.source,
+            creatureType: definition.key,
+            creatureTypeDisplayName: definition.displayName,
+            competencyKey: definition.competencyKey,
+            competencyDisplayName: definition.competencyDisplayName,
+            components: definition.defaultComponents.map(component => ({ ...component })),
+            creatureConceptKey: null,
+            creatureDisplayName: null,
+            creatureSize: null,
+            creatureOverridesApplied: false,
+            manualEditsApplied: false
+        };
+    }
+
+    function selectCreatureType(
+        state: HarvestingCraftingUiState,
+        creatureType: string
+    ): HarvestingCraftingUiState {
+        const table = state.catalog === null
+            ? null
+            : typeTable(state.catalog, creatureType);
+        return {
+            ...clearResolution(state),
+            creatureType,
+            tableStatus: table === null ? "idle" : "ready",
+            tableRequest: table === null ? null : { creatureType },
+            table,
+            harvestOrder: table?.components.map(component => component.key) ?? []
+        };
+    }
+
     async function ensureCatalog(): Promise<void> {
         const current = application.getState().harvestingCrafting;
         if (current.catalogStatus === "loading" || current.catalogStatus === "ready") return;
@@ -404,18 +459,29 @@ export function createHarvestingCraftingWorkflow(
         update(state => ({ ...state, catalogStatus: "loading", message: undefined }));
         try {
             const catalog = await loadHarvestingRules(environment);
-            update(state => ({
-                ...state,
-                catalogStatus: "ready",
-                catalog,
-                creatureType: state.creatureType.length > 0
+            update(state => {
+                const creatureType = state.creatureType.length > 0
                     ? state.creatureType
-                    : (catalog.creatureTypes[0]?.key ?? ""),
-                craftingCreatureType: state.craftingCreatureType.length > 0
-                    ? state.craftingCreatureType
-                    : (catalog.creatureTypes[0]?.key ?? ""),
-                message: undefined
-            }));
+                    : (catalog.creatureTypes[0]?.key ?? "");
+                const table = state.sourceKind === "creature-type"
+                    ? typeTable(catalog, creatureType)
+                    : null;
+                return {
+                    ...state,
+                    catalogStatus: "ready",
+                    catalog,
+                    creatureType,
+                    craftingCreatureType: state.craftingCreatureType.length > 0
+                        ? state.craftingCreatureType
+                        : (catalog.creatureTypes[0]?.key ?? ""),
+                    tableStatus: table === null ? state.tableStatus : "ready",
+                    tableRequest: table === null ? state.tableRequest : { creatureType },
+                    table: table ?? state.table,
+                    harvestOrder: table?.components.map(component => component.key)
+                        ?? state.harvestOrder,
+                    message: undefined
+                };
+            });
         } catch (error) {
             update(state => ({
                 ...state,
@@ -1066,8 +1132,15 @@ export function createHarvestingCraftingWorkflow(
 
     return {
         open(): void {
-            update(state => ({ ...state, open: true, message: undefined }));
+            const campaignId = inferredCampaignScope();
+            update(state => ({
+                ...state,
+                open: true,
+                scopeCampaignId: campaignId,
+                message: undefined
+            }));
             void ensureCatalog();
+            void ensureCampaignContext(campaignId);
         },
 
         close(): void {
@@ -1089,11 +1162,21 @@ export function createHarvestingCraftingWorkflow(
         },
 
         setSourceKind(kind): void {
-            update(state => clearResolution({
-                ...state,
-                sourceKind: kind,
-                creatureConceptKey: kind === "monster" ? state.creatureConceptKey : ""
-            }));
+            update(state => {
+                if (kind === "creature-type") {
+                    return selectCreatureType(
+                        {
+                            ...state,
+                            sourceKind: kind,
+                            creatureConceptKey: ""
+                        },
+                        state.creatureType);
+                }
+                return clearResolution({
+                    ...state,
+                    sourceKind: kind
+                });
+            });
             if (kind === "monster"
                 && application.getState().harvestingCrafting.monsterStatus === "idle") {
                 void searchMonsters("");
@@ -1101,16 +1184,20 @@ export function createHarvestingCraftingWorkflow(
         },
 
         setCreatureType(creatureType): void {
-            update(state => clearResolution({ ...state, creatureType }));
+            update(state => selectCreatureType(state, creatureType));
         },
 
         searchMonsters,
 
         selectMonster(conceptKey): void {
+            const normalized = conceptKey.trim();
             update(state => clearResolution({
                 ...state,
-                creatureConceptKey: conceptKey.trim()
+                creatureConceptKey: normalized
             }));
+            if (normalized.length > 0) {
+                void resolveTable();
+            }
         },
 
         resolveTable,
