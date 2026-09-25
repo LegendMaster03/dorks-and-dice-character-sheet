@@ -53,6 +53,8 @@ export interface HarvestingCraftingWorkflow {
     setCraftingTargetDc(value: number | null): void;
     setCraftingOtherModifier(value: number): void;
     prepareCrafting(characterId: string): Promise<void>;
+    setCraftingSelectedRoll(value: number | null): void;
+    submitCraftingRoll(characterId: string): Promise<void>;
     rollCrafting(characterId: string): Promise<void>;
     chooseCraftingRoll(characterId: string, value: number): Promise<void>;
 }
@@ -638,6 +640,35 @@ export function createHarvestingCraftingWorkflow(
 
         async prepareCrafting(characterId): Promise<void> {
             await resolveCrafting(characterId, null);
+        },
+
+        setCraftingSelectedRoll(value): void {
+            update(state => ({
+                ...state,
+                craftingSelectedRoll: value,
+                craftingResolution: state.craftingResolution === null
+                    ? null
+                    : {
+                        ...state.craftingResolution,
+                        d20Roll: null,
+                        total: null,
+                        meetsTarget: null
+                    },
+                message: undefined
+            }));
+        },
+
+        async submitCraftingRoll(characterId): Promise<void> {
+            const value = application.getState().harvestingCrafting.craftingSelectedRoll;
+            if (value === null || !Number.isInteger(value) || value < 1 || value > 20) {
+                update(state => ({
+                    ...state,
+                    craftingStatus: "error",
+                    message: "Enter a whole-number d20 result from 1 through 20."
+                }));
+                return;
+            }
+            await resolveCrafting(characterId, value);
         },
 
         rollCrafting,
