@@ -82,7 +82,7 @@ export interface ArmorCheckPenaltyView {
 }
 
 export type CompetencyKind = ExtensiblePresentationKey<"skill" | "specialized-skill" | "tool" | "other">;
-export type CompetencyPresentationCategory = ExtensiblePresentationKey<"skill" | "competency">;
+export type CompetencyPresentationCategory = ExtensiblePresentationKey<"skill" | "competency" | "supporting">;
 
 export interface CompetencyFacetView {
     facetType: string;
@@ -399,7 +399,8 @@ export function partitionCompetencyCollection(
         collection.entries
             .filter(entry =>
                 entry.presentationCategory !== undefined
-                && entry.presentationCategory !== "skill")
+                && entry.presentationCategory !== "skill"
+                && entry.presentationCategory !== "supporting")
             .map(entry => entry.key));
 
     return {

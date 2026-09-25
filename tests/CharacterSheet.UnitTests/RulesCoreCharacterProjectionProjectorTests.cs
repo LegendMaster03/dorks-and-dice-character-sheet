@@ -317,6 +317,71 @@ public sealed class RulesCoreCharacterProjectionProjectorTests
     }
 
     [Fact]
+    public void CharacterProjectionCarriesUniversalCompositeSkillRelationships()
+    {
+        static RulesCoreUniversalCompetencyView Skill(
+            string semanticKey,
+            string identityKey,
+            string displayName,
+            string mechanicKey) =>
+            new(
+                semanticKey,
+                identityKey,
+                displayName,
+                null,
+                false,
+                $"{semanticKey}.training",
+                [],
+                [mechanicKey],
+                [],
+                [displayName],
+                [],
+                [],
+                [],
+                [],
+                PresentationCategory: "skill");
+
+        var projection = EmptyProjection() with
+        {
+            Competencies =
+            [
+                Skill("competency.stealth", "stealth", "Stealth", "competency.skill.stealth"),
+                Skill("competency.hide", "hide", "Hide", "competency.skill.hide"),
+                Skill(
+                    "competency.move-silently",
+                    "move-silently",
+                    "Move Silently",
+                    "competency.skill.move-silently")
+            ],
+            CompetencyRelationships =
+            [
+                new RulesCoreMechanicRelationshipView(
+                    "skill-composite.stealth",
+                    "composite",
+                    "competency.skill.stealth",
+                    ["competency.skill.hide", "competency.skill.move-silently"],
+                    "average-floor",
+                    "components-to-parent",
+                    "derive-parent",
+                    true,
+                    [])
+            ]
+        };
+
+        var mechanics = CharacterPresentationProjector.ProjectCharacterRules(
+            null,
+            projection);
+
+        var relationship = Assert.Single(mechanics.Competencies!.Relationships!);
+        Assert.Equal("competency.stealth", relationship.ParentKey);
+        Assert.Equal(
+            ["competency.hide", "competency.move-silently"],
+            relationship.ComponentKeys);
+        Assert.Equal("average-floor", relationship.Composition);
+        Assert.Equal("derive-parent", relationship.ResolutionKind);
+    }
+
+    [Fact]
     public void AbilityProjectionUsesAxisKeysForStandardAndAdditionalAbilities()
     {
         var projection = EmptyProjection() with

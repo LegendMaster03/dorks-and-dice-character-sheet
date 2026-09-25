@@ -282,4 +282,5 @@ public sealed record RulesCoreCharacterRulesProjectionView(
     IReadOnlyList<RulesCoreCharacterProjectionConflictView> Conflicts,
     IReadOnlyList<RulesCoreCharacterEquipmentDefinitionView> Equipment,
     IReadOnlyList<RulesCoreUniversalCompetencyView>? Competencies = null,
+    IReadOnlyList<RulesCoreMechanicRelationshipView>? CompetencyRelationships = null,
     IReadOnlyList<RulesCoreCharacterRuleResolutionView>? RuleResolutions = null);

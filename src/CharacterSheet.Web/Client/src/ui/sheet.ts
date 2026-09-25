@@ -26,7 +26,7 @@ import {
     createInlineState,
     createSectionCard
 } from "./components.js";
-import { renderCompetenciesCard, renderSkillsCard } from "./skills.js";
+import { renderSkillsCard } from "./skills.js";
 import {
     renderSensesSummaryCard,
     renderTrainingCard
@@ -180,16 +180,6 @@ export function renderCharacterWorkspace(
             !ABILITY_SCORE_DEFINITIONS.some(definition =>
                 findAbilitySavingThrow([save], definition) === save));
 
-    const referenceRail = createElement("aside", "dd-sheet__reference-rail");
-    referenceRail.setAttribute("aria-label", "Saving throws, senses, and training");
-    referenceRail.append(
-        renderSavingThrowsCard(detachedSavingThrows, true),
-        renderSensesSummaryCard(mechanics),
-        renderTrainingCard(mechanics)
-    );
-
-    const skillsColumn = createElement("aside", "dd-sheet__skills");
-    skillsColumn.setAttribute("aria-label", "Skills and competencies");
     const competencyRankControls = {
         readOnly: readOnly || routine.status !== "ready" || routine.state === null,
         savingKey: routine.mutation?.kind === "rules-input-update"
@@ -202,9 +192,21 @@ export function renderCharacterWorkspace(
         onSetRank: handlers.rules.setCompetencyRank,
         onClearRank: handlers.rules.clearCompetencyRank
     };
-    skillsColumn.append(
-        renderSkillsCard(skillPresentation, competencyRankControls),
-        renderCompetenciesCard(broaderCompetencyPresentation, competencyRankControls));
+
+    const referenceRail = createElement("aside", "dd-sheet__reference-rail");
+    referenceRail.setAttribute("aria-label", "Saving throws, senses, and training");
+    referenceRail.append(
+        renderSavingThrowsCard(detachedSavingThrows, true),
+        renderSensesSummaryCard(mechanics),
+        renderTrainingCard(
+            mechanics,
+            broaderCompetencyPresentation,
+            competencyRankControls)
+    );
+
+    const skillsColumn = createElement("aside", "dd-sheet__skills");
+    skillsColumn.setAttribute("aria-label", "Skills");
+    skillsColumn.append(renderSkillsCard(skillPresentation, competencyRankControls));
 
     const stage = createElement("div", "dd-sheet__stage");
     stage.append(renderCombatSummaryBand(

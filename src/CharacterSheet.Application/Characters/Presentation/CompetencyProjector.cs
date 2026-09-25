@@ -55,6 +55,32 @@ internal static class CompetencyProjector
         var mechanicByKey = competencyMechanics.ToDictionary(
             value => value.MechanicKey,
             StringComparer.Ordinal);
+
+        var entries = universalCompetencies
+            .Select(value => ProjectUniversalCompetency(
+                value,
+                mechanicByKey,
+                evaluationByKey))
+            .ToArray();
+
+        var relationships = ProjectUniversalRelationships(
+            universalCompetencies,
+            competencyMechanics
+                .SelectMany(value => value.Relationships)
+                .ToArray());
+
+        return new CompetencyCollectionPresentationView(entries, relationships);
+    }
+
+    internal static IReadOnlyList<CompetencyRelationshipPresentationView>? ProjectUniversalRelationships(
+        IReadOnlyList<RulesCoreUniversalCompetencyView> universalCompetencies,
+        IReadOnlyList<RulesCoreMechanicRelationshipView>? relationships)
+    {
+        if (relationships is null || relationships.Count == 0)
+        {
+            return null;
+        }
+
         var semanticByMechanicKey = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var universal in universalCompetencies)
         {
@@ -66,18 +92,13 @@ internal static class CompetencyProjector
             }
         }
 
-        var entries = universalCompetencies
-            .Select(value => ProjectUniversalCompetency(
-                value,
-                mechanicByKey,
-                evaluationByKey))
-            .ToArray();
-
-        var relationships = competencyMechanics
-            .SelectMany(value => value.Relationships)
+        var projected = relationships
             .Where(value => value.CanResolve
                 && value.MissingMechanicKeys.Count == 0
-                && string.Equals(value.EffectiveResolutionKind, "derive-parent", StringComparison.Ordinal))
+                && string.Equals(
+                    value.EffectiveResolutionKind,
+                    "derive-parent",
+                    StringComparison.Ordinal))
             .Select(value => ProjectUniversalRelationship(value, semanticByMechanicKey))
             .Where(value => value is not null)
             .Cast<CompetencyRelationshipPresentationView>()
@@ -86,9 +107,7 @@ internal static class CompetencyProjector
                 StringComparer.Ordinal)
             .ToArray();
 
-        return new CompetencyCollectionPresentationView(
-            entries,
-            relationships.Length == 0 ? null : relationships);
+        return projected.Length == 0 ? null : projected;
     }
 
     private static CompetencyPresentationView ProjectUniversalCompetency(
