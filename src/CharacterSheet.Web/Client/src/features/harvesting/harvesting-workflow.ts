@@ -1331,10 +1331,20 @@ export function createHarvestingCraftingWorkflow(
         awardHarvest,
 
         setCraftingProcedure(value): void {
-            update(state => clearCraftingResult({
-                ...state,
-                craftingProcedure: value
-            }));
+            update(state => {
+                if (state.craftingProcedure === value) return state;
+                return clearCraftingResult({
+                    ...state,
+                    craftingProcedure: value,
+                    craftingCompetencyMode: "resolved",
+                    craftingCompetencyKey: "",
+                    craftingManualName: "",
+                    craftingManualContribution: null,
+                    craftingManualQualified: false,
+                    craftingTargetDc: null,
+                    craftingOtherModifier: 0
+                });
+            });
         },
 
         setCraftingCompetencyMode(value): void {
@@ -1497,17 +1507,65 @@ export function createHarvestingCraftingWorkflow(
         },
 
         setCraftingRequiresManufacturing(value): void {
-            update(state => resetCraftingCompletion({
-                ...state,
-                craftingRequiresManufacturing: value
-            }));
+            update(state => {
+                const procedure = !value
+                    && state.craftingProcedure === "manufacturing"
+                    && state.craftingRequiresEnchanting
+                    ? "enchanting"
+                    : value
+                        && !state.craftingRequiresEnchanting
+                        ? "manufacturing"
+                        : state.craftingProcedure;
+                const changedStage = procedure !== state.craftingProcedure;
+                const next = resetCraftingCompletion({
+                    ...state,
+                    craftingRequiresManufacturing: value,
+                    craftingProcedure: procedure
+                });
+                return changedStage
+                    ? clearCraftingResult({
+                        ...next,
+                        craftingCompetencyMode: "resolved",
+                        craftingCompetencyKey: "",
+                        craftingManualName: "",
+                        craftingManualContribution: null,
+                        craftingManualQualified: false,
+                        craftingTargetDc: null,
+                        craftingOtherModifier: 0
+                    })
+                    : next;
+            });
         },
 
         setCraftingRequiresEnchanting(value): void {
-            update(state => resetCraftingCompletion({
-                ...state,
-                craftingRequiresEnchanting: value
-            }));
+            update(state => {
+                const procedure = !value
+                    && state.craftingProcedure === "enchanting"
+                    && state.craftingRequiresManufacturing
+                    ? "manufacturing"
+                    : value
+                        && !state.craftingRequiresManufacturing
+                        ? "enchanting"
+                        : state.craftingProcedure;
+                const changedStage = procedure !== state.craftingProcedure;
+                const next = resetCraftingCompletion({
+                    ...state,
+                    craftingRequiresEnchanting: value,
+                    craftingProcedure: procedure
+                });
+                return changedStage
+                    ? clearCraftingResult({
+                        ...next,
+                        craftingCompetencyMode: "resolved",
+                        craftingCompetencyKey: "",
+                        craftingManualName: "",
+                        craftingManualContribution: null,
+                        craftingManualQualified: false,
+                        craftingTargetDc: null,
+                        craftingOtherModifier: 0
+                    })
+                    : next;
+            });
         },
 
         setCraftingManufacturingRequiredHours(value): void {
