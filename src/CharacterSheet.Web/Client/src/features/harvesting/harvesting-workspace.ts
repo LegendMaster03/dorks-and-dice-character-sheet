@@ -921,6 +921,38 @@ function renderManualRecipe(
             handlers.setCraftingRequiresEnchanting,
             readOnly));
 
+    if (state.craftingRequiresManufacturing) {
+        card.append(
+            numberField(
+                "Manufacturing time required (hours)",
+                state.craftingManufacturingRequiredHours,
+                handlers.setCraftingManufacturingRequiredHours,
+                readOnly,
+                1),
+            numberField(
+                "Manufacturing time completed (hours)",
+                state.craftingManufacturingCompletedHours,
+                value => handlers.setCraftingManufacturingCompletedHours(value ?? 0),
+                readOnly,
+                0));
+    }
+
+    if (state.craftingRequiresEnchanting) {
+        card.append(
+            numberField(
+                "Enchanting time required (hours)",
+                state.craftingEnchantingRequiredHours,
+                handlers.setCraftingEnchantingRequiredHours,
+                readOnly,
+                1),
+            numberField(
+                "Enchanting time completed (hours)",
+                state.craftingEnchantingCompletedHours,
+                value => handlers.setCraftingEnchantingCompletedHours(value ?? 0),
+                readOnly,
+                0));
+    }
+
     const stages = createElement("dl", "dd-harvesting-facts");
     appendFact(stages, "Manufacturing", stageState(
         state.craftingRequiresManufacturing,
