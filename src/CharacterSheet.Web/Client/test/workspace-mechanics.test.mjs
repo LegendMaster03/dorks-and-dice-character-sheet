@@ -845,6 +845,12 @@ test("support surfaces stay neutral when unavailable and consume supplied values
     assert.match(suppliedText, /Competencies/);
     assert.match(suppliedText, /Alchemist's Supplies/);
     assert.match(suppliedText, /Training\s+Proficient/);
+
+    const trainingCard = byAttribute(supplied, "data-support-values-kind", "training")[0];
+    const competenciesCard = byAttribute(supplied, "data-competency-card", "competencies")[0];
+    assert.ok(trainingCard);
+    assert.ok(competenciesCard);
+    assert.equal(walk(trainingCard).includes(competenciesCard), false);
 });
 
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
