@@ -56,6 +56,9 @@ export interface HarvestingCraftingWorkflow {
     setCraftingManualContribution(value: number | null): void;
     setCraftingManualQualified(value: boolean): void;
     setCraftingHasQualifiedGuidance(value: boolean): void;
+    setCraftingManufacturingAbilityMode(value: "character" | "manual"): void;
+    setCraftingManufacturingAbilityKey(value: string): void;
+    setCraftingManufacturingManualAbilityModifier(value: number | null): void;
     setCraftingCreatureType(value: string): void;
     setCraftingSpellcastingKey(value: string): void;
     setCraftingTargetDc(value: number | null): void;
@@ -237,6 +240,26 @@ export function createHarvestingCraftingWorkflow(
             }));
             return;
         }
+        if (state.craftingProcedure === "manufacturing"
+            && state.craftingManufacturingAbilityMode === "character"
+            && state.craftingManufacturingAbilityKey.trim().length === 0) {
+            update(current => ({
+                ...current,
+                craftingStatus: "error",
+                message: "Choose the Ability required by the Manufacturing tool/product, or use a manual Ability modifier."
+            }));
+            return;
+        }
+        if (state.craftingProcedure === "manufacturing"
+            && state.craftingManufacturingAbilityMode === "manual"
+            && state.craftingManufacturingManualAbilityModifier === null) {
+            update(current => ({
+                ...current,
+                craftingStatus: "error",
+                message: "Enter the manual Ability modifier required for this Manufacturing check."
+            }));
+            return;
+        }
         if (state.craftingProcedure === "enchanting"
             && competency === null
             && state.craftingCreatureType.trim().length === 0) {
@@ -268,7 +291,13 @@ export function createHarvestingCraftingWorkflow(
                     {
                         ...common,
                         competency: competency!,
-                        hasQualifiedGuidance: state.craftingHasQualifiedGuidance
+                        hasQualifiedGuidance: state.craftingHasQualifiedGuidance,
+                        abilityKey: state.craftingManufacturingAbilityMode === "character"
+                            ? state.craftingManufacturingAbilityKey.trim()
+                            : null,
+                        manualAbilityModifier: state.craftingManufacturingAbilityMode === "manual"
+                            ? state.craftingManufacturingManualAbilityModifier
+                            : null
                     })
                 : await resolveCharacterEnchanting(
                     environment,
@@ -1013,6 +1042,27 @@ export function createHarvestingCraftingWorkflow(
             update(state => clearCraftingResult(invalidateCurrentCraftingStage({
                 ...state,
                 craftingHasQualifiedGuidance: value
+            })));
+        },
+
+        setCraftingManufacturingAbilityMode(value): void {
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
+                ...state,
+                craftingManufacturingAbilityMode: value
+            })));
+        },
+
+        setCraftingManufacturingAbilityKey(value): void {
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
+                ...state,
+                craftingManufacturingAbilityKey: value
+            })));
+        },
+
+        setCraftingManufacturingManualAbilityModifier(value): void {
+            update(state => clearCraftingResult(invalidateCurrentCraftingStage({
+                ...state,
+                craftingManufacturingManualAbilityModifier: value
             })));
         },
 
