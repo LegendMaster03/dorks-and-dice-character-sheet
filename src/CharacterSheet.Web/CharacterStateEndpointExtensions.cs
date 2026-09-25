@@ -273,12 +273,18 @@ public static class CharacterStateEndpointExtensions
         {
             try
             {
-                return ToApiResult(
-                    await service.AddInventoryItemOccurrenceAsync(
+                var result = !string.IsNullOrWhiteSpace(request.ConceptKey)
+                    ? await service.AddInventoryItemOccurrenceAsync(
                         characterId,
                         request.ConceptKey,
-                        cancellationToken),
-                    mutating: true);
+                        cancellationToken)
+                    : await service.AddCustomInventoryItemOccurrenceAsync(
+                        characterId,
+                        request.CustomName
+                            ?? throw new ArgumentException(
+                                "A custom inventory item name is required when conceptKey is omitted."),
+                        cancellationToken);
+                return ToApiResult(result, mutating: true);
             }
             catch (ArgumentException exception)
             {
@@ -566,7 +572,9 @@ public sealed record CharacterRulesInputStateRequest(
 
 public sealed record CharacterHitPointGainRequest(int HitDieValue);
 
-public sealed record CharacterInventoryItemOccurrenceRequest(string ConceptKey);
+public sealed record CharacterInventoryItemOccurrenceRequest(
+    string? ConceptKey = null,
+    string? CustomName = null);
 
 public sealed record CharacterInventoryItemOccurrenceStateRequest(
     int Quantity,
