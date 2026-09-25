@@ -405,6 +405,21 @@ test("desktop Skill disclosures float without reflow while constrained layouts r
     assert.doesNotMatch(mechanicsCssSource, /@container character-sheet \(max-width:[\s\S]*?\.dd-skill-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
 });
 
+test("Competencies use an inline narrow-rail breakout instead of the desktop Skill popover", () => {
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-row__name\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-disclosure__body\s*\{[^}]*max-width:\s*100%;[^}]*overflow:\s*visible;/s);
+    assert.doesNotMatch(
+        mechanicsCssSource,
+        /\.dd-competency-disclosure__body\s*\{[^}]*position:\s*absolute;/s);
+    assert.match(
+        mechanicsCssSource,
+        /\.dd-competency-fact\s*,[\s\S]*?grid[^}]*gap:/s);
+});
+
 test("desktop composite Skills retain the compact split parent-and-children layout", () => {
     assert.match(css, /\.dd-skill-group--composite\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.95fr\)\s+minmax\(0,\s*1\.05fr\)/s);
     assert.match(css, /\.dd-skill-group__parent\s*\{[^}]*grid-row:\s*1 \/ span var\(--dd-skill-component-count\);[^}]*border-right:/s);
