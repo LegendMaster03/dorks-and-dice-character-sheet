@@ -115,12 +115,15 @@ public static class CharacterRulesProjectionRequestBuilder
                 .ToArray();
 
             itemConceptKeys = state.InventoryItemOccurrences
-                .Select(value => value.RuleConceptKey)
+                .Where(value => !string.IsNullOrWhiteSpace(value.RuleConceptKey))
+                .Select(value => value.RuleConceptKey!)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             var equipped = state.InventoryItemOccurrences
-                .Where(value => value.IsEquipped)
-                .Select(value => value.RuleConceptKey)
+                .Where(value =>
+                    value.IsEquipped
+                    && !string.IsNullOrWhiteSpace(value.RuleConceptKey))
+                .Select(value => value.RuleConceptKey!)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             equippedItemConceptKeys = equipped.Length == 0 ? null : equipped;
