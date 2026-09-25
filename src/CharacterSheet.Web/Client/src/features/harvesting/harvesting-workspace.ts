@@ -29,10 +29,7 @@ export function renderHarvestingCraftingWorkspace(
     const heading = createElement("div", "dd-harvesting-workspace__heading");
     heading.append(
         createElement("h2", "dd-harvesting-workspace__title", "Harvesting & Crafting"),
-        createElement(
-            "p",
-            "dd-harvesting-workspace__source",
-            "Rules: Loot Tavern — Harvesting & Crafting Lite. Rules Core resolves the effective mechanics; this workspace supplies runtime choices and results."));
+        renderRulesSource(state));
     header.append(
         heading,
         createButton(
@@ -172,7 +169,7 @@ function renderHarvestingPanel(
         renderHarvestingInputs(state, handlers, readOnly),
         renderHelperInputs(state, handlers, readOnly),
         renderHarvestOrder(state, handlers, readOnly),
-        renderOutcome(state));
+        renderOutcome(character, state, handlers, readOnly));
 
     return panel;
 }
@@ -435,7 +432,12 @@ function renderHarvestOrder(
     return card;
 }
 
-function renderOutcome(state: HarvestingCraftingUiState): HTMLElement {
+function renderOutcome(
+    character: CharacterSheetBootstrapResponse,
+    state: HarvestingCraftingUiState,
+    handlers: HarvestingCraftingWorkflow,
+    readOnly: boolean
+): HTMLElement {
     if (state.outcomeStatus === "loading") {
         return createInlineState("Rules Core is calculating the Harvesting outcome…", "loading");
     }
@@ -473,7 +475,48 @@ function renderOutcome(state: HarvestingCraftingUiState): HTMLElement {
         list.append(item);
     }
     card.append(list);
+    const awarded = outcome.components.filter(component => component.awarded);
+    if (awarded.length > 0) {
+        card.append(createButton(
+            state.harvestInventoryStatus === "loading"
+                ? "Adding to Inventory…"
+                : state.harvestInventoryAwarded
+                    ? "Added to Inventory"
+                    : "Add Harvested Components to Inventory",
+            "dd-button dd-button--secondary",
+            () => void handlers.awardHarvest(character.characterId),
+            readOnly
+                || state.harvestInventoryStatus === "loading"
+                || state.harvestInventoryAwarded));
+    }
     return card;
+}
+
+function renderRulesSource(state: HarvestingCraftingUiState): HTMLElement {
+    const source = state.catalog?.source;
+    const line = createElement(
+        "p",
+        "dd-harvesting-workspace__source",
+        source === undefined
+            ? "Rules Core resolves the effective Harvesting & Crafting mechanics."
+            : `Rules: ${source.provider} — ${source.workDisplayName}. `);
+    if (source !== undefined && isSafeHttpsUrl(source.referenceUri)) {
+        const link = document.createElement("a");
+        link.href = source.referenceUri;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Official rules";
+        line.append(link);
+    }
+    return line;
+}
+
+function isSafeHttpsUrl(value: string): boolean {
+    try {
+        return new URL(value).protocol === "https:";
+    } catch {
+        return false;
+    }
 }
 
 function renderCraftingPanel(
