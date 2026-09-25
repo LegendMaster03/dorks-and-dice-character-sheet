@@ -145,7 +145,7 @@ function renderCompetencyDisclosure(
 ): HTMLElement {
     if (!hasCompetencyBreakout(competency) && !canEditRank(competency, control)) {
         const row = renderSummaryRow(competency);
-        row.classList.add("dd-competency-row--standalone");
+        row.className += " dd-competency-row--standalone";
         return row;
     }
 
