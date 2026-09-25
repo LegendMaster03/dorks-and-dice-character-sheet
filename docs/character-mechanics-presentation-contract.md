@@ -219,7 +219,7 @@ The backend remains authoritative for combat values and their calculations. Base
 - `supportsTrainingState`;
 - `presentationCategory`: open-ended Rules Core-owned placement metadata, with `skill`, `competency`, and `supporting` as current values.
 
-The three `supports...` fields and family/specialty metadata describe the normalized Rules Core competency contract. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend displays `-`; it must not substitute `0`, `false`, or another inferred value.
+The three `supports...` fields, facet metadata, family/specialty metadata, and source attribution are Rules Core integration metadata. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend displays `-`; it must not substitute `0`, `false`, or another inferred value. Character-facing competency details do not surface source-history taxonomy merely because the integration contract carries it.
 
 Rules Core now exposes an authoritative universal competency catalog separately from its source-shaped implementation mechanics. Character Sheet treats the universal catalog as the presentation identity. A universal entry uses a semantic key such as `competency.alchemy`, while its `mechanicKeys` point to the Rules Core implementation mechanics used for evaluation and compatibility. Historical skill names, tool names, and other import aliases do not become duplicate Character Sheet rows.
 
@@ -233,11 +233,15 @@ The Character Sheet partitions the universal catalog only from Rules Core `prese
 - other explicit future non-`skill`, non-`supporting` categories remain visible through the Competencies card rather than being silently discarded;
 - responses that predate `presentationCategory` remain in **Skills** as a compatibility fallback.
 
-The **Skills** card therefore remains focused on ordinary/historical skills and Rules Core-supplied composite skill relationships. **Proficiencies & Training** and **Competencies** are separate sibling cards: the former shows ordinary proficiency/training state, while the latter presents normalized broader competencies. The generic Craft family and its 3.x-only specialties do not become a visible `Craft -> specialties` list. Reviewed shared Craft/tool identities such as Alchemy render once as normalized competencies, while their historical ranked-skill and later tool facets remain available behind that identity.
+The **Skills** card remains focused on ordinary skills and Rules Core-supplied composite skill relationships. **Proficiencies & Training** and **Competencies** are separate Character-facing surfaces. The generic Craft family and its source-specific specialties do not become a visible `Craft -> specialties` hierarchy in the Competencies card. Reviewed shared identities such as Alchemy or Carpentry render once as universal competencies.
 
-The Competencies card has its own row/detail presentation rather than reusing the Skills content layout. Its compact row emphasizes the universal competency identity and training state. On wide Character Sheet layouts, expanding a competency uses the same floating interaction model as Skills so opening details does not resize the reference rail; on constrained layouts it remains inline. The **Competency details** breakout can show state, implementation facets, related competencies, rank controls, and source attribution, and floating breakouts are allowed to extend beyond the Character Sheet boundary rather than being clipped by the sheet shell.
+The Competencies card has its own row/detail presentation rather than reusing the Skills content layout. Its compact row emphasizes the universal competency identity and its one shared training/proficiency state. On wide Character Sheet layouts, expanding a competency uses the same floating interaction model as Skills so opening details does not resize its lane; on constrained layouts it remains inline.
 
-A shared Craft/tool identity renders once because the split occurs after Rules Core has already reconciled the source facets into one semantic competency. Tool proficiency state is displayed as training/proficiency state; it is never converted into ranks. Rank editing remains available only when Rules Core supplies `supportsRanks` and an unambiguous `rankInputKey`.
+The **Competency details** breakout shows only character-facing mechanics relevant to play: the single shared **Training / Proficiency** state, ranks when the competency supports rank investment, governing Ability, class-skill state, trained-only behavior, Armor Check Penalty behavior, related competency mechanics, and rank controls when available. It does not display source attribution, edition grouping, family/specialty history, or separate skill/tool proficiency rows. Facets remain available to the backend for evaluation and reconciliation, but they are not presented as independent proficiency tracks.
+
+A shared identity renders once because Rules Core has already reconciled its source-shaped mechanics into one semantic competency. The universal `sharedTrainingKey` represents the one training/proficiency state consumed by every applicable facet. Ranks remain a separate numeric mechanic and are never converted into proficiency or vice versa. Rank editing remains available only when Rules Core supplies `supportsRanks` and an unambiguous `rankInputKey`.
+
+A competency whose only additional metadata is its shared training/proficiency state does not open a redundant details panel; the row already presents that state. A breakout appears only when there are additional play-relevant mechanics to show.
 
 The frontend does not classify entries by parsing `Craft (...)`, `Tools`, `Kit`, `Supplies`, publisher names, source editions, or competency `kind`. `supporting` is the only current category intentionally omitted from direct Character presentation.
 
@@ -245,13 +249,11 @@ Character Sheet may carry `rankInputKey` for the one unambiguous implementation 
 
 Ranks, final modifiers, class-skill effects, trained-only rules, and Armor Check Penalty effects are backend/Rules Core responsibilities. The frontend displays supplied facts.
 
-### Specialty competencies
+### Family and specialty metadata
 
-Specialized entries are represented by ordinary `CompetencyView` data. `family` and `specialty` remain separate normalized fields when Rules Core supplies them. A Rules Core entry marked `isFamily: true` is rendered as an organizational family. When `childCompetencyKeys` are supplied, those keys are authoritative for family membership. Matching a family label is retained only as a compatibility fallback for older Rules Core responses.
+`family`, `specialty`, `isFamily`, and `childCompetencyKeys` remain available in the shared competency contract because Skills and Rules Core reconciliation can legitimately use taxonomy. They are not Character-facing history for normalized entries in the **Competencies** card.
 
-This allows Rules Core to retain reviewed family members even when no source-shaped implementation mechanic exists. Character Sheet renders only members whose Rules Core `presentationCategory` is Character-facing; supporting Craft-only historical specialties remain available to rules reconciliation without being surfaced as competency rows.
-
-The frontend does not identify specialties, parse names such as `Craft (...)`, deduplicate tools and skills by display name, or maintain a hard-coded list of family names. Family nesting is driven only by authoritative Rules Core semantic metadata. This is distinct from composite relationships, which represent explicit mechanical composition rather than taxonomy.
+Character Sheet renders only entries whose Rules Core `presentationCategory` is Character-facing. Supporting source-specific taxonomy remains available to Rules Core without becoming competency-detail fields. The browser does not parse names such as `Craft (...)`, deduplicate tools and skills by display name, or maintain a hard-coded family list.
 
 ### Composite relationships
 
