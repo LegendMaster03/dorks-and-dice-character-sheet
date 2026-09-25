@@ -259,6 +259,10 @@ export interface HarvestingCraftingUiState {
     craftingOutputQuantity: number;
     craftingRequiresManufacturing: boolean;
     craftingRequiresEnchanting: boolean;
+    craftingManufacturingRequiredHours: number | null;
+    craftingManufacturingCompletedHours: number;
+    craftingEnchantingRequiredHours: number | null;
+    craftingEnchantingCompletedHours: number;
     craftingMaterials: Array<{ occurrenceId: string; quantity: number }>;
     craftingManufacturingSucceeded: boolean | null;
     craftingEnchantingSucceeded: boolean | null;
@@ -586,6 +590,10 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
         craftingOutputQuantity: 1,
         craftingRequiresManufacturing: true,
         craftingRequiresEnchanting: false,
+        craftingManufacturingRequiredHours: null,
+        craftingManufacturingCompletedHours: 0,
+        craftingEnchantingRequiredHours: null,
+        craftingEnchantingCompletedHours: 0,
         craftingMaterials: [],
         craftingManufacturingSucceeded: null,
         craftingEnchantingSucceeded: null,
