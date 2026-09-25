@@ -290,12 +290,16 @@ export function createHarvestingCraftingWorkflow(
                 craftingResolution: resolution,
                 craftingSelectedRoll: d20Roll,
                 craftingManufacturingSucceeded:
-                    state.craftingProcedure === "manufacturing" && d20Roll !== null
-                        ? resolution.meetsTarget
+                    state.craftingProcedure === "manufacturing"
+                        && d20Roll !== null
+                        && resolution.outcome !== "pending"
+                        ? resolution.producesFunctionalOutput
                         : current.craftingManufacturingSucceeded,
                 craftingEnchantingSucceeded:
-                    state.craftingProcedure === "enchanting" && d20Roll !== null
-                        ? resolution.meetsTarget
+                    state.craftingProcedure === "enchanting"
+                        && d20Roll !== null
+                        && resolution.outcome !== "pending"
+                        ? resolution.producesFunctionalOutput
                         : current.craftingEnchantingSucceeded,
                 craftingCompletionStatus: d20Roll !== null
                     ? "idle"
@@ -711,22 +715,35 @@ export function createHarvestingCraftingWorkflow(
             }));
             return;
         }
-        if (state.craftingRequiresManufacturing && state.craftingManufacturingSucceeded !== true) {
+        if (state.craftingRequiresManufacturing
+            && state.craftingManufacturingSucceeded === null) {
             update(current => ({
                 ...current,
                 craftingCompletionStatus: "error",
-                message: "Complete the required Manufacturing check successfully before finishing the recipe."
+                message: "Resolve the required Manufacturing check before finalizing the recipe attempt."
             }));
             return;
         }
-        if (state.craftingRequiresEnchanting && state.craftingEnchantingSucceeded !== true) {
+
+        const manufacturingFailed =
+            state.craftingRequiresManufacturing
+            && state.craftingManufacturingSucceeded === false;
+        if (!manufacturingFailed
+            && state.craftingRequiresEnchanting
+            && state.craftingEnchantingSucceeded === null) {
             update(current => ({
                 ...current,
                 craftingCompletionStatus: "error",
-                message: "Complete the required Enchanting check successfully before finishing the recipe."
+                message: "Resolve the required Enchanting check before finalizing the recipe attempt."
             }));
             return;
         }
+
+        const producesOutput =
+            (!state.craftingRequiresManufacturing
+                || state.craftingManufacturingSucceeded === true)
+            && (!state.craftingRequiresEnchanting
+                || state.craftingEnchantingSucceeded === true);
 
         const inventory = routine.current().state?.inventoryItemOccurrences ?? [];
         for (const material of state.craftingMaterials) {
@@ -757,10 +774,12 @@ export function createHarvestingCraftingWorkflow(
                         occurrenceId: material.occurrenceId,
                         quantity: material.quantity
                     })),
-                    additions: [{
-                        customName: outputName,
-                        quantity: state.craftingOutputQuantity
-                    }]
+                    additions: producesOutput
+                        ? [{
+                            customName: outputName,
+                            quantity: state.craftingOutputQuantity
+                        }]
+                        : []
                 }),
             undefined,
             { render: false });
@@ -780,7 +799,9 @@ export function createHarvestingCraftingWorkflow(
             ...current,
             craftingCompletionStatus: "ready",
             craftingCompleted: true,
-            message: `${recipeName} completed. Inventory materials were consumed and ${state.craftingOutputQuantity} × ${outputName} was added.`
+            message: producesOutput
+                ? `${recipeName} completed. Inventory materials were consumed and ${state.craftingOutputQuantity} × ${outputName} was added.`
+                : `${recipeName} did not produce a functional output. The selected inputs were consumed according to the resolved crafting outcome.`
         }));
     }
 
