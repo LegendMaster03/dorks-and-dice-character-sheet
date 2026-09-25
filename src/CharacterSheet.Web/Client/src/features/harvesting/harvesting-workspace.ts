@@ -65,6 +65,7 @@ export function renderHarvestingCraftingWorkspace(
             state.message,
             state.tableStatus === "error" || state.outcomeStatus === "error"
                 || state.catalogStatus === "error" || state.monsterStatus === "error"
+                || state.craftingStatus === "error"
                 ? "error"
                 : "warning"));
     }
