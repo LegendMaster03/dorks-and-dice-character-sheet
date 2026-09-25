@@ -6,8 +6,7 @@ import type { CharacterSheetBootstrapResponse } from "../../character-api.js";
 import type { CharacterMechanicsView } from "../../ui/character-mechanics.js";
 import type { HarvestingCraftingWorkflow } from "./harvesting-workflow.js";
 import type {
-    HarvestingComponentResponse,
-    HarvestingHelperInput
+    HarvestingComponentResponse
 } from "../../rules-core-api.js";
 import {
     createButton,
@@ -359,9 +358,46 @@ function renderHelperInputs(
 
     state.helpers.forEach((helper, index) => {
         const row = createElement("div", "dd-harvesting-helper");
-        row.append(
-            createElement("strong", "dd-harvesting-helper__title", `Helper ${index + 1}`),
-            numberField(
+        row.append(createElement(
+            "strong",
+            "dd-harvesting-helper__title",
+            helper.displayName?.trim().length
+                ? helper.displayName
+                : `Helper ${index + 1}`));
+
+        if (state.scopeCampaignId !== null) {
+            const source = createElement("label", "dd-harvesting-field");
+            source.append(createElement("span", "dd-harvesting-field__label", "Campaign Character"));
+            const select = createElement("select", "dd-harvesting-field__control");
+            const manual = createElement("option");
+            manual.value = "";
+            manual.textContent = "Manual helper";
+            select.append(manual);
+            for (const character of state.campaignCharacters) {
+                const option = createElement("option");
+                option.value = character.characterId;
+                option.textContent = character.name;
+                select.append(option);
+            }
+            select.value = helper.characterId ?? "";
+            select.disabled = readOnly || state.campaignContextStatus === "loading";
+            select.addEventListener("change", () =>
+                void handlers.setHelperCharacter(
+                    index,
+                    select.value.length === 0 ? null : select.value));
+            source.append(select);
+            row.append(source);
+
+            if (helper.resolutionStatus === "loading") {
+                row.append(createInlineState("Resolving helper mechanics…", "loading"));
+            } else if (helper.resolutionStatus === "error") {
+                row.append(createInlineState(
+                    "Resolved helper data is incomplete. Manual values below remain editable.",
+                    "warning"));
+            }
+        }
+
+        row.append(numberField(
                 "Proficiency bonus",
                 helper.proficiencyBonus,
                 value => handlers.updateHelper(
@@ -388,6 +424,17 @@ function renderHelperInputs(
             readOnly));
         card.append(row);
     });
+
+    if (state.scopeCampaignId !== null && state.campaignContextStatus === "loading") {
+        card.append(createInlineState("Loading campaign helper roster…", "loading"));
+    } else if (state.scopeCampaignId !== null
+        && state.campaignContextStatus === "ready"
+        && state.campaignCharacters.length === 0) {
+        card.append(createElement(
+            "p",
+            "dd-harvesting-field__help",
+            "No active campaign-linked Characters are available. Manual helper entry remains available."));
+    }
 
     card.append(createButton(
         "Add Helper",
