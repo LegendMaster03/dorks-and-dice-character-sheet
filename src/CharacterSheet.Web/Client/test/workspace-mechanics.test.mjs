@@ -1748,8 +1748,8 @@ test("workspace renders specialized, composite, independent, and unconfigured co
     assert.ok(specialty);
     assert.match(visibleText(family), /Craft/);
     assert.match(visibleText(specialtyRow), /Craft \(Alchemy\)/);
-    assert.match(visibleText(specialty), /Family\s+Craft/);
-    assert.match(visibleText(specialty), /Specialty\s+alchemy/);
+    assert.doesNotMatch(visibleText(specialty), /Family\s+Craft/);
+    assert.doesNotMatch(visibleText(specialty), /Specialty\s+alchemy/);
     assert.match(visibleText(specialty), /Ranks\s+-/);
     assert.match(visibleText(specialty), /Training\s+-/);
     assert.match(visibleText(specialty), /Class skill\s+-/);
