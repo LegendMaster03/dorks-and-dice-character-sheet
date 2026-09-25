@@ -27,11 +27,29 @@ public sealed class PostgresCharacterArtStore(CharacterSheetDbContext dbContext)
 
     public async Task<CharacterArtAsset?> SetPortraitAsync(Guid characterId, Guid assetId, DateTimeOffset changedAt, CancellationToken cancellationToken = default)
     {
-        var assets = await dbContext.CharacterArtAssets.Where(value => value.CharacterId == characterId).ToArrayAsync(cancellationToken);
+        var assets = await dbContext.CharacterArtAssets
+            .Where(value => value.CharacterId == characterId)
+            .ToArrayAsync(cancellationToken);
         var selected = assets.SingleOrDefault(value => value.Id == assetId);
         if (selected is null) return null;
-        foreach (var asset in assets) asset.SetPortrait(asset.Id == assetId, changedAt);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var previousPortraits = assets
+            .Where(value => value.IsPortrait && value.Id != assetId)
+            .ToArray();
+
+        if (previousPortraits.Length > 0)
+        {
+            foreach (var asset in previousPortraits)
+            {
+                asset.SetPortrait(false, changedAt);
+            }
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        selected.SetPortrait(true, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return selected;
     }
 
