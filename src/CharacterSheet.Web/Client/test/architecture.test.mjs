@@ -204,3 +204,21 @@ test("Crafting UI is organized around project and crafting steps", async () => {
     assert.doesNotMatch(workspace, /Crafting Procedure/);
     assert.doesNotMatch(workspace, /Universal competency/);
 });
+
+
+test("Harvesting and Crafting opens as a modal over the Character Sheet", async () => {
+    const sheet = await source("ui/sheet.ts");
+    const workspace = await source("features/harvesting/harvesting-workspace.ts");
+    const css = await source("styles/supplemental.css");
+
+    assert.match(sheet, /renderHarvestingCraftingOverlay/);
+    assert.doesNotMatch(
+        sheet,
+        /if \(harvestingCrafting\.open\)[\s\S]{0,600}return shell;/,
+        "opening Harvesting & Crafting must not replace the Character Sheet");
+    assert.match(workspace, /aria-modal", "true"/);
+    assert.match(workspace, /event\.key !== "Escape"/);
+    assert.match(workspace, /event\.target === overlay/);
+    assert.match(css, /\.dd-harvesting-overlay\s*\{[\s\S]*position:\s*fixed/);
+    assert.match(css, /\.dd-harvesting-dialog\s*\{[\s\S]*width:\s*min\(94vw, 88rem\)/);
+});
