@@ -1,14 +1,9 @@
 import {
     formatMechanicalValue,
     type CalculatedMechanicalValueView,
-    type CharacterMechanicsView,
-    type CompetencyPresentationItem
+    type CharacterMechanicsView
 } from "../../ui/character-mechanics.js";
 import { createElement, createSectionCard } from "../../ui/components.js";
-import {
-    renderCompetenciesSection,
-    type CompetencyRankControlOptions
-} from "../../ui/skills.js";
 
 export function renderPassiveValuesCard(mechanics: CharacterMechanicsView | null): HTMLElement {
     return renderSupportValuesCard("Passive Values", "passive", mechanics?.passiveValues);
@@ -35,17 +30,11 @@ export function renderSensesSummaryCard(mechanics: CharacterMechanicsView | null
     return card;
 }
 
-export function renderTrainingCard(
-    mechanics: CharacterMechanicsView | null,
-    competencies: readonly CompetencyPresentationItem[] | null = null,
-    competencyControl: CompetencyRankControlOptions = {}
-): HTMLElement {
-    const card = renderSupportValuesCard(
+export function renderTrainingCard(mechanics: CharacterMechanicsView | null): HTMLElement {
+    return renderSupportValuesCard(
         "Proficiencies & Training",
         "training",
         mechanics?.training);
-    card.append(renderCompetenciesSection(competencies, competencyControl));
-    return card;
 }
 
 function renderSupportGroup(
