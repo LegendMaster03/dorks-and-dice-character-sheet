@@ -1,4 +1,5 @@
 using CharacterSheet.Application.Characters;
+using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Web;
 
