@@ -74,21 +74,30 @@ export function renderInventorySection(
     for (const occurrence of routine.state.inventoryItemOccurrences) {
         const item = createElement("article", "dd-inventory-item");
         item.setAttribute("data-inventory-occurrence-id", occurrence.id);
-        const reference = routine.references[occurrence.id] ?? {
-            status: "loading" as const,
-            conceptKey: occurrence.ruleConceptKey
-        };
-        const display = toRuleReferenceDisplay(reference);
-        const title = display.tone === "unavailable"
-            ? "Unavailable item reference"
-            : display.value;
-        item.append(
-            createElement("h3", "dd-inventory-item__name", title),
-            createElement(
-                "p",
-                "dd-routine-meta",
-                display.detail ?? occurrence.ruleConceptKey)
-        );
+        if (occurrence.ruleConceptKey === null) {
+            item.append(
+                createElement(
+                    "h3",
+                    "dd-inventory-item__name",
+                    occurrence.customName ?? "Unnamed custom item"),
+                createElement("p", "dd-routine-meta", "Manual inventory item"));
+        } else {
+            const reference = routine.references[occurrence.id] ?? {
+                status: "loading" as const,
+                conceptKey: occurrence.ruleConceptKey
+            };
+            const display = toRuleReferenceDisplay(reference);
+            const title = display.tone === "unavailable"
+                ? "Unavailable item reference"
+                : display.value;
+            item.append(
+                createElement("h3", "dd-inventory-item__name", title),
+                createElement(
+                    "p",
+                    "dd-routine-meta",
+                    display.detail ?? occurrence.ruleConceptKey)
+            );
+        }
         item.append(renderOccurrenceStateSummary(occurrence, routine));
         const occurrenceMechanics = renderItemOccurrenceMechanics(
             findItemOccurrenceMechanics(mechanics, occurrence.id));
@@ -350,10 +359,15 @@ function inventoryOccurrenceLabel(
     const occurrence = occurrences.find(value => value.id === occurrenceId);
     if (occurrence === undefined) return "Unavailable container";
     const reference = routine.references[occurrenceId];
-    const base = reference === undefined
-        ? occurrence.ruleConceptKey
-        : toRuleReferenceDisplay(reference).value;
-    const matching = occurrences.filter(value => value.ruleConceptKey === occurrence.ruleConceptKey);
+    const base = occurrence.ruleConceptKey === null
+        ? (occurrence.customName ?? "Unnamed custom item")
+        : reference === undefined
+            ? occurrence.ruleConceptKey
+            : toRuleReferenceDisplay(reference).value;
+    const matching = occurrences.filter(value =>
+        occurrence.ruleConceptKey === null
+            ? value.ruleConceptKey === null && value.customName === occurrence.customName
+            : value.ruleConceptKey === occurrence.ruleConceptKey);
     if (matching.length <= 1) return base;
     const index = matching.findIndex(value => value.id === occurrenceId);
     return index < 0 ? base : `${base} #${index + 1}`;
