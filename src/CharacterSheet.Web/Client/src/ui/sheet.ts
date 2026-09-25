@@ -95,7 +95,8 @@ export function renderCharacterWorkspace(
             harvestingCrafting,
             handlers.harvestingCrafting!,
             readOnly,
-            mechanics));
+            mechanics,
+            routine));
         return shell;
     }
     if (advancement !== null && advancement.occurrences.length > 0) {
