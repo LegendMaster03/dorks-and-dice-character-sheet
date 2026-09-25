@@ -223,17 +223,17 @@ The three `supports...` fields and family/specialty metadata describe the normal
 
 Rules Core now exposes an authoritative universal competency catalog separately from its source-shaped implementation mechanics. Character Sheet treats the universal catalog as the presentation identity. A universal entry uses a semantic key such as `competency.alchemy`, while its `mechanicKeys` point to the Rules Core implementation mechanics used for evaluation and compatibility. Historical skill names, tool names, and other import aliases do not become duplicate Character Sheet rows.
 
-### Skills and Proficiencies & Training placement
+### Skills, Proficiencies & Training, and Competencies placement
 
 The Character Sheet partitions the universal catalog only from Rules Core `presentationCategory` metadata:
 
 - `skill` entries render in the **Skills** card;
-- `competency` entries render in a **Competencies** subsection inside **Proficiencies & Training**;
+- `competency` entries render in their own **Competencies** card directly below **Proficiencies & Training** in the reference rail;
 - `supporting` entries remain available to backend/rules reconciliation but do not render as direct Character-facing rows;
-- other explicit future non-`skill`, non-`supporting` categories remain visible through the Competencies subsection rather than being silently discarded;
+- other explicit future non-`skill`, non-`supporting` categories remain visible through the Competencies card rather than being silently discarded;
 - responses that predate `presentationCategory` remain in **Skills** as a compatibility fallback.
 
-The **Skills** card therefore remains focused on ordinary/historical skills and Rules Core-supplied composite skill relationships. **Proficiencies & Training** owns the normalized broader competency presentation alongside other training and proficiency state. The generic Craft family and its 3.x-only specialties do not become a visible `Craft -> specialties` list. Reviewed shared Craft/tool identities such as Alchemy render once as normalized competencies, while their historical ranked-skill and later tool facets remain available behind that identity.
+The **Skills** card therefore remains focused on ordinary/historical skills and Rules Core-supplied composite skill relationships. **Proficiencies & Training** and **Competencies** are separate sibling cards: the former shows ordinary proficiency/training state, while the latter presents normalized broader competencies. The generic Craft family and its 3.x-only specialties do not become a visible `Craft -> specialties` list. Reviewed shared Craft/tool identities such as Alchemy render once as normalized competencies, while their historical ranked-skill and later tool facets remain available behind that identity.
 
 A shared Craft/tool identity renders once because the split occurs after Rules Core has already reconciled the source facets into one semantic competency. Tool proficiency state is displayed as training/proficiency state; it is never converted into ranks. Rank editing remains available only when Rules Core supplies `supportsRanks` and an unambiguous `rankInputKey`.
 

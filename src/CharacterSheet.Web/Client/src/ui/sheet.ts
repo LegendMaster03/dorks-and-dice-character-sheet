@@ -28,7 +28,7 @@ import {
     createInlineState,
     createSectionCard
 } from "./components.js";
-import { renderSkillsCard } from "./skills.js";
+import { renderCompetenciesCard, renderSkillsCard } from "./skills.js";
 import {
     renderSensesSummaryCard,
     renderTrainingCard
@@ -215,8 +215,8 @@ export function renderCharacterWorkspace(
     referenceRail.append(
         renderSavingThrowsCard(detachedSavingThrows, true),
         renderSensesSummaryCard(mechanics),
-        renderTrainingCard(
-            mechanics,
+        renderTrainingCard(mechanics),
+        renderCompetenciesCard(
             broaderCompetencyPresentation,
             competencyRankControls)
     );

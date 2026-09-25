@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { renderCompetenciesSection, renderSkillsCard } from "../.test-dist/ui/skills.js";
+import { renderCompetenciesCard, renderSkillsCard } from "../.test-dist/ui/skills.js";
 import { buildCompetencyPresentation } from "../.test-dist/ui/character-mechanics.js";
 
 class FakeStyle {
@@ -440,18 +440,18 @@ test("production Character Sheet drives competencies from the nullable mechanics
     assert.match(sheetSource, /buildCompetencyPresentation\(competencyCollections\.skills\)/);
     assert.match(sheetSource, /buildCompetencyPresentation\(competencyCollections\.competencies\)/);
     assert.match(sheetSource, /renderSkillsCard\(skillPresentation/);
+    assert.match(sheetSource, /renderTrainingCard\(mechanics\)/);
     assert.match(
         sheetSource,
-        /renderTrainingCard\(\s*mechanics,\s*broaderCompetencyPresentation,/);
-    assert.doesNotMatch(sheetSource, /renderCompetenciesCard/);
+        /renderCompetenciesCard\(\s*broaderCompetencyPresentation,/);
     assert.match(sheetSource, /onSetRank:\s*handlers\.rules\.setCompetencyRank/);
     assert.match(sheetSource, /onClearRank:\s*handlers\.rules\.clearCompetencyRank/);
 });
 
 
-test("Skills remain a card while Competencies render as an embedded training section", () => {
+test("Skills and Competencies render as independent cards", () => {
     const skills = renderSkillsCard([standalone(competency("arcana", "Arcana", "+7"))]);
-    const competencies = renderCompetenciesSection([
+    const competencies = renderCompetenciesCard([
         standalone(competency("glassblowing", "Glassblowing", "Proficient", {
             supportsRanks: false,
             supportsTrainingState: true,
@@ -461,7 +461,8 @@ test("Skills remain a card while Competencies render as an embedded training sec
 
     assert.equal(byAttribute(skills, "data-competency-card", "skills").length, 1);
     assert.equal(byAttribute(competencies, "data-competency-card", "competencies").length, 1);
-    assert.equal(competencies.tagName, "SECTION");
+    assert.match(competencies.className, /dd-support-card/);
+    assert.match(competencies.className, /dd-competencies-card/);
     assert.match(visibleText(skills), /Skills/);
     assert.match(visibleText(competencies), /Competencies/);
     assert.equal(byClass(skills, "dd-skills-search")[0].placeholder, "Search skills");

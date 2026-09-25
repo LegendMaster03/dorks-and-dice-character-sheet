@@ -23,21 +23,16 @@ export function renderSkillsCard(
     return card;
 }
 
-export function renderCompetenciesSection(
+export function renderCompetenciesCard(
     items: readonly CompetencyPresentationItem[] | null,
     control: CompetencyRankControlOptions = {}
 ): HTMLElement {
-    const section = createElement(
-        "section",
-        "dd-support-values__group dd-competencies-section");
-    section.setAttribute("data-support-group", "competencies");
-    section.setAttribute("data-competency-card", "competencies");
-    section.append(createElement(
-        "h3",
-        "dd-support-values__group-title",
-        "Competencies"));
-    appendCompetencyContent(section, "competencies", items, control);
-    return section;
+    const card = createSectionCard(
+        "Competencies",
+        "dd-support-card dd-skills-card dd-competencies-card");
+    card.setAttribute("data-competency-card", "competencies");
+    appendCompetencyContent(card, "competencies", items, control);
+    return card;
 }
 
 function appendCompetencyContent(
