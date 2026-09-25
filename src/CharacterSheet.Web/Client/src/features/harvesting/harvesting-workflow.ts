@@ -17,6 +17,9 @@ import {
     resolveCharacterManufacturing,
     type CraftingCompetencyInput
 } from "../../crafting-api.js";
+import { applyInventoryTransaction } from "../../character-state-api.js";
+import type { RoutineStateWorkflow } from "../../core/application/routine-state-workflow.js";
+import type { PresentationWorkflow } from "../../core/application/presentation-workflow.js";
 import {
     normalizeD20RollMode,
     rollD20
@@ -41,6 +44,7 @@ export interface HarvestingCraftingWorkflow {
     removeHelper(index: number): void;
     moveComponent(key: string, direction: -1 | 1): void;
     evaluate(): Promise<void>;
+    awardHarvest(characterId: string): Promise<void>;
     setCraftingProcedure(value: "manufacturing" | "enchanting"): void;
     setCraftingCompetencyMode(value: "resolved" | "manual"): void;
     setCraftingCompetencyKey(value: string): void;
@@ -61,6 +65,8 @@ export interface HarvestingCraftingWorkflow {
 
 export function createHarvestingCraftingWorkflow(
     application: CharacterSheetApplication,
+    routine: RoutineStateWorkflow,
+    presentation: PresentationWorkflow,
     environment: HostEnvironment
 ): HarvestingCraftingWorkflow {
     function update(
@@ -76,7 +82,58 @@ export function createHarvestingCraftingWorkflow(
     function clearResolution(
         state: HarvestingCraftingUiState
     ): HarvestingCraftingUiState {
-        return {
+        async function awardHarvest(characterId: string): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        if (state.outcome === null || state.harvestInventoryAwarded) return;
+
+        const awarded = state.outcome.components.filter(component => component.awarded);
+        if (awarded.length === 0) {
+            update(current => ({
+                ...current,
+                harvestInventoryStatus: "error",
+                message: "No harvested components are available to add to Inventory."
+            }));
+            return;
+        }
+
+        update(current => ({
+            ...current,
+            harvestInventoryStatus: "loading",
+            message: undefined
+        }));
+        const changed = await routine.mutate(
+            "inventory-add",
+            () => applyInventoryTransaction(
+                environment,
+                characterId,
+                {
+                    additions: awarded.map(component => ({
+                        customName: component.displayName,
+                        quantity: component.quantity ?? 1
+                    }))
+                }),
+            undefined,
+            { render: false });
+        if (!changed) {
+            update(current => ({
+                ...current,
+                harvestInventoryStatus: "error",
+                message: routine.current().mutationError
+                    ?? "Harvested components could not be added to Inventory."
+            }));
+            return;
+        }
+
+        await presentation.load(characterId);
+        update(current => ({
+            ...current,
+            harvestInventoryStatus: "ready",
+            harvestInventoryAwarded: true,
+            message: `Added ${awarded.length} harvested component type${awarded.length === 1 ? "" : "s"} to Inventory.`
+        }));
+    }
+
+    return {
             ...state,
             tableStatus: "idle",
             tableRequest: null,
@@ -84,6 +141,8 @@ export function createHarvestingCraftingWorkflow(
             harvestOrder: [],
             outcomeStatus: "idle",
             outcome: null,
+            harvestInventoryStatus: "idle",
+            harvestInventoryAwarded: false,
             message: undefined
         };
     }
@@ -319,6 +378,8 @@ export function createHarvestingCraftingWorkflow(
             harvestOrder: [],
             outcomeStatus: "idle",
             outcome: null,
+            harvestInventoryStatus: "idle",
+            harvestInventoryAwarded: false,
             message: undefined
         }));
         try {
@@ -560,6 +621,7 @@ export function createHarvestingCraftingWorkflow(
         },
 
         evaluate,
+        awardHarvest,
 
         setCraftingProcedure(value): void {
             update(state => clearCraftingResult({
