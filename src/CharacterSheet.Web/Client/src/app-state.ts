@@ -4,6 +4,7 @@ import type {
     CharacterBuilderChoice
 } from "./builder-api.js";
 import type { CharacterSheetBootstrapResponse } from "./character-api.js";
+import type { CraftingCheckResolutionResponse } from "./crafting-api.js";
 import type { CharacterPresentationResponse } from "./character-presentation-api.js";
 import type {
     CharacterRecoveryRequestInput,
@@ -217,6 +218,22 @@ export interface HarvestingCraftingUiState {
     helpers: HarvestingHelperInput[];
     outcomeStatus: "idle" | "loading" | "ready" | "error";
     outcome: HarvestingOutcomeResponse | null;
+    craftingProcedure: "manufacturing" | "enchanting";
+    craftingCompetencyMode: "resolved" | "manual";
+    craftingCompetencyKey: string;
+    craftingManualName: string;
+    craftingManualContribution: number | null;
+    craftingManualQualified: boolean;
+    craftingHasQualifiedGuidance: boolean;
+    craftingCreatureType: string;
+    craftingSpellcastingKey: string;
+    craftingTargetDc: number | null;
+    craftingOtherModifier: number;
+    craftingStatus: "idle" | "loading" | "ready" | "error";
+    craftingResolution: CraftingCheckResolutionResponse | null;
+    craftingRolls: number[];
+    craftingSelectedRoll: number | null;
+    craftingRollTie: boolean;
     message?: string;
 }
 
@@ -510,7 +527,23 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
         harvestOrder: [],
         helpers: [],
         outcomeStatus: "idle",
-        outcome: null
+        outcome: null,
+        craftingProcedure: "manufacturing",
+        craftingCompetencyMode: "resolved",
+        craftingCompetencyKey: "",
+        craftingManualName: "",
+        craftingManualContribution: null,
+        craftingManualQualified: false,
+        craftingHasQualifiedGuidance: false,
+        craftingCreatureType: "",
+        craftingSpellcastingKey: "",
+        craftingTargetDc: null,
+        craftingOtherModifier: 0,
+        craftingStatus: "idle",
+        craftingResolution: null,
+        craftingRolls: [],
+        craftingSelectedRoll: null,
+        craftingRollTie: false
     };
 }
 
