@@ -339,8 +339,19 @@
 .dd-competency-members,
 .dd-competency-components {
     display: grid;
-    gap: 0.18rem;
+    gap: var(--dd-sheet-space-1);
     min-width: 0;
+}
+
+.dd-competency-list-item {
+    display: block;
+    min-width: 0;
+    margin: 0;
+}
+
+.dd-competency-list-item > .dd-competency-disclosure {
+    display: block;
+    margin: 0;
 }
 
 .dd-competency-no-matches,
@@ -375,8 +386,8 @@
     gap: 0.3rem;
     align-items: center;
     min-width: 0;
-    min-height: 1.55rem;
-    padding: 0.18rem 0.3rem;
+    min-height: 1.5rem;
+    padding: 0.125rem 0.25rem;
     color: var(--dd-sheet-ink);
     background: var(--dd-sheet-surface-muted);
     border: 1px solid var(--dd-sheet-border);
@@ -455,7 +466,7 @@
     gap: var(--dd-sheet-space-3);
     min-width: 0;
     max-width: 100%;
-    margin-top: 0.18rem;
+    margin-top: var(--dd-sheet-space-1);
     padding: var(--dd-sheet-space-2);
     overflow: visible;
     background: var(--dd-sheet-surface);
@@ -470,18 +481,18 @@
  * from its row and may extend beyond the Character Sheet boundary.
  */
 @container character-sheet (min-width: 62rem) {
-    .dd-competency-list > .dd-competency-disclosure {
+    .dd-competency-list-item > .dd-competency-disclosure {
         position: relative;
     }
 
-    .dd-competency-list > .dd-competency-disclosure[open] {
+    .dd-competency-list-item > .dd-competency-disclosure[open] {
         z-index: 40;
     }
 
-    .dd-competency-list > .dd-competency-disclosure > .dd-competency-disclosure__body {
+    .dd-competency-list-item > .dd-competency-disclosure > .dd-competency-disclosure__body {
         position: absolute;
         z-index: 40;
-        inset-block-start: calc(100% + 0.18rem);
+        inset-block-start: calc(100% + var(--dd-sheet-space-1));
         inset-inline-start: 0;
         width: max(100%, 22rem);
         max-width: min(34rem, calc(100vw - 2rem));
