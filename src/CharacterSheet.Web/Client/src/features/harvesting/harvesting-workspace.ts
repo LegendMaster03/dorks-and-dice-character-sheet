@@ -191,7 +191,7 @@ function renderHarvestingPanel(
     handlers: HarvestingCraftingWorkflow,
     readOnly: boolean
 ): HTMLElement {
-    const panel = createElement("div", "dd-harvesting-workspace__panel");
+    const panel = createElement("div", "dd-harvesting-workspace__panel dd-harvesting-worksheet");
 
     if (state.catalogStatus === "loading" || state.catalogStatus === "idle") {
         panel.append(createInlineState("Loading Harvesting rules…", "loading"));
@@ -204,22 +204,28 @@ function renderHarvestingPanel(
         return panel;
     }
 
-    panel.append(renderCreatureSelection(state, handlers));
+    const plan = createElement("div", "dd-harvesting-worksheet__plan");
+    const checks = createElement("div", "dd-harvesting-worksheet__checks");
+
+    plan.append(renderCreatureSelection(state, handlers));
 
     if (state.tableStatus === "loading") {
-        panel.append(createInlineState("Loading harvestable components…", "loading"));
+        plan.append(createInlineState("Loading harvestable components…", "loading"));
+        panel.append(plan);
         return panel;
     }
     if (state.table === null) {
+        panel.append(plan);
         return panel;
     }
 
-    panel.append(
-        renderHarvestOrder(state, handlers, readOnly),
+    plan.append(renderHarvestOrder(state, handlers, readOnly));
+    checks.append(
         renderHarvestingInputs(state, handlers, readOnly),
         renderHelperInputs(state, handlers, readOnly),
         renderOutcome(character, state, handlers, readOnly));
 
+    panel.append(plan, checks);
     return panel;
 }
 
