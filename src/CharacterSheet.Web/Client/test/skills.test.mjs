@@ -242,22 +242,42 @@ test("composite skill sources are collapsed into one secondary disclosure", () =
     assert.equal(byClass(card, "dd-skill-mechanics-item").length, 2);
 });
 
-test("ranked specialty competency progressively discloses metadata", () => {
-    const card = renderSkillsCard([standalone(competency("specialty", "Specialty Work", "+11", {
+test("ranked specialty competency discloses play mechanics without repeating family taxonomy", () => {
+    const card = renderSkillsCard([standalone(competency("brewer", "Brewer", "+11", {
         kind: "skill",
         ranks: 8,
-        governingAbility: "Intelligence",
+        governingAbility: "Wisdom",
         classSkill: true,
         trainedOnly: true,
-        armorCheckPenalty: { applies: true, formattedEffect: "-2 applied" },
-        specialty: "Fine work"
+        armorCheckPenalty: { applies: false },
+        family: "Profession",
+        specialty: "Brewer"
     }))]);
-    assert.equal(byClass(card, "dd-skill-disclosure--standalone").length, 1);
+    const disclosure = byClass(card, "dd-skill-disclosure--standalone")[0];
+    assert.ok(disclosure);
     assert.equal(byClass(card, "dd-skill-row__details").length, 0);
-    assert.doesNotMatch(visibleText(card), /\bDetails\b/);
-    assert.match(visibleText(card), /Ranks/);
-    assert.match(visibleText(card), /Class skill/);
-    assert.match(visibleText(card), /Armor Check Penalty/);
+    const text = visibleText(disclosure);
+    assert.doesNotMatch(text, /\bDetails\b/);
+    assert.match(text, /Ranks/);
+    assert.match(text, /Class skill/);
+    assert.match(text, /Trained only/);
+    assert.match(text, /Armor Check Penalty/);
+    assert.doesNotMatch(text, /\bFamily\b|\bSpecialty\b|Profession/);
+});
+
+test("family and specialty metadata alone do not create a redundant Skill detail breakout", () => {
+    const card = renderSkillsCard([
+        standalone(competency("brewer", "Brewer", "-", {
+            kind: "specialized-skill",
+            family: "Profession",
+            specialty: "Brewer"
+        }))
+    ]);
+
+    assert.equal(byClass(card, "dd-skill-disclosure--standalone").length, 0);
+    assert.equal(byClass(card, "dd-skill-row--standalone").length, 1);
+    assert.equal(visibleText(card).includes("Brewer"), true);
+    assert.equal(visibleText(card).includes("Profession"), false);
 });
 
 test("rank-capable competencies expose sparse Character-owned rank editing", () => {
