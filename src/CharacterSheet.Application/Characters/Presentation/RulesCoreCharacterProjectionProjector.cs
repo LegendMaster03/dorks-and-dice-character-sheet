@@ -501,11 +501,7 @@ internal static class RulesCoreCharacterProjectionProjector
                 var governingAbility = mechanics?.GoverningAbility is null
                     ? null
                     : ResolveEffectiveGoverningAbility(mechanics.GoverningAbility);
-                var rankInputKey = mechanics?.SupportsRanks == true
-                    ? value.MechanicKeys
-                        .Select(ConceptKeyFromCompetencyMechanicKey)
-                        .FirstOrDefault(key => key is not null)
-                    : null;
+                var rankInputKey = ResolveUniversalRankInputKey(value);
 
                 return new CompetencyPresentationView(
                     value.SemanticKey,
@@ -564,6 +560,32 @@ internal static class RulesCoreCharacterProjectionProjector
             competencies,
             competencyRelationships);
         return new CompetencyCollectionPresentationView(entries, relationships);
+    }
+
+    private static string? ResolveUniversalRankInputKey(
+        RulesCoreUniversalCompetencyView competency)
+    {
+        var rankMechanicKeys = competency.Facets
+            .Where(facet => facet.SupportsRanks)
+            .SelectMany(facet => facet.MechanicKeys ?? [])
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (rankMechanicKeys.Length == 0
+            && competency.Mechanics?.SupportsRanks == true)
+        {
+            rankMechanicKeys = competency.MechanicKeys
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        var conceptKeys = rankMechanicKeys
+            .Select(ConceptKeyFromCompetencyMechanicKey)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return conceptKeys.Length == 1 ? conceptKeys[0] : null;
     }
 
     private static string? ResolveEffectiveGoverningAbility(
