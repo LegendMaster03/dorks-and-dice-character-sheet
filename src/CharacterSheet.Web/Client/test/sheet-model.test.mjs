@@ -355,7 +355,8 @@ test("wide primary navigation exposes compact section summaries without changing
 test("responsive shell uses persistent presentation scaffolds without fabricating Character values", () => {
     assert.doesNotMatch(sheetSource, /renderSupportScaffoldCard/);
     assert.match(sheetSource, /renderSensesSummaryCard\(mechanics\)/);
-    assert.match(sheetSource, /renderTrainingCard\(\s*mechanics,\s*broaderCompetencyPresentation,/);
+    assert.match(sheetSource, /renderTrainingCard\(mechanics\)/);
+    assert.match(sheetSource, /renderCompetenciesCard\(\s*broaderCompetencyPresentation,/);
     assert.doesNotMatch(sheetSource, /renderDefenseMechanicsCard\(mechanics\)/);
     assert.doesNotMatch(sheetSource, /renderCombatFundamentalsCard\(mechanics\)/);
     assert.match(coreStatsSource, /renderHealthQuickCard\(mechanics, healthControl\)/);
