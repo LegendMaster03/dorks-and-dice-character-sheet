@@ -112,6 +112,7 @@ export type RoutineMutationKind =
     | "note-update"
     | "note-delete"
     | "inventory-add"
+    | "inventory-transaction"
     | "inventory-update"
     | "inventory-delete"
     | "rules-input-update"
