@@ -407,9 +407,13 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
 }
 
 const application = createApplication(initialState, render);
-const harvestingCraftingWorkflow = createHarvestingCraftingWorkflow(application, environment);
 const presentationWorkflow = createPresentationWorkflow(application, environment);
 const routineStateWorkflow = createRoutineStateWorkflow(application, environment);
+const harvestingCraftingWorkflow = createHarvestingCraftingWorkflow(
+    application,
+    routineStateWorkflow,
+    presentationWorkflow,
+    environment);
 const buildStateWorkflow = createBuildStateWorkflow(application, environment);
 const advancementWorkflow = createAdvancementWorkflow(
     application,
