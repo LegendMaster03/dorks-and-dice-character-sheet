@@ -28,7 +28,8 @@ import {
     createInlineState,
     createSectionCard
 } from "./components.js";
-import { renderCompetenciesCard, renderSkillsCard } from "./skills.js";
+import { renderSkillsCard } from "./skills.js";
+import { renderCompetenciesCard } from "./competencies.js";
 import {
     renderSensesSummaryCard,
     renderTrainingCard
