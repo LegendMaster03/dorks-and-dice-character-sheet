@@ -73,6 +73,10 @@ export interface HarvestingCraftingWorkflow {
     setCraftingOutputQuantity(value: number): void;
     setCraftingRequiresManufacturing(value: boolean): void;
     setCraftingRequiresEnchanting(value: boolean): void;
+    setCraftingManufacturingRequiredHours(value: number | null): void;
+    setCraftingManufacturingCompletedHours(value: number): void;
+    setCraftingEnchantingRequiredHours(value: number | null): void;
+    setCraftingEnchantingCompletedHours(value: number): void;
     addCraftingMaterial(occurrenceId: string): void;
     updateCraftingMaterial(index: number, quantity: number): void;
     removeCraftingMaterial(index: number): void;
@@ -754,6 +758,48 @@ export function createHarvestingCraftingWorkflow(
             return;
         }
 
+        if (state.craftingRequiresManufacturing) {
+            if (state.craftingManufacturingRequiredHours === null
+                || state.craftingManufacturingRequiredHours <= 0) {
+                update(current => ({
+                    ...current,
+                    craftingCompletionStatus: "error",
+                    message: "Enter the required Manufacturing time for this recipe."
+                }));
+                return;
+            }
+            if (state.craftingManufacturingCompletedHours
+                < state.craftingManufacturingRequiredHours) {
+                update(current => ({
+                    ...current,
+                    craftingCompletionStatus: "error",
+                    message: "Complete the required Manufacturing time before finalizing the recipe attempt."
+                }));
+                return;
+            }
+        }
+
+        if (state.craftingRequiresEnchanting) {
+            if (state.craftingEnchantingRequiredHours === null
+                || state.craftingEnchantingRequiredHours <= 0) {
+                update(current => ({
+                    ...current,
+                    craftingCompletionStatus: "error",
+                    message: "Enter the required Enchanting time for this recipe."
+                }));
+                return;
+            }
+            if (state.craftingEnchantingCompletedHours
+                < state.craftingEnchantingRequiredHours) {
+                update(current => ({
+                    ...current,
+                    craftingCompletionStatus: "error",
+                    message: "Complete the required Enchanting time before finalizing the recipe attempt."
+                }));
+                return;
+            }
+        }
+
         const manufacturingFailed =
             state.craftingRequiresManufacturing
             && state.craftingManufacturingSucceeded === false;
@@ -1173,6 +1219,34 @@ export function createHarvestingCraftingWorkflow(
             update(state => resetCraftingCompletion({
                 ...state,
                 craftingRequiresEnchanting: value
+            }));
+        },
+
+        setCraftingManufacturingRequiredHours(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingManufacturingRequiredHours: value
+            }));
+        },
+
+        setCraftingManufacturingCompletedHours(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingManufacturingCompletedHours: Math.max(0, value)
+            }));
+        },
+
+        setCraftingEnchantingRequiredHours(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingEnchantingRequiredHours: value
+            }));
+        },
+
+        setCraftingEnchantingCompletedHours(value): void {
+            update(state => resetCraftingCompletion({
+                ...state,
+                craftingEnchantingCompletedHours: Math.max(0, value)
             }));
         },
 
