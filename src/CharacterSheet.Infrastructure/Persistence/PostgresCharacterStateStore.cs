@@ -164,6 +164,7 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
     public async Task<CharacterSheetRoot?> AddCustomInventoryItemOccurrenceAsync(
         Guid characterId,
         string customName,
+        int quantity,
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default)
     {
@@ -173,7 +174,7 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
             return null;
         }
 
-        root.AddCustomInventoryItemOccurrence(customName, changedAt);
+        root.AddCustomInventoryItemOccurrence(customName, changedAt, quantity);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
     }
