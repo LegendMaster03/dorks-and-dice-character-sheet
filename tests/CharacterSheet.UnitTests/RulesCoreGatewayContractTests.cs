@@ -210,7 +210,8 @@ public sealed class RulesCoreGatewayContractTests
             "facets": [],
             "relatedCompetencies": [],
             "sourceAttributions": [],
-            "mechanics": null
+            "mechanics": null,
+            "presentationCategory": "competency"
           }, {
             "semanticKey": "competency.alchemy",
             "identityKey": "alchemy",
@@ -247,7 +248,8 @@ public sealed class RulesCoreGatewayContractTests
               "evaluationProfileKeys": ["ranked-skill"],
               "evaluationKinds": ["competency-profile"],
               "canEvaluate": true
-            }
+            },
+            "presentationCategory": "competency"
           }]
         }
         """;
@@ -258,10 +260,12 @@ public sealed class RulesCoreGatewayContractTests
         Assert.NotNull(catalog.Competencies);
         var craft = Assert.Single(catalog.Competencies, value => value.SemanticKey == "competency.craft");
         Assert.True(craft.IsFamily);
+        Assert.Equal("competency", craft.PresentationCategory);
         Assert.Equal(["competency.alchemy", "competency.blacksmithing"], craft.ChildCompetencyKeys);
 
         var alchemy = Assert.Single(catalog.Competencies, value => value.SemanticKey == "competency.alchemy");
         Assert.Equal("competency.alchemy.training", alchemy.TrainingStateKey);
+        Assert.Equal("competency", alchemy.PresentationCategory);
         Assert.Equal(
             ["competency.skill.craft-alchemy", "competency.tool.alchemists-supplies"],
             alchemy.MechanicKeys);

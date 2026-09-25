@@ -17,7 +17,24 @@ export function renderSkillsCard(
     items: readonly CompetencyPresentationItem[] | null,
     control: CompetencyRankControlOptions = {}
 ): HTMLElement {
-    const card = createSectionCard("Skills & Competencies", "dd-support-card dd-skills-card");
+    return renderCompetencyCard("Skills", "skills", items, control);
+}
+
+export function renderCompetenciesCard(
+    items: readonly CompetencyPresentationItem[] | null,
+    control: CompetencyRankControlOptions = {}
+): HTMLElement {
+    return renderCompetencyCard("Competencies", "competencies", items, control);
+}
+
+function renderCompetencyCard(
+    title: string,
+    searchNoun: string,
+    items: readonly CompetencyPresentationItem[] | null,
+    control: CompetencyRankControlOptions
+): HTMLElement {
+    const card = createSectionCard(title, "dd-support-card dd-skills-card");
+    card.setAttribute("data-competency-card", searchNoun);
 
     if (items === null) {
         card.setAttribute("data-skills-state", "unavailable");
@@ -34,8 +51,8 @@ export function renderSkillsCard(
     const controls = createElement("div", "dd-skills-controls");
     const search = createElement("input", "dd-skills-search");
     search.type = "search";
-    search.placeholder = "Search skills";
-    search.setAttribute("aria-label", "Search skills and competencies");
+    search.placeholder = `Search ${searchNoun}`;
+    search.setAttribute("aria-label", `Search ${searchNoun}`);
     controls.append(search);
 
     const list = createElement("div", "dd-skill-list");
@@ -55,7 +72,7 @@ export function renderSkillsCard(
     const noMatches = createElement(
         "p",
         "dd-skills-no-matches",
-        "No skills match this search.");
+        `No ${searchNoun} match this search.`);
     noMatches.hidden = true;
 
     search.addEventListener("input", () => {

@@ -48,7 +48,8 @@ public sealed record RulesCoreUniversalCompetencyView(
     IReadOnlyList<RulesCoreCompetencyFacetView> Facets,
     IReadOnlyList<RulesCoreCompetencyRelationshipView> RelatedCompetencies,
     IReadOnlyList<RulesCoreMechanicSourceAttributionView> SourceAttributions,
-    RulesCoreUniversalCompetencyMechanicsView? Mechanics = null);
+    RulesCoreUniversalCompetencyMechanicsView? Mechanics = null,
+    string PresentationCategory = "skill");
 
 public sealed record RulesCoreUniversalGoverningAbilityView(
     string ResolutionKind,

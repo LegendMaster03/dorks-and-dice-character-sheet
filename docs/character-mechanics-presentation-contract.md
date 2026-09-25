@@ -216,11 +216,26 @@ The backend remains authoritative for combat values and their calculations. Base
 - `specialty`;
 - `supportsRanks`;
 - `supportsClassSkillState`;
-- `supportsTrainingState`.
+- `supportsTrainingState`;
+- `presentationCategory`: open-ended Rules Core-owned placement metadata, with `skill` and `competency` as current values.
 
 The three `supports...` fields and family/specialty metadata describe the normalized Rules Core competency contract. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend displays `-`; it must not substitute `0`, `false`, or another inferred value.
 
 Rules Core now exposes an authoritative universal competency catalog separately from its source-shaped implementation mechanics. Character Sheet treats the universal catalog as the presentation identity. A universal entry uses a semantic key such as `competency.alchemy`, while its `mechanicKeys` point to the Rules Core implementation mechanics used for evaluation and compatibility. Historical skill names, tool names, and other import aliases do not become duplicate Character Sheet rows.
+
+### Skills and Competencies cards
+
+The Character Sheet partitions the universal catalog only from Rules Core `presentationCategory` metadata:
+
+- `skill` entries render in the **Skills** card;
+- any explicit non-`skill` category renders in the **Competencies** card, so future category values remain visible rather than being discarded;
+- responses that predate `presentationCategory` remain in **Skills** as a compatibility fallback.
+
+The **Skills** card therefore remains focused on ordinary/historical skills and Rules Core-supplied composite skill relationships. The **Competencies** card contains Craft specialties, merged Craft/tool identities, standalone tools and kits, and other nonordinary learned capabilities that Rules Core classifies there. The Craft family can remain an organizational family inside Competencies, but it no longer appears as a nested family in Skills.
+
+A shared Craft/tool identity renders once because the split occurs after Rules Core has already reconciled the source facets into one semantic competency. Tool proficiency state is displayed as training/proficiency state; it is never converted into ranks. Rank editing remains available only when Rules Core supplies `supportsRanks` and an unambiguous `rankInputKey`.
+
+The frontend does not classify entries by parsing `Craft (...)`, `Tools`, `Kit`, `Supplies`, publisher names, source editions, or competency `kind`. Unknown future presentation categories are not hidden.
 
 Character Sheet may carry `rankInputKey` for the one unambiguous implementation concept that owns rank state. This is an implementation-state join only. The visible row remains keyed by the universal semantic competency. If no unambiguous rank implementation is supplied, the frontend does not invent one and does not expose a rank editor.
 
