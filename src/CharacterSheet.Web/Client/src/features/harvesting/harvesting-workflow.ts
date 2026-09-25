@@ -12,6 +12,15 @@ import {
     type HarvestingHelperInput
 } from "../../rules-core-api.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
+import {
+    resolveCharacterEnchanting,
+    resolveCharacterManufacturing,
+    type CraftingCompetencyInput
+} from "../../crafting-api.js";
+import {
+    normalizeD20RollMode,
+    rollD20
+} from "../../dice/roll-selection.js";
 
 export interface HarvestingCraftingWorkflow {
     open(): void;
@@ -32,6 +41,20 @@ export interface HarvestingCraftingWorkflow {
     removeHelper(index: number): void;
     moveComponent(key: string, direction: -1 | 1): void;
     evaluate(): Promise<void>;
+    setCraftingProcedure(value: "manufacturing" | "enchanting"): void;
+    setCraftingCompetencyMode(value: "resolved" | "manual"): void;
+    setCraftingCompetencyKey(value: string): void;
+    setCraftingManualName(value: string): void;
+    setCraftingManualContribution(value: number | null): void;
+    setCraftingManualQualified(value: boolean): void;
+    setCraftingHasQualifiedGuidance(value: boolean): void;
+    setCraftingCreatureType(value: string): void;
+    setCraftingSpellcastingKey(value: string): void;
+    setCraftingTargetDc(value: number | null): void;
+    setCraftingOtherModifier(value: number): void;
+    prepareCrafting(characterId: string): Promise<void>;
+    rollCrafting(characterId: string): Promise<void>;
+    chooseCraftingRoll(characterId: string, value: number): Promise<void>;
 }
 
 export function createHarvestingCraftingWorkflow(
@@ -51,7 +74,151 @@ export function createHarvestingCraftingWorkflow(
     function clearResolution(
         state: HarvestingCraftingUiState
     ): HarvestingCraftingUiState {
+        function clearCraftingResult(
+        state: HarvestingCraftingUiState
+    ): HarvestingCraftingUiState {
         return {
+            ...state,
+            craftingStatus: "idle",
+            craftingResolution: null,
+            craftingRolls: [],
+            craftingSelectedRoll: null,
+            craftingRollTie: false,
+            message: undefined
+        };
+    }
+
+    function craftingCompetency(
+        state: HarvestingCraftingUiState
+    ): CraftingCompetencyInput | null {
+        if (state.craftingCompetencyMode === "manual") {
+            const displayName = state.craftingManualName.trim();
+            if (displayName.length === 0 || state.craftingManualContribution === null) {
+                return null;
+            }
+            return {
+                manual: {
+                    displayName,
+                    contribution: state.craftingManualContribution,
+                    isQualified: state.craftingManualQualified
+                }
+            };
+        }
+
+        const key = state.craftingCompetencyKey.trim();
+        return key.length === 0 ? null : { competencyKey: key };
+    }
+
+    async function resolveCrafting(
+        characterId: string,
+        d20Roll: number | null
+    ): Promise<void> {
+        const state = application.getState().harvestingCrafting;
+        const competency = craftingCompetency(state);
+        if (state.craftingProcedure === "manufacturing" && competency === null) {
+            update(current => ({
+                ...current,
+                craftingStatus: "error",
+                message: state.craftingCompetencyMode === "manual"
+                    ? "Enter a manual competency name and modifier."
+                    : "Choose a universal competency or use manual entry."
+            }));
+            return;
+        }
+        if (state.craftingProcedure === "enchanting"
+            && competency === null
+            && state.craftingCreatureType.trim().length === 0) {
+            update(current => ({
+                ...current,
+                craftingStatus: "error",
+                message: "Choose a creature type, a universal competency, or manual entry for Enchanting."
+            }));
+            return;
+        }
+
+        update(current => ({
+            ...current,
+            craftingStatus: "loading",
+            craftingResolution: d20Roll === null ? null : current.craftingResolution,
+            message: undefined
+        }));
+        try {
+            const common = {
+                campaignId: state.scopeCampaignId,
+                d20Roll,
+                otherModifier: state.craftingOtherModifier,
+                targetDc: state.craftingTargetDc
+            };
+            const resolution = state.craftingProcedure === "manufacturing"
+                ? await resolveCharacterManufacturing(
+                    environment,
+                    characterId,
+                    {
+                        ...common,
+                        competency: competency!,
+                        hasQualifiedGuidance: state.craftingHasQualifiedGuidance
+                    })
+                : await resolveCharacterEnchanting(
+                    environment,
+                    characterId,
+                    {
+                        ...common,
+                        creatureType: competency === null
+                            ? state.craftingCreatureType.trim()
+                            : null,
+                        competency,
+                        spellcastingKey: state.craftingSpellcastingKey.trim().length > 0
+                            ? state.craftingSpellcastingKey.trim()
+                            : null
+                    });
+
+            update(current => ({
+                ...current,
+                craftingStatus: "ready",
+                craftingResolution: resolution,
+                craftingSelectedRoll: d20Roll,
+                message: undefined
+            }));
+        } catch (error) {
+            update(current => ({
+                ...current,
+                craftingStatus: "error",
+                message: requestErrorMessage(error)
+            }));
+        }
+    }
+
+    async function rollCrafting(characterId: string): Promise<void> {
+        let state = application.getState().harvestingCrafting;
+        if (state.craftingResolution === null || state.craftingResolution.d20Roll !== null) {
+            await resolveCrafting(characterId, null);
+            state = application.getState().harvestingCrafting;
+        }
+        if (state.craftingResolution === null) return;
+
+        const selection = rollD20(normalizeD20RollMode(state.craftingResolution.rollMode));
+        if (selection.tied) {
+            update(current => ({
+                ...current,
+                craftingRolls: [...selection.rolls],
+                craftingSelectedRoll: null,
+                craftingRollTie: true,
+                message: "The roll selection is tied. Choose which die result to use."
+            }));
+            return;
+        }
+
+        update(current => ({
+            ...current,
+            craftingRolls: [...selection.rolls],
+            craftingSelectedRoll: selection.selected,
+            craftingRollTie: false,
+            message: undefined
+        }));
+        await resolveCrafting(characterId, selection.selected);
+    }
+
+    return {
             ...state,
             tableStatus: "idle",
             tableRequest: null,
@@ -252,10 +419,10 @@ export function createHarvestingCraftingWorkflow(
         },
 
         setScope(campaignId): void {
-            update(state => clearResolution({
+            update(state => clearCraftingResult(clearResolution({
                 ...state,
                 scopeCampaignId: campaignId
-            }));
+            })));
         },
 
         setSourceKind(kind): void {
@@ -387,6 +554,101 @@ export function createHarvestingCraftingWorkflow(
             });
         },
 
-        evaluate
+        evaluate,
+
+        setCraftingProcedure(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingProcedure: value
+            }));
+        },
+
+        setCraftingCompetencyMode(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingCompetencyMode: value
+            }));
+        },
+
+        setCraftingCompetencyKey(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingCompetencyKey: value
+            }));
+        },
+
+        setCraftingManualName(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingManualName: value
+            }));
+        },
+
+        setCraftingManualContribution(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingManualContribution: value
+            }));
+        },
+
+        setCraftingManualQualified(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingManualQualified: value
+            }));
+        },
+
+        setCraftingHasQualifiedGuidance(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingHasQualifiedGuidance: value
+            }));
+        },
+
+        setCraftingCreatureType(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingCreatureType: value
+            }));
+        },
+
+        setCraftingSpellcastingKey(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingSpellcastingKey: value
+            }));
+        },
+
+        setCraftingTargetDc(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingTargetDc: value
+            }));
+        },
+
+        setCraftingOtherModifier(value): void {
+            update(state => clearCraftingResult({
+                ...state,
+                craftingOtherModifier: value
+            }));
+        },
+
+        async prepareCrafting(characterId): Promise<void> {
+            await resolveCrafting(characterId, null);
+        },
+
+        rollCrafting,
+
+        async chooseCraftingRoll(characterId, value): Promise<void> {
+            const state = application.getState().harvestingCrafting;
+            if (!state.craftingRollTie || !state.craftingRolls.includes(value)) return;
+            update(current => ({
+                ...current,
+                craftingSelectedRoll: value,
+                craftingRollTie: false,
+                message: undefined
+            }));
+            await resolveCrafting(characterId, value);
+        }
     };
 }
