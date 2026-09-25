@@ -56,6 +56,7 @@ public sealed record RulesCoreUniversalGoverningAbilityView(
     IReadOnlyList<string> AbilityKeys);
 
 public sealed record RulesCoreUniversalCompetencyMechanicsView(
+    string CompetencyKind,
     RulesCoreUniversalGoverningAbilityView GoverningAbility,
     bool SupportsRanks,
     bool SupportsClassSkillState,
@@ -338,13 +339,6 @@ public interface IRulesCoreGateway
 {
     Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
         IReadOnlyCollection<string> conceptKeys,
-        CancellationToken cancellationToken = default);
-
-    Task<RulesCoreMechanicsCatalogView> GetGlobalMechanicsAsync(
-        CancellationToken cancellationToken = default);
-
-    Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
-        RulesCoreMechanicsBatchEvaluationRequest request,
         CancellationToken cancellationToken = default);
 
     Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(

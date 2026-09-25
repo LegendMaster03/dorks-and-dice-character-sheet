@@ -60,26 +60,6 @@ public sealed class DelegatedRulesCoreGateway(
         return resolved;
     }
 
-    public Task<RulesCoreMechanicsCatalogView> GetGlobalMechanicsAsync(
-        CancellationToken cancellationToken = default) =>
-        SendJsonAsync<RulesCoreMechanicsCatalogView>(
-            HttpMethod.Get,
-            "/api/rules/mechanics",
-            content: null,
-            cancellationToken);
-
-    public Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
-        RulesCoreMechanicsBatchEvaluationRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreMechanicsBatchEvaluationView>(
-            HttpMethod.Post,
-            "/api/rules/mechanics/evaluate",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
-
     public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
         RulesCoreCharacterSupportProjectionRequest request,
         CancellationToken cancellationToken = default)

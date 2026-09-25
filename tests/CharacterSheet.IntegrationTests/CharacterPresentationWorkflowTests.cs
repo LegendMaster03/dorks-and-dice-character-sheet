@@ -45,7 +45,7 @@ public sealed class CharacterPresentationWorkflowTests
                 .GetProperty("occurrences")[0].GetProperty("displayName").GetString());
             Assert.True(json.RootElement.TryGetProperty("mechanics", out _));
         }
-        Assert.True(factory.Gateway.GlobalMechanicsRequested);
+        Assert.True(factory.Gateway.GlobalCharacterProjectionRequested);
         Assert.False(factory.Gateway.CampaignMechanicsRequested);
 
         factory.Context = Context(new ToolHostCharacterContext(
@@ -351,7 +351,38 @@ public sealed class CharacterPresentationWorkflowTests
             $"/api/characters/{characterId:D}/sheet");
         Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
 
-        factory.Gateway.Catalog = Catalog(Competency());
+        factory.Gateway.ProjectionCompetencies =
+        [
+            new RulesCoreUniversalCompetencyView(
+                "skill.hide",
+                "skill.hide",
+                "Hide",
+                null,
+                false,
+                null,
+                [],
+                ["competency.skill.hide"],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                new RulesCoreUniversalCompetencyMechanicsView(
+                    "skill",
+                    new RulesCoreUniversalGoverningAbilityView(
+                        "fixed",
+                        "dexterity",
+                        ["dexterity"]),
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    [],
+                    [],
+                    false))
+        ];
         using var response = await factory.SendHostedAsync(
             HttpMethod.Get,
             $"/api/characters/{characterId:D}/presentation");
@@ -467,15 +498,13 @@ public sealed class CharacterPresentationWorkflowTests
     private sealed class FakeRulesCoreGateway : IRulesCoreGateway
     {
         public bool Throw { get; set; }
-        public bool GlobalMechanicsRequested { get; private set; }
         public bool GlobalCharacterProjectionRequested { get; private set; }
         public Guid? CharacterProjectionCampaignId { get; private set; }
         public bool CampaignMechanicsRequested => CharacterProjectionCampaignId is not null;
         public Dictionary<string, RulesCoreResolvedRuleSummaryView> ResolvedRules { get; } =
             new(StringComparer.Ordinal);
-        public RulesCoreMechanicsCatalogView Catalog { get; set; } =
-            new("global", null, 1, DateTimeOffset.UtcNow, []);
         public IReadOnlyList<RulesCoreCharacterCapabilityView> ProjectionCapabilities { get; set; } = [];
+        public IReadOnlyList<RulesCoreUniversalCompetencyView> ProjectionCompetencies { get; set; } = [];
         public RulesCoreCharacterSupportProjectionView SupportProjection { get; set; } =
             new("global", null, 1, DateTimeOffset.UtcNow, []);
         public RulesCoreCharacterRecoveryResolutionView? RecoveryResolution { get; set; }
@@ -491,23 +520,6 @@ public sealed class CharacterPresentationWorkflowTests
                 .Where(value => conceptKeys.Contains(value.Key, StringComparer.Ordinal))
                 .ToDictionary(StringComparer.Ordinal);
             return Task.FromResult(result);
-        }
-
-        public Task<RulesCoreMechanicsCatalogView> GetGlobalMechanicsAsync(
-            CancellationToken cancellationToken = default)
-        {
-            GlobalMechanicsRequested = true;
-            if (Throw) throw new RulesCoreGatewayException("test outage");
-            return Task.FromResult(Catalog);
-        }
-
-        public Task<RulesCoreMechanicsBatchEvaluationView> EvaluateGlobalMechanicsAsync(
-            RulesCoreMechanicsBatchEvaluationRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            if (Throw) throw new RulesCoreGatewayException("test outage");
-            return Task.FromResult(new RulesCoreMechanicsBatchEvaluationView(
-                "global", null, 1, DateTimeOffset.UtcNow, []));
         }
 
         public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
@@ -551,7 +563,8 @@ public sealed class CharacterPresentationWorkflowTests
             if (Throw) throw new RulesCoreGatewayException("test outage");
             return Task.FromResult(EmptyProjection("global", null) with
             {
-                Capabilities = ProjectionCapabilities
+                Capabilities = ProjectionCapabilities,
+                Competencies = ProjectionCompetencies
             });
         }
 
