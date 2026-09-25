@@ -164,30 +164,38 @@ internal static class CompetencyProjector
                 ?? (profiles.Any(value => value.SupportsTrainingState)
                     || universal.Facets.Any(value => value.SupportsTrainingState)
                     || !string.IsNullOrWhiteSpace(universal.TrainingStateKey)));
+        var presentAsCompetency = string.Equals(
+            universal.PresentationCategory,
+            "competency",
+            StringComparison.OrdinalIgnoreCase);
 
         return new CompetencyPresentationView(
             universal.SemanticKey,
             universal.DisplayName,
             evaluation is null ? CharacterMechanicsProjector.Unconfigured : (object)evaluation.Value,
-            Kind: kind,
+            Kind: presentAsCompetency ? "competency" : kind,
             GoverningAbility: governingAbility,
             TrainedOnly: trainedOnly,
             ArmorCheckPenalty: armorCheckPenalty is bool applies
                 ? new ArmorCheckPenaltyPresentationView(applies)
                 : null,
-            Family: universal.FamilyName,
-            Specialty: universal.IsFamily || universal.FamilyName is null
+            Family: presentAsCompetency ? null : universal.FamilyName,
+            Specialty: presentAsCompetency
+                || universal.IsFamily
+                || universal.FamilyName is null
                 ? null
                 : universal.DisplayName,
             SupportsRanks: supportsRanks,
             SupportsClassSkillState: supportsClassSkillState,
             SupportsTrainingState: supportsTrainingState,
-            SourceAttributions: SourceAttributionMapper.Map(universal.SourceAttributions),
+            SourceAttributions: presentAsCompetency
+                ? null
+                : SourceAttributionMapper.Map(universal.SourceAttributions),
             IdentityKey: universal.IdentityKey,
             IdentityName: universal.DisplayName,
             SharedTrainingKey: universal.TrainingStateKey,
             IsFamily: universal.IsFamily,
-            Facets: ProjectFacets(universal.Facets),
+            Facets: presentAsCompetency ? null : ProjectFacets(universal.Facets),
             RelatedCompetencies: ProjectRelatedCompetencies(universal.RelatedCompetencies),
             ChildCompetencyKeys: universal.ChildCompetencyKeys.Count == 0
                 ? null
