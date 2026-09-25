@@ -217,25 +217,27 @@ The backend remains authoritative for combat values and their calculations. Base
 - `supportsRanks`;
 - `supportsClassSkillState`;
 - `supportsTrainingState`;
-- `presentationCategory`: open-ended Rules Core-owned placement metadata, with `skill` and `competency` as current values.
+- `presentationCategory`: open-ended Rules Core-owned placement metadata, with `skill`, `competency`, and `supporting` as current values.
 
 The three `supports...` fields and family/specialty metadata describe the normalized Rules Core competency contract. They do not assert that this Character has configured ranks, training, or class-skill state. When a state dimension is supported but the Character-owned value is absent, the frontend displays `-`; it must not substitute `0`, `false`, or another inferred value.
 
 Rules Core now exposes an authoritative universal competency catalog separately from its source-shaped implementation mechanics. Character Sheet treats the universal catalog as the presentation identity. A universal entry uses a semantic key such as `competency.alchemy`, while its `mechanicKeys` point to the Rules Core implementation mechanics used for evaluation and compatibility. Historical skill names, tool names, and other import aliases do not become duplicate Character Sheet rows.
 
-### Skills and Competencies cards
+### Skills and Proficiencies & Training placement
 
 The Character Sheet partitions the universal catalog only from Rules Core `presentationCategory` metadata:
 
 - `skill` entries render in the **Skills** card;
-- any explicit non-`skill` category renders in the **Competencies** card, so future category values remain visible rather than being discarded;
+- `competency` entries render in a **Competencies** subsection inside **Proficiencies & Training**;
+- `supporting` entries remain available to backend/rules reconciliation but do not render as direct Character-facing rows;
+- other explicit future non-`skill`, non-`supporting` categories remain visible through the Competencies subsection rather than being silently discarded;
 - responses that predate `presentationCategory` remain in **Skills** as a compatibility fallback.
 
-The **Skills** card therefore remains focused on ordinary/historical skills and Rules Core-supplied composite skill relationships. The **Competencies** card contains Craft specialties, merged Craft/tool identities, standalone tools and kits, and other nonordinary learned capabilities that Rules Core classifies there. The Craft family can remain an organizational family inside Competencies, but it no longer appears as a nested family in Skills.
+The **Skills** card therefore remains focused on ordinary/historical skills and Rules Core-supplied composite skill relationships. **Proficiencies & Training** owns the normalized broader competency presentation alongside other training and proficiency state. The generic Craft family and its 3.x-only specialties do not become a visible `Craft -> specialties` list. Reviewed shared Craft/tool identities such as Alchemy render once as normalized competencies, while their historical ranked-skill and later tool facets remain available behind that identity.
 
 A shared Craft/tool identity renders once because the split occurs after Rules Core has already reconciled the source facets into one semantic competency. Tool proficiency state is displayed as training/proficiency state; it is never converted into ranks. Rank editing remains available only when Rules Core supplies `supportsRanks` and an unambiguous `rankInputKey`.
 
-The frontend does not classify entries by parsing `Craft (...)`, `Tools`, `Kit`, `Supplies`, publisher names, source editions, or competency `kind`. Unknown future presentation categories are not hidden.
+The frontend does not classify entries by parsing `Craft (...)`, `Tools`, `Kit`, `Supplies`, publisher names, source editions, or competency `kind`. `supporting` is the only current category intentionally omitted from direct Character presentation.
 
 Character Sheet may carry `rankInputKey` for the one unambiguous implementation concept that owns rank state. This is an implementation-state join only. The visible row remains keyed by the universal semantic competency. If no unambiguous rank implementation is supplied, the frontend does not invent one and does not expose a rank editor.
 
