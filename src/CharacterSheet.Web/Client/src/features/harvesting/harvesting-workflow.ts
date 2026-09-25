@@ -471,9 +471,7 @@ export function createHarvestingCraftingWorkflow(
                     catalogStatus: "ready",
                     catalog,
                     creatureType,
-                    craftingCreatureType: state.craftingCreatureType.length > 0
-                        ? state.craftingCreatureType
-                        : (catalog.creatureTypes[0]?.key ?? ""),
+                    craftingCreatureType: state.craftingCreatureType,
                     tableStatus: table === null ? state.tableStatus : "ready",
                     tableRequest: table === null ? state.tableRequest : { creatureType },
                     table: table ?? state.table,
