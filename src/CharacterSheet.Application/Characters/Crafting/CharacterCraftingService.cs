@@ -70,7 +70,9 @@ public sealed class CharacterCraftingService(
             request.HasQualifiedGuidance,
             request.D20Roll,
             request.OtherModifier,
-            request.TargetDc);
+            request.TargetDc,
+            request.AbilityKey,
+            request.ManualAbilityModifier);
 
         try
         {
