@@ -523,11 +523,19 @@ internal static class RulesCoreCharacterProjectionProjector
                     Specialty: value.IsFamily || value.FamilyName is null
                         ? null
                         : value.DisplayName,
-                    SupportsRanks: !value.IsFamily && mechanics?.SupportsRanks == true,
+                    SupportsRanks:
+                        !value.IsFamily
+                        && (mechanics?.SupportsRanks == true
+                            || value.Facets.Any(facet => facet.SupportsRanks)),
                     SupportsClassSkillState:
-                        !value.IsFamily && mechanics?.SupportsClassSkillState == true,
+                        !value.IsFamily
+                        && (mechanics?.SupportsClassSkillState == true
+                            || value.Facets.Any(facet => facet.SupportsClassSkillState)),
                     SupportsTrainingState:
-                        !value.IsFamily && mechanics?.SupportsTrainingState == true,
+                        !value.IsFamily
+                        && (mechanics?.SupportsTrainingState == true
+                            || value.Facets.Any(facet => facet.SupportsTrainingState)
+                            || !string.IsNullOrWhiteSpace(value.TrainingStateKey)),
                     SourceAttributions: SourceAttributionMapper.Map(value.SourceAttributions),
                     IdentityKey: value.IdentityKey,
                     IdentityName: value.DisplayName,
