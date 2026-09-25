@@ -1309,17 +1309,43 @@ function renderCraftingProject(
 
     const inventory = routine?.state?.inventoryItemOccurrences ?? [];
     const materials = createElement("div", "dd-crafting-materials");
-    materials.append(createElement("strong", "", "Materials"));
+    const materialShortages = state.craftingMaterials.filter(material => {
+        const occurrence = inventory.find(item => item.id === material.occurrenceId);
+        return occurrence === undefined || occurrence.quantity < material.quantity;
+    }).length;
+    materials.append(
+        createElement("strong", "", "Materials"),
+        createElement(
+            "span",
+            materialShortages === 0
+                ? "dd-crafting-materials__status"
+                : "dd-crafting-materials__status dd-crafting-materials__status--short",
+            state.craftingMaterials.length === 0
+                ? "No materials selected"
+                : materialShortages === 0
+                    ? "Ready"
+                    : `${materialShortages} shortage${materialShortages === 1 ? "" : "s"}`));
 
     state.craftingMaterials.forEach((material, index) => {
-        const row = createElement("div", "dd-harvesting-helper");
+        const occurrence = inventory.find(item => item.id === material.occurrenceId);
+        const availableQuantity = occurrence?.quantity ?? 0;
+        const enough = availableQuantity >= material.quantity;
+        const row = createElement(
+            "div",
+            enough
+                ? "dd-crafting-material"
+                : "dd-crafting-material dd-crafting-material--short");
         row.append(
             createElement(
-                "span",
-                "dd-harvesting-helper__title",
+                "div",
+                "dd-crafting-material__identity",
                 inventoryOccurrenceLabel(routine, material.occurrenceId)),
+            createElement(
+                "span",
+                "dd-crafting-material__availability",
+                `${material.quantity} required · ${availableQuantity} available`),
             numberField(
-                "Quantity",
+                "Required",
                 material.quantity,
                 value => handlers.updateCraftingMaterial(index, value ?? 1),
                 readOnly,
