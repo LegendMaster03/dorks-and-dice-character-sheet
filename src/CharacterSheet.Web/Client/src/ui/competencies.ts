@@ -4,7 +4,6 @@ import {
     type CompetencyView
 } from "./character-mechanics.js";
 import { createButton, createElement, createSectionCard } from "./components.js";
-import { renderSourceAttributionDisclosure } from "./source-attribution.js";
 import type { CompetencyRankControlOptions } from "./skills.js";
 
 export function renderCompetenciesCard(
@@ -266,7 +265,7 @@ function appendCompetencyDetails(
     const stateFacts = createElement("dl", "dd-competency-facts");
     appendFact(
         stateFacts,
-        "Training",
+        "Training / Proficiency",
         competency.training ?? (competency.supportsTrainingState === true ? "-" : undefined));
     appendFact(
         stateFacts,
@@ -291,8 +290,6 @@ function appendCompetencyDetails(
                 ? competency.armorCheckPenalty.formattedEffect ?? "Applies"
                 : "Does not apply");
     }
-    appendFact(stateFacts, "Family", competency.family);
-    appendFact(stateFacts, "Specialty", competency.specialty);
     for (const contribution of competency.breakdown ?? []) {
         appendFact(stateFacts, contribution.label, formatMechanicalValue(contribution));
     }
@@ -300,31 +297,6 @@ function appendCompetencyDetails(
         appendFact(stateFacts, related.label, formatMechanicalValue(related));
     }
     appendDetailSection(body, "State", stateFacts);
-
-    if ((competency.facets?.length ?? 0) > 0) {
-        const facets = createElement("div", "dd-competency-facets");
-        for (const facet of competency.facets ?? []) {
-            const facetRow = createElement("article", "dd-competency-facet");
-            facetRow.append(createElement(
-                "strong",
-                "dd-competency-facet__name",
-                humanizeToken(facet.facetType)));
-
-            const capabilities = [
-                facet.supportsRanks ? "ranks" : null,
-                facet.supportsClassSkillState ? "class-skill state" : null,
-                facet.supportsTrainingState ? "training" : null
-            ].filter((value): value is string => value !== null);
-            if (capabilities.length > 0) {
-                facetRow.append(createElement(
-                    "span",
-                    "dd-competency-facet__capabilities",
-                    capabilities.join(" · ")));
-            }
-            facets.append(facetRow);
-        }
-        appendSection(body, "Implementations", facets);
-    }
 
     if ((competency.relatedCompetencies?.length ?? 0) > 0) {
         const relations = createElement("div", "dd-competency-relations");
@@ -354,8 +326,6 @@ function appendCompetencyDetails(
         appendSection(body, "Ranks", rankEditor);
     }
 
-    const sources = renderSourceAttributionDisclosure(competency.sourceAttributions);
-    if (sources !== null) body.append(sources);
 }
 
 function appendRelationshipFacts(
@@ -486,20 +456,15 @@ function parseRank(value: string): number | null {
 
 function hasCompetencyBreakout(competency: CompetencyView): boolean {
     return competency.ranks !== undefined
-        || competency.training !== undefined
+        || competency.governingAbility !== undefined
         || competency.classSkill !== undefined
         || competency.trainedOnly !== undefined
         || competency.armorCheckPenalty !== undefined
-        || competency.family !== undefined
-        || competency.specialty !== undefined
         || competency.supportsRanks === true
         || competency.supportsClassSkillState === true
-        || competency.supportsTrainingState === true
-        || (competency.facets?.length ?? 0) > 0
         || (competency.relatedCompetencies?.length ?? 0) > 0
         || (competency.breakdown?.length ?? 0) > 0
-        || (competency.relatedValues?.length ?? 0) > 0
-        || (competency.sourceAttributions?.length ?? 0) > 0;
+        || (competency.relatedValues?.length ?? 0) > 0;
 }
 
 function competencySearchText(item: CompetencyPresentationItem): string {
@@ -514,9 +479,6 @@ function competencySearchText(item: CompetencyPresentationItem): string {
             value.label,
             value.training,
             value.governingAbility,
-            value.family,
-            value.specialty,
-            ...(value.facets ?? []).map(facet => facet.facetType),
             ...(value.relatedCompetencies ?? []).map(related => related.targetName)
         ])
         .filter((value): value is string => value !== undefined && value.trim().length > 0)
