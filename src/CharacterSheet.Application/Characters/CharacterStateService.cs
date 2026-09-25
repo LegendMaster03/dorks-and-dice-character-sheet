@@ -288,12 +288,14 @@ public sealed class CharacterStateService(
     public Task<CharacterStateResult> AddCustomInventoryItemOccurrenceAsync(
         Guid characterId,
         string customName,
+        int quantity = 1,
         CancellationToken cancellationToken = default) =>
         MutateAsync(
             characterId,
             (changedAt, token) => stateStore.AddCustomInventoryItemOccurrenceAsync(
                 characterId,
                 customName,
+                quantity,
                 changedAt,
                 token),
             cancellationToken);
