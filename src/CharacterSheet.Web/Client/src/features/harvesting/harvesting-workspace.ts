@@ -1,4 +1,7 @@
-import type { HarvestingCraftingUiState } from "../../app-state.js";
+import type {
+    CharacterRoutineUiState,
+    HarvestingCraftingUiState
+} from "../../app-state.js";
 import type { CharacterSheetBootstrapResponse } from "../../character-api.js";
 import type { CharacterMechanicsView } from "../../ui/character-mechanics.js";
 import type { HarvestingCraftingWorkflow } from "./harvesting-workflow.js";
@@ -12,6 +15,7 @@ import {
     createInlineState,
     createSectionCard
 } from "../../ui/components.js";
+import { toRuleReferenceDisplay } from "../../ui/sheet-model.js";
 
 const SIZE_OPTIONS = ["Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"];
 
@@ -20,7 +24,8 @@ export function renderHarvestingCraftingWorkspace(
     state: HarvestingCraftingUiState,
     handlers: HarvestingCraftingWorkflow,
     readOnly: boolean,
-    mechanics: CharacterMechanicsView | null = null
+    mechanics: CharacterMechanicsView | null = null,
+    routine: CharacterRoutineUiState | null = null
 ): HTMLElement {
     const workspace = createElement("section", "dd-harvesting-workspace");
     workspace.setAttribute("data-harvesting-crafting-workspace", "true");
@@ -73,7 +78,8 @@ export function renderHarvestingCraftingWorkspace(
             state,
             handlers,
             readOnly,
-            mechanics));
+            mechanics,
+            routine));
         return workspace;
     }
 
@@ -525,9 +531,12 @@ function renderCraftingPanel(
     state: HarvestingCraftingUiState,
     handlers: HarvestingCraftingWorkflow,
     readOnly: boolean,
-    mechanics: CharacterMechanicsView | null
+    mechanics: CharacterMechanicsView | null,
+    routine: CharacterRoutineUiState | null
 ): HTMLElement {
     const panel = createElement("div", "dd-harvesting-workspace__panel");
+
+    panel.append(renderManualRecipe(state, handlers, readOnly, routine));
 
     const procedure = createSectionCard("Crafting Procedure", "dd-crafting-procedure");
     const procedureChoices = createElement("div", "dd-harvesting-choice-row");
@@ -756,7 +765,194 @@ function renderCraftingPanel(
         panel.append(resolved);
     }
 
+    panel.append(renderCraftingCompletion(
+        character,
+        state,
+        handlers,
+        readOnly));
+
     return panel;
+}
+
+function renderManualRecipe(
+    state: HarvestingCraftingUiState,
+    handlers: HarvestingCraftingWorkflow,
+    readOnly: boolean,
+    routine: CharacterRoutineUiState | null
+): HTMLElement {
+    const card = createSectionCard("Recipe", "dd-crafting-recipe");
+    card.append(createElement(
+        "p",
+        "dd-harvesting-field__help",
+        "Manual recipe entry keeps this workflow usable without copying source recipe tables. Rules Core still resolves the required checks."));
+
+    card.append(
+        textField(
+            "Recipe name",
+            state.craftingRecipeName,
+            handlers.setCraftingRecipeName,
+            readOnly),
+        textField(
+            "Crafted output",
+            state.craftingOutputName,
+            handlers.setCraftingOutputName,
+            readOnly),
+        numberField(
+            "Output quantity",
+            state.craftingOutputQuantity,
+            value => handlers.setCraftingOutputQuantity(value ?? 1),
+            readOnly,
+            1),
+        booleanField(
+            "Requires Manufacturing",
+            state.craftingRequiresManufacturing,
+            handlers.setCraftingRequiresManufacturing,
+            readOnly),
+        booleanField(
+            "Requires Enchanting",
+            state.craftingRequiresEnchanting,
+            handlers.setCraftingRequiresEnchanting,
+            readOnly));
+
+    const stages = createElement("dl", "dd-harvesting-facts");
+    appendFact(stages, "Manufacturing", stageState(
+        state.craftingRequiresManufacturing,
+        state.craftingManufacturingSucceeded));
+    appendFact(stages, "Enchanting", stageState(
+        state.craftingRequiresEnchanting,
+        state.craftingEnchantingSucceeded));
+    card.append(stages);
+
+    const inventory = routine?.state?.inventoryItemOccurrences ?? [];
+    const materials = createElement("div", "dd-crafting-materials");
+    materials.append(createElement("strong", "", "Materials"));
+
+    state.craftingMaterials.forEach((material, index) => {
+        const row = createElement("div", "dd-harvesting-helper");
+        row.append(
+            createElement(
+                "span",
+                "dd-harvesting-helper__title",
+                inventoryOccurrenceLabel(routine, material.occurrenceId)),
+            numberField(
+                "Quantity",
+                material.quantity,
+                value => handlers.updateCraftingMaterial(index, value ?? 1),
+                readOnly,
+                1),
+            createButton(
+                "Remove Material",
+                "dd-button dd-button--ghost",
+                () => handlers.removeCraftingMaterial(index),
+                readOnly));
+        materials.append(row);
+    });
+
+    const available = inventory.filter(item =>
+        !state.craftingMaterials.some(material => material.occurrenceId === item.id));
+    if (available.length > 0) {
+        const addLabel = createElement("label", "dd-harvesting-field");
+        addLabel.append(createElement("span", "dd-harvesting-field__label", "Add material from Inventory"));
+        const select = createElement("select", "dd-harvesting-field__control");
+        const placeholder = createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose inventory item";
+        select.append(placeholder);
+        for (const occurrence of available) {
+            const option = createElement("option");
+            option.value = occurrence.id;
+            option.textContent = `${inventoryOccurrenceLabel(routine, occurrence.id)} × ${occurrence.quantity}`;
+            select.append(option);
+        }
+        select.disabled = readOnly;
+        select.addEventListener("change", () => {
+            if (select.value.length === 0) return;
+            handlers.addCraftingMaterial(select.value);
+            select.value = "";
+        });
+        addLabel.append(select);
+        materials.append(addLabel);
+    } else if (inventory.length === 0) {
+        materials.append(createElement(
+            "p",
+            "dd-harvesting-field__help",
+            "No Character Inventory items are currently available. A recipe can still be resolved without material consumption."));
+    }
+    card.append(materials);
+    return card;
+}
+
+function renderCraftingCompletion(
+    character: CharacterSheetBootstrapResponse,
+    state: HarvestingCraftingUiState,
+    handlers: HarvestingCraftingWorkflow,
+    readOnly: boolean
+): HTMLElement {
+    const card = createSectionCard("Complete Crafting", "dd-crafting-completion");
+    if (state.craftingCompleted) {
+        card.append(createInlineState(
+            "This recipe output has been added to Inventory and the selected materials have been consumed.",
+            "success"));
+    } else {
+        card.append(createElement(
+            "p",
+            "dd-harvesting-field__help",
+            "Completion is explicit. It uses one atomic Inventory transaction so materials are not consumed unless the output can also be recorded."));
+    }
+
+    card.append(createButton(
+        state.craftingCompletionStatus === "loading"
+            ? "Completing…"
+            : state.craftingCompleted
+                ? "Crafting Completed"
+                : "Complete Recipe",
+        "dd-button dd-button--primary",
+        () => void handlers.completeCrafting(character.characterId),
+        readOnly
+            || state.craftingCompletionStatus === "loading"
+            || state.craftingCompleted));
+    return card;
+}
+
+function inventoryOccurrenceLabel(
+    routine: CharacterRoutineUiState | null,
+    occurrenceId: string
+): string {
+    const occurrence = routine?.state?.inventoryItemOccurrences
+        .find(item => item.id === occurrenceId);
+    if (occurrence === undefined) return "Unavailable inventory item";
+    if (occurrence.customName !== null && occurrence.customName.trim().length > 0) {
+        return occurrence.customName;
+    }
+    const reference = routine?.references[occurrence.id];
+    if (reference !== undefined) {
+        return toRuleReferenceDisplay(reference).value;
+    }
+    return occurrence.ruleConceptKey ?? "Inventory item";
+}
+
+function stageState(required: boolean, succeeded: boolean | null): string {
+    if (!required) return "Not required";
+    if (succeeded === true) return "Passed";
+    if (succeeded === false) return "Failed";
+    return "Pending";
+}
+
+function textField(
+    labelText: string,
+    value: string,
+    onChange: (value: string) => void,
+    readOnly: boolean
+): HTMLElement {
+    const label = createElement("label", "dd-harvesting-field");
+    label.append(createElement("span", "dd-harvesting-field__label", labelText));
+    const input = createElement("input", "dd-harvesting-field__control");
+    input.type = "text";
+    input.value = value;
+    input.disabled = readOnly;
+    input.addEventListener("change", () => onChange(input.value));
+    label.append(input);
+    return label;
 }
 
 function numberField(
