@@ -237,33 +237,6 @@ app.MapDelete("/api/characters/{characterId:guid}/build/subspecies", async (
         await service.ClearSubspeciesAsync(characterId, cancellationToken),
         mutating: true));
 
-// Backward-compatible endpoint for clients deployed before the Species/Subspecies migration.
-app.MapPut("/api/characters/{characterId:guid}/build/race-species", async (
-    Guid characterId,
-    RuleConceptSelectionRequest request,
-    CharacterBuildService service,
-    CancellationToken cancellationToken) =>
-{
-    try
-    {
-        return ToBuildApiResult(
-            await service.SetRaceSpeciesAsync(characterId, request.ConceptKey, cancellationToken),
-            mutating: true);
-    }
-    catch (ArgumentException exception)
-    {
-        return Results.BadRequest(new { error = exception.Message });
-    }
-});
-
-app.MapDelete("/api/characters/{characterId:guid}/build/race-species", async (
-    Guid characterId,
-    CharacterBuildService service,
-    CancellationToken cancellationToken) =>
-    ToBuildApiResult(
-        await service.ClearRaceSpeciesAsync(characterId, cancellationToken),
-        mutating: true));
-
 app.MapPut("/api/characters/{characterId:guid}/build/background", async (
     Guid characterId,
     RuleConceptSelectionRequest request,
