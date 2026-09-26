@@ -185,6 +185,59 @@ app.MapGet("/api/characters/{characterId:guid}/build", async (
     CancellationToken cancellationToken) =>
     ToBuildApiResult(await service.GetAsync(characterId, cancellationToken), mutating: false));
 
+app.MapPut("/api/characters/{characterId:guid}/build/species", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.SetSpeciesAsync(characterId, request.ConceptKey, cancellationToken),
+            mutating: true);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/species", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(
+        await service.ClearSpeciesAsync(characterId, cancellationToken),
+        mutating: true));
+
+app.MapPut("/api/characters/{characterId:guid}/build/subspecies", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return ToBuildApiResult(
+            await service.SetSubspeciesAsync(characterId, request.ConceptKey, cancellationToken),
+            mutating: true);
+    }
+    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapDelete("/api/characters/{characterId:guid}/build/subspecies", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(
+        await service.ClearSubspeciesAsync(characterId, cancellationToken),
+        mutating: true));
+
+// Backward-compatible endpoint for clients deployed before the Species/Subspecies migration.
 app.MapPut("/api/characters/{characterId:guid}/build/race-species", async (
     Guid characterId,
     RuleConceptSelectionRequest request,
