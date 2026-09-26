@@ -27,7 +27,7 @@ export function createBuildStateWorkflow(
 ): BuildStateWorkflow {
     async function resolveReferences(build: CharacterBuildResponse): Promise<void> {
         const structural = (
-            ["raceSpecies", "background", "deity", "startingClass", "subclass"] as const
+            ["species", "subspecies", "background", "deity", "startingClass", "subclass"] as const
         ).map(async target => {
             const conceptKey = getStoredChoiceConceptKey(build, target);
             if (conceptKey === null) return;
