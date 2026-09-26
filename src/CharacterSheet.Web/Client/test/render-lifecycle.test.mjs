@@ -156,7 +156,17 @@ test("contextual help exposes unfamiliar mechanics without rewriting attack reso
     action.setAttribute("data-action-key", "action.unseen-strike");
     root.append(normalAc, touchAc, skill, action);
 
-    decorateContextualRulesHelp(root, mechanics);
+    const previousDocument = globalThis.document;
+    globalThis.document = { createElement: tagName => new FakeElement(tagName) };
+    try {
+        decorateContextualRulesHelp(root, mechanics);
+    } finally {
+        if (previousDocument === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previousDocument;
+        }
+    }
 
     assert.equal(byAttribute(root, "data-help-topic", "defense.ac.total").length, 0);
     assert.equal(byAttribute(root, "data-help-topic", "defense.ac.touch").length, 1);
