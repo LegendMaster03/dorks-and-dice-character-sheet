@@ -1,6 +1,6 @@
 import type { CharacterBuilderUiState } from "../app-state.js";
 import type { CharacterBuilderChoice } from "../builder-api.js";
-import { getStartingClassEntry } from "../builder-rules.js";
+import { getStartingClassEntry, getStoredChoiceConceptKey } from "../builder-rules.js";
 import type { ResolvedRuleCatalogItem } from "../rules-core-api.js";
 import { createButton, createElement, createInlineState, createSectionCard } from "./components.js";
 import {
@@ -24,7 +24,8 @@ export interface CharacterBuilderRenderOptions {
 }
 
 const ALL_CHARACTER_BUILDER_CHOICES: readonly CharacterBuilderChoice[] = [
-    "raceSpecies",
+    "species",
+    "subspecies",
     "background",
     "deity",
     "startingClass",
@@ -70,8 +71,19 @@ export function renderCharacterBuilder(
 
     const grid = createElement("div", "dd-build__grid");
     const startingClass = getStartingClassEntry(builder.build);
-    if (choices.includes("raceSpecies")) {
-        grid.append(renderChoice("raceSpecies", "Race / Species", builder, readOnly, true, undefined, handlers));
+    const speciesSelected = getStoredChoiceConceptKey(builder.build, "species") !== null;
+    if (choices.includes("species")) {
+        grid.append(renderChoice("species", "Species", builder, readOnly, true, undefined, handlers));
+    }
+    if (choices.includes("subspecies")) {
+        grid.append(renderChoice(
+            "subspecies",
+            "Subspecies",
+            builder,
+            readOnly,
+            speciesSelected,
+            "Choose a Species before selecting a Subspecies.",
+            handlers));
     }
     if (choices.includes("background")) {
         grid.append(renderChoice("background", "Background", builder, readOnly, true, undefined, handlers));
@@ -175,13 +187,15 @@ function renderRuleChooser(
     const heading = createElement(
         "h3",
         "dd-rule-chooser__title",
-        target === "raceSpecies"
-            ? "Choose Race / Species"
-            : target === "background"
-                ? "Choose Background"
-                : target === "deity"
-                    ? "Choose Deity"
-                    : target === "startingClass" ? "Choose Starting Class" : "Choose Subclass");
+        target === "species"
+            ? "Choose Species"
+            : target === "subspecies"
+                ? "Choose Subspecies"
+                : target === "background"
+                    ? "Choose Background"
+                    : target === "deity"
+                        ? "Choose Deity"
+                        : target === "startingClass" ? "Choose Starting Class" : "Choose Subclass");
     heading.id = headingId;
     header.append(heading, createButton("Close", "dd-button dd-button--ghost", handlers.closeChooser));
     container.append(header);
