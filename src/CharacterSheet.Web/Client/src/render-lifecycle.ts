@@ -1,5 +1,6 @@
 import type { CharacterSheetAction, CharacterSheetAppState } from "./app-state.js";
 import { reduceAppState } from "./app-state.js";
+import { applyContextualRulesHelp } from "./ui/contextual-help.js";
 
 export type RenderFunction = (state: Readonly<CharacterSheetAppState>) => void;
 
@@ -21,6 +22,10 @@ export function createApplication(
         rendering = true;
         try {
             renderFunction(state);
+            applyContextualRulesHelp(
+                state.presentation.status === "ready"
+                    ? state.presentation.mechanics
+                    : null);
         } finally {
             rendering = false;
         }
