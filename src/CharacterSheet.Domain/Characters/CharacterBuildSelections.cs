@@ -2,9 +2,12 @@ namespace CharacterSheet.Domain.Characters;
 
 public enum CharacterFoundationalSelectionCategory
 {
+    // Legacy persisted category retained only so pre-migration rows can still be read safely.
     RaceSpecies = 1,
     Background = 2,
-    Deity = 3
+    Deity = 3,
+    Species = 4,
+    Subspecies = 5
 }
 
 public enum CharacterAdvancementKind

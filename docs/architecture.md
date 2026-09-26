@@ -4,7 +4,7 @@
 
 The Dorks & Dice Site remains authoritative for canonical Character identity and lifecycle. It owns `CharacterId`, account ownership, Character name, active/archive state, permanent deletion, Campaign identity and membership, and Character-to-Campaign associations.
 
-Rules Core is the rule-definition authority. It owns source provenance, normalization across editions, resolved rules, mechanical relationships, combined skills, Classes, Subclasses, Prestige Classes, Feats, race/species concepts, and campaign rule resolution.
+Rules Core is the rule-definition authority. It owns source provenance, normalization across editions, resolved rules, mechanical relationships, combined skills, Classes, Subclasses, Prestige Classes, Feats, canonical Species/Subspecies concepts, legacy source ancestry normalization, and campaign rule resolution.
 
 Character Sheet owns Character decisions and state: which stable Rules Core concepts a Character selected, builder progress, advancement history, future calculated Character state, and future campaign-scoped Character module state. Character Sheet is not a second rules engine and does not copy resolved rule mechanics into its database.
 
@@ -36,7 +36,7 @@ GET /api/rules?entityType={type}&q={search}&limit=200
 GET /api/rules/{conceptKey}
 ```
 
-`GET /api/rules` is used for searchable resolved catalog choices. `GET /api/rules/{conceptKey}` resolves a persisted reference for display. Rules Core applies its existing current-user/source-access filtering to those reads. Resolved catalog items also carry stable concept-to-concept relationship metadata; Character Sheet currently consumes the `parent-class` relationship on Subclass concepts.
+`GET /api/rules` is used for searchable resolved catalog choices. `GET /api/rules/{conceptKey}` resolves a persisted reference for display. Rules Core applies its existing current-user/source-access filtering to those reads. Resolved catalog items also carry stable concept-to-concept relationship metadata. Character Sheet consumes `parent-class` on Subclass concepts and `parent-species` on Subspecies concepts; it does not parse source-native class or ancestry fields itself.
 
 The builder intentionally uses global rules only. A Site Character can belong to multiple Campaigns, so Character Sheet does not arbitrarily select one Campaign's resolved rules. Campaign-specific resolution is deferred until the Character Sheet has an explicit Campaign-context selector/overlay.
 
@@ -60,7 +60,7 @@ Advancement display resolution uses each persisted stable Rules Core concept key
 
 Rules Core owns evaluation arithmetic. Character Sheet supplies only inputs it can establish from authoritative Character state, batches only evaluations that require no Character/runtime/source inputs, and never substitutes a default or zero for missing state. Current persisted Character state does not yet establish effective Ability scores/modifiers, competency ranks/training/class-skill state, equipment state, spellcasting state, or rule capability grants derived from selected Classes/Species/Feats. Capability-gated 3.x mechanics therefore remain omitted until those contracts/state exist. Item-occurrence mechanics also remain absent because the current Rules Core consumer contract does not expose them.
 
-The browser stores presentation loading state in the explicit application reducer. Each request has a monotonic request ID so stale/out-of-order responses are ignored. Successful mutations of base Ability input, Race/Species, Starting Class, Subclass, Feats, and Inventory ownership refresh the projection. Notes do not trigger a mechanics refresh. Projection failure never replaces the separately loaded build/routine state.
+The browser stores presentation loading state in the explicit application reducer. Each request has a monotonic request ID so stale/out-of-order responses are ignored. Successful mutations of base Ability input, Species, Subspecies, Starting Class, Subclass, Feats, and Inventory ownership refresh the projection. Notes do not trigger a mechanics refresh. Projection failure never replaces the separately loaded build/routine state.
 
 ## Stable rule-reference semantics
 
@@ -74,7 +74,7 @@ A persisted row therefore means only:
 This Character selected Rules Core concept <ConceptKey>.
 ```
 
-Rules Core remains responsible for what that concept currently means and whether its content is currently visible to the authenticated user.
+Rules Core remains responsible for what that concept currently means and whether its content is currently visible to the authenticated user. A stable key may retain legacy source vocabulary such as a `race.*` prefix; Character Sheet does not rewrite that identity merely because Rules Core exposes the concept through the canonical `species` entity type.
 
 The Character Sheet backend deliberately does not call Rules Core when a selection reference is persisted. Saving a `ConceptKey` is not independent verification of the user's current Rules Core source access and grants no permission to reveal rule content. The authenticated frontend resolves content through Rules Core before displaying it.
 
@@ -102,13 +102,17 @@ Builder choices are intentionally split between foundational rule selections, Ch
 ```text
 Id                Character-owned selection identity
 CharacterId       Site CharacterId, FK -> root, cascade delete
-Category          current value: RaceSpecies
+Category          Species | Subspecies | Background | Deity
 RuleConceptKey    stable Rules Core ConceptKey
 CreatedAt
 UpdatedAt
 ```
 
-`(CharacterId, Category)` is unique for the currently active foundational choice. The first public category is presented as `raceSpecies`, allowing the UI to use the combined `Race / Species` terminology without asserting that every source edition calls the concept the same thing. The row has its own identity rather than adding a `RaceId` column to the root, leaving room for future provenance/template/inheritance semantics to evolve independently of the root schema.
+`(CharacterId, Category)` is unique for each currently active foundational choice. Species is the canonical ancestry category exposed outside Rules Core, and Subspecies is an optional independent selection related to Species by Rules Core's `parent-species` relationship. Character Sheet does not expose Race or Subrace as parallel public categories.
+
+The domain enum still reserves the historical `RaceSpecies` value solely so pre-migration database rows can be read safely. The `NormalizeSpeciesSelections` migration rewrites those rows to `Species`, and the read model maps any surviving legacy row to the canonical `species` category. New writes, API contracts, browser state, and Rules Core consumer checks use only Species/Subspecies. This is persistence migration compatibility, not a runtime Race alias.
+
+Each foundational selection row has its own identity rather than adding ancestry, Background, or Deity columns to the root, leaving room for future provenance/template/inheritance semantics to evolve independently of the root schema.
 
 ### Base ability-score inputs
 
@@ -125,9 +129,9 @@ UpdatedAt
 
 `(CharacterId, AbilityKey)` is unique in PostgreSQL. Replacing a value updates the existing Character-owned row instead of appending another current decision; clearing a value removes only that keyed current decision. The current playable API accepts the stable keys `strength`, `dexterity`, `constitution`, `intelligence`, `wisdom`, and `charisma`. The key remains a string-backed child-row identity rather than six columns on the root, so future additional ability axes do not require a root/table redesign.
 
-The stored `Score` is explicitly a **base ability score input**. It is a persisted Character decision, not an effective/final ability score, ability modifier, saving throw, Rules Core-derived bonus, or explicit override. No racial/species, Class, Feat, ASI, temporary-effect, magic-item, proficiency, minimum/maximum, or other derived contribution is applied in this slice. No edition-specific numeric range is imposed.
+The stored `Score` is explicitly a **base ability score input**. It is a persisted Character decision, not an effective/final ability score, ability modifier, saving throw, Rules Core-derived bonus, or explicit override. No Species/Subspecies, Class, Feat, ASI, temporary-effect, magic-item, proficiency, minimum/maximum, or other derived contribution is applied in this slice. No edition-specific numeric range is imposed.
 
-How the input number was generated is intentionally deferred. The schema does not currently claim rolled, point-buy, standard-array, imported, racial, ASI, DM-grant, or other provenance.
+How the input number was generated is intentionally deferred. The schema does not currently claim rolled, point-buy, standard-array, imported, ancestry-derived, ASI, DM-grant, or other provenance.
 
 ### Progression / advancement entries
 
@@ -160,12 +164,14 @@ No total Character level is calculated from this immature progression model.
 
 ## Current `/build` API
 
-Character build state is exposed as one coherent resource plus class/foundational selection resources:
+Character build state is exposed as one coherent resource plus canonical foundational and advancement resources:
 
 ```text
 GET    /api/characters/{characterId}/build
-PUT    /api/characters/{characterId}/build/race-species
-DELETE /api/characters/{characterId}/build/race-species
+PUT    /api/characters/{characterId}/build/species
+DELETE /api/characters/{characterId}/build/species
+PUT    /api/characters/{characterId}/build/subspecies
+DELETE /api/characters/{characterId}/build/subspecies
 PUT    /api/characters/{characterId}/build/ability-scores/{abilityKey}
 DELETE /api/characters/{characterId}/build/ability-scores/{abilityKey}
 PUT    /api/characters/{characterId}/build/starting-class
@@ -175,6 +181,8 @@ DELETE /api/characters/{characterId}/build/classes/{classAdvancementEntryId}/sub
 POST   /api/characters/{characterId}/build/feats
 DELETE /api/characters/{characterId}/build/feats/{featAdvancementEntryId}
 ```
+
+There is no public `/build/race-species` alias. Legacy `RaceSpecies` support is restricted to reading and migrating old persisted rows.
 
 A rule-selection mutation body, including `POST /build/feats`, is only:
 
@@ -210,7 +218,8 @@ The rules-backed Character Builder exposes stable Character-owned identity and a
 ```text
 <Character Name>
 
-Race / Species
+Species
+Subspecies
 Background
 Deity
 Starting Class
@@ -220,15 +229,23 @@ Base Ability Scores
 Advancement levels
 ```
 
-Race / Species, Background, Deity, Class, and Subclass are persisted only as stable Rules Core concept references. Their display names and source metadata are resolved from Rules Core rather than copied into Character Sheet state. Each chooser supports loading, search, empty results, Rules Core error, selection, replacement, clear, save error, and cancel.
+Species, Subspecies, Background, Deity, Class, and Subclass are persisted only as stable Rules Core concept references. Their display names and source metadata are resolved from Rules Core rather than copied into Character Sheet state. Each chooser supports loading, search, empty results, Rules Core error, selection, replacement, clear, save error, and cancel.
 
-Race / Species queries the global Rules Core race/species catalog. Background queries `entityType=background`; Deity queries `entityType=deity`; Starting Class queries `entityType=class`. `prestigeClass` is not treated as a Starting Class. Subclass selection remains attached to a Character-owned Class advancement occurrence and uses Rules Core parent-Class relationships rather than source-document parsing.
+Species queries the canonical global Rules Core `species` catalog. Subspecies queries the canonical `subspecies` catalog and retains only concepts with an explicit `parent-species` relationship to the selected Species. Background queries `entityType=background`; Deity queries `entityType=deity`; Starting Class queries `entityType=class`. `prestigeClass` is not treated as a Starting Class. Subclass selection remains attached to a Character-owned Class advancement occurrence and uses Rules Core parent-Class relationships rather than source-document parsing.
 
 The sheet also consumes transient Site-owned display identity. Player Name comes from the authenticated Site user projection and remains represented by the Site account context rather than being duplicated in Character Sheet header chrome. Campaign names come from the Site Tool Host campaign projection and may be shown as sheet context. Character Sheet does not persist those values as substitute ownership or Campaign state.
 
-The normal Character header follows the D&D Beyond placement hierarchy used as the UI baseline: Character name, Race / Species, and compact Advancement identity stay together. Background and rule-backed Deity are presented in the Background tab with authored biography. Character-owned Advancement Progress is presented with Advancement details rather than as an unrelated header field.
+The normal Character header keeps Character name, Species, optional Subspecies, and compact Advancement identity together. Background and rule-backed Deity are presented in the Background tab with authored biography. Character-owned Advancement Progress is presented with Advancement details rather than as an unrelated header field.
 
 Build status remains `In progress`; the Guided Setup UI reports what it can verify without inventing an edition-specific completion state machine.
+
+## Species and Subspecies boundary
+
+Rules Core owns source terminology, import provenance, normalized Species/Subspecies entity types, and the relationship from a Subspecies concept to its parent Species concept. Legacy source records named `race` or `subrace` remain importable in Rules Core and retain their native source evidence, but Rules Core exposes them to consumers through canonical `species` and `subspecies` entity types. For 5e.tools-shaped source material, source-native `raceName`/`raceSource` identity evidence is normalized into a persistent `parent-species` concept relationship.
+
+Character Sheet consumes only that canonical contract. It stores Species and optional Subspecies as independent foundational selections, filters Subspecies by the supplied `parent-species` relationship, and clears an existing Subspecies when a replacement Species is incompatible. It does not reinterpret names, parse source documents, or accept legacy `race`/`subrace` entity types from the Rules Core consumer API.
+
+Legacy Character Sheet `RaceSpecies` persistence is handled separately: the database migration normalizes existing rows to `Species`, while the domain/read path can still recognize a pre-migration row long enough to expose it as canonical Species without data loss. No new Character Sheet write or public API uses `RaceSpecies`.
 
 ## Subclass boundary
 
@@ -313,6 +330,7 @@ src/
     combat/
     defense/
     features/
+    harvesting/
     health/
     initiative/
     inventory/

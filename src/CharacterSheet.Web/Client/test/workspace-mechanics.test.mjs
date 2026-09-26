@@ -74,7 +74,8 @@ const builder = {
     status: "idle",
     build: null,
     references: {
-        raceSpecies: { status: "none" },
+        species: { status: "none" },
+        subspecies: { status: "none" },
         background: { status: "none" },
         deity: { status: "none" },
         startingClass: { status: "none" },
@@ -943,7 +944,8 @@ test("header follows the Beyond identity hierarchy instead of metadata cards", (
     const header = byClass(rendered, "dd-sheet-header")[0];
     assert.ok(header);
 
-    assert.equal(byAttribute(header, "data-sheet-header-identity", "race-species").length, 1);
+    assert.equal(byAttribute(header, "data-sheet-header-identity", "species").length, 1);
+    assert.equal(byAttribute(header, "data-sheet-header-identity", "subspecies").length, 1);
     assert.equal(byAttribute(header, "data-sheet-header-identity", "advancement").length, 1);
     assert.equal(byClass(header, "dd-sheet-header__summary").length, 0);
     assert.doesNotMatch(
@@ -1197,7 +1199,6 @@ test("Known Spells renders Character-owned spell concepts and delegates add/remo
             entityType: "spell"
         }
     };
-
     const spellHandlers = {
         ...handlers,
         spells: {

@@ -40,12 +40,12 @@ public sealed class CharacterBuildWorkflowTests
             Assert.Empty(view.ProgressionEntries);
         }
 
-        using (var race = await factory.SendHostedAsync(
+        using (var species = await factory.SendHostedAsync(
                    HttpMethod.Put,
-                   $"/api/characters/{characterId:D}/build/race-species",
+                   $"/api/characters/{characterId:D}/build/species",
                    new { conceptKey = "race:elf" }))
         {
-            Assert.Equal(HttpStatusCode.OK, race.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, species.StatusCode);
         }
         using (var startingClass = await factory.SendHostedAsync(
                    HttpMethod.Put,
@@ -60,7 +60,9 @@ public sealed class CharacterBuildWorkflowTests
             $"/api/characters/{characterId:D}/build");
         var build = await response.Content.ReadFromJsonAsync<CharacterBuildView>();
         Assert.NotNull(build);
-        Assert.Equal("race:elf", Assert.Single(build.FoundationalSelections).RuleConceptKey);
+        var foundational = Assert.Single(build.FoundationalSelections);
+        Assert.Equal("species", foundational.Category);
+        Assert.Equal("race:elf", foundational.RuleConceptKey);
         var progression = Assert.Single(build.ProgressionEntries);
         Assert.Equal("class", progression.Kind);
         Assert.Equal(0, progression.Ordinal);
@@ -82,7 +84,7 @@ public sealed class CharacterBuildWorkflowTests
         {
             using var response = await factory.SendHostedAsync(
                 HttpMethod.Put,
-                $"/api/characters/{characterId:D}/build/race-species",
+                $"/api/characters/{characterId:D}/build/species",
                 new { conceptKey = key });
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
@@ -125,7 +127,7 @@ public sealed class CharacterBuildWorkflowTests
         {
             using var response = await factory.SendHostedAsync(
                 HttpMethod.Put,
-                $"/api/characters/{characterId:D}/build/race-species",
+                $"/api/characters/{characterId:D}/build/species",
                 new { conceptKey = key });
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
@@ -147,11 +149,11 @@ public sealed class CharacterBuildWorkflowTests
             Assert.Equal("class:wizard", (await db.CharacterAdvancementEntries.SingleAsync()).RuleConceptKey);
         }
 
-        using (var raceClear = await factory.SendHostedAsync(
+        using (var speciesClear = await factory.SendHostedAsync(
                    HttpMethod.Delete,
-                   $"/api/characters/{characterId:D}/build/race-species"))
+                   $"/api/characters/{characterId:D}/build/species"))
         {
-            Assert.Equal(HttpStatusCode.OK, raceClear.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, speciesClear.StatusCode);
         }
         using (var classClear = await factory.SendHostedAsync(
                    HttpMethod.Delete,
@@ -252,7 +254,7 @@ public sealed class CharacterBuildWorkflowTests
         }
         using (var select = await factory.SendHostedAsync(
                    HttpMethod.Put,
-                   $"/api/characters/{characterId:D}/build/race-species",
+                   $"/api/characters/{characterId:D}/build/species",
                    new { conceptKey = "race:elf" }))
         {
             Assert.Equal(HttpStatusCode.OK, select.StatusCode);
@@ -271,7 +273,9 @@ public sealed class CharacterBuildWorkflowTests
         Assert.Equal(HttpStatusCode.OK, read.StatusCode);
         Assert.NotNull(build);
         Assert.True(build.ReadOnly);
-        Assert.Equal("race:elf", Assert.Single(build.FoundationalSelections).RuleConceptKey);
+        var foundational = Assert.Single(build.FoundationalSelections);
+        Assert.Equal("species", foundational.Category);
+        Assert.Equal("race:elf", foundational.RuleConceptKey);
 
         using var mutate = await factory.SendHostedAsync(
             HttpMethod.Put,
