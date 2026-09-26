@@ -19,7 +19,6 @@ public static class CharacterBuildSelectionCategories
 {
     public const string Species = "species";
     public const string Subspecies = "subspecies";
-    public const string LegacyRaceSpecies = "raceSpecies";
     public const string Background = "background";
     public const string Deity = "deity";
 }
@@ -214,17 +213,6 @@ public sealed class CharacterBuildService(
                 token),
             cancellationToken);
 
-    public Task<CharacterBuildResult> SetRaceSpeciesAsync(
-        Guid characterId,
-        string ruleConceptKey,
-        CancellationToken cancellationToken = default) =>
-        SetSpeciesAsync(characterId, ruleConceptKey, cancellationToken);
-
-    public Task<CharacterBuildResult> ClearRaceSpeciesAsync(
-        Guid characterId,
-        CancellationToken cancellationToken = default) =>
-        ClearSpeciesAsync(characterId, cancellationToken);
-
     public Task<CharacterBuildResult> SetBackgroundAsync(
         Guid characterId,
         string ruleConceptKey,
@@ -333,8 +321,8 @@ public sealed class CharacterBuildService(
             cancellationToken);
         if (!resolved.TryGetValue(normalizedSubspecies, out var subspecies)
             || !resolved.TryGetValue(normalizedSpecies, out var species)
-            || !IsCanonicalEntityType(subspecies.EntityType, "subspecies", "subrace")
-            || !IsCanonicalEntityType(species.EntityType, "species", "race"))
+            || !IsCanonicalEntityType(subspecies.EntityType, "subspecies")
+            || !IsCanonicalEntityType(species.EntityType, "species"))
         {
             return false;
         }
@@ -342,13 +330,12 @@ public sealed class CharacterBuildService(
         return (subspecies.Relationships ?? [])
             .Any(relationship =>
                 string.Equals(relationship.Kind, "parent-species", StringComparison.Ordinal)
-                && IsCanonicalEntityType(relationship.RelatedEntityType, "species", "race")
+                && IsCanonicalEntityType(relationship.RelatedEntityType, "species")
                 && string.Equals(relationship.RelatedConceptKey, normalizedSpecies, StringComparison.Ordinal));
     }
 
-    private static bool IsCanonicalEntityType(string actual, string canonical, string legacy) =>
-        string.Equals(actual, canonical, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(actual, legacy, StringComparison.OrdinalIgnoreCase);
+    private static bool IsCanonicalEntityType(string actual, string canonical) =>
+        string.Equals(actual, canonical, StringComparison.OrdinalIgnoreCase);
 
     private async Task<CharacterBuildResult> MutateAsync(
         Guid characterId,
