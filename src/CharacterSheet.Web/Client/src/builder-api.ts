@@ -53,7 +53,7 @@ export interface CharacterBuildResponse {
     progressionEntries: CharacterAdvancementEntryResponse[];
 }
 
-export type CharacterBuilderChoice = "raceSpecies" | "background" | "deity" | "startingClass" | "subclass";
+export type CharacterBuilderChoice = "species" | "subspecies" | "background" | "deity" | "startingClass" | "subclass";
 
 export function buildCharacterBuildBackendUrl(
     environment: HostEnvironment,
@@ -62,8 +62,11 @@ export function buildCharacterBuildBackendUrl(
     classAdvancementEntryId?: string
 ): string {
     const base = `/api/characters/${encodeURIComponent(characterId)}/build`;
-    if (choice === "raceSpecies") {
-        return buildCharacterSheetApiUrl(environment, `${base}/race-species`);
+    if (choice === "species") {
+        return buildCharacterSheetApiUrl(environment, `${base}/species`);
+    }
+    if (choice === "subspecies") {
+        return buildCharacterSheetApiUrl(environment, `${base}/subspecies`);
     }
     if (choice === "background") {
         return buildCharacterSheetApiUrl(environment, `${base}/background`);
@@ -216,7 +219,6 @@ export async function clearCharacterBaseAbilityScore(
     }
     return await response.json() as CharacterBuildResponse;
 }
-
 
 export function buildCharacterAdvancementLevelBackendUrl(
     environment: HostEnvironment,
