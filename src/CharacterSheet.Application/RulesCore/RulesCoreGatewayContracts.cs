@@ -7,6 +7,13 @@ public sealed class RulesCoreGatewayException(string message, Exception? innerEx
 {
 }
 
+public sealed record RulesCoreResolvedRuleRelationshipView(
+    string Kind,
+    Guid RelatedRuleConceptId,
+    string RelatedConceptKey,
+    string RelatedEntityType,
+    string RelatedDisplayName);
+
 public sealed record RulesCoreResolvedRuleSummaryView(
     string ConceptKey,
     string EntityType,
@@ -19,7 +26,8 @@ public sealed record RulesCoreResolvedRuleSummaryView(
     string EditionKey,
     string EditionDisplayName,
     string? WorkKey = null,
-    string? WorkDisplayName = null);
+    string? WorkDisplayName = null,
+    IReadOnlyList<RulesCoreResolvedRuleRelationshipView>? Relationships = null);
 
 public sealed record RulesCoreResolvedRulesCatalogView(
     int TotalCount,
