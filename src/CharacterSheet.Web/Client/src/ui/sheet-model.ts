@@ -90,7 +90,7 @@ export function getGuidedBuilderSectionStates(
     }
 
     const speciesSelected = builder.build.foundationalSelections
-        .some(selection => selection.category === "raceSpecies");
+        .some(selection => selection.category === "species");
     const startingClassSelected = getStartingClassEntry(builder.build) !== null;
     const configuredAbilities = new Set(
         builder.build.baseAbilityScoreInputs.map(input => input.abilityKey)
@@ -144,7 +144,6 @@ export const MECHANIC_PLACEHOLDERS: readonly MechanicPlaceholderDefinition[] = [
     { id: "hit-points", label: "Hit Points", message: "Hit points are not available yet.", group: "combat" },
     { id: "hit-dice", label: "Hit Dice", message: "Hit dice are not available yet.", group: "combat" }
 ];
-
 
 export interface AbilityScoreDefinition {
     key: CharacterAbilityKey;
@@ -293,7 +292,8 @@ export interface CharacterHeaderModel {
     readOnly: boolean;
     builderStatus: string | null;
     campaignContext: string | null;
-    raceSpecies: RuleReferenceDisplay;
+    species: RuleReferenceDisplay;
+    subspecies: RuleReferenceDisplay;
     startingClass: RuleReferenceDisplay;
     subclass: RuleReferenceDisplay;
 }
@@ -310,7 +310,8 @@ export function createCharacterHeaderModel(
         readOnly,
         builderStatus: builder.build?.builderStatus ?? character.sheet?.builderStatus ?? null,
         campaignContext: formatCampaignContext(character),
-        raceSpecies: builderReferenceDisplay(builder, "raceSpecies"),
+        species: builderReferenceDisplay(builder, "species"),
+        subspecies: builderReferenceDisplay(builder, "subspecies"),
         startingClass: builderReferenceDisplay(builder, "startingClass"),
         subclass: builderReferenceDisplay(builder, "subclass")
     };
