@@ -7,10 +7,18 @@ import {
 } from "./character-api.js";
 import type { CharacterAdvancementView } from "./ui/character-advancement.js";
 import type { CharacterMechanicsView } from "./ui/character-mechanics.js";
+import {
+    attachRulesCoreContext,
+    type RulesCoreCharacterProjectionContextView
+} from "./rules-core-context.js";
 
 export interface CharacterPresentationResponse {
     advancement: CharacterAdvancementView;
     mechanics: CharacterMechanicsView | null;
+}
+
+interface CharacterPresentationPayload extends CharacterPresentationResponse {
+    ruleProjection?: RulesCoreCharacterProjectionContextView | null;
 }
 
 export function buildCharacterPresentationUrl(
@@ -36,5 +44,12 @@ export async function loadCharacterPresentation(
             await readApiError(response, "Character mechanics presentation is unavailable."),
             response.status);
     }
-    return await response.json() as CharacterPresentationResponse;
+
+    const presentation = await response.json() as CharacterPresentationPayload;
+    return {
+        advancement: presentation.advancement,
+        mechanics: attachRulesCoreContext(
+            presentation.mechanics,
+            presentation.ruleProjection)
+    };
 }

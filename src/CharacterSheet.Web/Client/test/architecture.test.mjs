@@ -132,6 +132,7 @@ test("stylesheet entrypoint is composition-only", async () => {
         '@import "./styles/builder.css";',
         '@import "./styles/advancement.css";',
         '@import "./styles/mechanics.css";',
+        '@import "./styles/contextual-help.css";',
         '@import "./styles/abilities.css";',
         '@import "./styles/supplemental.css";'
     ]);

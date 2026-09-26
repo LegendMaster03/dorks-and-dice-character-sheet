@@ -67,6 +67,13 @@ public sealed record RulesCoreCharacterMechanicProvenanceView(
     IReadOnlyList<RulesCoreMechanicSourceAttributionView> MechanicalProfile,
     IReadOnlyList<RulesCoreMechanicSourceAttributionView> EffectiveRule);
 
+public sealed record RulesCoreCharacterContextualHelpView(
+    string TopicKey,
+    string DisplayName,
+    string ShortText,
+    string? FullText,
+    string Prominence);
+
 public sealed record RulesCoreCharacterMechanicContributionView(
     string ContributionKey,
     string Label,
@@ -91,7 +98,8 @@ public sealed record RulesCoreCharacterResolvedMechanicView(
     IReadOnlyList<string> RequiredChoices,
     IReadOnlyList<string> RequiredRolls,
     IReadOnlyList<RulesCoreCharacterMechanicContributionView> Contributions,
-    RulesCoreCharacterMechanicProvenanceView Provenance);
+    RulesCoreCharacterMechanicProvenanceView Provenance,
+    RulesCoreCharacterContextualHelpView? Help = null);
 
 public sealed record RulesCoreCharacterRuleEffectView(
     string EffectKey,
@@ -136,6 +144,11 @@ public sealed record RulesCoreCharacterQualificationView(
     IReadOnlyList<string> GrantedByConceptKeys,
     RulesCoreCharacterMechanicProvenanceView Provenance);
 
+public sealed record RulesCoreCharacterAttackResolutionView(
+    string? TargetDefenseKey,
+    string RollMode,
+    IReadOnlyList<string> TargetStateKeys);
+
 public sealed record RulesCoreCharacterActionView(
     string ActionKey,
     string DisplayName,
@@ -159,7 +172,8 @@ public sealed record RulesCoreCharacterActionView(
     string? MaterialComponent = null,
     string? Duration = null,
     bool? Ritual = null,
-    bool? Concentration = null);
+    bool? Concentration = null,
+    RulesCoreCharacterAttackResolutionView? AttackResolution = null);
 
 public sealed record RulesCoreCharacterFeatureView(
     string FeatureKey,
@@ -283,4 +297,5 @@ public sealed record RulesCoreCharacterRulesProjectionView(
     IReadOnlyList<RulesCoreCharacterEquipmentDefinitionView> Equipment,
     IReadOnlyList<RulesCoreUniversalCompetencyView>? Competencies = null,
     IReadOnlyList<RulesCoreMechanicRelationshipView>? CompetencyRelationships = null,
-    IReadOnlyList<RulesCoreCharacterRuleResolutionView>? RuleResolutions = null);
+    IReadOnlyList<RulesCoreCharacterRuleResolutionView>? RuleResolutions = null,
+    IReadOnlyList<RulesCoreCharacterContextualHelpView>? HelpTopics = null);
