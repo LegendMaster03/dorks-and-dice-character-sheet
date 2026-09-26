@@ -28,8 +28,14 @@ const build = {
     readOnly: false,
     foundationalSelections: [{
         id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-        category: "raceSpecies",
-        ruleConceptKey: "race:elf",
+        category: "species",
+        ruleConceptKey: "species:elf",
+        createdAt: "now",
+        updatedAt: "now"
+    }, {
+        id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        category: "subspecies",
+        ruleConceptKey: "subspecies:high-elf",
         createdAt: "now",
         updatedAt: "now"
     }],
@@ -73,17 +79,18 @@ test("rich builder state models Rules Core resolution, chooser loading, search, 
 
     state = reduceAppState(state, { type: "builder-loaded", build });
     assert.equal(state.builder.status, "ready");
-    assert.deepEqual(state.builder.references.raceSpecies, { status: "loading", conceptKey: "race:elf" });
+    assert.deepEqual(state.builder.references.species, { status: "loading", conceptKey: "species:elf" });
+    assert.deepEqual(state.builder.references.subspecies, { status: "loading", conceptKey: "subspecies:high-elf" });
     assert.deepEqual(state.builder.references.startingClass, { status: "loading", conceptKey: "class:wizard" });
     assert.deepEqual(state.builder.references.subclass, { status: "none" });
 
     state = reduceAppState(state, {
         type: "rule-reference-resolved",
-        target: "raceSpecies",
-        conceptKey: "race:elf",
-        reference: { status: "unavailable", conceptKey: "race:elf" }
+        target: "species",
+        conceptKey: "species:elf",
+        reference: { status: "unavailable", conceptKey: "species:elf" }
     });
-    assert.equal(state.builder.references.raceSpecies.status, "unavailable");
+    assert.equal(state.builder.references.species.status, "unavailable");
 
     state = reduceAppState(state, { type: "chooser-opened", target: "startingClass" });
     state = reduceAppState(state, {
@@ -160,22 +167,22 @@ test("stale Rules Core resolution can not overwrite a replaced stored concept", 
     state = reduceAppState(state, { type: "builder-loaded", build });
     const replacement = {
         ...build,
-        foundationalSelections: [{
-            ...build.foundationalSelections[0],
-            ruleConceptKey: "race:dwarf"
-        }]
+        foundationalSelections: build.foundationalSelections.map(selection =>
+            selection.category === "species"
+                ? { ...selection, ruleConceptKey: "species:dwarf" }
+                : selection)
     };
     state = reduceAppState(state, { type: "selection-saved", build: replacement });
     state = reduceAppState(state, {
         type: "rule-reference-resolved",
-        target: "raceSpecies",
-        conceptKey: "race:elf",
-        reference: { status: "unavailable", conceptKey: "race:elf" }
+        target: "species",
+        conceptKey: "species:elf",
+        reference: { status: "unavailable", conceptKey: "species:elf" }
     });
 
-    assert.deepEqual(state.builder.references.raceSpecies, {
+    assert.deepEqual(state.builder.references.species, {
         status: "loading",
-        conceptKey: "race:dwarf"
+        conceptKey: "species:dwarf"
     });
 });
 
