@@ -16,7 +16,9 @@ public enum CharacterBuildAccessStatus
 
 public static class CharacterBuildSelectionCategories
 {
-    public const string RaceSpecies = "raceSpecies";
+    public const string Species = "species";
+    public const string Subspecies = "subspecies";
+    public const string LegacyRaceSpecies = "raceSpecies";
     public const string Background = "background";
     public const string Deity = "deity";
 }
@@ -90,7 +92,71 @@ public sealed class CharacterBuildService(
         return Ready(root, access.Character!);
     }
 
-    public Task<CharacterBuildResult> SetRaceSpeciesAsync(
+    public Task<CharacterBuildResult> SetSpeciesAsync(
+        Guid characterId,
+        string ruleConceptKey,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            async (changedAt, token) =>
+            {
+                var current = await buildStore.GetAsync(characterId, token);
+                var previousSpecies = current?.FoundationalSelections.FirstOrDefault(value =>
+                    value.Category is CharacterFoundationalSelectionCategory.Species
+                        or CharacterFoundationalSelectionCategory.RaceSpecies);
+                if (previousSpecies is not null
+                    && !string.Equals(
+                        previousSpecies.RuleConceptKey,
+                        CharacterRuleReference.NormalizeConceptKey(ruleConceptKey),
+                        StringComparison.Ordinal))
+                {
+                    _ = await buildStore.ClearFoundationalSelectionAsync(
+                        characterId,
+                        CharacterFoundationalSelectionCategory.Subspecies,
+                        changedAt,
+                        token);
+                }
+
+                _ = await buildStore.ClearFoundationalSelectionAsync(
+                    characterId,
+                    CharacterFoundationalSelectionCategory.RaceSpecies,
+                    changedAt,
+                    token);
+                return await buildStore.SetFoundationalSelectionAsync(
+                    characterId,
+                    CharacterFoundationalSelectionCategory.Species,
+                    ruleConceptKey,
+                    changedAt,
+                    token);
+            },
+            cancellationToken);
+
+    public Task<CharacterBuildResult> ClearSpeciesAsync(
+        Guid characterId,
+        CancellationToken cancellationToken = default) =>
+        MutateAsync(
+            characterId,
+            async (changedAt, token) =>
+            {
+                _ = await buildStore.ClearFoundationalSelectionAsync(
+                    characterId,
+                    CharacterFoundationalSelectionCategory.Subspecies,
+                    changedAt,
+                    token);
+                _ = await buildStore.ClearFoundationalSelectionAsync(
+                    characterId,
+                    CharacterFoundationalSelectionCategory.RaceSpecies,
+                    changedAt,
+                    token);
+                return await buildStore.ClearFoundationalSelectionAsync(
+                    characterId,
+                    CharacterFoundationalSelectionCategory.Species,
+                    changedAt,
+                    token);
+            },
+            cancellationToken);
+
+    public Task<CharacterBuildResult> SetSubspeciesAsync(
         Guid characterId,
         string ruleConceptKey,
         CancellationToken cancellationToken = default) =>
@@ -98,23 +164,35 @@ public sealed class CharacterBuildService(
             characterId,
             (changedAt, token) => buildStore.SetFoundationalSelectionAsync(
                 characterId,
-                CharacterFoundationalSelectionCategory.RaceSpecies,
+                CharacterFoundationalSelectionCategory.Subspecies,
                 ruleConceptKey,
                 changedAt,
                 token),
             cancellationToken);
 
-    public Task<CharacterBuildResult> ClearRaceSpeciesAsync(
+    public Task<CharacterBuildResult> ClearSubspeciesAsync(
         Guid characterId,
         CancellationToken cancellationToken = default) =>
         MutateAsync(
             characterId,
             (changedAt, token) => buildStore.ClearFoundationalSelectionAsync(
                 characterId,
-                CharacterFoundationalSelectionCategory.RaceSpecies,
+                CharacterFoundationalSelectionCategory.Subspecies,
                 changedAt,
                 token),
             cancellationToken);
+
+    // Temporary deployed-client compatibility. The public model is Species.
+    public Task<CharacterBuildResult> SetRaceSpeciesAsync(
+        Guid characterId,
+        string ruleConceptKey,
+        CancellationToken cancellationToken = default) =>
+        SetSpeciesAsync(characterId, ruleConceptKey, cancellationToken);
+
+    public Task<CharacterBuildResult> ClearRaceSpeciesAsync(
+        Guid characterId,
+        CancellationToken cancellationToken = default) =>
+        ClearSpeciesAsync(characterId, cancellationToken);
 
     public Task<CharacterBuildResult> SetBackgroundAsync(
         Guid characterId,
@@ -331,21 +409,31 @@ public sealed class CharacterBuildService(
         _ => new(CharacterBuildAccessStatus.ProjectionUnavailable)
     };
 
-    private static CharacterBuildView ToView(CharacterSheetRoot root, bool readOnly) =>
-        new(
+    private static CharacterBuildView ToView(CharacterSheetRoot root, bool readOnly)
+    {
+        var foundational = root.FoundationalSelections
+            .GroupBy(value => value.Category == CharacterFoundationalSelectionCategory.RaceSpecies
+                ? CharacterFoundationalSelectionCategory.Species
+                : value.Category)
+            .Select(group => group
+                .OrderByDescending(value => value.Category == CharacterFoundationalSelectionCategory.Species)
+                .ThenByDescending(value => value.UpdatedAt)
+                .First())
+            .OrderBy(value => value.Category)
+            .ThenBy(value => value.Id)
+            .Select(value => new FoundationalRuleSelectionView(
+                value.Id,
+                MapCategory(value.Category),
+                value.RuleConceptKey,
+                value.CreatedAt,
+                value.UpdatedAt))
+            .ToArray();
+
+        return new CharacterBuildView(
             root.CharacterId,
             root.BuilderStatus.ToString(),
             readOnly,
-            root.FoundationalSelections
-                .OrderBy(value => value.Category)
-                .ThenBy(value => value.Id)
-                .Select(value => new FoundationalRuleSelectionView(
-                    value.Id,
-                    MapCategory(value.Category),
-                    value.RuleConceptKey,
-                    value.CreatedAt,
-                    value.UpdatedAt))
-                .ToArray(),
+            foundational,
             root.BaseAbilityScoreInputs
                 .OrderBy(value => value.AbilityKey, StringComparer.Ordinal)
                 .ThenBy(value => value.Id)
@@ -371,10 +459,13 @@ public sealed class CharacterBuildService(
                     value.UpdatedAt,
                     value.Level))
                 .ToArray());
+    }
 
     private static string MapCategory(CharacterFoundationalSelectionCategory category) => category switch
     {
-        CharacterFoundationalSelectionCategory.RaceSpecies => CharacterBuildSelectionCategories.RaceSpecies,
+        CharacterFoundationalSelectionCategory.RaceSpecies => CharacterBuildSelectionCategories.Species,
+        CharacterFoundationalSelectionCategory.Species => CharacterBuildSelectionCategories.Species,
+        CharacterFoundationalSelectionCategory.Subspecies => CharacterBuildSelectionCategories.Subspecies,
         CharacterFoundationalSelectionCategory.Background => CharacterBuildSelectionCategories.Background,
         CharacterFoundationalSelectionCategory.Deity => CharacterBuildSelectionCategories.Deity,
         _ => throw new InvalidOperationException($"Unsupported foundational selection category '{category}'.")
