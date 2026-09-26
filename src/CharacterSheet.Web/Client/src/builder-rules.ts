@@ -44,8 +44,8 @@ export function getStoredChoiceConceptKey(
     build: CharacterBuildResponse,
     choice: CharacterBuilderChoice
 ): string | null {
-    if (choice === "raceSpecies") {
-        return build.foundationalSelections.find(value => value.category === "raceSpecies")?.ruleConceptKey ?? null;
+    if (choice === "species" || choice === "subspecies") {
+        return build.foundationalSelections.find(value => value.category === choice)?.ruleConceptKey ?? null;
     }
     if (choice === "background" || choice === "deity") {
         return build.foundationalSelections.find(value => value.category === choice)?.ruleConceptKey ?? null;
@@ -54,6 +54,23 @@ export function getStoredChoiceConceptKey(
         return getStartingClassEntry(build)?.ruleConceptKey ?? null;
     }
     return getStoredSubclassEntry(build)?.ruleConceptKey ?? null;
+}
+
+export function filterSubspeciesForSpecies(
+    rules: readonly ResolvedRuleCatalogItem[],
+    speciesConceptKey: string
+): ResolvedRuleCatalogItem[] {
+    const normalizedSpeciesKey = speciesConceptKey.trim();
+    if (normalizedSpeciesKey.length === 0) {
+        return [];
+    }
+
+    return rules.filter(rule =>
+        rule.entityType === "subspecies"
+        && (rule.relationships ?? []).some(relationship =>
+            relationship.kind === "parent-species"
+            && relationship.relatedEntityType === "species"
+            && relationship.relatedConceptKey === normalizedSpeciesKey));
 }
 
 export function filterSubclassesForClass(
@@ -96,13 +113,15 @@ export async function resolveStoredChoice(
 
     try {
         const rule = await resolveRuleConcept(environment, conceptKey, fetcher);
-        const expectedEntityType = choice === "raceSpecies"
-            ? "race"
-            : choice === "background"
-                ? "background"
-                : choice === "deity"
-                    ? "deity"
-                    : choice === "startingClass" ? "class" : "subclass";
+        const expectedEntityType = choice === "species"
+            ? "species"
+            : choice === "subspecies"
+                ? "subspecies"
+                : choice === "background"
+                    ? "background"
+                    : choice === "deity"
+                        ? "deity"
+                        : choice === "startingClass" ? "class" : "subclass";
         if (rule === null || rule.entityType !== expectedEntityType || rule.conceptKey !== conceptKey) {
             return { status: "unavailable", conceptKey };
         }
