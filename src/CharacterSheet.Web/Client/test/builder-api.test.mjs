@@ -37,8 +37,11 @@ test("builder API remains behind Character Sheet Tool Host authorization", () =>
         buildCharacterBuildBackendUrl(environment, characterId),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build`);
     assert.equal(
-        buildCharacterBuildBackendUrl(environment, characterId, "raceSpecies"),
-        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/race-species`);
+        buildCharacterBuildBackendUrl(environment, characterId, "species"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/species`);
+    assert.equal(
+        buildCharacterBuildBackendUrl(environment, characterId, "subspecies"),
+        `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/subspecies`);
     assert.equal(
         buildCharacterBuildBackendUrl(environment, characterId, "background"),
         `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/background`);
@@ -81,7 +84,8 @@ test("selection mutation sends only the stable concept key", async () => {
         return Response.json(build);
     };
 
-    await setCharacterBuildChoice(environment, characterId, "raceSpecies", "race:elf", undefined, fetcher);
+    await setCharacterBuildChoice(environment, characterId, "species", "species:elf", undefined, fetcher);
+    await setCharacterBuildChoice(environment, characterId, "subspecies", "subspecies:high-elf", undefined, fetcher);
     await setCharacterBuildChoice(environment, characterId, "background", "background:sage", undefined, fetcher);
     await setCharacterBuildChoice(environment, characterId, "deity", "deity:pelor", undefined, fetcher);
     await setCharacterBuildChoice(environment, characterId, "startingClass", "class:wizard", undefined, fetcher);
@@ -93,16 +97,18 @@ test("selection mutation sends only the stable concept key", async () => {
         classEntryId,
         fetcher);
 
-    assert.deepEqual(JSON.parse(calls[0].body), { conceptKey: "race:elf" });
-    assert.deepEqual(JSON.parse(calls[1].body), { conceptKey: "background:sage" });
-    assert.deepEqual(JSON.parse(calls[2].body), { conceptKey: "deity:pelor" });
-    assert.deepEqual(JSON.parse(calls[3].body), { conceptKey: "class:wizard" });
-    assert.deepEqual(JSON.parse(calls[4].body), { conceptKey: "subclass.wizard.evocation" });
-    assert.equal(calls[0].input.endsWith("/build/race-species"), true);
-    assert.equal(calls[1].input.endsWith("/build/background"), true);
-    assert.equal(calls[2].input.endsWith("/build/deity"), true);
-    assert.equal(calls[3].input.endsWith("/build/starting-class"), true);
-    assert.equal(calls[4].input.endsWith(`/build/classes/${classEntryId}/subclass`), true);
+    assert.deepEqual(JSON.parse(calls[0].body), { conceptKey: "species:elf" });
+    assert.deepEqual(JSON.parse(calls[1].body), { conceptKey: "subspecies:high-elf" });
+    assert.deepEqual(JSON.parse(calls[2].body), { conceptKey: "background:sage" });
+    assert.deepEqual(JSON.parse(calls[3].body), { conceptKey: "deity:pelor" });
+    assert.deepEqual(JSON.parse(calls[4].body), { conceptKey: "class:wizard" });
+    assert.deepEqual(JSON.parse(calls[5].body), { conceptKey: "subclass.wizard.evocation" });
+    assert.equal(calls[0].input.endsWith("/build/species"), true);
+    assert.equal(calls[1].input.endsWith("/build/subspecies"), true);
+    assert.equal(calls[2].input.endsWith("/build/background"), true);
+    assert.equal(calls[3].input.endsWith("/build/deity"), true);
+    assert.equal(calls[4].input.endsWith("/build/starting-class"), true);
+    assert.equal(calls[5].input.endsWith(`/build/classes/${classEntryId}/subclass`), true);
     assert.equal(calls.some(call => String(call.body).includes("displayName")), false);
 });
 
@@ -113,10 +119,20 @@ test("clearing a builder choice uses DELETE without rule content", async () => {
         return Response.json(build);
     };
 
+    await clearCharacterBuildChoice(environment, characterId, "species", undefined, fetcher);
+    await clearCharacterBuildChoice(environment, characterId, "subspecies", undefined, fetcher);
     await clearCharacterBuildChoice(environment, characterId, "startingClass", undefined, fetcher);
     await clearCharacterBuildChoice(environment, characterId, "subclass", classEntryId, fetcher);
 
     assert.deepEqual(calls, [{
+        input: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/species`,
+        method: "DELETE",
+        body: undefined
+    }, {
+        input: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/subspecies`,
+        method: "DELETE",
+        body: undefined
+    }, {
         input: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/build/starting-class`,
         method: "DELETE",
         body: undefined

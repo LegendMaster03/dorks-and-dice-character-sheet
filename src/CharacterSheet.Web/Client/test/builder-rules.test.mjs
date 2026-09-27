@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
     filterSubclassesForClass,
+    filterSubspeciesForSpecies,
     getStartingClassEntry,
     getStoredChoiceConceptKey,
     getStoredSubclassEntry,
@@ -24,8 +25,14 @@ const build = {
     readOnly: false,
     foundationalSelections: [{
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        category: "raceSpecies",
-        ruleConceptKey: "race:elf",
+        category: "species",
+        ruleConceptKey: "species:elf",
+        createdAt: "now",
+        updatedAt: "now"
+    }, {
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        category: "subspecies",
+        ruleConceptKey: "subspecies:high-elf",
         createdAt: "now",
         updatedAt: "now"
     }],
@@ -48,16 +55,70 @@ const build = {
     }]
 };
 
-test("stored builder references are identified from Character Sheet-owned categories and progression", () => {
-    assert.equal(getStoredChoiceConceptKey(build, "raceSpecies"), "race:elf");
+test("stored builder references are identified from canonical Character Sheet-owned categories and progression", () => {
+    assert.equal(getStoredChoiceConceptKey(build, "species"), "species:elf");
+    assert.equal(getStoredChoiceConceptKey(build, "subspecies"), "subspecies:high-elf");
     assert.equal(getStoredChoiceConceptKey(build, "startingClass"), "class:wizard");
     assert.equal(getStoredChoiceConceptKey(build, "subclass"), "subclass.wizard.evocation");
     assert.equal(getStartingClassEntry(build)?.id, classEntryId);
     assert.equal(getStoredSubclassEntry(build)?.parentAdvancementEntryId, classEntryId);
-    assert.deepEqual(loadingRuleReference(build, "raceSpecies"), {
+    assert.deepEqual(loadingRuleReference(build, "species"), {
         status: "loading",
-        conceptKey: "race:elf"
+        conceptKey: "species:elf"
     });
+    assert.deepEqual(loadingRuleReference(build, "subspecies"), {
+        status: "loading",
+        conceptKey: "subspecies:high-elf"
+    });
+});
+
+test("subspecies chooser retains only explicit Subspecies related to the selected Species", () => {
+    const relationship = relatedConceptKey => [{
+        kind: "parent-species",
+        relatedRuleConceptId: "11111111-1111-1111-1111-111111111111",
+        relatedConceptKey,
+        relatedEntityType: "species",
+        relatedDisplayName: relatedConceptKey
+    }];
+    const rule = (conceptKey, entityType, relationships) => ({
+        ruleConceptId: conceptKey,
+        conceptKey,
+        entityType,
+        displayName: conceptKey,
+        decisionKind: "select-source",
+        hasCampaignOverride: false,
+        sourceEntityId: conceptKey,
+        sourceEntityRevisionId: conceptKey,
+        sourceRevisionNumber: 1,
+        sourceEntityName: conceptKey,
+        sourceCode: "TST",
+        packageKey: "fixture",
+        packageDisplayName: "Fixture",
+        editionKey: "5e",
+        editionDisplayName: "5e",
+        relationships
+    });
+
+    const elfSubspecies = rule(
+        "subspecies:high-elf",
+        "subspecies",
+        relationship("species:elf"));
+    const dwarfSubspecies = rule(
+        "subspecies:hill-dwarf",
+        "subspecies",
+        relationship("species:dwarf"));
+    const unlinkedSubspecies = rule("subspecies:unknown", "subspecies", []);
+    const species = rule(
+        "species:human",
+        "species",
+        relationship("species:elf"));
+
+    assert.deepEqual(
+        filterSubspeciesForSpecies(
+            [elfSubspecies, dwarfSubspecies, unlinkedSubspecies, species],
+            "species:elf"),
+        [elfSubspecies]);
+    assert.deepEqual(filterSubspeciesForSpecies([elfSubspecies], "   "), []);
 });
 
 test("subclass chooser retains only explicit Subclasses related to the selected Class", () => {
@@ -109,11 +170,11 @@ test("subclass chooser retains only explicit Subclasses related to the selected 
     assert.deepEqual(filterSubclassesForClass([wizardSubclass], "   "), []);
 });
 
-test("canonical persisted reference resolves through Rules Core rather than being falsely unavailable", async () => {
+test("canonical persisted Species reference resolves through Rules Core rather than being falsely unavailable", async () => {
     const fetcher = async () => Response.json({
         ruleConceptId: "11111111-1111-1111-1111-111111111111",
-        conceptKey: "race:elf",
-        entityType: "race",
+        conceptKey: "species:elf",
+        entityType: "species",
         displayName: "Elf",
         sourceEntityName: "Elf",
         sourceCode: "SRD",
@@ -123,11 +184,30 @@ test("canonical persisted reference resolves through Rules Core rather than bein
         editionDisplayName: "5e"
     });
 
-    const resolved = await resolveStoredChoice(environment, build, "raceSpecies", fetcher);
+    const resolved = await resolveStoredChoice(environment, build, "species", fetcher);
 
     assert.equal(resolved.status, "resolved");
-    assert.equal(resolved.conceptKey, "race:elf");
+    assert.equal(resolved.conceptKey, "species:elf");
     assert.equal(resolved.rule.displayName, "Elf");
+});
+
+test("canonical persisted Subspecies reference resolves only as an explicit Subspecies concept", async () => {
+    const fetcher = async () => Response.json({
+        ruleConceptId: "33333333-3333-3333-3333-333333333333",
+        conceptKey: "subspecies:high-elf",
+        entityType: "subspecies",
+        displayName: "High Elf",
+        sourceEntityName: "High Elf",
+        sourceCode: "SRD",
+        packageKey: "fixture",
+        packageDisplayName: "Fixture",
+        editionKey: "5e",
+        editionDisplayName: "5e"
+    });
+
+    const resolved = await resolveStoredChoice(environment, build, "subspecies", fetcher);
+    assert.equal(resolved.status, "resolved");
+    assert.equal(resolved.rule.entityType, "subspecies");
 });
 
 test("subclass reference resolves only as an explicit subclass concept", async () => {
@@ -177,12 +257,12 @@ test("a concept that resolves as the wrong entity type is unavailable rather tha
         { status: "unavailable", conceptKey: "class:wizard" });
 });
 
-test("Rules Core technical failures produce an explicit reference error without clearing the key", async () => {
+test("Rules Core technical failures produce an explicit Species reference error without clearing the key", async () => {
     const fetcher = async () => Response.json({ detail: "offline" }, { status: 503 });
 
-    const result = await resolveStoredChoice(environment, build, "raceSpecies", fetcher);
+    const result = await resolveStoredChoice(environment, build, "species", fetcher);
 
     assert.equal(result.status, "error");
-    assert.equal(result.conceptKey, "race:elf");
+    assert.equal(result.conceptKey, "species:elf");
     assert.match(result.message, /offline/);
 });

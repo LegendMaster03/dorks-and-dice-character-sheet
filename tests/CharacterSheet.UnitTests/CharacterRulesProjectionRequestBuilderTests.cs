@@ -11,6 +11,7 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
     public void ProjectsOnlyExplicitCharacterOwnedFactsAndPreservesAdvancementLevels()
     {
         var speciesId = Guid.NewGuid();
+        var subspeciesId = Guid.NewGuid();
         var classId = Guid.NewGuid();
         var subclassId = Guid.NewGuid();
         var featId = Guid.NewGuid();
@@ -18,12 +19,20 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
             Guid.NewGuid(),
             "BuildInProgress",
             false,
-            [new FoundationalRuleSelectionView(
-                speciesId,
-                CharacterBuildSelectionCategories.RaceSpecies,
-                "race.elf",
-                Now,
-                Now)],
+            [
+                new FoundationalRuleSelectionView(
+                    speciesId,
+                    CharacterBuildSelectionCategories.Species,
+                    "species.elf",
+                    Now,
+                    Now),
+                new FoundationalRuleSelectionView(
+                    subspeciesId,
+                    CharacterBuildSelectionCategories.Subspecies,
+                    "subspecies.high-elf",
+                    Now,
+                    Now)
+            ],
             [new BaseAbilityScoreInputView(
                 Guid.NewGuid(),
                 "strength",
@@ -187,7 +196,15 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
                 && value.Level == 7
                 && value.OccurrenceKey == subclassId.ToString("D")
                 && value.ParentConceptKey == "class.fighter");
-        Assert.Equal(4, request.SelectedConcepts!.Count);
+        Assert.Equal(5, request.SelectedConcepts!.Count);
+        Assert.Contains(
+            request.SelectedConcepts,
+            value => value.ConceptKey == "species.elf"
+                && value.OccurrenceKey == speciesId.ToString("D"));
+        Assert.Contains(
+            request.SelectedConcepts,
+            value => value.ConceptKey == "subspecies.high-elf"
+                && value.OccurrenceKey == subspeciesId.ToString("D"));
         Assert.Contains(
             request.SelectedConcepts,
             value => value.ConceptKey == "class.fighter"

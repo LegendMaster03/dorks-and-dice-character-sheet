@@ -10,6 +10,13 @@ async function source(relativePath) {
     return readFile(path.join(srcRoot, relativePath), "utf8");
 }
 
+async function harvestingWorkflowSource() {
+    return (await Promise.all([
+        source("features/harvesting/harvesting-workflow.ts"),
+        source("features/harvesting/harvesting-workflow-core.ts")
+    ])).join("\n");
+}
+
 async function tsFiles(relativeDir) {
     const root = path.join(srcRoot, relativeDir);
     const files = [];
@@ -140,7 +147,7 @@ test("stylesheet entrypoint is composition-only", async () => {
 
 
 test("Harvesting and Crafting keeps rule resolution, inventory mutation, and source attribution behind their owners", async () => {
-    const workflow = await source("features/harvesting/harvesting-workflow.ts");
+    const workflow = await harvestingWorkflowSource();
     const workspace = await source("features/harvesting/harvesting-workspace.ts");
     const craftingApi = await source("crafting-api.ts");
 
@@ -161,7 +168,7 @@ test("Harvesting and Crafting keeps rule resolution, inventory mutation, and sou
 });
 
 test("campaign helper selection is optional and preserves manual fallback", async () => {
-    const workflow = await source("features/harvesting/harvesting-workflow.ts");
+    const workflow = await harvestingWorkflowSource();
     const campaignApi = await source("campaign-context-api.ts");
 
     assert.match(workflow, /loadHostedCampaignContext/);
@@ -173,7 +180,7 @@ test("campaign helper selection is optional and preserves manual fallback", asyn
 
 test("Harvesting UI does not expose Rules Core resolution controls", async () => {
     const workspace = await source("features/harvesting/harvesting-workspace.ts");
-    const workflow = await source("features/harvesting/harvesting-workflow.ts");
+    const workflow = await harvestingWorkflowSource();
     const rulesApi = await source("rules-core-api.ts");
 
     for (const internalLabel of [

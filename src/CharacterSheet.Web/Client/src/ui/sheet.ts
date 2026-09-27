@@ -370,7 +370,7 @@ function renderGuidedBuilder(
                 builder,
                 false,
                 handlers.structural,
-                { title: "Identity", choices: ["raceSpecies", "background", "deity"] }));
+                { title: "Identity", choices: ["species", "subspecies", "background", "deity"] }));
             break;
         case "advancement":
             panel.append(renderCharacterBuilder(
@@ -597,14 +597,24 @@ export function renderCharacterHeader(
         ? legacyAdvancementHeaderSummary(model.startingClass.value, model.subclass.value)
         : createCompactAdvancementSummary(advancement);
     const headline = createElement("div", "dd-sheet-header__headline");
-    const raceSpecies = createElement(
+    const species = createElement(
         "span",
         "dd-sheet-header__headline-item",
-        model.raceSpecies.value);
-    raceSpecies.setAttribute("data-sheet-header-identity", "race-species");
-    raceSpecies.setAttribute("aria-label", `Race / Species: ${model.raceSpecies.value}`);
-    if (model.raceSpecies.detail !== undefined) {
-        raceSpecies.setAttribute("title", model.raceSpecies.detail);
+        `Species: ${model.species.value}`);
+    species.setAttribute("data-sheet-header-identity", "species");
+    species.setAttribute("aria-label", `Species: ${model.species.value}`);
+    if (model.species.detail !== undefined) {
+        species.setAttribute("title", model.species.detail);
+    }
+
+    const subspecies = createElement(
+        "span",
+        "dd-sheet-header__headline-item",
+        `Subspecies: ${model.subspecies.value}`);
+    subspecies.setAttribute("data-sheet-header-identity", "subspecies");
+    subspecies.setAttribute("aria-label", `Subspecies: ${model.subspecies.value}`);
+    if (model.subspecies.detail !== undefined) {
+        subspecies.setAttribute("title", model.subspecies.detail);
     }
 
     const advancementText = advancementSummary.detail === undefined
@@ -618,7 +628,9 @@ export function renderCharacterHeader(
     advancementItem.setAttribute("aria-label", `Advancement: ${advancementText}`);
 
     headline.append(
-        raceSpecies,
+        species,
+        createElement("span", "dd-sheet-header__headline-separator", "•"),
+        subspecies,
         createElement("span", "dd-sheet-header__headline-separator", "•"),
         advancementItem);
 

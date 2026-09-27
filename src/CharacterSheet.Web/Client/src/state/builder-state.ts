@@ -285,7 +285,6 @@ export function reduceBuilderState(
         case "feat-save-failed":
             builder = { ...builder, savingFeat: null, featSaveError: action.message };
             break;
-
     }
     return builder;
 }
@@ -295,7 +294,8 @@ export function createInitialBuilderState(): CharacterBuilderUiState {
         status: "idle",
         build: null,
         references: {
-            raceSpecies: { status: "none" },
+            species: { status: "none" },
+            subspecies: { status: "none" },
             background: { status: "none" },
             deity: { status: "none" },
             startingClass: { status: "none" },
@@ -321,7 +321,8 @@ function builderStateFromBuild(
         build,
         message: undefined,
         references: {
-            raceSpecies: loadingRuleReference(build, "raceSpecies"),
+            species: loadingRuleReference(build, "species"),
+            subspecies: loadingRuleReference(build, "subspecies"),
             background: loadingRuleReference(build, "background"),
             deity: loadingRuleReference(build, "deity"),
             startingClass: loadingRuleReference(build, "startingClass"),

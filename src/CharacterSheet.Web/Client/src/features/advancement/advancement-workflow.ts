@@ -6,7 +6,9 @@ import {
 } from "../../builder-api.js";
 import {
     filterSubclassesForClass,
-    getStartingClassEntry
+    filterSubspeciesForSpecies,
+    getStartingClassEntry,
+    getStoredChoiceConceptKey
 } from "../../builder-rules.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
@@ -45,22 +47,33 @@ export function createAdvancementWorkflow(
             query: normalizedQuery
         });
         try {
-            const entityType = target === "raceSpecies"
-                ? "race"
-                : target === "background"
-                    ? "background"
-                    : target === "deity"
-                        ? "deity"
-                        : target === "startingClass"
-                            ? "class"
-                            : "subclass";
+            const entityType = target === "species"
+                ? "species"
+                : target === "subspecies"
+                    ? "subspecies"
+                    : target === "background"
+                        ? "background"
+                        : target === "deity"
+                            ? "deity"
+                            : target === "startingClass"
+                                ? "class"
+                                : "subclass";
             const catalog = await searchResolvedRules(
                 environment,
                 entityType,
                 normalizedQuery);
             let results = catalog.rules.filter(
                 rule => rule.entityType === entityType);
-            if (target === "subclass") {
+            if (target === "subspecies") {
+                const build = buildState.current().build;
+                const speciesConceptKey = build === null
+                    ? null
+                    : getStoredChoiceConceptKey(build, "species");
+                if (speciesConceptKey === null) {
+                    throw new Error("Choose a Species before selecting a Subspecies.");
+                }
+                results = filterSubspeciesForSpecies(results, speciesConceptKey);
+            } else if (target === "subclass") {
                 const build = buildState.current().build;
                 const startingClass = build === null
                     ? null

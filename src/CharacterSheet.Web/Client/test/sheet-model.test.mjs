@@ -62,7 +62,8 @@ function builder(overrides = {}) {
         status: "ready",
         build,
         references: {
-            raceSpecies: resolved("race:human", "race", "Human"),
+            species: resolved("species:human", "species", "Human"),
+            subspecies: resolved("subspecies:variant-human", "subspecies", "Variant Human"),
             background: resolved("background:sage", "background", "Sage"),
             deity: resolved("deity:pelor", "deity", "Pelor"),
             startingClass: resolved("class:wizard", "class", "Wizard"),
@@ -78,11 +79,12 @@ function builder(overrides = {}) {
     };
 }
 
-test("header model presents real Character name plus resolved Race and Advancement identity", () => {
+test("header model presents real Character name plus resolved Species, Subspecies, and Advancement identity", () => {
     const currentBuilder = builder();
     const model = createCharacterHeaderModel(character, currentBuilder, false);
     assert.equal(model.name, "Sai Cithreth");
-    assert.equal(model.raceSpecies.value, "Human");
+    assert.equal(model.species.value, "Human");
+    assert.equal(model.subspecies.value, "Variant Human");
     assert.equal(model.startingClass.value, "Wizard");
     assert.equal(model.subclass.value, "School of Evocation");
     assert.equal(model.campaignContext, "1 Campaign association");
@@ -110,7 +112,8 @@ test("header does not present an uninitialized builder as real empty selections"
         status: "idle",
         build: null,
         references: {
-            raceSpecies: { status: "none" },
+            species: { status: "none" },
+            subspecies: { status: "none" },
             startingClass: { status: "none" },
             subclass: { status: "none" }
         }
@@ -119,16 +122,17 @@ test("header does not present an uninitialized builder as real empty selections"
         { ...character, hasRichSheet: false, sheet: null },
         idleBuilder,
         false);
-    assert.equal(model.raceSpecies.value, "Character Sheet not set up");
+    assert.equal(model.species.value, "Character Sheet not set up");
+    assert.equal(model.subspecies.value, "Character Sheet not set up");
     assert.equal(model.startingClass.value, "Character Sheet not set up");
     assert.equal(model.subclass.value, "Character Sheet not set up");
 });
 
 test("unavailable persisted rule references remain visible instead of disappearing", () => {
-    const reference = { status: "unavailable", conceptKey: "race:missing" };
+    const reference = { status: "unavailable", conceptKey: "species:missing" };
     const display = toRuleReferenceDisplay(reference);
     assert.equal(display.value, "Unavailable saved selection");
-    assert.equal(display.detail, "race:missing");
+    assert.equal(display.detail, "species:missing");
 });
 
 test("archived Character model is explicitly read-only", () => {
