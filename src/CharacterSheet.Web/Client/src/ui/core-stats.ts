@@ -55,8 +55,12 @@ export function renderCoreStats(
         createElement("h3", "dd-stat__label", "Movement"),
         renderMovementValues(mechanics?.movement));
 
+    const proficiencyValues = [
+        ...(mechanics?.training ?? []),
+        ...(mechanics?.combatFundamentals ?? [])
+    ];
     quickGrid.append(
-        renderProficiencyQuickCard(mechanics?.combatFundamentals),
+        renderProficiencyQuickCard(proficiencyValues),
         movement,
         renderInspirationQuickCard(inspirationControl),
         renderHealthQuickCard(mechanics, healthControl)
@@ -70,4 +74,3 @@ export function renderCoreStats(
     }
     return section;
 }
-
