@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createInitialState } from "../.test-dist/app-state.js";
 import { createApplication } from "../.test-dist/render-lifecycle.js";
 import { createHarvestingCraftingWorkflow } from "../.test-dist/features/harvesting/harvesting-workflow.js";
+import { getGuidedBuilderSectionStates } from "../.test-dist/ui/sheet-model.js";
 
 const sourceAttribution = {
     workKey: "fixture",
@@ -223,4 +224,61 @@ test("Skill disclosures use native details-summary keyboard semantics with visib
     assert.match(
         foundation,
         /\.dd-sheet summary:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--dd-sheet-focus\)/s);
+});
+
+test("core Proficiency Bonus consumes Rules Core proficiency mechanics from Training", async () => {
+    const coreStats = await readFile(new URL("../src/ui/core-stats.ts", import.meta.url), "utf8");
+
+    assert.match(coreStats, /\.\.\.\(mechanics\?\.training \?\? \[\]\)/);
+    assert.match(coreStats, /\.\.\.\(mechanics\?\.combatFundamentals \?\? \[\]\)/);
+    assert.match(coreStats, /renderProficiencyQuickCard\(proficiencyValues\)/);
+});
+
+test("Guided Abilities remains incomplete while Rules Core requires Ability Score choices", async () => {
+    const abilityKeys = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"];
+    const builder = {
+        status: "ready",
+        build: {
+            characterId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            builderStatus: "BuildInProgress",
+            readOnly: false,
+            foundationalSelections: [],
+            progressionEntries: [],
+            baseAbilityScoreInputs: abilityKeys.map((abilityKey, index) => ({
+                id: `00000000-0000-0000-0000-00000000000${index}`,
+                abilityKey,
+                score: 10 + index,
+                createdAt: "now",
+                updatedAt: "now"
+            }))
+        }
+    };
+    const choice = {
+        choiceKey: "choice.background.acolyte.ability.0.0",
+        groupKey: "choice-group.background.acolyte.ability.0",
+        displayName: "Acolyte Ability +2",
+        kind: "ability-score",
+        state: "choice-required",
+        options: [
+            { value: "intelligence", displayName: "Intelligence" },
+            { value: "wisdom", displayName: "Wisdom" },
+            { value: "charisma", displayName: "Charisma" }
+        ]
+    };
+
+    const pending = getGuidedBuilderSectionStates(builder, { ruleChoices: [choice] });
+    const pendingAbilities = pending.find(section => section.id === "abilities");
+    assert.equal(pendingAbilities.status, "incomplete");
+    assert.match(pendingAbilities.detail, /1 required Ability Score choice remains/);
+
+    const resolved = getGuidedBuilderSectionStates(builder, {
+        ruleChoices: [{ ...choice, state: "resolved", selectedValue: "wisdom" }]
+    });
+    const resolvedAbilities = resolved.find(section => section.id === "abilities");
+    assert.equal(resolvedAbilities.status, "resolved");
+
+    const sheet = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    assert.match(sheet, /getGuidedBuilderSectionStates\(builder, mechanics\)/);
+    assert.match(sheet, /heading:\s*"Required Ability Choices"/);
+    assert.match(sheet, /choiceKinds:\s*\["ability-score", "ability-score-set"\]/);
 });

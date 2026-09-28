@@ -343,7 +343,7 @@ function renderGuidedBuilder(
             "dd-guided-builder__intro",
             "Use any section that is useful. The Character Sheet remains available even when setup is incomplete."));
 
-    const sectionStates = getGuidedBuilderSectionStates(builder);
+    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const section of sectionStates) {
@@ -391,7 +391,7 @@ function renderGuidedBuilder(
             abilities.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "Enter the base Ability Scores used for this Character. These values are saved with the sheet."));
+                "Enter the base Ability Scores used for this Character. Complete any rule-required Ability choices below so effective scores and modifiers can be resolved."));
             const grid = createElement("div", "dd-core-stats__abilities dd-guided-builder__ability-grid");
             for (const definition of ABILITY_SCORE_DEFINITIONS) {
                 grid.append(renderAbilityScoreCard(
@@ -403,6 +403,16 @@ function renderGuidedBuilder(
             }
             abilities.append(grid);
             panel.append(abilities);
+            const abilityChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers,
+                {
+                    choiceKinds: ["ability-score", "ability-score-set"],
+                    includeConflicts: false,
+                    heading: "Required Ability Choices"
+                });
+            if (abilityChoices !== null) panel.append(abilityChoices);
             break;
         }
         case "review": {
@@ -436,17 +446,27 @@ function renderGuidedBuilder(
     return container;
 }
 
+interface RulesChoiceRenderOptions {
+    choiceKinds?: readonly string[];
+    includeConflicts?: boolean;
+    heading?: string;
+}
+
 function renderRulesChoices(
     mechanics: CharacterMechanicsView | null,
     routine: CharacterRoutineUiState,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    options: RulesChoiceRenderOptions = {}
 ): HTMLElement | null {
     if (mechanics === null) {
         return null;
     }
 
-    const choices = mechanics.ruleChoices ?? [];
-    const conflicts = mechanics.projectionConflicts ?? [];
+    const choices = (mechanics.ruleChoices ?? []).filter(choice =>
+        options.choiceKinds === undefined || options.choiceKinds.includes(choice.kind));
+    const conflicts = options.includeConflicts === false
+        ? []
+        : mechanics.projectionConflicts ?? [];
     if (choices.length === 0 && conflicts.length === 0) {
         return null;
     }
@@ -455,7 +475,7 @@ function renderRulesChoices(
     section.append(createElement(
         "h3",
         "dd-guided-builder__subheading",
-        "Rules Choices"));
+        options.heading ?? "Rules Choices"));
 
     const pending = routine.mutation?.kind === "rules-input-update"
         || routine.mutation?.kind === "rules-input-delete";
