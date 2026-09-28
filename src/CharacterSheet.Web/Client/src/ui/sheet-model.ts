@@ -8,6 +8,7 @@ import type { CharacterBuilderUiState } from "../app-state.js";
 import { getStartingClassEntry } from "../builder-rules.js";
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
+import type { CharacterMechanicsView } from "./character-mechanics.js";
 
 export type SheetSection = "actions" | "spells" | "inventory" | "features" | "details" | "notes";
 
@@ -79,7 +80,8 @@ export interface GuidedBuilderSectionState extends GuidedBuilderSectionDefinitio
 }
 
 export function getGuidedBuilderSectionStates(
-    builder: CharacterBuilderUiState
+    builder: CharacterBuilderUiState,
+    mechanics: CharacterMechanicsView | null = null
 ): readonly GuidedBuilderSectionState[] {
     if (builder.status !== "ready" || builder.build === null) {
         return GUIDED_BUILDER_SECTIONS.map(section => ({
@@ -96,6 +98,21 @@ export function getGuidedBuilderSectionStates(
         builder.build.baseAbilityScoreInputs.map(input => input.abilityKey)
     ).size;
     const allBaseAbilitiesConfigured = configuredAbilities === CHARACTER_ABILITY_KEYS.length;
+    const pendingAbilityChoices = (mechanics?.ruleChoices ?? []).filter(choice =>
+        (choice.kind === "ability-score" || choice.kind === "ability-score-set")
+        && choice.state !== "resolved");
+    const abilitiesResolved = allBaseAbilitiesConfigured && pendingAbilityChoices.length === 0;
+
+    let abilityDetail: string;
+    if (!allBaseAbilitiesConfigured) {
+        abilityDetail = `${configuredAbilities} of ${CHARACTER_ABILITY_KEYS.length} base Ability Score inputs are configured.`;
+    } else if (pendingAbilityChoices.length > 0) {
+        abilityDetail = pendingAbilityChoices.length === 1
+            ? "1 required Ability Score choice remains."
+            : `${pendingAbilityChoices.length} required Ability Score choices remain.`;
+    } else {
+        abilityDetail = "All base Ability Scores and required Ability Score choices are configured.";
+    }
 
     return [
         {
@@ -115,10 +132,8 @@ export function getGuidedBuilderSectionStates(
         {
             id: "abilities",
             label: "Abilities",
-            status: allBaseAbilitiesConfigured ? "resolved" : "incomplete",
-            detail: allBaseAbilitiesConfigured
-                ? "All base Ability Scores available in the sheet are configured."
-                : `${configuredAbilities} of ${CHARACTER_ABILITY_KEYS.length} base Ability Score inputs are configured.`
+            status: abilitiesResolved ? "resolved" : "incomplete",
+            detail: abilityDetail
         },
         {
             id: "review",
