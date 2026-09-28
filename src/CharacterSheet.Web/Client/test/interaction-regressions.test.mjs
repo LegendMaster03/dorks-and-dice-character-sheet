@@ -224,3 +224,11 @@ test("Skill disclosures use native details-summary keyboard semantics with visib
         foundation,
         /\.dd-sheet summary:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--dd-sheet-focus\)/s);
 });
+
+test("core Proficiency Bonus consumes Rules Core proficiency mechanics from Training", async () => {
+    const coreStats = await readFile(new URL("../src/ui/core-stats.ts", import.meta.url), "utf8");
+
+    assert.match(coreStats, /\.\.\.\(mechanics\?\.training \?\? \[\]\)/);
+    assert.match(coreStats, /\.\.\.\(mechanics\?\.combatFundamentals \?\? \[\]\)/);
+    assert.match(coreStats, /renderProficiencyQuickCard\(proficiencyValues\)/);
+});
