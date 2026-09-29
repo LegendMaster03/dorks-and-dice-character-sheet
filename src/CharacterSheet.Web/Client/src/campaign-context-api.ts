@@ -1,7 +1,12 @@
 import type { HostEnvironment } from "./host-environment.js";
 import type { FetchLike } from "./character-api.js";
 
-export interface CampaignParticipantContextResponse {
+export interface CampaignMemberContextResponse {
+    userId: string;
+    roles: string[];
+}
+
+export interface CampaignLegacyParticipantContextResponse {
     participantId: string;
     displayName: string;
     userId?: string | null;
@@ -17,7 +22,8 @@ export interface CampaignContextResponse {
     campaignId: string;
     name: string;
     requestingUserRoles: string[];
-    participants: CampaignParticipantContextResponse[];
+    members?: CampaignMemberContextResponse[];
+    participants?: CampaignLegacyParticipantContextResponse[];
     characters: CampaignCharacterContextResponse[];
 }
 
@@ -27,7 +33,7 @@ export async function loadHostedCampaignContext(
     fetcher: FetchLike = window.fetch.bind(window)
 ): Promise<CampaignContextResponse> {
     if (!environment.embedded || environment.contextUrl === null) {
-        throw new Error("Campaign roster context is available only when Character Sheet is hosted by Dorks & Dice.");
+        throw new Error("Campaign context is available only when Character Sheet is hosted by Dorks & Dice.");
     }
 
     const queryOrFragmentIndex = environment.contextUrl.search(/[?#]/);
@@ -47,7 +53,7 @@ export async function loadHostedCampaignContext(
         });
 
     if (!response.ok) {
-        throw new Error("Campaign roster context is unavailable.");
+        throw new Error("Campaign context is unavailable.");
     }
 
     return await response.json() as CampaignContextResponse;
