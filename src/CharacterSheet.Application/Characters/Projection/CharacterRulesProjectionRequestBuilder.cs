@@ -49,17 +49,20 @@ public static class CharacterRulesProjectionRequestBuilder
                 if (level is not > 0) return null;
 
                 string? parentConceptKey = null;
+                string? parentOccurrenceKey = null;
                 if (value.ParentAdvancementEntryId is Guid linkedParentId
                     && advancementById.TryGetValue(linkedParentId, out var linkedParent))
                 {
                     parentConceptKey = linkedParent.RuleConceptKey;
+                    parentOccurrenceKey = linkedParent.Id.ToString("D");
                 }
 
                 return new RulesCoreCharacterAdvancementFactInput(
                     value.RuleConceptKey,
                     level.Value,
                     value.Id.ToString("D"),
-                    parentConceptKey);
+                    parentConceptKey,
+                    parentOccurrenceKey);
             })
             .Where(value => value is not null)
             .Cast<RulesCoreCharacterAdvancementFactInput>()
