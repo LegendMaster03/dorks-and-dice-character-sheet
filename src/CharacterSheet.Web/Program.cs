@@ -37,7 +37,6 @@ if (builder.Environment.IsDevelopment())
             throw new InvalidOperationException(
                 "RulesCore:DevelopmentBaseUrl must be an absolute HTTP or HTTPS URL when configured.");
         }
-
         rulesCoreDevelopmentBaseUrl = rulesCoreDevelopmentBaseUri.ToString().TrimEnd('/');
     }
 }
@@ -102,6 +101,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
+builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
@@ -185,6 +185,20 @@ app.MapGet("/api/characters/{characterId:guid}/build", async (
     CancellationToken cancellationToken) =>
     ToBuildApiResult(await service.GetAsync(characterId, cancellationToken), mutating: false));
 
+app.MapPost("/api/characters/{characterId:guid}/advancement/preview", async (
+    Guid characterId,
+    CharacterClassAdvancementRequest request,
+    CharacterAdvancementService service,
+    CancellationToken cancellationToken) =>
+    ToAdvancementPreviewApiResult(await service.PreviewAsync(characterId, request, cancellationToken)));
+
+app.MapPost("/api/characters/{characterId:guid}/advancement/apply", async (
+    Guid characterId,
+    CharacterClassAdvancementRequest request,
+    CharacterAdvancementService service,
+    CancellationToken cancellationToken) =>
+    ToAdvancementApplyApiResult(await service.ApplyAsync(characterId, request, cancellationToken)));
+
 app.MapPut("/api/characters/{characterId:guid}/build/species", async (
     Guid characterId,
     RuleConceptSelectionRequest request,
@@ -193,9 +207,7 @@ app.MapPut("/api/characters/{characterId:guid}/build/species", async (
 {
     try
     {
-        return ToBuildApiResult(
-            await service.SetSpeciesAsync(characterId, request.ConceptKey, cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.SetSpeciesAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
     }
     catch (ArgumentException exception)
     {
@@ -207,9 +219,7 @@ app.MapDelete("/api/characters/{characterId:guid}/build/species", async (
     Guid characterId,
     CharacterBuildService service,
     CancellationToken cancellationToken) =>
-    ToBuildApiResult(
-        await service.ClearSpeciesAsync(characterId, cancellationToken),
-        mutating: true));
+    ToBuildApiResult(await service.ClearSpeciesAsync(characterId, cancellationToken), mutating: true));
 
 app.MapPut("/api/characters/{characterId:guid}/build/subspecies", async (
     Guid characterId,
@@ -219,9 +229,7 @@ app.MapPut("/api/characters/{characterId:guid}/build/subspecies", async (
 {
     try
     {
-        return ToBuildApiResult(
-            await service.SetSubspeciesAsync(characterId, request.ConceptKey, cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.SetSubspeciesAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
     }
     catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
     {
@@ -233,9 +241,7 @@ app.MapDelete("/api/characters/{characterId:guid}/build/subspecies", async (
     Guid characterId,
     CharacterBuildService service,
     CancellationToken cancellationToken) =>
-    ToBuildApiResult(
-        await service.ClearSubspeciesAsync(characterId, cancellationToken),
-        mutating: true));
+    ToBuildApiResult(await service.ClearSubspeciesAsync(characterId, cancellationToken), mutating: true));
 
 app.MapPut("/api/characters/{characterId:guid}/build/background", async (
     Guid characterId,
@@ -290,13 +296,7 @@ app.MapPut("/api/characters/{characterId:guid}/build/ability-scores/{abilityKey}
 {
     try
     {
-        return ToBuildApiResult(
-            await service.SetBaseAbilityScoreInputAsync(
-                characterId,
-                abilityKey,
-                request.Score,
-                cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.SetBaseAbilityScoreInputAsync(characterId, abilityKey, request.Score, cancellationToken), mutating: true);
     }
     catch (ArgumentException exception)
     {
@@ -312,12 +312,7 @@ app.MapDelete("/api/characters/{characterId:guid}/build/ability-scores/{abilityK
 {
     try
     {
-        return ToBuildApiResult(
-            await service.ClearBaseAbilityScoreInputAsync(
-                characterId,
-                abilityKey,
-                cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.ClearBaseAbilityScoreInputAsync(characterId, abilityKey, cancellationToken), mutating: true);
     }
     catch (ArgumentException exception)
     {
@@ -333,9 +328,7 @@ app.MapPut("/api/characters/{characterId:guid}/build/starting-class", async (
 {
     try
     {
-        return ToBuildApiResult(
-            await service.SetStartingClassAsync(characterId, request.ConceptKey, cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.SetStartingClassAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
     }
     catch (ArgumentException exception)
     {
@@ -347,9 +340,7 @@ app.MapDelete("/api/characters/{characterId:guid}/build/starting-class", async (
     Guid characterId,
     CharacterBuildService service,
     CancellationToken cancellationToken) =>
-    ToBuildApiResult(
-        await service.ClearStartingClassAsync(characterId, cancellationToken),
-        mutating: true));
+    ToBuildApiResult(await service.ClearStartingClassAsync(characterId, cancellationToken), mutating: true));
 
 app.MapPut("/api/characters/{characterId:guid}/build/classes/{classAdvancementEntryId:guid}/subclass", async (
     Guid characterId,
@@ -361,11 +352,7 @@ app.MapPut("/api/characters/{characterId:guid}/build/classes/{classAdvancementEn
     try
     {
         return ToBuildApiResult(
-            await service.SetSubclassAsync(
-                characterId,
-                classAdvancementEntryId,
-                request.ConceptKey,
-                cancellationToken),
+            await service.SetSubclassAsync(characterId, classAdvancementEntryId, request.ConceptKey, cancellationToken),
             mutating: true);
     }
     catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
@@ -382,9 +369,7 @@ app.MapDelete("/api/characters/{characterId:guid}/build/classes/{classAdvancemen
 {
     try
     {
-        return ToBuildApiResult(
-            await service.ClearSubclassAsync(characterId, classAdvancementEntryId, cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.ClearSubclassAsync(characterId, classAdvancementEntryId, cancellationToken), mutating: true);
     }
     catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
     {
@@ -402,17 +387,10 @@ app.MapPut("/api/characters/{characterId:guid}/build/advancements/{advancementEn
     try
     {
         return ToBuildApiResult(
-            await service.SetAdvancementLevelAsync(
-                characterId,
-                advancementEntryId,
-                request.Level,
-                cancellationToken),
+            await service.SetAdvancementLevelAsync(characterId, advancementEntryId, request.Level, cancellationToken),
             mutating: true);
     }
-    catch (Exception exception) when (
-        exception is ArgumentException
-        or InvalidOperationException
-        or KeyNotFoundException)
+    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
     {
         return Results.BadRequest(new { error = exception.Message });
     }
@@ -426,9 +404,7 @@ app.MapPost("/api/characters/{characterId:guid}/build/feats", async (
 {
     try
     {
-        return ToBuildApiResult(
-            await service.AddFeatOccurrenceAsync(characterId, request.ConceptKey, cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.AddFeatOccurrenceAsync(characterId, request.ConceptKey, cancellationToken), mutating: true);
     }
     catch (ArgumentException exception)
     {
@@ -444,12 +420,7 @@ app.MapDelete("/api/characters/{characterId:guid}/build/feats/{featAdvancementEn
 {
     try
     {
-        return ToBuildApiResult(
-            await service.RemoveFeatOccurrenceAsync(
-                characterId,
-                featAdvancementEntryId,
-                cancellationToken),
-            mutating: true);
+        return ToBuildApiResult(await service.RemoveFeatOccurrenceAsync(characterId, featAdvancementEntryId, cancellationToken), mutating: true);
     }
     catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
     {
@@ -493,17 +464,10 @@ static async Task<IResult> ReceiveLifecycleEventAsync(
     CancellationToken cancellationToken)
 {
     httpContext.Response.Headers.CacheControl = "no-store";
-
     var tickets = httpContext.Request.Headers[ToolLifecycleHeaders.Ticket];
     var introspectionPaths = httpContext.Request.Headers[ToolLifecycleHeaders.IntrospectionPath];
-    if (tickets.Count != 1
-        || introspectionPaths.Count != 1
-        || string.IsNullOrWhiteSpace(tickets[0])
-        || string.IsNullOrWhiteSpace(introspectionPaths[0])
-        || !string.Equals(
-            introspectionPaths[0],
-            DorksAndDiceToolLifecycleIntrospectionClient.ExpectedIntrospectionPath,
-            StringComparison.Ordinal))
+    if (tickets.Count != 1 || introspectionPaths.Count != 1 || string.IsNullOrWhiteSpace(tickets[0]) || string.IsNullOrWhiteSpace(introspectionPaths[0])
+        || !string.Equals(introspectionPaths[0], DorksAndDiceToolLifecycleIntrospectionClient.ExpectedIntrospectionPath, StringComparison.Ordinal))
     {
         return Results.Unauthorized();
     }
@@ -511,47 +475,21 @@ static async Task<IResult> ReceiveLifecycleEventAsync(
     ToolLifecycleContext? lifecycleContext;
     try
     {
-        lifecycleContext = await introspectionClient.RedeemAsync(
-            tickets[0]!,
-            introspectionPaths[0]!,
-            cancellationToken);
+        lifecycleContext = await introspectionClient.RedeemAsync(tickets[0]!, introspectionPaths[0]!, cancellationToken);
     }
-    catch (InvalidOperationException)
-    {
-        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-    }
-    catch (InvalidDataException exception)
-    {
-        return Results.Json(
-            new { error = exception.Message },
-            statusCode: StatusCodes.Status422UnprocessableEntity);
-    }
-    catch (ArgumentException)
-    {
-        return Results.Unauthorized();
-    }
-    catch (HttpRequestException)
-    {
-        return Results.StatusCode(StatusCodes.Status502BadGateway);
-    }
-    catch (OperationCanceledException) when (!httpContext.RequestAborted.IsCancellationRequested)
-    {
-        return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
-    }
+    catch (InvalidOperationException) { return Results.StatusCode(StatusCodes.Status503ServiceUnavailable); }
+    catch (InvalidDataException exception) { return Results.Json(new { error = exception.Message }, statusCode: StatusCodes.Status422UnprocessableEntity); }
+    catch (ArgumentException) { return Results.Unauthorized(); }
+    catch (HttpRequestException) { return Results.StatusCode(StatusCodes.Status502BadGateway); }
+    catch (OperationCanceledException) when (!httpContext.RequestAborted.IsCancellationRequested) { return Results.StatusCode(StatusCodes.Status504GatewayTimeout); }
 
-    if (lifecycleContext is null)
-    {
-        return Results.Unauthorized();
-    }
-
+    if (lifecycleContext is null) return Results.Unauthorized();
     var processingStatus = await processor.ProcessAsync(lifecycleContext, cancellationToken);
     return processingStatus switch
     {
         LifecycleProcessingStatus.Processed => Results.NoContent(),
         LifecycleProcessingStatus.AlreadyProcessed => Results.NoContent(),
-        LifecycleProcessingStatus.Unsupported => Results.Json(
-            new { error = $"Unsupported lifecycle event type '{lifecycleContext.EventType}'." },
-            statusCode: StatusCodes.Status422UnprocessableEntity),
+        LifecycleProcessingStatus.Unsupported => Results.Json(new { error = $"Unsupported lifecycle event type '{lifecycleContext.EventType}'." }, statusCode: StatusCodes.Status422UnprocessableEntity),
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
     };
 }
@@ -559,50 +497,51 @@ static async Task<IResult> ReceiveLifecycleEventAsync(
 static IResult ToApiResult(CharacterSheetBootstrapResult result, bool initializing) => result.Status switch
 {
     CharacterSheetBootstrapStatus.Ready => Results.Ok(result.View),
-    CharacterSheetBootstrapStatus.NotFoundOrNotOwned => Results.NotFound(new
-    {
-        error = "Character unavailable."
-    }),
-    CharacterSheetBootstrapStatus.ProjectionUnavailable => Results.Json(new
-    {
-        error = "Site Character authorization is unavailable for this request."
-    }, statusCode: StatusCodes.Status503ServiceUnavailable),
+    CharacterSheetBootstrapStatus.NotFoundOrNotOwned => Results.NotFound(new { error = "Character unavailable." }),
+    CharacterSheetBootstrapStatus.ProjectionUnavailable => Results.Json(new { error = "Site Character authorization is unavailable for this request." }, statusCode: StatusCodes.Status503ServiceUnavailable),
     CharacterSheetBootstrapStatus.Unauthenticated => Results.Unauthorized(),
-    CharacterSheetBootstrapStatus.Archived when initializing => Results.Conflict(new
-    {
-        error = "Archived Characters can not initialize or edit a digital Character Sheet. Restore the Character through the Site first.",
-        character = result.View
-    }),
+    CharacterSheetBootstrapStatus.Archived when initializing => Results.Conflict(new { error = "Archived Characters can not initialize or edit a digital Character Sheet. Restore the Character through the Site first.", character = result.View }),
     _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
 };
 
 static IResult ToBuildApiResult(CharacterBuildResult result, bool mutating) => result.Status switch
 {
     CharacterBuildAccessStatus.Ready => Results.Ok(result.View),
-    CharacterBuildAccessStatus.NotFoundOrNotOwned => Results.NotFound(new
-    {
-        error = "Character unavailable."
-    }),
-    CharacterBuildAccessStatus.ProjectionUnavailable => Results.Json(new
-    {
-        error = "Site Character authorization is unavailable for this request."
-    }, statusCode: StatusCodes.Status503ServiceUnavailable),
+    CharacterBuildAccessStatus.NotFoundOrNotOwned => Results.NotFound(new { error = "Character unavailable." }),
+    CharacterBuildAccessStatus.ProjectionUnavailable => Results.Json(new { error = "Site Character authorization is unavailable for this request." }, statusCode: StatusCodes.Status503ServiceUnavailable),
     CharacterBuildAccessStatus.Unauthenticated => Results.Unauthorized(),
-    CharacterBuildAccessStatus.SheetNotInitialized => Results.NotFound(new
-    {
-        error = "Digital Character Sheet is not initialized."
-    }),
-    CharacterBuildAccessStatus.ArchivedReadOnly when mutating => Results.Conflict(new
-    {
-        error = "Archived Characters are read-only. Restore the Character through the Site before editing its build."
-    }),
+    CharacterBuildAccessStatus.SheetNotInitialized => Results.NotFound(new { error = "Digital Character Sheet is not initialized." }),
+    CharacterBuildAccessStatus.ArchivedReadOnly when mutating => Results.Conflict(new { error = "Archived Characters are read-only. Restore the Character through the Site before editing its build." }),
+    _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+};
+
+static IResult ToAdvancementPreviewApiResult(CharacterAdvancementPreviewResult result) => result.Status switch
+{
+    CharacterAdvancementAccessStatus.Ready => Results.Ok(result.Plan),
+    CharacterAdvancementAccessStatus.NotFoundOrNotOwned => Results.NotFound(new { error = "Character unavailable." }),
+    CharacterAdvancementAccessStatus.ProjectionUnavailable => Results.Json(new { error = "Character advancement rules are unavailable for this request." }, statusCode: StatusCodes.Status503ServiceUnavailable),
+    CharacterAdvancementAccessStatus.Unauthenticated => Results.Unauthorized(),
+    CharacterAdvancementAccessStatus.SheetNotInitialized => Results.NotFound(new { error = "Digital Character Sheet is not initialized." }),
+    CharacterAdvancementAccessStatus.ArchivedReadOnly => Results.Conflict(new { error = "Archived Characters are read-only." }),
+    CharacterAdvancementAccessStatus.EntryNotFound => Results.NotFound(new { error = result.Message ?? "Advancement entry was not found." }),
+    CharacterAdvancementAccessStatus.InvalidRequest => Results.BadRequest(new { error = result.Message, plan = result.Plan }),
+    _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+};
+
+static IResult ToAdvancementApplyApiResult(CharacterAdvancementApplyResult result) => result.Status switch
+{
+    CharacterAdvancementAccessStatus.Ready => Results.Ok(new { plan = result.Plan, build = result.Build }),
+    CharacterAdvancementAccessStatus.NotFoundOrNotOwned => Results.NotFound(new { error = "Character unavailable." }),
+    CharacterAdvancementAccessStatus.ProjectionUnavailable => Results.Json(new { error = "Character advancement rules are unavailable for this request." }, statusCode: StatusCodes.Status503ServiceUnavailable),
+    CharacterAdvancementAccessStatus.Unauthenticated => Results.Unauthorized(),
+    CharacterAdvancementAccessStatus.SheetNotInitialized => Results.NotFound(new { error = "Digital Character Sheet is not initialized." }),
+    CharacterAdvancementAccessStatus.ArchivedReadOnly => Results.Conflict(new { error = "Archived Characters are read-only." }),
+    CharacterAdvancementAccessStatus.EntryNotFound => Results.NotFound(new { error = result.Message ?? "Advancement entry was not found." }),
+    CharacterAdvancementAccessStatus.InvalidRequest => Results.BadRequest(new { error = result.Message, plan = result.Plan }),
     _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
 };
 
 public sealed record RuleConceptSelectionRequest(string ConceptKey);
-
 public sealed record BaseAbilityScoreInputRequest(int Score);
-
 public sealed record AdvancementLevelRequest(int Level);
-
 public partial class Program;
