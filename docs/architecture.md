@@ -18,12 +18,12 @@ An active owned Character may be mutated. An archived owned Character may read p
 
 ## Rules Core read path
 
-In embedded production use, rule discovery and rule display are browser reads through the Site's authenticated Rules Core Tool Host route:
+In embedded production use, rule discovery and rule display are browser reads through the Site's authenticated Rules Core Tool Host route resolved by the stable Rules Core registration key:
 
 ```text
 browser
   -> Dorks & Dice Site
-  -> /tool-host/rules-core/api/upstream/api/...
+  -> /tool-host/registrations/rules-core/api/upstream/api/...
   -> Rules Core
 ```
 
