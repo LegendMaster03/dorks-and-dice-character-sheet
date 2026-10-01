@@ -34,10 +34,10 @@ const rule = {
     editionDisplayName: "3.5e"
 };
 
-test("embedded Rules Core URLs use the Rules Core Tool Host route rather than Character Sheet context", () => {
+test("embedded Rules Core URLs use the stable headless service route rather than Character Sheet context", () => {
     assert.equal(
         buildRulesCoreUrl(embedded, "/api/rules"),
-        "/tool-host/rules-core/api/upstream/api/rules");
+        "/tool-host/registrations/rules-core/api/upstream/api/rules");
     assert.equal(buildRulesCoreUrl(embedded, "/api/rules").includes("character-sheet"), false);
 });
 
@@ -52,7 +52,7 @@ test("class catalog requests use Rules Core and encode search", async () => {
 
     assert.equal(result.rules[0].conceptKey, rule.conceptKey);
     assert.deepEqual(calls, [{
-        input: "/tool-host/rules-core/api/upstream/api/rules?entityType=class&q=Arcane+Archer+%26+Mage&limit=200",
+        input: "/tool-host/registrations/rules-core/api/upstream/api/rules?entityType=class&q=Arcane+Archer+%26+Mage&limit=200",
         method: "GET"
     }]);
 });
@@ -92,7 +92,7 @@ test("stable concept resolution encodes the concept key and treats 404 as unavai
     assert.equal(result, null);
     assert.equal(
         calls[0],
-        "/tool-host/rules-core/api/upstream/api/rules/class%3Akey%2Fwith%20slash");
+        "/tool-host/registrations/rules-core/api/upstream/api/rules/class%3Akey%2Fwith%20slash");
 });
 
 test("standalone Rules Core adapter is development-only", () => {
