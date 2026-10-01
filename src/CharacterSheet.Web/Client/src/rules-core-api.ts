@@ -67,9 +67,10 @@ export function buildRulesCoreUrl(
 
     let baseUrl: string;
     if (environment.embedded) {
-        // Rules Core receives its own Site-issued Tool Host context. Never derive this from or
-        // forward Character Sheet's Tool Host ticket/context path; tickets are Tool-scoped.
-        baseUrl = "/tool-host/rules-core/api/upstream";
+        // Rules Core is a headless Tool service. Resolve it by stable registration key rather
+        // than the retired application slug route. The Site issues a Rules Core-scoped Tool Host
+        // context; Character Sheet's own Tool Host ticket is never forwarded to Rules Core.
+        baseUrl = "/tool-host/registrations/rules-core/api/upstream";
     } else {
         if (!environment.standaloneDevelopment || environment.rulesCoreDevelopmentBaseUrl === null) {
             throw new Error(
