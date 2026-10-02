@@ -117,6 +117,7 @@ export function renderPrimaryContent(
                 structuralEditing,
                 readOnly,
                 mechanics?.features,
+                mechanics?.ruleChoices,
                 handlers.feats));
             break;
         case "actions": {
