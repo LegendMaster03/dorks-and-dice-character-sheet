@@ -11,7 +11,7 @@ public sealed class DelegatedRulesCoreGateway(
     HttpClient httpClient,
     IHttpContextAccessor httpContextAccessor,
     ILogger<DelegatedRulesCoreGateway> logger)
-    : IRulesCoreGateway
+    : IRulesCoreAdvancementGateway
 {
     private const string TargetSlug = "rules-core";
     private const int MaximumRuleResolutionCalls = 28;
@@ -115,6 +115,36 @@ public sealed class DelegatedRulesCoreGateway(
         return SendJsonAsync<RulesCoreCharacterRulesProjectionView>(
             HttpMethod.Post,
             $"/api/campaigns/{campaignId:D}/rules/character-mechanics/resolve",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
+    public Task<RulesCoreCharacterAdvancementEligibilityView> ResolveGlobalCharacterAdvancementEligibilityAsync(
+        RulesCoreCharacterAdvancementEligibilityRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterAdvancementEligibilityView>(
+            HttpMethod.Post,
+            "/api/rules/character-advancement/eligibility",
+            JsonContent.Create(request, options: JsonOptions),
+            cancellationToken);
+    }
+
+    public Task<RulesCoreCharacterAdvancementEligibilityView> ResolveCampaignCharacterAdvancementEligibilityAsync(
+        Guid campaignId,
+        RulesCoreCharacterAdvancementEligibilityRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (campaignId == Guid.Empty)
+        {
+            throw new ArgumentException("Campaign ID can not be empty.", nameof(campaignId));
+        }
+
+        ArgumentNullException.ThrowIfNull(request);
+        return SendJsonAsync<RulesCoreCharacterAdvancementEligibilityView>(
+            HttpMethod.Post,
+            $"/api/campaigns/{campaignId:D}/rules/character-advancement/eligibility",
             JsonContent.Create(request, options: JsonOptions),
             cancellationToken);
     }

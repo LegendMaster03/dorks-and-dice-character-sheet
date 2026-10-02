@@ -189,13 +189,15 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
             value => value.ConceptKey == "class.fighter"
                 && value.Level == 7
                 && value.OccurrenceKey == classId.ToString("D")
-                && value.ParentConceptKey is null);
+                && value.ParentConceptKey is null
+                && value.ParentOccurrenceKey is null);
         Assert.Contains(
             request.Advancements,
             value => value.ConceptKey == "subclass.champion"
                 && value.Level == 7
                 && value.OccurrenceKey == subclassId.ToString("D")
-                && value.ParentConceptKey == "class.fighter");
+                && value.ParentConceptKey == "class.fighter"
+                && value.ParentOccurrenceKey == classId.ToString("D"));
         Assert.Equal(5, request.SelectedConcepts!.Count);
         Assert.Contains(
             request.SelectedConcepts,

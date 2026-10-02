@@ -21,11 +21,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.SetFoundationalSelection(category, ruleConceptKey, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -38,11 +34,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.ClearFoundationalSelection(category, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -56,11 +48,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.SetBaseAbilityScoreInput(abilityKey, score, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -73,11 +61,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.ClearBaseAbilityScoreInput(abilityKey, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -90,11 +74,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.SetStartingClass(ruleConceptKey, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -106,11 +86,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.ClearStartingClass(changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -124,11 +100,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.SetSubclassForClass(classAdvancementEntryId, ruleConceptKey, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -141,11 +113,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.ClearSubclassForClass(classAdvancementEntryId, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -159,12 +127,74 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
+        if (root is null) return null;
+        root.SetAdvancementLevel(advancementEntryId, level, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> ApplyClassAdvancementAsync(
+        Guid characterId,
+        Guid? classAdvancementEntryId,
+        string classConceptKey,
+        int? hitDieValue,
+        string? subclassConceptKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null) return null;
+
+        var normalizedClassConceptKey = CharacterRuleReference.NormalizeConceptKey(classConceptKey);
+        CharacterAdvancementEntry classEntry;
+        if (classAdvancementEntryId is Guid occurrenceId)
         {
-            return null;
+            classEntry = root.AdvancementEntries.SingleOrDefault(value => value.Id == occurrenceId)
+                ?? throw new KeyNotFoundException("Character Class advancement entry was not found.");
+            if (classEntry.Kind != CharacterAdvancementKind.Class)
+            {
+                throw new InvalidOperationException("Only a base Class occurrence can be advanced by this workflow.");
+            }
+            if (!string.Equals(classEntry.RuleConceptKey, normalizedClassConceptKey, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("The Class occurrence no longer matches the reviewed advancement plan.");
+            }
+            var currentLevel = classEntry.Level
+                ?? throw new InvalidOperationException("Class advancement does not have a level.");
+            root.SetAdvancementLevel(classEntry.Id, checked(currentLevel + 1), changedAt);
+        }
+        else
+        {
+            if (root.AdvancementEntries.Any(value =>
+                    value.Kind == CharacterAdvancementKind.Class
+                    && string.Equals(value.RuleConceptKey, normalizedClassConceptKey, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException("Character already has that Class occurrence.");
+            }
+            var nextOrdinal = root.AdvancementEntries
+                .Where(value => value.Kind == CharacterAdvancementKind.Class)
+                .Select(value => value.Ordinal ?? 0)
+                .DefaultIfEmpty(0)
+                .Max() + 1;
+            classEntry = root.AddAdvancement(
+                CharacterAdvancementKind.Class,
+                normalizedClassConceptKey,
+                nextOrdinal,
+                null,
+                changedAt);
         }
 
-        root.SetAdvancementLevel(advancementEntryId, level, changedAt);
+        var appliedLevel = classEntry.Level
+            ?? throw new InvalidOperationException("Applied Class advancement does not have a level.");
+        if (hitDieValue is int gain)
+        {
+            root.SetHitPointGain(classEntry.Id, appliedLevel, gain, changedAt);
+        }
+        if (!string.IsNullOrWhiteSpace(subclassConceptKey))
+        {
+            root.SetSubclassForClass(classEntry.Id, subclassConceptKey, changedAt);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
     }
@@ -176,11 +206,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.AddFeatOccurrence(ruleConceptKey, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -193,11 +219,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         CancellationToken cancellationToken = default)
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
-        if (root is null)
-        {
-            return null;
-        }
-
+        if (root is null) return null;
         root.RemoveFeatOccurrence(featAdvancementEntryId, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;

@@ -6,6 +6,7 @@ public static class CharacterRulesProjectionRequestBuilder
 {
     private const string DeathSaveSuccessesResourceKey = "resource.death-save.successes";
     private const string DeathSaveFailuresResourceKey = "resource.death-save.failures";
+    private const string StartingClassFactKey = "advancement.starting-class";
 
     public static RulesCoreCharacterRulesProjectionRequest Build(
         CharacterBuildView build,
@@ -45,23 +46,23 @@ public static class CharacterRulesProjectionRequestBuilder
                     _ => null
                 };
 
-                if (level is not > 0)
-                {
-                    return null;
-                }
+                if (level is not > 0) return null;
 
                 string? parentConceptKey = null;
+                string? parentOccurrenceKey = null;
                 if (value.ParentAdvancementEntryId is Guid linkedParentId
                     && advancementById.TryGetValue(linkedParentId, out var linkedParent))
                 {
                     parentConceptKey = linkedParent.RuleConceptKey;
+                    parentOccurrenceKey = linkedParent.Id.ToString("D");
                 }
 
                 return new RulesCoreCharacterAdvancementFactInput(
                     value.RuleConceptKey,
                     level.Value,
                     value.Id.ToString("D"),
-                    parentConceptKey);
+                    parentConceptKey,
+                    parentOccurrenceKey);
             })
             .Where(value => value is not null)
             .Cast<RulesCoreCharacterAdvancementFactInput>()
@@ -72,39 +73,41 @@ public static class CharacterRulesProjectionRequestBuilder
             .Where(value => value.Kind == CharacterRulesInputKinds.Choice && value.TextValue is not null)
             .Select(value => new RulesCoreCharacterRuntimeChoiceInput(value.Key, value.TextValue!))
             .ToArray();
-        var competencyRanks = ToIntegerDictionary(
-            ruleInputs,
-            CharacterRulesInputKinds.CompetencyRank);
+        var competencyRanks = ToIntegerDictionary(ruleInputs, CharacterRulesInputKinds.CompetencyRank);
         var trainingKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.Training);
         var classSkillKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.ClassSkill);
         var knownSpellConceptKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.KnownSpell);
         var integerFacts = ToIntegerDictionary(ruleInputs, CharacterRulesInputKinds.IntegerFact);
         var booleanFacts = ruleInputs
-            .Where(value => value.Kind == CharacterRulesInputKinds.BooleanFact
-                && value.BooleanValue is not null)
+            .Where(value => value.Kind == CharacterRulesInputKinds.BooleanFact && value.BooleanValue is not null)
             .GroupBy(value => value.Key, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
                 group => group.Last().BooleanValue!.Value,
                 StringComparer.Ordinal);
         var stringFacts = ruleInputs
-            .Where(value => value.Kind == CharacterRulesInputKinds.StringFact
-                && value.TextValue is not null)
+            .Where(value => value.Kind == CharacterRulesInputKinds.StringFact && value.TextValue is not null)
             .GroupBy(value => value.Key, StringComparer.Ordinal)
             .ToDictionary(
                 group => group.Key,
                 group => group.Last().TextValue!,
                 StringComparer.Ordinal);
-        var currentResources = ToIntegerDictionary(
-            ruleInputs,
-            CharacterRulesInputKinds.Resource);
 
+        var startingClass = build.ProgressionEntries.SingleOrDefault(value =>
+            value.Kind == CharacterBuildAdvancementKinds.Class
+            && value.Ordinal == 0
+            && value.ParentAdvancementEntryId is null);
+        if (startingClass is not null)
+        {
+            stringFacts[StartingClassFactKey] = startingClass.RuleConceptKey;
+        }
+
+        var currentResources = ToIntegerDictionary(ruleInputs, CharacterRulesInputKinds.Resource);
         IReadOnlyList<string>? conditionKeys = null;
         IReadOnlyList<string>? itemConceptKeys = null;
         IReadOnlyList<string>? equippedItemConceptKeys = null;
         if (state is not null)
         {
-            currentResources ??= new Dictionary<string, int>(StringComparer.Ordinal);
             currentResources[DeathSaveSuccessesResourceKey] = state.DeathSaves.Successes;
             currentResources[DeathSaveFailuresResourceKey] = state.DeathSaves.Failures;
 
@@ -113,16 +116,13 @@ public static class CharacterRulesProjectionRequestBuilder
                 .Select(value => value.RuleConceptKey!)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
-
             itemConceptKeys = state.InventoryItemOccurrences
                 .Where(value => !string.IsNullOrWhiteSpace(value.RuleConceptKey))
                 .Select(value => value.RuleConceptKey!)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             var equipped = state.InventoryItemOccurrences
-                .Where(value =>
-                    value.IsEquipped
-                    && !string.IsNullOrWhiteSpace(value.RuleConceptKey))
+                .Where(value => value.IsEquipped && !string.IsNullOrWhiteSpace(value.RuleConceptKey))
                 .Select(value => value.RuleConceptKey!)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
@@ -136,7 +136,6 @@ public static class CharacterRulesProjectionRequestBuilder
                 {
                     return null;
                 }
-
                 return new RulesCoreCharacterHitPointGainInput(
                     advancement.RuleConceptKey,
                     value.ClassLevel,
@@ -187,7 +186,6 @@ public static class CharacterRulesProjectionRequestBuilder
             .OrderBy(value => value, StringComparer.Ordinal)
             .ToArray();
 
-    private static Dictionary<string, TValue>? NullIfEmpty<TValue>(
-        Dictionary<string, TValue> values) =>
+    private static Dictionary<string, TValue>? NullIfEmpty<TValue>(Dictionary<string, TValue> values) =>
         values.Count == 0 ? null : values;
 }
