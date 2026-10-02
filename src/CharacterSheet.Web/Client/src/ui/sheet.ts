@@ -89,10 +89,9 @@ export function renderCharacterWorkspace(
         advancement,
         portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
     if (advancement !== null && advancement.occurrences.length > 0) {
-        const advancementEditing = structuralEditing
-            || (guidedBuilder.open
-                && editable
-                && guidedBuilder.activeSection === "advancement");
+        const advancementEditing = guidedBuilder.open
+            && editable
+            && guidedBuilder.activeSection === "advancement";
         shell.append(renderAdvancementDetails(
             advancement,
             builder,
@@ -232,13 +231,6 @@ export function renderCharacterWorkspace(
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
-    if (structuralEditing) {
-        primary.append(renderCharacterBuilder(
-            character.characterId,
-            builder,
-            forceReadOnly,
-            handlers.structural));
-    }
     primary.append(renderPrimaryContent(
         activeSection,
         builder,
@@ -254,6 +246,13 @@ export function renderCharacterWorkspace(
     const body = createElement("div", "dd-sheet__body");
     body.append(topRow, dashboard);
     shell.append(body);
+    if (structuralEditing) {
+        shell.append(renderCharacterEditorOverlay(
+            character.characterId,
+            builder,
+            handlers.structural,
+            handlers.leaveEditMode));
+    }
     if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
         shell.append(renderHarvestingCraftingOverlay(
             character,
@@ -321,6 +320,34 @@ function renderModeControls(
     return controls;
 }
 
+function renderCharacterEditorOverlay(
+    characterId: string,
+    builder: CharacterBuilderUiState,
+    handlers: CharacterBuilderHandlers,
+    close: () => void
+): HTMLElement {
+    const overlay = createElement("div", "dd-character-editor-overlay");
+    overlay.setAttribute("data-character-editor-overlay", "true");
+
+    const surface = createElement("section", "dd-character-editor-surface");
+    surface.setAttribute("role", "dialog");
+    surface.setAttribute("aria-modal", "true");
+    surface.setAttribute("aria-labelledby", "dd-character-editor-title");
+
+    const header = createElement("div", "dd-character-editor-surface__header");
+    const title = createElement("h2", "dd-character-editor-surface__title", "Edit Character");
+    title.id = "dd-character-editor-title";
+    header.append(
+        title,
+        createButton("Done", "dd-button dd-button--ghost", close));
+
+    const body = createElement("div", "dd-character-editor-surface__body");
+    body.append(renderCharacterBuilder(characterId, builder, false, handlers));
+    surface.append(header, body);
+    overlay.append(surface);
+    return overlay;
+}
+
 function renderGuidedBuilder(
     characterId: string,
     builder: CharacterBuilderUiState,
@@ -372,13 +399,23 @@ function renderGuidedBuilder(
                 handlers.structural,
                 { title: "Identity", choices: ["species", "subspecies", "background", "deity"] }));
             break;
-        case "advancement":
+        case "advancement": {
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
                 { title: "Advancement", choices: ["startingClass", "subclass"] }));
+            const masteryChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers,
+                {
+                    choiceKinds: ["weapon-mastery"],
+                    includeConflicts: false,
+                    heading: "Weapon Mastery"
+                });
+            if (masteryChoices !== null) panel.append(masteryChoices);
             const hitPointGains = renderHitPointGainEditors(
                 advancement?.occurrences ?? [],
                 routine,
@@ -386,6 +423,7 @@ function renderGuidedBuilder(
                 handlers.rules);
             if (hitPointGains !== null) panel.append(hitPointGains);
             break;
+        }
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");
             abilities.append(createElement(
