@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderCharacterWorkspace } from "../.test-dist/ui/sheet.js";
+import { renderFeaturesSection } from "../.test-dist/features/features/features-section.js";
 
 class FakeStyle {
     values = new Map();
@@ -194,20 +195,6 @@ function render(ruleChoices) {
         handlers);
 }
 
-function renderFeatures(ruleChoices) {
-    return renderCharacterWorkspace(
-        character,
-        builder,
-        routine,
-        "features",
-        false,
-        "view",
-        { ...guidedBuilder, open: false },
-        null,
-        { ruleChoices, features: [] },
-        handlers);
-}
-
 test("Weapon Mastery sibling choices do not offer a weapon already selected in the group", () => {
     const rendered = render([
         masteryChoice(0, "resolved", "item:longsword"),
@@ -272,11 +259,17 @@ test("resolved Weapon Mastery choices remain visible on the normal Features and 
         displayName: "Weapon Master Weapon Mastery",
         sourceConceptKey: "feat:weapon-master"
     };
-    const rendered = renderFeatures([
-        first,
-        duplicateFromAnotherGrant,
-        masteryChoice(1, "choice-required", undefined)
-    ]);
+    const rendered = renderFeaturesSection(
+        builder,
+        false,
+        false,
+        [],
+        [
+            first,
+            duplicateFromAnotherGrant,
+            masteryChoice(1, "choice-required", undefined)
+        ],
+        handlers.feats);
 
     assert.match(visibleText(rendered), /Weapon Mastery/);
     assert.match(visibleText(rendered), /Longsword — Sap/);
