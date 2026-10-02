@@ -12,11 +12,24 @@ import type {
 import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
 import type { HarvestingCraftingWorkflow } from "../features/harvesting/harvesting-workflow.js";
+import type { AdvancementCandidateTarget } from "../features/advancement/advancement-workflow.js";
 
 export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
     setAdvancementLevel(occurrenceId: string, level: number): void;
     setBaseAbilityScore(abilityKey: CharacterAbilityKey, score: number): void;
     clearBaseAbilityScore(abilityKey: CharacterAbilityKey): void;
+}
+
+export interface PlayerAdvancementHandlers {
+    previewExistingClass(occurrenceId: string): void;
+    openCandidateChooser(target: AdvancementCandidateTarget): void;
+    closeCandidateChooser(): void;
+    searchCandidates(target: AdvancementCandidateTarget, query: string): void;
+    selectCandidate(target: AdvancementCandidateTarget, conceptKey: string): void;
+    reviewHitPointGain(hitDieValue: number): void;
+    resolveChoice(choiceKey: string, value: string): void;
+    apply(): void;
+    cancel(): void;
 }
 
 export interface RoutineCharacterHandlers {
@@ -91,6 +104,7 @@ export interface FeatCharacterHandlers {
 
 export interface CharacterSheetHandlers {
     structural: StructuralCharacterHandlers;
+    advancement: PlayerAdvancementHandlers;
     feats: FeatCharacterHandlers;
     spells: KnownSpellCharacterHandlers;
     rules: RulesInputCharacterHandlers;
