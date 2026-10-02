@@ -132,7 +132,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(states.find(section => section.id === "abilities").status, "incomplete");
     assert.match(states.find(section => section.id === "background").detail, /1 required Background choice remains/);
     assert.match(states.find(section => section.id === "species").detail, /1 required Species choice remains/);
-    assert.match(states.find(section => section.id === "abilities").detail, /1 general Ability Score choice remains/);
+    assert.match(states.find(section => section.id === "abilities").detail, /1 required Ability Score choice remains/);
 
     const sourceResolved = {
         ruleChoices: mechanics.ruleChoices.map(value =>
