@@ -108,7 +108,13 @@ export function renderFeaturesSection(
             "No weapon masteries are currently resolved."));
     } else {
         const list = createElement("div", "dd-feat-list");
+        const rendered = new Set<string>();
         for (const mastery of masteryChoices) {
+            const identity = mastery.value.trim().toLowerCase();
+            if (!rendered.add(identity)) {
+                continue;
+            }
+
             const item = createElement("article", "dd-feat");
             item.setAttribute("data-weapon-mastery", mastery.value);
             item.append(createElement("h4", "dd-feat__name", mastery.displayName));
