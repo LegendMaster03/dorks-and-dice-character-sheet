@@ -195,10 +195,10 @@ export function getGuidedBuilderSectionStates(
         abilityDetail = `${configuredAbilities} of ${CHARACTER_ABILITY_KEYS.length} base Ability Score inputs are configured.`;
     } else if (pendingAbilityChoices.length > 0) {
         abilityDetail = pendingAbilityChoices.length === 1
-            ? "1 general Ability Score choice remains."
-            : `${pendingAbilityChoices.length} general Ability Score choices remain.`;
+            ? "1 required Ability Score choice remains."
+            : `${pendingAbilityChoices.length} required Ability Score choices remain.`;
     } else {
-        abilityDetail = "All base Ability Scores and general Ability Score choices are configured.";
+        abilityDetail = "All base Ability Scores and required Ability Score choices are configured.";
     }
 
     return [
