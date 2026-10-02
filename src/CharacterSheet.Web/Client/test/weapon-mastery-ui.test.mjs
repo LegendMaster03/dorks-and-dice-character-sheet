@@ -273,6 +273,18 @@ test("resolved Weapon Mastery choices remain visible on the normal Features and 
 
     assert.match(visibleText(rendered), /Weapon Mastery/);
     assert.match(visibleText(rendered), /Longsword — Sap/);
-    assert.equal(byAttribute(rendered, "data-weapon-mastery", "item:longsword").length, 1);
+    const masteryNodes = byAttribute(rendered, "data-weapon-mastery", "item:longsword");
+    assert.equal(
+        masteryNodes.length,
+        1,
+        JSON.stringify({
+            sameNode: masteryNodes.length > 1 ? masteryNodes[0] === masteryNodes[1] : null,
+            nodes: masteryNodes.map(node => ({
+                tagName: node.tagName,
+                className: node.className,
+                text: visibleText(node),
+                childCount: node.children.length
+            }))
+        }));
     assert.doesNotMatch(visibleText(rendered), /Greataxe — Cleave/);
 });
