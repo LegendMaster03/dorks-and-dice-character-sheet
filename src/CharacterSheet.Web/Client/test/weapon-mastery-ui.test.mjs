@@ -194,6 +194,20 @@ function render(ruleChoices) {
         handlers);
 }
 
+function renderFeatures(ruleChoices) {
+    return renderCharacterWorkspace(
+        character,
+        builder,
+        routine,
+        "features",
+        false,
+        "view",
+        { ...guidedBuilder, open: false },
+        null,
+        { ruleChoices, features: [] },
+        handlers);
+}
+
 test("Weapon Mastery sibling choices do not offer a weapon already selected in the group", () => {
     const rendered = render([
         masteryChoice(0, "resolved", "item:longsword"),
@@ -247,4 +261,25 @@ test("source-unavailable Weapon Mastery choices do not expose futile selection c
     assert.ok(card);
     assert.match(visibleText(card), /can not fully represent the legal options/i);
     assert.equal(byTag(card, "select").length, 0);
+});
+
+test("resolved Weapon Mastery choices remain visible on the normal Features and Traits sheet", () => {
+    const first = masteryChoice(0, "resolved", "item:longsword");
+    const duplicateFromAnotherGrant = {
+        ...masteryChoice(1, "resolved", "item:longsword"),
+        choiceKey: "choice.feat:weapon-master.weapon-mastery.0.0",
+        groupKey: "choice-group.feat:weapon-master.weapon-mastery.0",
+        displayName: "Weapon Master Weapon Mastery",
+        sourceConceptKey: "feat:weapon-master"
+    };
+    const rendered = renderFeatures([
+        first,
+        duplicateFromAnotherGrant,
+        masteryChoice(1, "choice-required", undefined)
+    ]);
+
+    assert.match(visibleText(rendered), /Weapon Mastery/);
+    assert.match(visibleText(rendered), /Longsword — Sap/);
+    assert.equal(byAttribute(rendered, "data-weapon-mastery", "item:longsword").length, 1);
+    assert.doesNotMatch(visibleText(rendered), /Greataxe — Cleave/);
 });
