@@ -137,6 +137,7 @@ test("stylesheet entrypoint is composition-only", async () => {
     assert.deepEqual(lines, [
         '@import "./styles/foundation.css";',
         '@import "./styles/builder.css";',
+        '@import "./styles/editor-overlay.css";',
         '@import "./styles/advancement.css";',
         '@import "./styles/mechanics.css";',
         '@import "./styles/contextual-help.css";',
