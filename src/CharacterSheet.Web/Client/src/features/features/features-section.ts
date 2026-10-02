@@ -191,14 +191,14 @@ function resolvedWeaponMasteries(
             continue;
         }
 
-        const option = choice.options.find(value => value.value === choice.selectedValue);
-        const identity = option?.conceptKey ?? option?.value ?? choice.selectedValue;
-        if (!seen.add(identity.toLowerCase())) {
+        const identity = choice.selectedValue.trim().toLowerCase();
+        if (!seen.add(identity)) {
             continue;
         }
 
+        const option = choice.options.find(value => value.value === choice.selectedValue);
         result.push({
-            value: option?.value ?? choice.selectedValue,
+            value: choice.selectedValue,
             displayName: option?.displayName ?? choice.selectedValue,
             sourceConceptKey: choice.sourceConceptKey,
             sourceAttributions: choice.sourceAttributions
