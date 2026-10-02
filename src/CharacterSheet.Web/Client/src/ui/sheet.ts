@@ -397,7 +397,6 @@ function renderGuidedBuilder(
         nav.append(button);
     }
     container.append(nav);
-
     const panel = createElement("div", "dd-guided-builder__panel");
     panel.setAttribute("data-guided-builder-active-section", guidedBuilder.activeSection);
 
@@ -557,7 +556,32 @@ function renderRulesChoices(
                 metadata.join(" • ")));
         }
 
-        if (choice.options.length > 0) {
+        const selectedElsewhere = new Set(
+            choices
+                .filter(other =>
+                    other.choiceKey !== choice.choiceKey
+                    && other.groupKey === choice.groupKey
+                    && other.selectedValue !== undefined)
+                .map(other => other.selectedValue!.trim().toLowerCase()));
+        const duplicateSelection = choice.selectedValue !== undefined
+            && selectedElsewhere.has(choice.selectedValue.trim().toLowerCase());
+        const sourceUnavailable = choice.state === "source-unavailable";
+
+        if (sourceUnavailable) {
+            card.append(createInlineState(
+                "Rules Core can not fully represent the legal options for this choice.",
+                "warning"));
+        } else if (duplicateSelection) {
+            card.append(createInlineState(
+                "This option is already selected in another choice in the same group. Choose a different option.",
+                "warning"));
+        } else if (choice.selectedValue !== undefined && choice.state !== "resolved") {
+            card.append(createInlineState(
+                "The current selection does not satisfy this rules choice. Choose a different option or clear it.",
+                "warning"));
+        }
+
+        if (choice.options.length > 0 && !sourceUnavailable) {
             const controls = createElement("div", "dd-build-choice__actions");
             const select = createElement("select", "dd-rule-chooser__input");
             select.setAttribute("aria-label", choice.displayName);
@@ -568,6 +592,9 @@ function renderRulesChoices(
             select.append(placeholder);
 
             for (const option of choice.options) {
+                if (selectedElsewhere.has(option.value.trim().toLowerCase())) {
+                    continue;
+                }
                 const element = createElement("option");
                 element.value = option.value;
                 element.textContent = option.displayName;
@@ -576,7 +603,7 @@ function renderRulesChoices(
                 }
                 select.append(element);
             }
-            select.value = choice.selectedValue ?? "";
+            select.value = duplicateSelection ? "" : choice.selectedValue ?? "";
 
             controls.append(
                 select,
@@ -597,7 +624,7 @@ function renderRulesChoices(
                     pending));
             }
             card.append(controls);
-        } else if (choice.selectedValue === undefined) {
+        } else if (!sourceUnavailable && choice.selectedValue === undefined) {
             card.append(createInlineState(
                 "Rules Core requires this choice but did not provide selectable options.",
                 "warning"));
