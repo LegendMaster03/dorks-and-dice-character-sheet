@@ -10,6 +10,11 @@ import { createButton, createElement, createInlineState } from "./components.js"
 import { hasPendingBuildMutation } from "./sheet-model.js";
 import type { StructuralCharacterHandlers } from "./sheet-contracts.js";
 import { renderSourceAttributions } from "./source-attribution.js";
+import { getActiveAdvancementWorkflow } from "../features/advancement/advancement-workflow.js";
+import { renderCharacterAdvancementPanel } from "../features/advancement/advancement-panel.js";
+
+// Defensive UI/domain boundary only. Effective progression limits come from Rules Core.
+const MAX_SAFE_PROGRESSION_LEVEL = 1_000_000;
 
 export interface AdvancementProgressControl {
     value: number | null | undefined;
@@ -42,6 +47,32 @@ export function renderAdvancementDetails(
         body.append(createInlineState("No advancement details are available for this Character.", "neutral"));
         details.append(body);
         return details;
+    }
+
+    const playerWorkflow = getActiveAdvancementWorkflow();
+    const characterId = builder?.build?.characterId;
+    if (playerWorkflow !== null && builder !== undefined && characterId !== undefined) {
+        const panel = renderCharacterAdvancementPanel(
+            builder,
+            advancement,
+            playerWorkflow.current(),
+            {
+                previewExistingClass: occurrenceId =>
+                    void playerWorkflow.previewExisting(characterId, occurrenceId),
+                openCandidateChooser: target => playerWorkflow.openCandidateChooser(target),
+                closeCandidateChooser: () => playerWorkflow.closeCandidateChooser(),
+                searchCandidates: (target, query) =>
+                    void playerWorkflow.searchCandidates(target, query),
+                selectCandidate: (target, conceptKey) =>
+                    void playerWorkflow.selectCandidate(characterId, target, conceptKey),
+                reviewHitPointGain: hitDieValue =>
+                    void playerWorkflow.reviewHitPointGain(characterId, hitDieValue),
+                resolveChoice: (choiceKey, value) =>
+                    void playerWorkflow.resolveChoice(characterId, choiceKey, value),
+                apply: () => void playerWorkflow.apply(characterId),
+                cancel: () => playerWorkflow.cancel()
+            });
+        if (panel !== null) body.append(panel);
     }
 
     const list = createElement("div", "dd-advancement-list");
@@ -189,7 +220,7 @@ function renderLevelEditor(
     input.type = "number";
     input.step = "1";
     input.min = "1";
-    input.max = "1000";
+    input.max = String(MAX_SAFE_PROGRESSION_LEVEL);
     input.inputMode = "numeric";
     input.value = level === null || level === undefined ? "1" : String(level);
     input.setAttribute("aria-label", "Advancement level");
@@ -204,7 +235,8 @@ function renderLevelEditor(
         () => {
             const parsed = parseAdvancementLevel(input.value);
             if (parsed === null) {
-                input.setCustomValidity("Level must be a whole number from 1 through 1000.");
+                input.setCustomValidity(
+                    `Level must be a whole number from 1 through ${MAX_SAFE_PROGRESSION_LEVEL}.`);
                 input.reportValidity();
                 return;
             }
@@ -233,7 +265,7 @@ function parseAdvancementLevel(value: string): number | null {
     const normalized = value.trim();
     if (!/^\d+$/.test(normalized)) return null;
     const parsed = Number(normalized);
-    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 1000
+    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= MAX_SAFE_PROGRESSION_LEVEL
         ? parsed
         : null;
 }
