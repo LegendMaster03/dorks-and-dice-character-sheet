@@ -12,6 +12,8 @@ export interface CharacterClassAdvancementRequest {
     classConceptKey?: string | null;
     hitDieValue?: number | null;
     subclassConceptKey?: string | null;
+    prestigeClassAdvancementEntryId?: string | null;
+    prestigeClassConceptKey?: string | null;
 }
 
 export interface CharacterAdvancementChoiceOption {
@@ -97,6 +99,8 @@ export interface CharacterAdvancementPlan {
     subclassConceptKey?: string | null;
     subclassDisplayName?: string | null;
     subclassEligibility?: CharacterAdvancementEligibility | null;
+    advancementKind?: "class" | "prestigeClass" | string;
+    advancementEligibility?: CharacterAdvancementEligibility | null;
 }
 
 export interface CharacterAdvancementApplyResponse {
