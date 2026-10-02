@@ -75,6 +75,15 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
         if (root is null) return null;
+        if (!root.AdvancementEntries.Any(value =>
+                value.Kind == CharacterAdvancementKind.Class
+                && value.Ordinal == 0
+                && value.ParentAdvancementEntryId is null))
+        {
+            CharacterNormalProgressionPolicy.EnsureNewProgressionAllowed(
+                root.AdvancementEntries,
+                CharacterAdvancementKind.Class);
+        }
         root.SetStartingClass(ruleConceptKey, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -128,6 +137,12 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
     {
         var root = await GetTrackedAsync(characterId, cancellationToken);
         if (root is null) return null;
+        var entry = root.AdvancementEntries.SingleOrDefault(value => value.Id == advancementEntryId)
+            ?? throw new KeyNotFoundException("Character advancement entry was not found.");
+        CharacterNormalProgressionPolicy.EnsureLevelChangeAllowed(
+            root.AdvancementEntries,
+            entry,
+            level);
         root.SetAdvancementLevel(advancementEntryId, level, changedAt);
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
@@ -161,7 +176,12 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
             }
             var currentLevel = classEntry.Level
                 ?? throw new InvalidOperationException("Class advancement does not have a level.");
-            root.SetAdvancementLevel(classEntry.Id, checked(currentLevel + 1), changedAt);
+            var targetLevel = checked(currentLevel + 1);
+            CharacterNormalProgressionPolicy.EnsureLevelChangeAllowed(
+                root.AdvancementEntries,
+                classEntry,
+                targetLevel);
+            root.SetAdvancementLevel(classEntry.Id, targetLevel, changedAt);
         }
         else
         {
@@ -171,6 +191,9 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
             {
                 throw new InvalidOperationException("Character already has that Class occurrence.");
             }
+            CharacterNormalProgressionPolicy.EnsureNewProgressionAllowed(
+                root.AdvancementEntries,
+                CharacterAdvancementKind.Class);
             var nextOrdinal = root.AdvancementEntries
                 .Where(value => value.Kind == CharacterAdvancementKind.Class)
                 .Select(value => value.Ordinal ?? 0)
