@@ -10,16 +10,20 @@ import {
     getStartingClassEntry,
     getStoredChoiceConceptKey
 } from "../../builder-rules.js";
+import {
+    loadCharacterState,
+    setCharacterRulesInput,
+    type CharacterStateResponse
+} from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
 import {
+    resolveRuleConcept,
     searchResolvedRules,
     type ResolvedRuleCatalogItem
 } from "../../rules-core-api.js";
 import type { BuildStateWorkflow } from "../../core/application/build-state-workflow.js";
 import type { PresentationWorkflow } from "../../core/application/presentation-workflow.js";
-import type { RoutineStateWorkflow } from "../../core/application/routine-state-workflow.js";
-import type { RulesInputWorkflow } from "../../core/application/rules-input-workflow.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
 import {
     applyCharacterAdvancement,
@@ -77,11 +81,15 @@ export interface AdvancementWorkflow {
     cancel(): void;
 }
 
+let activeAdvancementWorkflow: AdvancementWorkflow | null = null;
+
+export function getActiveAdvancementWorkflow(): AdvancementWorkflow | null {
+    return activeAdvancementWorkflow;
+}
+
 export function createAdvancementWorkflow(
     application: CharacterSheetApplication,
     buildState: BuildStateWorkflow,
-    routineState: RoutineStateWorkflow,
-    rulesInputs: RulesInputWorkflow,
     presentation: PresentationWorkflow,
     environment: HostEnvironment
 ): AdvancementWorkflow {
@@ -283,7 +291,60 @@ export function createAdvancementWorkflow(
         }
     }
 
-    return {
+    async function resolveRoutineReferences(state: CharacterStateResponse): Promise<void> {
+        const targets = [
+            ...state.inventoryItemOccurrences
+                .filter(value => value.ruleConceptKey !== null)
+                .map(value => ({ id: value.id, conceptKey: value.ruleConceptKey! })),
+            ...(state.rulesInputs ?? [])
+                .filter(value => value.kind === "knownSpell")
+                .map(value => ({ id: value.id, conceptKey: value.key })),
+            ...(state.conditions ?? [])
+                .filter(value => value.ruleConceptKey !== null)
+                .map(value => ({ id: value.id, conceptKey: value.ruleConceptKey! }))
+        ];
+
+        await Promise.all(targets.map(async target => {
+            try {
+                const rule = await resolveRuleConcept(environment, target.conceptKey);
+                application.dispatch({
+                    type: "routine-reference-resolved",
+                    occurrenceId: target.id,
+                    conceptKey: target.conceptKey,
+                    reference: rule === null
+                        ? { status: "unavailable", conceptKey: target.conceptKey }
+                        : { status: "resolved", conceptKey: target.conceptKey, rule }
+                });
+            } catch (error) {
+                application.dispatch({
+                    type: "routine-reference-resolved",
+                    occurrenceId: target.id,
+                    conceptKey: target.conceptKey,
+                    reference: {
+                        status: "error",
+                        conceptKey: target.conceptKey,
+                        message: requestErrorMessage(error)
+                    }
+                });
+            }
+        }));
+    }
+
+    async function refreshRoutine(characterId: string): Promise<void> {
+        application.dispatch({ type: "routine-load-started" });
+        try {
+            const state = await loadCharacterState(environment, characterId);
+            application.dispatch({ type: "routine-loaded", state });
+            await resolveRoutineReferences(state);
+        } catch (error) {
+            application.dispatch({
+                type: "routine-load-failed",
+                message: requestErrorMessage(error)
+            });
+        }
+    }
+
+    const workflow: AdvancementWorkflow = {
         openChooser(target: CharacterBuilderChoice): void {
             application.dispatch({ type: "chooser-opened", target });
             void search(target, "");
@@ -411,9 +472,31 @@ export function createAdvancementWorkflow(
 
         async resolveChoice(characterId, choiceKey, value): Promise<void> {
             if (workflowState.request === null) return;
-            const changed = await rulesInputs.setChoice(characterId, choiceKey, value);
-            if (changed) {
+            application.dispatch({
+                type: "routine-mutation-started",
+                kind: "rules-input-update",
+                entryId: `choice:${choiceKey}`
+            });
+            try {
+                const state = await setCharacterRulesInput(
+                    environment,
+                    characterId,
+                    {
+                        kind: "choice",
+                        key: choiceKey,
+                        textValue: value
+                    });
+                application.dispatch({ type: "routine-mutation-succeeded", state });
+                await resolveRoutineReferences(state);
                 await preview(characterId, workflowState.request);
+            } catch (error) {
+                const message = requestErrorMessage(error);
+                application.dispatch({ type: "routine-mutation-failed", message });
+                setWorkflowState({
+                    ...workflowState,
+                    status: "error",
+                    message
+                });
             }
         },
 
@@ -444,7 +527,7 @@ export function createAdvancementWorkflow(
                 application.dispatch({ type: "builder-loaded", build: result.build });
                 await Promise.all([
                     buildState.resolveReferences(result.build),
-                    routineState.load(characterId),
+                    refreshRoutine(characterId),
                     presentation.load(characterId)
                 ]);
                 application.dispatch({ type: "rerender" });
@@ -462,6 +545,9 @@ export function createAdvancementWorkflow(
             setWorkflowState(createInitialWorkflowState());
         }
     };
+
+    activeAdvancementWorkflow = workflow;
+    return workflow;
 }
 
 function createInitialWorkflowState(): AdvancementWorkflowState {
