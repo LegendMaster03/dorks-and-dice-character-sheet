@@ -1,5 +1,6 @@
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
+using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Application.Characters;
 
@@ -229,6 +230,12 @@ public sealed class CharacterAdvancementService(
             throw new InvalidOperationException("The selected Class occurrence does not have a valid current level.");
         }
         var targetClassLevel = checked(currentClassLevel + 1);
+        var currentCharacterLevel = CharacterLevel(currentBuild);
+        var targetCharacterLevel = checked(currentCharacterLevel + 1);
+        CharacterNormalProgressionPolicy.EnsureCharacterLevelChangeAllowed(
+            currentCharacterLevel,
+            targetCharacterLevel);
+
         var changedAt = timeProvider.GetUtcNow();
         var prospectiveEntries = currentBuild.ProgressionEntries.ToList();
         if (existing is null)
@@ -476,8 +483,8 @@ public sealed class CharacterAdvancementService(
             existing?.Ordinal == 0,
             currentClassLevel,
             targetClassLevel,
-            CharacterLevel(currentBuild),
-            CharacterLevel(prospectiveBuild),
+            currentCharacterLevel,
+            targetCharacterLevel,
             hitPointGainRequired,
             request.HitDieValue,
             status,
