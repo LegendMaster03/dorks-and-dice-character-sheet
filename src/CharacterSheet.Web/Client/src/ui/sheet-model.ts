@@ -58,7 +58,7 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     }
 ];
 
-export type GuidedBuilderSection = "species" | "advancement" | "abilities" | "review";
+export type GuidedBuilderSection = "class" | "background" | "species" | "abilities" | "review";
 
 export interface GuidedBuilderSectionDefinition {
     id: GuidedBuilderSection;
@@ -66,8 +66,9 @@ export interface GuidedBuilderSectionDefinition {
 }
 
 export const GUIDED_BUILDER_SECTIONS: readonly GuidedBuilderSectionDefinition[] = [
+    { id: "class", label: "Class" },
+    { id: "background", label: "Background" },
     { id: "species", label: "Species" },
-    { id: "advancement", label: "Advancement" },
     { id: "abilities", label: "Abilities" },
     { id: "review", label: "Review" }
 ];
@@ -93,7 +94,25 @@ export function getGuidedBuilderSectionStates(
 
     const speciesSelected = builder.build.foundationalSelections
         .some(selection => selection.category === "species");
-    const startingClassSelected = getStartingClassEntry(builder.build) !== null;
+    const backgroundSelected = builder.build.foundationalSelections
+        .some(selection => selection.category === "background");
+    const startingClass = getStartingClassEntry(builder.build);
+    const startingClassSelected = startingClass !== null;
+    const classSourceKeys = new Set<string>();
+    if (startingClass !== null) {
+        classSourceKeys.add(startingClass.ruleConceptKey);
+        for (const entry of builder.build.progressionEntries) {
+            if (entry.kind === "subclass" && entry.parentAdvancementEntryId === startingClass.id) {
+                classSourceKeys.add(entry.ruleConceptKey);
+            }
+        }
+    }
+    const pendingClassChoices = (mechanics?.ruleChoices ?? []).filter(choice =>
+        choice.state !== "resolved"
+        && choice.sourceConceptKey !== undefined
+        && classSourceKeys.has(choice.sourceConceptKey));
+    const classResolved = startingClassSelected && pendingClassChoices.length === 0;
+
     const configuredAbilities = new Set(
         builder.build.baseAbilityScoreInputs.map(input => input.abilityKey)
     ).size;
@@ -102,6 +121,17 @@ export function getGuidedBuilderSectionStates(
         (choice.kind === "ability-score" || choice.kind === "ability-score-set")
         && choice.state !== "resolved");
     const abilitiesResolved = allBaseAbilitiesConfigured && pendingAbilityChoices.length === 0;
+
+    let classDetail: string;
+    if (!startingClassSelected) {
+        classDetail = "No Starting Class is selected.";
+    } else if (pendingClassChoices.length === 1) {
+        classDetail = "Starting Class selected. 1 required Class choice remains.";
+    } else if (pendingClassChoices.length > 1) {
+        classDetail = `Starting Class selected. ${pendingClassChoices.length} required Class choices remain.`;
+    } else {
+        classDetail = "Starting Class and current Class choices are configured.";
+    }
 
     let abilityDetail: string;
     if (!allBaseAbilitiesConfigured) {
@@ -116,18 +146,22 @@ export function getGuidedBuilderSectionStates(
 
     return [
         {
+            id: "class",
+            label: "Class",
+            status: classResolved ? "resolved" : "incomplete",
+            detail: classDetail
+        },
+        {
+            id: "background",
+            label: "Background",
+            status: backgroundSelected ? "resolved" : "incomplete",
+            detail: backgroundSelected ? "Background selected." : "No Background is selected."
+        },
+        {
             id: "species",
             label: "Species",
             status: speciesSelected ? "resolved" : "incomplete",
             detail: speciesSelected ? "Species selected." : "No Species is selected."
-        },
-        {
-            id: "advancement",
-            label: "Advancement",
-            status: startingClassSelected ? "resolved" : "incomplete",
-            detail: startingClassSelected
-                ? "Starting Class selected. No Subclass requirement is inferred."
-                : "No Starting Class is selected."
         },
         {
             id: "abilities",
