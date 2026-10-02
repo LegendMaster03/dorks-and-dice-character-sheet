@@ -14,6 +14,26 @@ public static class CharacterNormalProgressionPolicy
             .Where(value => value.Kind is CharacterAdvancementKind.Class or CharacterAdvancementKind.PrestigeClass)
             .Sum(value => value.Level ?? 0);
 
+    public static void EnsureCharacterLevelChangeAllowed(
+        int currentCharacterLevel,
+        int proposedCharacterLevel)
+    {
+        if (currentCharacterLevel < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(currentCharacterLevel),
+                "Current Character level can not be negative.");
+        }
+        if (proposedCharacterLevel < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(proposedCharacterLevel),
+                "Proposed Character level can not be negative.");
+        }
+
+        EnsureSupportedIncrease(currentCharacterLevel, proposedCharacterLevel);
+    }
+
     public static void EnsureLevelChangeAllowed(
         IEnumerable<CharacterAdvancementEntry> entries,
         CharacterAdvancementEntry entry,
@@ -31,7 +51,7 @@ public static class CharacterNormalProgressionPolicy
         var currentTotal = TotalCharacterLevel(entries);
         var currentLevel = entry.Level ?? 0;
         var proposedTotal = checked(currentTotal - currentLevel + proposedLevel);
-        EnsureSupportedIncrease(currentTotal, proposedTotal);
+        EnsureCharacterLevelChangeAllowed(currentTotal, proposedTotal);
     }
 
     public static void EnsureNewProgressionAllowed(
@@ -48,7 +68,7 @@ public static class CharacterNormalProgressionPolicy
 
         var currentTotal = TotalCharacterLevel(entries);
         var proposedTotal = checked(currentTotal + level);
-        EnsureSupportedIncrease(currentTotal, proposedTotal);
+        EnsureCharacterLevelChangeAllowed(currentTotal, proposedTotal);
     }
 
     private static void EnsureSupportedIncrease(int currentTotal, int proposedTotal)
