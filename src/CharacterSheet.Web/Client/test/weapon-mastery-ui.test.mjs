@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderCharacterWorkspace } from "../.test-dist/ui/sheet.js";
-import { renderFeaturesSection } from "../.test-dist/features/features/features-section.js";
+import {
+    renderFeaturesSection,
+    resolveWeaponMasteries
+} from "../.test-dist/features/features/features-section.js";
 
 class FakeStyle {
     values = new Map();
@@ -250,6 +253,22 @@ test("source-unavailable Weapon Mastery choices do not expose futile selection c
     assert.equal(byTag(card, "select").length, 0);
 });
 
+test("resolved Weapon Mastery normalization merges repeated weapon grants", () => {
+    const first = masteryChoice(0, "resolved", "item:longsword");
+    const duplicateFromAnotherGrant = {
+        ...masteryChoice(1, "resolved", "item:longsword"),
+        choiceKey: "choice.feat:weapon-master.weapon-mastery.0.0",
+        groupKey: "choice-group.feat:weapon-master.weapon-mastery.0",
+        displayName: "Weapon Master Weapon Mastery",
+        sourceConceptKey: "feat:weapon-master"
+    };
+
+    const normalized = resolveWeaponMasteries([first, duplicateFromAnotherGrant]);
+    assert.equal(normalized.length, 1);
+    assert.equal(normalized[0].value, "item:longsword");
+    assert.deepEqual(normalized[0].sourceConceptKeys, ["class:fighter", "feat:weapon-master"]);
+});
+
 test("resolved Weapon Mastery choices remain visible on the normal Features and Traits sheet", () => {
     const first = masteryChoice(0, "resolved", "item:longsword");
     const duplicateFromAnotherGrant = {
@@ -273,18 +292,8 @@ test("resolved Weapon Mastery choices remain visible on the normal Features and 
 
     assert.match(visibleText(rendered), /Weapon Mastery/);
     assert.match(visibleText(rendered), /Longsword — Sap/);
-    const masteryNodes = byAttribute(rendered, "data-weapon-mastery", "item:longsword");
-    assert.equal(
-        masteryNodes.length,
-        1,
-        JSON.stringify({
-            sameNode: masteryNodes.length > 1 ? masteryNodes[0] === masteryNodes[1] : null,
-            nodes: masteryNodes.map(node => ({
-                tagName: node.tagName,
-                className: node.className,
-                text: visibleText(node),
-                childCount: node.children.length
-            }))
-        }));
+    assert.equal(byAttribute(rendered, "data-weapon-mastery", "item:longsword").length, 1);
+    assert.match(visibleText(rendered), /class:fighter/);
+    assert.match(visibleText(rendered), /feat:weapon-master/);
     assert.doesNotMatch(visibleText(rendered), /Greataxe — Cleave/);
 });
