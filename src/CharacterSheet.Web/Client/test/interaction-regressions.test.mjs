@@ -282,3 +282,40 @@ test("Guided Abilities remains incomplete while Rules Core requires Ability Scor
     assert.match(sheet, /heading:\s*"Required Ability Choices"/);
     assert.match(sheet, /choiceKinds:\s*\["ability-score", "ability-score-set"\]/);
 });
+
+test("ordinary advancement uses a dedicated floating workspace instead of raw level editing", async () => {
+    const advancement = await readFile(new URL("../src/ui/advancement.ts", import.meta.url), "utf8");
+    const panel = await readFile(new URL("../src/features/advancement/advancement-panel.ts", import.meta.url), "utf8");
+    const css = await readFile(new URL("../src/styles/advancement.css", import.meta.url), "utf8");
+
+    assert.match(advancement, /"Advance Character"/);
+    assert.match(advancement, /renderCharacterAdvancementPanel/);
+    assert.doesNotMatch(advancement, /Save Level/);
+    assert.doesNotMatch(advancement, /data-advancement-level-editor/);
+
+    assert.match(panel, /dd-character-advancement-overlay/);
+    assert.match(panel, /aria-modal", "true"/);
+    assert.match(panel, /Take a level in another Class/);
+    assert.match(panel, /Qualify for a Prestige Class/);
+    assert.match(panel, /What will change/);
+    assert.match(panel, /Apply Advancement/);
+    assert.match(panel, /Level 21\+ progression is reserved for the planned Epic advancement update/);
+
+    assert.match(css, /\.dd-character-advancement-overlay\s*\{[\s\S]*position:\s*fixed/);
+    assert.match(css, /\.dd-character-advancement-surface\s*\{[\s\S]*width:\s*min\(78rem, 100%\)/);
+});
+
+test("Prestige Class advancement remains inspectable when eligibility is unresolved", async () => {
+    const panel = await readFile(new URL("../src/features/advancement/advancement-panel.ts", import.meta.url), "utf8");
+    const workflow = await readFile(new URL("../src/features/advancement/advancement-workflow.ts", import.meta.url), "utf8");
+
+    assert.match(workflow, /"class" \| "prestigeClass" \| "subclass"/);
+    assert.match(workflow, /prestigeClassConceptKey/);
+    assert.match(workflow, /searchResolvedRules\(environment, entityType, normalizedQuery\)/);
+    assert.doesNotMatch(workflow, /eligible[^\n]*filter/i);
+
+    assert.match(panel, /Eligibility unresolved/);
+    assert.match(panel, /Known requirements are shown below/);
+    assert.match(panel, /Check Requirements/);
+    assert.match(panel, /Rules Core does not yet have enough normalized prerequisite data/);
+});

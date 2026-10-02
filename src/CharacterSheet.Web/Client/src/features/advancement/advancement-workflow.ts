@@ -32,7 +32,7 @@ import {
     type CharacterClassAdvancementRequest
 } from "./advancement-api.js";
 
-export type AdvancementCandidateTarget = "class" | "subclass";
+export type AdvancementCandidateTarget = "class" | "prestigeClass" | "subclass";
 
 export type AdvancementCandidateChooserState =
     | { kind: "closed" }
@@ -46,6 +46,7 @@ export type AdvancementCandidateChooserState =
     };
 
 export interface AdvancementWorkflowState {
+    open: boolean;
     status: "idle" | "previewing" | "ready" | "applying" | "error";
     request: CharacterClassAdvancementRequest | null;
     plan: CharacterAdvancementPlan | null;
@@ -66,6 +67,9 @@ export interface AdvancementWorkflow {
     setLevel(characterId: string, occurrenceId: string, level: number): Promise<void>;
 
     current(): Readonly<AdvancementWorkflowState>;
+    openAdvancement(): void;
+    closeAdvancement(): void;
+    backToSelection(): void;
     previewExisting(characterId: string, occurrenceId: string): Promise<void>;
     openCandidateChooser(target: AdvancementCandidateTarget): void;
     closeCandidateChooser(): void;
@@ -191,6 +195,7 @@ export function createAdvancementWorkflow(
     ): Promise<void> {
         setWorkflowState({
             ...workflowState,
+            open: true,
             status: "previewing",
             request,
             chooser: { kind: "closed" },
@@ -202,6 +207,7 @@ export function createAdvancementWorkflow(
                 characterId,
                 request);
             setWorkflowState({
+                open: true,
                 status: "ready",
                 request,
                 plan,
@@ -210,8 +216,10 @@ export function createAdvancementWorkflow(
         } catch (error) {
             setWorkflowState({
                 ...workflowState,
+                open: true,
                 status: "error",
                 request,
+                plan: null,
                 chooser: { kind: "closed" },
                 message: requestErrorMessage(error)
             });
@@ -219,7 +227,8 @@ export function createAdvancementWorkflow(
     }
 
     function classConceptKeyForCurrentRequest(): string | null {
-        if (workflowState.plan?.classConceptKey) {
+        if (workflowState.plan?.advancementKind !== "prestigeClass"
+            && workflowState.plan?.classConceptKey) {
             return workflowState.plan.classConceptKey;
         }
         if (workflowState.request?.classConceptKey) {
@@ -240,6 +249,7 @@ export function createAdvancementWorkflow(
         const normalizedQuery = query.trim();
         setWorkflowState({
             ...workflowState,
+            open: true,
             chooser: {
                 kind: "open",
                 target,
@@ -250,15 +260,15 @@ export function createAdvancementWorkflow(
             message: undefined
         });
         try {
-            const entityType = target === "class" ? "class" : "subclass";
+            const entityType = target;
             const catalog = await searchResolvedRules(environment, entityType, normalizedQuery);
             let results = catalog.rules.filter(rule => rule.entityType === entityType);
-            if (target === "class") {
-                const ownedClasses = new Set(
+            if (target === "class" || target === "prestigeClass") {
+                const owned = new Set(
                     (buildState.current().build?.progressionEntries ?? [])
-                        .filter(value => value.kind === "class")
+                        .filter(value => value.kind === target)
                         .map(value => value.ruleConceptKey));
-                results = results.filter(rule => !ownedClasses.has(rule.conceptKey));
+                results = results.filter(rule => !owned.has(rule.conceptKey));
             } else {
                 const classConceptKey = classConceptKeyForCurrentRequest();
                 if (classConceptKey === null) {
@@ -412,7 +422,33 @@ export function createAdvancementWorkflow(
             return workflowState;
         },
 
+        openAdvancement(): void {
+            setWorkflowState({
+                ...createInitialWorkflowState(),
+                open: true
+            });
+        },
+
+        closeAdvancement(): void {
+            setWorkflowState(createInitialWorkflowState());
+        },
+
+        backToSelection(): void {
+            setWorkflowState({
+                ...createInitialWorkflowState(),
+                open: true
+            });
+        },
+
         async previewExisting(characterId, occurrenceId): Promise<void> {
+            const entry = buildState.current().build?.progressionEntries.find(
+                value => value.id === occurrenceId);
+            if (entry?.kind === "prestigeClass") {
+                await preview(characterId, {
+                    prestigeClassAdvancementEntryId: occurrenceId
+                });
+                return;
+            }
             await preview(characterId, {
                 classAdvancementEntryId: occurrenceId
             });
@@ -421,6 +457,9 @@ export function createAdvancementWorkflow(
         openCandidateChooser(target): void {
             setWorkflowState({
                 ...workflowState,
+                open: true,
+                plan: target === "subclass" ? workflowState.plan : null,
+                request: target === "subclass" ? workflowState.request : null,
                 chooser: {
                     kind: "open",
                     target,
@@ -445,6 +484,10 @@ export function createAdvancementWorkflow(
         async selectCandidate(characterId, target, conceptKey): Promise<void> {
             if (target === "class") {
                 await preview(characterId, { classConceptKey: conceptKey });
+                return;
+            }
+            if (target === "prestigeClass") {
+                await preview(characterId, { prestigeClassConceptKey: conceptKey });
                 return;
             }
             if (workflowState.request === null) {
@@ -519,6 +562,7 @@ export function createAdvancementWorkflow(
                     characterId,
                     request);
                 workflowState = {
+                    open: true,
                     status: "ready",
                     request: null,
                     plan: result.plan,
@@ -542,7 +586,7 @@ export function createAdvancementWorkflow(
         },
 
         cancel(): void {
-            setWorkflowState(createInitialWorkflowState());
+            workflow.backToSelection();
         }
     };
 
@@ -552,6 +596,7 @@ export function createAdvancementWorkflow(
 
 function createInitialWorkflowState(): AdvancementWorkflowState {
     return {
+        open: false,
         status: "idle",
         request: null,
         plan: null,

@@ -120,6 +120,115 @@ public sealed class CharacterAdvancementWorkflowTests
         Assert.Null(champion.Level);
     }
 
+    [Fact]
+    public async Task EligiblePrestigeClassCanBeAcquiredAndAdvancedThroughTheSameWorkflow()
+    {
+        using var factory = new AdvancementWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            characterId,
+            "Prestige Character",
+            "Active",
+            null,
+            []));
+
+        using (var initialize = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/sheet"))
+        {
+            Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+        }
+
+        CharacterBuildView startingBuild;
+        using (var startingClass = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/build/starting-class",
+                   new { conceptKey = "class:fighter" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, startingClass.StatusCode);
+            startingBuild = (await startingClass.Content.ReadFromJsonAsync<CharacterBuildView>())!;
+        }
+        var fighter = Assert.Single(startingBuild.ProgressionEntries);
+        using (var setLevel = await factory.SendHostedAsync(
+                   HttpMethod.Put,
+                   $"/api/characters/{characterId:D}/build/advancements/{fighter.Id:D}/level",
+                   new { level = 5 }))
+        {
+            Assert.Equal(HttpStatusCode.OK, setLevel.StatusCode);
+        }
+
+        using (var preview = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/advancement/preview",
+                   new { prestigeClassConceptKey = "prestige:weapon-master" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+            var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+            Assert.NotNull(plan);
+            Assert.Equal("prestigeClass", plan.AdvancementKind);
+            Assert.Equal("prestige-class-acquire", plan.Operation);
+            Assert.Equal("Weapon Master", plan.ClassDisplayName);
+            Assert.Equal(0, plan.CurrentClassLevel);
+            Assert.Equal(1, plan.TargetClassLevel);
+            Assert.Equal(5, plan.CurrentCharacterLevel);
+            Assert.Equal(6, plan.TargetCharacterLevel);
+            Assert.True(plan.CanApply);
+            Assert.NotNull(plan.AdvancementEligibility);
+            Assert.True(plan.AdvancementEligibility!.Eligible);
+        }
+
+        Assert.NotNull(factory.RulesCore.LastEligibilityRequest);
+        Assert.Equal(
+            "prestige:weapon-master",
+            factory.RulesCore.LastEligibilityRequest!.CandidateConceptKey);
+        Assert.Null(factory.RulesCore.LastEligibilityRequest.ParentAdvancementOccurrenceKey);
+
+        CharacterAdvancementEntryView prestige;
+        using (var apply = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/advancement/apply",
+                   new { prestigeClassConceptKey = "prestige:weapon-master" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, apply.StatusCode);
+            var result = await apply.Content.ReadFromJsonAsync<AdvancementApplyResponse>();
+            Assert.NotNull(result);
+            Assert.Equal("applied", result.Plan.Status);
+            prestige = Assert.Single(
+                result.Build.ProgressionEntries,
+                value => value.Kind == "prestigeClass");
+            Assert.Equal("prestige:weapon-master", prestige.RuleConceptKey);
+            Assert.Equal(1, prestige.Level);
+        }
+
+        using (var previewLevelTwo = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/advancement/preview",
+                   new { prestigeClassAdvancementEntryId = prestige.Id }))
+        {
+            Assert.Equal(HttpStatusCode.OK, previewLevelTwo.StatusCode);
+            var plan = await previewLevelTwo.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+            Assert.NotNull(plan);
+            Assert.Equal("prestige-class-level-up", plan.Operation);
+            Assert.Equal(1, plan.CurrentClassLevel);
+            Assert.Equal(2, plan.TargetClassLevel);
+            Assert.True(plan.CanApply);
+        }
+
+        using (var applyLevelTwo = await factory.SendHostedAsync(
+                   HttpMethod.Post,
+                   $"/api/characters/{characterId:D}/advancement/apply",
+                   new { prestigeClassAdvancementEntryId = prestige.Id }))
+        {
+            Assert.Equal(HttpStatusCode.OK, applyLevelTwo.StatusCode);
+            var result = await applyLevelTwo.Content.ReadFromJsonAsync<AdvancementApplyResponse>();
+            Assert.NotNull(result);
+            var updatedPrestige = Assert.Single(
+                result.Build.ProgressionEntries,
+                value => value.Kind == "prestigeClass");
+            Assert.Equal(2, updatedPrestige.Level);
+        }
+    }
+
     private static ToolHostAuthenticationContext Context(params ToolHostCharacterContext[] characters) =>
         new(
             1,
@@ -195,6 +304,7 @@ public sealed class CharacterAdvancementWorkflowTests
     {
         private const string ClassKey = "class:fighter";
         private const string SubclassKey = "subclass:champion";
+        private const string PrestigeKey = "prestige:weapon-master";
 
         public RulesCoreCharacterAdvancementEligibilityRequest? LastEligibilityRequest { get; private set; }
 
@@ -222,6 +332,10 @@ public sealed class CharacterAdvancementWorkflowTests
                             "class",
                             "Fighter")]);
                 }
+                else if (conceptKey == PrestigeKey)
+                {
+                    rules[conceptKey] = Rule(PrestigeKey, "prestigeClass", "Weapon Master");
+                }
             }
             return Task.FromResult<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>>(rules);
         }
@@ -237,6 +351,21 @@ public sealed class CharacterAdvancementWorkflowTests
         {
             LastEligibilityRequest = request;
             var classFact = Assert.Single(request.Character.Advancements!, value => value.ConceptKey == ClassKey);
+            if (request.CandidateConceptKey == PrestigeKey)
+            {
+                return Task.FromResult(new RulesCoreCharacterAdvancementEligibilityView(
+                    "global",
+                    null,
+                    PrestigeKey,
+                    "Weapon Master",
+                    "prestigeClass",
+                    "eligible",
+                    classFact.Level >= 5,
+                    null,
+                    null,
+                    []));
+            }
+
             return Task.FromResult(new RulesCoreCharacterAdvancementEligibilityView(
                 "global",
                 null,

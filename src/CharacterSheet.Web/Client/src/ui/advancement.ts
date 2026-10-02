@@ -7,14 +7,10 @@ import {
     type CharacterAdvancementView
 } from "./character-advancement.js";
 import { createButton, createElement, createInlineState } from "./components.js";
-import { hasPendingBuildMutation } from "./sheet-model.js";
 import type { StructuralCharacterHandlers } from "./sheet-contracts.js";
 import { renderSourceAttributions } from "./source-attribution.js";
 import { getActiveAdvancementWorkflow } from "../features/advancement/advancement-workflow.js";
 import { renderCharacterAdvancementPanel } from "../features/advancement/advancement-panel.js";
-
-// Defensive UI/domain boundary only. Effective progression limits come from Rules Core.
-const MAX_SAFE_PROGRESSION_LEVEL = 1_000_000;
 
 export interface AdvancementProgressControl {
     value: number | null | undefined;
@@ -26,12 +22,40 @@ export interface AdvancementProgressControl {
 export function renderAdvancementDetails(
     advancement: CharacterAdvancementView | null,
     builder?: CharacterBuilderUiState,
-    editing = false,
-    handlers?: StructuralCharacterHandlers,
+    _editing = false,
+    _handlers?: StructuralCharacterHandlers,
     progress?: AdvancementProgressControl
 ): HTMLElement {
+    const wrapper = createElement("section", "dd-advancement-shell");
+    wrapper.setAttribute("data-advancement-state", advancement === null ? "unavailable" : "resolved");
+
+    const playerWorkflow = getActiveAdvancementWorkflow();
+    const characterId = builder?.build?.characterId;
+    const canAdvance = advancement !== null
+        && builder?.status === "ready"
+        && builder.build !== null
+        && !builder.build.readOnly
+        && playerWorkflow !== null
+        && characterId !== undefined;
+    if (canAdvance) {
+        const actionBar = createElement("div", "dd-advancement-shell__actions");
+        const text = createElement("div", "dd-advancement-shell__action-copy");
+        text.append(
+            createElement("strong", "dd-advancement-shell__action-title", "Character Advancement"),
+            createElement(
+                "span",
+                "dd-advancement-shell__action-detail",
+                "Level an existing progression or qualify for a new one."));
+        actionBar.append(
+            text,
+            createButton(
+                "Advance Character",
+                "dd-button dd-button--primary",
+                () => playerWorkflow.openAdvancement()));
+        wrapper.append(actionBar);
+    }
+
     const details = createElement("details", "dd-advancement-overview");
-    details.setAttribute("data-advancement-state", advancement === null ? "unavailable" : "resolved");
     details.append(createElement("summary", "dd-advancement-overview__toggle", "Advancement details"));
     const body = createElement("div", "dd-advancement-overview__body");
     if (progress !== undefined) {
@@ -40,24 +64,71 @@ export function renderAdvancementDetails(
 
     if (advancement === null) {
         body.append(createInlineState("Advancement details are not available yet.", "neutral"));
-        details.append(body);
-        return details;
-    }
-    if (advancement.occurrences.length === 0) {
+    } else if (advancement.occurrences.length === 0) {
         body.append(createInlineState("No advancement details are available for this Character.", "neutral"));
-        details.append(body);
-        return details;
+    } else {
+        const list = createElement("div", "dd-advancement-list");
+        for (const item of buildAdvancementPresentation(advancement)) {
+            const occurrence = item.occurrence;
+            const card = createElement("article", "dd-advancement-entry");
+            card.setAttribute("data-advancement-occurrence-id", occurrence.occurrenceId);
+            card.setAttribute("data-advancement-concept-key", occurrence.conceptKey);
+            card.setAttribute("data-advancement-kind", occurrence.kind);
+            if (occurrence.parentOccurrenceId !== undefined) {
+                card.setAttribute("data-parent-advancement-occurrence-id", occurrence.parentOccurrenceId);
+            }
+
+            const heading = createElement("div", "dd-advancement-entry__heading");
+            heading.append(createElement("h3", "dd-advancement-entry__name", occurrence.displayName));
+            const meta = createElement("div", "dd-advancement-entry__meta");
+            meta.append(createElement("span", "dd-advancement-entry__kind", advancementKindLabel(occurrence)));
+            if (occurrence.progression !== undefined) {
+                meta.append(createElement(
+                    "span",
+                    "dd-advancement-entry__progression",
+                    formatAdvancementProgression(occurrence.progression)));
+            }
+            heading.append(meta);
+            card.append(heading);
+
+            if (item.parent !== undefined) {
+                card.append(createElement(
+                    "p",
+                    "dd-advancement-entry__relationship",
+                    `Parent: ${item.parent.displayName}`));
+            } else if (item.unresolvedParent) {
+                card.append(createElement(
+                    "p",
+                    "dd-advancement-entry__relationship",
+                    "Parent advancement is unavailable."));
+            }
+
+            if (occurrence.progressionDetails?.length) {
+                card.append(renderFields("Progression details", occurrence.progressionDetails));
+            }
+            if (occurrence.grantedFeaturesOrMechanics?.length) {
+                card.append(renderGrants(occurrence.grantedFeaturesOrMechanics));
+            }
+            const sources = renderSourceAttributions(occurrence.sourceAttributions, true);
+            if (sources !== null) card.append(sources);
+            list.append(card);
+        }
+        body.append(list);
     }
 
-    const playerWorkflow = getActiveAdvancementWorkflow();
-    const characterId = builder?.build?.characterId;
-    if (playerWorkflow !== null && builder !== undefined && characterId !== undefined) {
-        const panel = renderCharacterAdvancementPanel(
+    details.append(body);
+    wrapper.append(details);
+
+    if (canAdvance) {
+        const overlay = renderCharacterAdvancementPanel(
             builder,
             advancement,
             playerWorkflow.current(),
             {
-                previewExistingClass: occurrenceId =>
+                open: () => playerWorkflow.openAdvancement(),
+                close: () => playerWorkflow.closeAdvancement(),
+                backToSelection: () => playerWorkflow.backToSelection(),
+                previewExistingProgression: occurrenceId =>
                     void playerWorkflow.previewExisting(characterId, occurrenceId),
                 openCandidateChooser: target => playerWorkflow.openCandidateChooser(target),
                 closeCandidateChooser: () => playerWorkflow.closeCandidateChooser(),
@@ -69,69 +140,12 @@ export function renderAdvancementDetails(
                     void playerWorkflow.reviewHitPointGain(characterId, hitDieValue),
                 resolveChoice: (choiceKey, value) =>
                     void playerWorkflow.resolveChoice(characterId, choiceKey, value),
-                apply: () => void playerWorkflow.apply(characterId),
-                cancel: () => playerWorkflow.cancel()
+                apply: () => void playerWorkflow.apply(characterId)
             });
-        if (panel !== null) body.append(panel);
+        if (overlay !== null) wrapper.append(overlay);
     }
 
-    const list = createElement("div", "dd-advancement-list");
-    for (const item of buildAdvancementPresentation(advancement)) {
-        const occurrence = item.occurrence;
-        const card = createElement("article", "dd-advancement-entry");
-        card.setAttribute("data-advancement-occurrence-id", occurrence.occurrenceId);
-        card.setAttribute("data-advancement-concept-key", occurrence.conceptKey);
-        card.setAttribute("data-advancement-kind", occurrence.kind);
-        if (occurrence.parentOccurrenceId !== undefined) {
-            card.setAttribute("data-parent-advancement-occurrence-id", occurrence.parentOccurrenceId);
-        }
-
-        const heading = createElement("div", "dd-advancement-entry__heading");
-        heading.append(createElement("h3", "dd-advancement-entry__name", occurrence.displayName));
-        const meta = createElement("div", "dd-advancement-entry__meta");
-        meta.append(createElement("span", "dd-advancement-entry__kind", advancementKindLabel(occurrence)));
-        if (occurrence.progression !== undefined) {
-            meta.append(createElement("span", "dd-advancement-entry__progression", formatAdvancementProgression(occurrence.progression)));
-        }
-        heading.append(meta);
-        card.append(heading);
-
-        const buildEntry = builder?.build?.progressionEntries.find(
-            value => value.id === occurrence.occurrenceId);
-        if (editing
-            && handlers !== undefined
-            && builder?.build !== null
-            && builder?.build !== undefined
-            && !builder.build.readOnly
-            && buildEntry !== undefined
-            && isLevelOwningAdvancementKind(buildEntry.kind)) {
-            card.append(renderLevelEditor(
-                occurrence.occurrenceId,
-                buildEntry.level,
-                builder,
-                handlers));
-        }
-
-        if (item.parent !== undefined) {
-            card.append(createElement("p", "dd-advancement-entry__relationship", `Parent: ${item.parent.displayName}`));
-        } else if (item.unresolvedParent) {
-            card.append(createElement("p", "dd-advancement-entry__relationship", "Parent advancement is unavailable."));
-        }
-
-        if (occurrence.progressionDetails?.length) {
-            card.append(renderFields("Progression details", occurrence.progressionDetails));
-        }
-        if (occurrence.grantedFeaturesOrMechanics?.length) {
-            card.append(renderGrants(occurrence.grantedFeaturesOrMechanics));
-        }
-        const sources = renderSourceAttributions(occurrence.sourceAttributions, true);
-        if (sources !== null) card.append(sources);
-        list.append(card);
-    }
-
-    body.append(list);
-    details.append(body);
-    return details;
+    return wrapper;
 }
 
 function renderAdvancementProgress(
@@ -206,70 +220,6 @@ function renderAdvancementProgress(
     return section;
 }
 
-function renderLevelEditor(
-    occurrenceId: string,
-    level: number | null | undefined,
-    builder: CharacterBuilderUiState,
-    handlers: StructuralCharacterHandlers
-): HTMLElement {
-    const editor = createElement("div", "dd-advancement-entry__level-editor");
-    editor.setAttribute("data-advancement-level-editor", occurrenceId);
-
-    const label = createElement("label", "dd-sheet-screen__label", "Level");
-    const input = createElement("input", "dd-sheet-screen__input");
-    input.type = "number";
-    input.step = "1";
-    input.min = "1";
-    input.max = String(MAX_SAFE_PROGRESSION_LEVEL);
-    input.inputMode = "numeric";
-    input.value = level === null || level === undefined ? "1" : String(level);
-    input.setAttribute("aria-label", "Advancement level");
-    input.addEventListener("input", () => input.setCustomValidity(""));
-    label.append(input);
-
-    const pending = hasPendingBuildMutation(builder);
-    const saving = builder.savingAdvancementLevel === occurrenceId;
-    const save = createButton(
-        saving ? "Saving…" : "Save Level",
-        "dd-button dd-button--secondary",
-        () => {
-            const parsed = parseAdvancementLevel(input.value);
-            if (parsed === null) {
-                input.setCustomValidity(
-                    `Level must be a whole number from 1 through ${MAX_SAFE_PROGRESSION_LEVEL}.`);
-                input.reportValidity();
-                return;
-            }
-            input.setCustomValidity("");
-            handlers.setAdvancementLevel(occurrenceId, parsed);
-        },
-        pending);
-
-    editor.append(label, save);
-    if (builder.advancementLevelSaveError?.occurrenceId === occurrenceId) {
-        editor.append(createInlineState(
-            builder.advancementLevelSaveError.message,
-            "error"));
-    }
-    return editor;
-}
-
-function isLevelOwningAdvancementKind(kind: string): boolean {
-    const normalized = kind.trim().toLowerCase();
-    return normalized === "class"
-        || normalized === "prestigeclass"
-        || normalized === "prestige-class";
-}
-
-function parseAdvancementLevel(value: string): number | null {
-    const normalized = value.trim();
-    if (!/^\d+$/.test(normalized)) return null;
-    const parsed = Number(normalized);
-    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= MAX_SAFE_PROGRESSION_LEVEL
-        ? parsed
-        : null;
-}
-
 function renderFields(
     title: string,
     fields: readonly { key: string; label: string; value: string }[]
@@ -292,7 +242,10 @@ function renderFields(
 
 function renderGrants(grants: readonly AdvancementGrantView[]): HTMLElement {
     const section = createElement("section", "dd-advancement-entry__grants");
-    section.append(createElement("h4", "dd-advancement-entry__subheading", "Granted Features & Mechanics"));
+    section.append(createElement(
+        "h4",
+        "dd-advancement-entry__subheading",
+        "Granted Features & Mechanics"));
     const list = createElement("div", "dd-advancement-grant-list");
     for (const grant of grants) {
         const item = createElement("div", "dd-advancement-grant");

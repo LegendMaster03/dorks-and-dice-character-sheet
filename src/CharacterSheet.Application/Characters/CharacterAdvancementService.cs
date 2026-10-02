@@ -1,5 +1,6 @@
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
+using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Application.Characters;
 
@@ -19,7 +20,9 @@ public sealed record CharacterClassAdvancementRequest(
     Guid? ClassAdvancementEntryId = null,
     string? ClassConceptKey = null,
     int? HitDieValue = null,
-    string? SubclassConceptKey = null);
+    string? SubclassConceptKey = null,
+    Guid? PrestigeClassAdvancementEntryId = null,
+    string? PrestigeClassConceptKey = null);
 
 public sealed record CharacterAdvancementChangeView(
     string Kind,
@@ -46,7 +49,9 @@ public sealed record CharacterAdvancementPlanView(
     IReadOnlyList<CharacterAdvancementChangeView> Changes,
     string? SubclassConceptKey = null,
     string? SubclassDisplayName = null,
-    RulesCoreCharacterAdvancementEligibilityView? SubclassEligibility = null);
+    RulesCoreCharacterAdvancementEligibilityView? SubclassEligibility = null,
+    string AdvancementKind = CharacterBuildAdvancementKinds.Class,
+    RulesCoreCharacterAdvancementEligibilityView? AdvancementEligibility = null);
 
 public sealed record CharacterAdvancementPreviewResult(
     CharacterAdvancementAccessStatus Status,
@@ -60,9 +65,10 @@ public sealed record CharacterAdvancementApplyResult(
     string? Message = null);
 
 /// <summary>
-/// Coordinates one player-facing Class advancement step. Rules Core owns prerequisites, choices,
-/// conflicts, features, hit-die semantics, and resulting mechanics; Character Sheet owns the
-/// Character occurrence mutation and persists the accepted step atomically.
+/// Coordinates one player-facing independently leveled progression step. Rules Core owns
+/// prerequisites, choices, conflicts, features, candidate eligibility, hit-die semantics, and
+/// resulting mechanics; Character Sheet owns the Character occurrence mutation and persists the
+/// accepted Class or Prestige Class step atomically.
 /// </summary>
 public sealed class CharacterAdvancementService(
     CharacterBuildService buildService,
@@ -153,12 +159,17 @@ public sealed class CharacterAdvancementService(
                 Message: "Advancement still has unresolved requirements or blocking conflicts.");
         }
 
-        var root = await buildStore.ApplyClassAdvancementAsync(
+        var kind = ToDomainKind(preview.Plan.AdvancementKind);
+        var occurrenceId = kind == CharacterAdvancementKind.PrestigeClass
+            ? request.PrestigeClassAdvancementEntryId
+            : request.ClassAdvancementEntryId;
+        var root = await buildStore.ApplyProgressionAdvancementAsync(
             characterId,
-            request.ClassAdvancementEntryId,
+            occurrenceId,
+            kind,
             preview.Plan.ClassConceptKey,
             preview.Plan.HitPointGainRequired ? request.HitDieValue : null,
-            preview.Plan.SubclassConceptKey,
+            kind == CharacterAdvancementKind.Class ? preview.Plan.SubclassConceptKey : null,
             timeProvider.GetUtcNow(),
             cancellationToken);
         if (root is null)
@@ -193,56 +204,120 @@ public sealed class CharacterAdvancementService(
         CharacterClassAdvancementRequest request,
         CancellationToken cancellationToken)
     {
-        var existing = request.ClassAdvancementEntryId is Guid occurrenceId
+        var prestigeRequested = request.PrestigeClassAdvancementEntryId is not null
+            || !string.IsNullOrWhiteSpace(request.PrestigeClassConceptKey);
+        var classRequested = request.ClassAdvancementEntryId is not null
+            || !string.IsNullOrWhiteSpace(request.ClassConceptKey)
+            || !string.IsNullOrWhiteSpace(request.SubclassConceptKey);
+        if (prestigeRequested && classRequested)
+        {
+            throw new ArgumentException(
+                "An advancement request can target either a Class or a Prestige Class, not both.",
+                nameof(request));
+        }
+
+        var advancementKind = prestigeRequested
+            ? CharacterBuildAdvancementKinds.PrestigeClass
+            : CharacterBuildAdvancementKinds.Class;
+        var expectedEntityType = prestigeRequested ? "prestigeClass" : "class";
+        var displayKind = prestigeRequested ? "Prestige Class" : "Class";
+        var requestedOccurrenceId = prestigeRequested
+            ? request.PrestigeClassAdvancementEntryId
+            : request.ClassAdvancementEntryId;
+        var requestedConceptKey = prestigeRequested
+            ? request.PrestigeClassConceptKey
+            : request.ClassConceptKey;
+
+        if (prestigeRequested && !string.IsNullOrWhiteSpace(request.SubclassConceptKey))
+        {
+            throw new ArgumentException(
+                "A Prestige Class advancement can not select a Subclass.",
+                nameof(request));
+        }
+
+        var existing = requestedOccurrenceId is Guid occurrenceId
             ? currentBuild.ProgressionEntries.SingleOrDefault(value => value.Id == occurrenceId)
             : null;
-        if (request.ClassAdvancementEntryId is not null && existing is null)
+        if (requestedOccurrenceId is not null && existing is null)
         {
-            throw new ArgumentException("The selected Class occurrence was not found.", nameof(request));
+            throw new ArgumentException(
+                $"The selected {displayKind} occurrence was not found.",
+                nameof(request));
         }
-        if (existing is not null && existing.Kind != CharacterBuildAdvancementKinds.Class)
+        if (existing is not null && existing.Kind != advancementKind)
         {
-            throw new ArgumentException("Only a base Class occurrence can be advanced by this workflow.", nameof(request));
+            throw new ArgumentException(
+                $"The selected occurrence is not a {displayKind} progression.",
+                nameof(request));
         }
 
-        var classConceptKey = existing?.RuleConceptKey
-            ?? NormalizeConceptKey(request.ClassConceptKey);
+        var conceptKey = existing?.RuleConceptKey
+            ?? NormalizeConceptKey(requestedConceptKey, displayKind);
         if (existing is null && currentBuild.ProgressionEntries.Any(value =>
-                value.Kind == CharacterBuildAdvancementKinds.Class
-                && string.Equals(value.RuleConceptKey, classConceptKey, StringComparison.Ordinal)))
+                value.Kind == advancementKind
+                && string.Equals(value.RuleConceptKey, conceptKey, StringComparison.Ordinal)))
         {
             throw new InvalidOperationException(
-                "This Character already has that Class. Advance its existing Class occurrence instead of adding a duplicate.");
+                $"This Character already has that {displayKind}. Advance its existing occurrence instead of adding a duplicate.");
         }
 
-        var resolved = await rulesCore.ResolveGlobalRulesAsync([classConceptKey], cancellationToken);
-        if (!resolved.TryGetValue(classConceptKey, out var classRule)
-            || !string.Equals(classRule.EntityType, "class", StringComparison.OrdinalIgnoreCase))
+        var resolved = await rulesCore.ResolveGlobalRulesAsync([conceptKey], cancellationToken);
+        if (!resolved.TryGetValue(conceptKey, out var progressionRule)
+            || !string.Equals(progressionRule.EntityType, expectedEntityType, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("The selected rule is not an available Class.", nameof(request));
+            throw new ArgumentException(
+                $"The selected rule is not an available {displayKind}.",
+                nameof(request));
         }
 
-        var classOccurrenceId = existing?.Id ?? Guid.NewGuid();
-        var currentClassLevel = existing?.Level ?? 0;
-        if (existing is not null && currentClassLevel <= 0)
+        var progressionOccurrenceId = existing?.Id ?? Guid.NewGuid();
+        var currentProgressionLevel = existing?.Level ?? 0;
+        if (existing is not null && currentProgressionLevel <= 0)
         {
-            throw new InvalidOperationException("The selected Class occurrence does not have a valid current level.");
+            throw new InvalidOperationException(
+                $"The selected {displayKind} occurrence does not have a valid current level.");
         }
-        var targetClassLevel = checked(currentClassLevel + 1);
+        var targetProgressionLevel = checked(currentProgressionLevel + 1);
+        var currentCharacterLevel = CharacterLevel(currentBuild);
+        var targetCharacterLevel = checked(currentCharacterLevel + 1);
+        CharacterNormalProgressionPolicy.EnsureCharacterLevelChangeAllowed(
+            currentCharacterLevel,
+            targetCharacterLevel);
+
+        var advancementGateway = rulesCore as IRulesCoreAdvancementGateway;
+        RulesCoreCharacterAdvancementEligibilityView? advancementEligibility = null;
+        if (prestigeRequested && existing is null)
+        {
+            if (advancementGateway is null)
+            {
+                throw new RulesCoreGatewayException(
+                    "The configured Rules Core gateway does not support advancement eligibility.");
+            }
+            advancementEligibility = await advancementGateway.ResolveGlobalCharacterAdvancementEligibilityAsync(
+                new RulesCoreCharacterAdvancementEligibilityRequest(
+                    conceptKey,
+                    CharacterRulesProjectionRequestBuilder.Build(currentBuild, currentState)),
+                cancellationToken);
+        }
+
         var changedAt = timeProvider.GetUtcNow();
         var prospectiveEntries = currentBuild.ProgressionEntries.ToList();
         if (existing is null)
         {
             var nextOrdinal = prospectiveEntries
-                .Where(value => value.Kind == CharacterBuildAdvancementKinds.Class)
-                .Select(value => value.Ordinal ?? 0)
-                .DefaultIfEmpty(0)
+                .Where(value => value.Kind == advancementKind)
+                .Select(value => value.Ordinal ?? -1)
+                .DefaultIfEmpty(-1)
                 .Max() + 1;
+            if (!prestigeRequested && nextOrdinal == 0)
+            {
+                nextOrdinal = 1;
+            }
             prospectiveEntries.Add(new CharacterAdvancementEntryView(
-                classOccurrenceId,
+                progressionOccurrenceId,
                 nextOrdinal,
-                CharacterBuildAdvancementKinds.Class,
-                classConceptKey,
+                advancementKind,
+                conceptKey,
                 null,
                 changedAt,
                 changedAt,
@@ -252,7 +327,7 @@ public sealed class CharacterAdvancementService(
         {
             prospectiveEntries = prospectiveEntries
                 .Select(value => value.Id == existing.Id
-                    ? value with { Level = targetClassLevel, UpdatedAt = changedAt }
+                    ? value with { Level = targetProgressionLevel, UpdatedAt = changedAt }
                     : value)
                 .ToList();
         }
@@ -260,8 +335,8 @@ public sealed class CharacterAdvancementService(
         var prospectiveBuild = currentBuild with { ProgressionEntries = prospectiveEntries };
         var prospectiveState = AddProspectiveHitPointGain(
             currentState,
-            classOccurrenceId,
-            targetClassLevel,
+            progressionOccurrenceId,
+            targetProgressionLevel,
             request.HitDieValue,
             changedAt);
         var projectionRequest = CharacterRulesProjectionRequestBuilder.Build(
@@ -274,110 +349,114 @@ public sealed class CharacterAdvancementService(
         var hitPointGainRequired = projection.Resources.Any(value =>
             string.Equals(
                 value.ResourceKey,
-                $"resource.hit-die.{classConceptKey}",
+                $"resource.hit-die.{conceptKey}",
                 StringComparison.Ordinal));
 
-        var currentSubclass = prospectiveBuild.ProgressionEntries.FirstOrDefault(value =>
-            value.Kind == CharacterBuildAdvancementKinds.Subclass
-            && value.ParentAdvancementEntryId == classOccurrenceId);
-        string? subclassConceptKey = currentSubclass?.RuleConceptKey;
+        CharacterAdvancementEntryView? currentSubclass = null;
+        string? subclassConceptKey = null;
         string? subclassDisplayName = null;
         var newlyAcquiredSubclass = false;
         RulesCoreCharacterAdvancementEligibilityView? subclassEligibility = null;
-        var subclassChoice = FindSubclassChoice(
-            projection,
-            classConceptKey,
-            classOccurrenceId);
+        RulesCoreCharacterChoiceView? subclassChoice = null;
         var requestedSubclass = NormalizeOptionalConceptKey(request.SubclassConceptKey);
 
-        if (currentSubclass is not null && requestedSubclass is not null)
+        if (!prestigeRequested)
         {
-            throw new InvalidOperationException(
-                "This Class occurrence already has a Subclass; a new Subclass can not be selected during level advancement.");
-        }
+            currentSubclass = prospectiveBuild.ProgressionEntries.FirstOrDefault(value =>
+                value.Kind == CharacterBuildAdvancementKinds.Subclass
+                && value.ParentAdvancementEntryId == progressionOccurrenceId);
+            subclassConceptKey = currentSubclass?.RuleConceptKey;
+            subclassChoice = FindSubclassChoice(
+                projection,
+                conceptKey,
+                progressionOccurrenceId);
 
-        if (currentSubclass is null && requestedSubclass is not null)
-        {
-            if (subclassChoice is null)
+            if (currentSubclass is not null && requestedSubclass is not null)
             {
                 throw new InvalidOperationException(
-                    "A Subclass can not be selected at the proposed Class level because Rules Core did not expose a Subclass choice.");
+                    "This Class occurrence already has a Subclass; a new Subclass can not be selected during level advancement.");
             }
 
-            projectionRequest = WithChoice(
-                projectionRequest,
-                subclassChoice.ChoiceKey,
-                requestedSubclass);
-            projection = await rulesCore.ResolveGlobalCharacterMechanicsAsync(
-                projectionRequest,
-                cancellationToken);
-            subclassChoice = projection.Choices.FirstOrDefault(value =>
-                string.Equals(value.ChoiceKey, subclassChoice.ChoiceKey, StringComparison.Ordinal));
-
-            var advancementRulesCore = rulesCore as IRulesCoreAdvancementGateway
-                ?? throw new RulesCoreGatewayException(
-                    "The configured Rules Core gateway does not support advancement eligibility.");
-            subclassEligibility = await advancementRulesCore.ResolveGlobalCharacterAdvancementEligibilityAsync(
-                new RulesCoreCharacterAdvancementEligibilityRequest(
-                    requestedSubclass,
-                    projectionRequest,
-                    classOccurrenceId.ToString("D")),
-                cancellationToken);
-            subclassConceptKey = requestedSubclass;
-            subclassDisplayName = subclassEligibility.CandidateDisplayName;
-
-            var choiceResolved = subclassChoice is not null
-                && IsResolved(subclassChoice.State)
-                && string.Equals(
-                    subclassChoice.SelectedValue,
-                    requestedSubclass,
-                    StringComparison.OrdinalIgnoreCase);
-            if (choiceResolved && subclassEligibility.Eligible == true)
+            if (currentSubclass is null && requestedSubclass is not null)
             {
-                newlyAcquiredSubclass = true;
-                prospectiveEntries.Add(new CharacterAdvancementEntryView(
-                    Guid.NewGuid(),
-                    null,
-                    CharacterBuildAdvancementKinds.Subclass,
-                    requestedSubclass,
-                    classOccurrenceId,
-                    changedAt,
-                    changedAt));
-                prospectiveBuild = prospectiveBuild with { ProgressionEntries = prospectiveEntries };
-                projectionRequest = CharacterRulesProjectionRequestBuilder.Build(
-                    prospectiveBuild,
-                    prospectiveState);
+                if (subclassChoice is null)
+                {
+                    throw new InvalidOperationException(
+                        "A Subclass can not be selected at the proposed Class level because Rules Core did not expose a Subclass choice.");
+                }
+
+                projectionRequest = WithChoice(
+                    projectionRequest,
+                    subclassChoice.ChoiceKey,
+                    requestedSubclass);
                 projection = await rulesCore.ResolveGlobalCharacterMechanicsAsync(
                     projectionRequest,
                     cancellationToken);
-                subclassChoice = FindSubclassChoice(
-                    projection,
-                    classConceptKey,
-                    classOccurrenceId);
+                subclassChoice = projection.Choices.FirstOrDefault(value =>
+                    string.Equals(value.ChoiceKey, subclassChoice.ChoiceKey, StringComparison.Ordinal));
+
+                if (advancementGateway is null)
+                {
+                    throw new RulesCoreGatewayException(
+                        "The configured Rules Core gateway does not support advancement eligibility.");
+                }
+                subclassEligibility = await advancementGateway.ResolveGlobalCharacterAdvancementEligibilityAsync(
+                    new RulesCoreCharacterAdvancementEligibilityRequest(
+                        requestedSubclass,
+                        projectionRequest,
+                        progressionOccurrenceId.ToString("D")),
+                    cancellationToken);
+                subclassConceptKey = requestedSubclass;
+                subclassDisplayName = subclassEligibility.CandidateDisplayName;
+
+                var choiceResolved = subclassChoice is not null
+                    && IsResolved(subclassChoice.State)
+                    && string.Equals(
+                        subclassChoice.SelectedValue,
+                        requestedSubclass,
+                        StringComparison.OrdinalIgnoreCase);
+                if (choiceResolved && subclassEligibility.Eligible == true)
+                {
+                    newlyAcquiredSubclass = true;
+                    prospectiveEntries.Add(new CharacterAdvancementEntryView(
+                        Guid.NewGuid(),
+                        null,
+                        CharacterBuildAdvancementKinds.Subclass,
+                        requestedSubclass,
+                        progressionOccurrenceId,
+                        changedAt,
+                        changedAt));
+                    prospectiveBuild = prospectiveBuild with { ProgressionEntries = prospectiveEntries };
+                    projectionRequest = CharacterRulesProjectionRequestBuilder.Build(
+                        prospectiveBuild,
+                        prospectiveState);
+                    projection = await rulesCore.ResolveGlobalCharacterMechanicsAsync(
+                        projectionRequest,
+                        cancellationToken);
+                    subclassChoice = FindSubclassChoice(
+                        projection,
+                        conceptKey,
+                        progressionOccurrenceId);
+                }
             }
         }
 
         var relevantPrerequisites = projection.Prerequisites
-            .Where(value => string.Equals(value.ConceptKey, classConceptKey, StringComparison.Ordinal)
+            .Where(value => string.Equals(value.ConceptKey, conceptKey, StringComparison.Ordinal)
                 || (subclassConceptKey is not null
                     && string.Equals(value.ConceptKey, subclassConceptKey, StringComparison.Ordinal)))
             .ToList();
-        if (subclassEligibility?.Prerequisites is { } eligibilityPrerequisite
-            && !relevantPrerequisites.Any(value => string.Equals(
-                value.ConceptKey,
-                eligibilityPrerequisite.ConceptKey,
-                StringComparison.Ordinal)))
-        {
-            relevantPrerequisites.Add(eligibilityPrerequisite);
-        }
+        AddEligibilityPrerequisite(relevantPrerequisites, advancementEligibility);
+        AddEligibilityPrerequisite(relevantPrerequisites, subclassEligibility);
 
         var requiredChoices = projection.Choices
             .Where(value => !IsResolved(value.State))
-            .Where(value => string.Equals(value.SourceConceptKey, classConceptKey, StringComparison.Ordinal)
+            .Where(value => string.Equals(value.SourceConceptKey, conceptKey, StringComparison.Ordinal)
                 || (subclassConceptKey is not null
                     && string.Equals(value.SourceConceptKey, subclassConceptKey, StringComparison.Ordinal)))
             .ToList();
-        if (currentSubclass is null
+        if (!prestigeRequested
+            && currentSubclass is null
             && requestedSubclass is null
             && subclassChoice is not null
             && !requiredChoices.Any(value => string.Equals(
@@ -394,42 +473,35 @@ public sealed class CharacterAdvancementService(
 
         var relatedConcepts = new HashSet<string>(StringComparer.Ordinal)
         {
-            classConceptKey
+            conceptKey
         };
         if (subclassConceptKey is not null) relatedConcepts.Add(subclassConceptKey);
         var blockingConflicts = projection.Conflicts
             .Where(value => value.RelatedConceptKeys.Any(relatedConcepts.Contains))
             .ToList();
-        if (subclassEligibility is not null)
-        {
-            foreach (var conflict in subclassEligibility.Conflicts)
-            {
-                if (!blockingConflicts.Any(value => string.Equals(
-                        value.ConflictKey,
-                        conflict.ConflictKey,
-                        StringComparison.Ordinal)))
-                {
-                    blockingConflicts.Add(conflict);
-                }
-            }
-        }
+        AddEligibilityConflicts(blockingConflicts, advancementEligibility);
+        AddEligibilityConflicts(blockingConflicts, subclassEligibility);
 
         var prerequisitesSatisfied = relevantPrerequisites.All(value => value.Satisfied == true);
         var hitPointsSatisfied = !hitPointGainRequired || request.HitDieValue is not null;
-        var eligibilitySatisfied = subclassEligibility is null || subclassEligibility.Eligible == true;
+        var advancementEligibilitySatisfied = advancementEligibility is null
+            || advancementEligibility.Eligible == true;
+        var subclassEligibilitySatisfied = subclassEligibility is null
+            || subclassEligibility.Eligible == true;
         var canApply = prerequisitesSatisfied
             && hitPointsSatisfied
-            && eligibilitySatisfied
+            && advancementEligibilitySatisfied
+            && subclassEligibilitySatisfied
             && requiredChoices.Count == 0
             && blockingConflicts.Count == 0;
         var status = !prerequisitesSatisfied
             ? "blocked-prerequisite"
-            : requiredChoices.Count > 0
-                ? "choices-required"
-                : blockingConflicts.Count > 0
-                    ? "blocked-conflict"
-                    : !eligibilitySatisfied
-                        ? "blocked-eligibility"
+            : !advancementEligibilitySatisfied || !subclassEligibilitySatisfied
+                ? "blocked-eligibility"
+                : requiredChoices.Count > 0
+                    ? "choices-required"
+                    : blockingConflicts.Count > 0
+                        ? "blocked-conflict"
                         : !hitPointsSatisfied
                             ? "hit-points-required"
                             : "ready";
@@ -442,13 +514,15 @@ public sealed class CharacterAdvancementService(
                 cancellationToken);
             existingFeatureKeys.UnionWith(currentProjection.Features.Select(value => value.FeatureKey));
         }
+
+        var changeKindPrefix = prestigeRequested ? "prestige-class" : "class";
         var changes = new List<CharacterAdvancementChangeView>
         {
             new(
-                existing is null ? "class-acquired" : "class-level",
+                existing is null ? $"{changeKindPrefix}-acquired" : $"{changeKindPrefix}-level",
                 existing is null
-                    ? $"Acquire {classRule.DisplayName} level 1"
-                    : $"Advance {classRule.DisplayName} to level {targetClassLevel}")
+                    ? $"Acquire {progressionRule.DisplayName} level 1"
+                    : $"Advance {progressionRule.DisplayName} to level {targetProgressionLevel}")
         };
         if (newlyAcquiredSubclass && subclassConceptKey is not null)
         {
@@ -458,7 +532,7 @@ public sealed class CharacterAdvancementService(
         }
         changes.AddRange(projection.Features
             .Where(value => !existingFeatureKeys.Contains(value.FeatureKey))
-            .Where(value => string.Equals(value.SourceConceptKey, classConceptKey, StringComparison.Ordinal)
+            .Where(value => string.Equals(value.SourceConceptKey, conceptKey, StringComparison.Ordinal)
                 || (subclassConceptKey is not null
                     && string.Equals(value.SourceConceptKey, subclassConceptKey, StringComparison.Ordinal)))
             .Select(value => new CharacterAdvancementChangeView(
@@ -469,15 +543,17 @@ public sealed class CharacterAdvancementService(
                     : null)));
 
         return new CharacterAdvancementPlanView(
-            existing is null ? "multiclass" : "level-up",
-            classOccurrenceId,
-            classConceptKey,
-            classRule.DisplayName,
-            existing?.Ordinal == 0,
-            currentClassLevel,
-            targetClassLevel,
-            CharacterLevel(currentBuild),
-            CharacterLevel(prospectiveBuild),
+            prestigeRequested
+                ? existing is null ? "prestige-class-acquire" : "prestige-class-level-up"
+                : existing is null ? "multiclass" : "level-up",
+            progressionOccurrenceId,
+            conceptKey,
+            progressionRule.DisplayName,
+            !prestigeRequested && existing?.Ordinal == 0,
+            currentProgressionLevel,
+            targetProgressionLevel,
+            currentCharacterLevel,
+            targetCharacterLevel,
             hitPointGainRequired,
             request.HitDieValue,
             status,
@@ -488,7 +564,42 @@ public sealed class CharacterAdvancementService(
             changes,
             subclassConceptKey,
             subclassDisplayName,
-            subclassEligibility);
+            subclassEligibility,
+            advancementKind,
+            advancementEligibility);
+    }
+
+    private static void AddEligibilityPrerequisite(
+        List<RulesCoreCharacterPrerequisiteView> target,
+        RulesCoreCharacterAdvancementEligibilityView? eligibility)
+    {
+        if (eligibility?.Prerequisites is not { } prerequisite) return;
+        if (target.Any(value => string.Equals(
+                value.ConceptKey,
+                prerequisite.ConceptKey,
+                StringComparison.Ordinal)))
+        {
+            return;
+        }
+        target.Add(prerequisite);
+    }
+
+    private static void AddEligibilityConflicts(
+        List<RulesCoreCharacterProjectionConflictView> target,
+        RulesCoreCharacterAdvancementEligibilityView? eligibility)
+    {
+        if (eligibility is null) return;
+        foreach (var conflict in eligibility.Conflicts)
+        {
+            if (target.Any(value => string.Equals(
+                    value.ConflictKey,
+                    conflict.ConflictKey,
+                    StringComparison.Ordinal)))
+            {
+                continue;
+            }
+            target.Add(conflict);
+        }
     }
 
     private static RulesCoreCharacterChoiceView? FindSubclassChoice(
@@ -521,7 +632,7 @@ public sealed class CharacterAdvancementService(
     private static CharacterStateView? AddProspectiveHitPointGain(
         CharacterStateView? state,
         Guid occurrenceId,
-        int classLevel,
+        int progressionLevel,
         int? hitDieValue,
         DateTimeOffset changedAt)
     {
@@ -531,11 +642,11 @@ public sealed class CharacterAdvancementService(
         }
 
         var gains = (state.HitPointGains ?? [])
-            .Where(value => value.AdvancementOccurrenceId != occurrenceId || value.ClassLevel != classLevel)
+            .Where(value => value.AdvancementOccurrenceId != occurrenceId || value.ClassLevel != progressionLevel)
             .Append(new CharacterHitPointGainStateView(
                 Guid.NewGuid(),
                 occurrenceId,
-                classLevel,
+                progressionLevel,
                 hitDieValue.Value,
                 changedAt,
                 changedAt))
@@ -549,12 +660,13 @@ public sealed class CharacterAdvancementService(
                 or CharacterBuildAdvancementKinds.PrestigeClass)
             .Sum(value => Math.Max(value.Level ?? 0, 0));
 
-    private static string NormalizeConceptKey(string? value)
+    private static string NormalizeConceptKey(string? value, string displayKind)
     {
         var normalized = value?.Trim();
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            throw new ArgumentException("A Class must be selected before previewing multiclass advancement.");
+            throw new ArgumentException(
+                $"A {displayKind} must be selected before previewing advancement.");
         }
         return normalized;
     }
@@ -564,6 +676,15 @@ public sealed class CharacterAdvancementService(
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
+
+    private static CharacterAdvancementKind ToDomainKind(string kind) =>
+        kind switch
+        {
+            CharacterBuildAdvancementKinds.Class => CharacterAdvancementKind.Class,
+            CharacterBuildAdvancementKinds.PrestigeClass => CharacterAdvancementKind.PrestigeClass,
+            _ => throw new InvalidOperationException(
+                $"Unsupported independently leveled advancement kind '{kind}'.")
+        };
 
     private static bool IsResolved(string state) =>
         string.Equals(state, "resolved", StringComparison.OrdinalIgnoreCase);

@@ -69,6 +69,16 @@ public interface ICharacterBuildStore
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> ApplyProgressionAdvancementAsync(
+        Guid characterId,
+        Guid? advancementEntryId,
+        CharacterAdvancementKind kind,
+        string conceptKey,
+        int? hitDieValue,
+        string? subclassConceptKey,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> ApplyClassAdvancementAsync(
         Guid characterId,
         Guid? classAdvancementEntryId,

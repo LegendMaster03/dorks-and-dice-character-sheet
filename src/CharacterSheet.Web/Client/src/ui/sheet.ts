@@ -7,7 +7,6 @@ import {
     type SheetMode
 } from "../app-state.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
-import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
 import {
     createCompactAdvancementSummary,
@@ -89,10 +88,9 @@ export function renderCharacterWorkspace(
         advancement,
         portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
     if (advancement !== null && advancement.occurrences.length > 0) {
-        const advancementEditing = structuralEditing
-            || (guidedBuilder.open
-                && editable
-                && guidedBuilder.activeSection === "advancement");
+        const advancementEditing = guidedBuilder.open
+            && editable
+            && guidedBuilder.activeSection === "class";
         shell.append(renderAdvancementDetails(
             advancement,
             builder,
@@ -232,13 +230,6 @@ export function renderCharacterWorkspace(
 
     const primary = createElement("section", "dd-sheet__main");
     primary.setAttribute("aria-label", "Character details and controls");
-    if (structuralEditing) {
-        primary.append(renderCharacterBuilder(
-            character.characterId,
-            builder,
-            forceReadOnly,
-            handlers.structural));
-    }
     primary.append(renderPrimaryContent(
         activeSection,
         builder,
@@ -254,6 +245,14 @@ export function renderCharacterWorkspace(
     const body = createElement("div", "dd-sheet__body");
     body.append(topRow, dashboard);
     shell.append(body);
+    if (structuralEditing) {
+        shell.append(renderCharacterEditorOverlay(
+            character.characterId,
+            builder,
+            routine,
+            mechanics,
+            handlers));
+    }
     if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
         shell.append(renderHarvestingCraftingOverlay(
             character,
@@ -321,6 +320,45 @@ function renderModeControls(
     return controls;
 }
 
+function renderCharacterEditorOverlay(
+    characterId: string,
+    builder: CharacterBuilderUiState,
+    routine: CharacterRoutineUiState,
+    mechanics: CharacterMechanicsView | null,
+    handlers: CharacterSheetHandlers
+): HTMLElement {
+    const overlay = createElement("div", "dd-character-editor-overlay");
+    overlay.setAttribute("data-character-editor-overlay", "true");
+
+    const surface = createElement("section", "dd-character-editor-surface");
+    surface.setAttribute("role", "dialog");
+    surface.setAttribute("aria-modal", "true");
+    surface.setAttribute("aria-labelledby", "dd-character-editor-title");
+
+    const header = createElement("div", "dd-character-editor-surface__header");
+    const title = createElement("h2", "dd-character-editor-surface__title", "Edit Character");
+    title.id = "dd-character-editor-title";
+    header.append(
+        title,
+        createButton("Done", "dd-button dd-button--ghost", handlers.leaveEditMode));
+
+    const body = createElement("div", "dd-character-editor-surface__body");
+    body.append(renderCharacterBuilder(characterId, builder, false, handlers.structural));
+    const masteryChoices = renderRulesChoices(
+        mechanics,
+        routine,
+        handlers,
+        {
+            choiceKinds: ["weapon-mastery"],
+            includeConflicts: false,
+            heading: "Weapon Mastery"
+        });
+    if (masteryChoices !== null) body.append(masteryChoices);
+    surface.append(header, body);
+    overlay.append(surface);
+    return overlay;
+}
+
 function renderGuidedBuilder(
     characterId: string,
     builder: CharacterBuilderUiState,
@@ -359,32 +397,50 @@ function renderGuidedBuilder(
         nav.append(button);
     }
     container.append(nav);
-
     const panel = createElement("div", "dd-guided-builder__panel");
     panel.setAttribute("data-guided-builder-active-section", guidedBuilder.activeSection);
 
     switch (guidedBuilder.activeSection) {
-        case "species":
+        case "class": {
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
-                { title: "Identity", choices: ["species", "subspecies", "background", "deity"] }));
-            break;
-        case "advancement":
-            panel.append(renderCharacterBuilder(
-                characterId,
-                builder,
-                false,
-                handlers.structural,
-                { title: "Advancement", choices: ["startingClass", "subclass"] }));
+                { title: "Class", choices: ["startingClass", "subclass"] }));
+            const masteryChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers,
+                {
+                    choiceKinds: ["weapon-mastery"],
+                    includeConflicts: false,
+                    heading: "Weapon Mastery"
+                });
+            if (masteryChoices !== null) panel.append(masteryChoices);
             const hitPointGains = renderHitPointGainEditors(
                 advancement?.occurrences ?? [],
                 routine,
                 false,
                 handlers.rules);
             if (hitPointGains !== null) panel.append(hitPointGains);
+            break;
+        }
+        case "background":
+            panel.append(renderCharacterBuilder(
+                characterId,
+                builder,
+                false,
+                handlers.structural,
+                { title: "Background", choices: ["background", "deity"] }));
+            break;
+        case "species":
+            panel.append(renderCharacterBuilder(
+                characterId,
+                builder,
+                false,
+                handlers.structural,
+                { title: "Species", choices: ["species", "subspecies"] }));
             break;
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");
@@ -508,7 +564,32 @@ function renderRulesChoices(
                 metadata.join(" • ")));
         }
 
-        if (choice.options.length > 0) {
+        const selectedElsewhere = new Set(
+            choices
+                .filter(other =>
+                    other.choiceKey !== choice.choiceKey
+                    && other.groupKey === choice.groupKey
+                    && other.selectedValue !== undefined)
+                .map(other => other.selectedValue!.trim().toLowerCase()));
+        const duplicateSelection = choice.selectedValue !== undefined
+            && selectedElsewhere.has(choice.selectedValue.trim().toLowerCase());
+        const sourceUnavailable = choice.state === "source-unavailable";
+
+        if (sourceUnavailable) {
+            card.append(createInlineState(
+                "Rules Core can not fully represent the legal options for this choice.",
+                "warning"));
+        } else if (duplicateSelection) {
+            card.append(createInlineState(
+                "This option is already selected in another choice in the same group. Choose a different option.",
+                "warning"));
+        } else if (choice.selectedValue !== undefined && choice.state !== "resolved") {
+            card.append(createInlineState(
+                "The current selection does not satisfy this rules choice. Choose a different option or clear it.",
+                "warning"));
+        }
+
+        if (choice.options.length > 0 && !sourceUnavailable) {
             const controls = createElement("div", "dd-build-choice__actions");
             const select = createElement("select", "dd-rule-chooser__input");
             select.setAttribute("aria-label", choice.displayName);
@@ -519,6 +600,9 @@ function renderRulesChoices(
             select.append(placeholder);
 
             for (const option of choice.options) {
+                if (selectedElsewhere.has(option.value.trim().toLowerCase())) {
+                    continue;
+                }
                 const element = createElement("option");
                 element.value = option.value;
                 element.textContent = option.displayName;
@@ -527,7 +611,7 @@ function renderRulesChoices(
                 }
                 select.append(element);
             }
-            select.value = choice.selectedValue ?? "";
+            select.value = duplicateSelection ? "" : choice.selectedValue ?? "";
 
             controls.append(
                 select,
@@ -548,7 +632,7 @@ function renderRulesChoices(
                     pending));
             }
             card.append(controls);
-        } else if (choice.selectedValue === undefined) {
+        } else if (!sourceUnavailable && choice.selectedValue === undefined) {
             card.append(createInlineState(
                 "Rules Core requires this choice but did not provide selectable options.",
                 "warning"));
