@@ -288,8 +288,11 @@ public sealed class CharacterAdvancementService(
         RulesCoreCharacterAdvancementEligibilityView? advancementEligibility = null;
         if (prestigeRequested && existing is null)
         {
-            advancementGateway ??= throw new RulesCoreGatewayException(
-                "The configured Rules Core gateway does not support advancement eligibility.");
+            if (advancementGateway is null)
+            {
+                throw new RulesCoreGatewayException(
+                    "The configured Rules Core gateway does not support advancement eligibility.");
+            }
             advancementEligibility = await advancementGateway.ResolveGlobalCharacterAdvancementEligibilityAsync(
                 new RulesCoreCharacterAdvancementEligibilityRequest(
                     conceptKey,
@@ -392,8 +395,11 @@ public sealed class CharacterAdvancementService(
                 subclassChoice = projection.Choices.FirstOrDefault(value =>
                     string.Equals(value.ChoiceKey, subclassChoice.ChoiceKey, StringComparison.Ordinal));
 
-                advancementGateway ??= throw new RulesCoreGatewayException(
-                    "The configured Rules Core gateway does not support advancement eligibility.");
+                if (advancementGateway is null)
+                {
+                    throw new RulesCoreGatewayException(
+                        "The configured Rules Core gateway does not support advancement eligibility.");
+                }
                 subclassEligibility = await advancementGateway.ResolveGlobalCharacterAdvancementEligibilityAsync(
                     new RulesCoreCharacterAdvancementEligibilityRequest(
                         requestedSubclass,
