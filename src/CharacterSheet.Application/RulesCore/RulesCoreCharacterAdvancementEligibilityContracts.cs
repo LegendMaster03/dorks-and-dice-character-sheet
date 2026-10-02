@@ -25,3 +25,15 @@ public sealed record RulesCoreCharacterAdvancementEligibilityView(
     RulesCoreCharacterAdvancementParentRequirementView? ParentClass,
     RulesCoreCharacterPrerequisiteView? Prerequisites,
     IReadOnlyList<RulesCoreCharacterProjectionConflictView> Conflicts);
+
+public interface IRulesCoreAdvancementGateway : IRulesCoreGateway
+{
+    Task<RulesCoreCharacterAdvancementEligibilityView> ResolveGlobalCharacterAdvancementEligibilityAsync(
+        RulesCoreCharacterAdvancementEligibilityRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<RulesCoreCharacterAdvancementEligibilityView> ResolveCampaignCharacterAdvancementEligibilityAsync(
+        Guid campaignId,
+        RulesCoreCharacterAdvancementEligibilityRequest request,
+        CancellationToken cancellationToken = default);
+}
