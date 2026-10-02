@@ -13,8 +13,8 @@ import { renderSourceAttributions } from "./source-attribution.js";
 import { getActiveAdvancementWorkflow } from "../features/advancement/advancement-workflow.js";
 import { renderCharacterAdvancementPanel } from "../features/advancement/advancement-panel.js";
 
-// Defensive UI/domain boundary only. Effective progression limits come from Rules Core.
-const MAX_SAFE_PROGRESSION_LEVEL = 1_000_000;
+// Normal Character Sheet progression is intentionally capped until the planned level-21+ epic update.
+const MAX_NORMAL_PROGRESSION_LEVEL = 20;
 
 export interface AdvancementProgressControl {
     value: number | null | undefined;
@@ -220,7 +220,7 @@ function renderLevelEditor(
     input.type = "number";
     input.step = "1";
     input.min = "1";
-    input.max = String(MAX_SAFE_PROGRESSION_LEVEL);
+    input.max = String(MAX_NORMAL_PROGRESSION_LEVEL);
     input.inputMode = "numeric";
     input.value = level === null || level === undefined ? "1" : String(level);
     input.setAttribute("aria-label", "Advancement level");
@@ -236,7 +236,7 @@ function renderLevelEditor(
             const parsed = parseAdvancementLevel(input.value);
             if (parsed === null) {
                 input.setCustomValidity(
-                    `Level must be a whole number from 1 through ${MAX_SAFE_PROGRESSION_LEVEL}.`);
+                    `Normal progression levels must be whole numbers from 1 through ${MAX_NORMAL_PROGRESSION_LEVEL}.`);
                 input.reportValidity();
                 return;
             }
@@ -265,7 +265,7 @@ function parseAdvancementLevel(value: string): number | null {
     const normalized = value.trim();
     if (!/^\d+$/.test(normalized)) return null;
     const parsed = Number(normalized);
-    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= MAX_SAFE_PROGRESSION_LEVEL
+    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= MAX_NORMAL_PROGRESSION_LEVEL
         ? parsed
         : null;
 }
