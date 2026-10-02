@@ -90,9 +90,9 @@ public sealed class CharacterFoundationalRuleSelection
 
 public sealed class CharacterAdvancementEntry
 {
-    // Technical safety ceiling, not a game-rule maximum. It prevents pathological
-    // allocations/projections while remaining far above official advancement ranges.
-    public const int MaxSupportedLevel = 1000;
+    // Technical safety ceiling, not a game-rule maximum. It prevents pathological values while
+    // remaining far above any ordinary tabletop progression. Rules Core owns rules-derived maxima.
+    public const int MaxSupportedLevel = 1_000_000;
     private CharacterAdvancementEntry()
     {
     }
