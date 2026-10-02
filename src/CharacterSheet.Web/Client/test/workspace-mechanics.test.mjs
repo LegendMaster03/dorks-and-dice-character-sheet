@@ -1347,7 +1347,7 @@ test("guided advancement exposes one raw hit-die outcome per owned Class level",
             }]
         }
     };
-    const openGuided = { open: true, activeSection: "advancement", returnSheetMode: "view" };
+    const openGuided = { open: true, activeSection: "class", returnSheetMode: "view" };
     const currentRoutine = routine([], {}, false);
     currentRoutine.state.hitPointGains = [{
         id: "gain-one",

@@ -590,14 +590,15 @@ test("guided setup reports only backend-known unresolved structural configuratio
     assert.deepEqual(
         states.map(section => [section.id, section.status]),
         [
+            ["class", "incomplete"],
+            ["background", "incomplete"],
             ["species", "incomplete"],
-            ["advancement", "incomplete"],
             ["abilities", "incomplete"],
             ["review", "available"]
         ]
     );
-    assert.match(states.find(section => section.id === "advancement").detail, /No Starting Class/);
-    assert.doesNotMatch(states.find(section => section.id === "advancement").detail, /Subclass.*required/i);
+    assert.match(states.find(section => section.id === "class").detail, /No Starting Class/);
+    assert.doesNotMatch(states.find(section => section.id === "class").detail, /Subclass.*required/i);
 });
 
 test("normal View rendering keeps structural editors out of the sheet until Edit Mode is active", () => {
