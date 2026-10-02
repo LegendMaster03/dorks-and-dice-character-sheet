@@ -36,6 +36,8 @@ import {
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
+    getGuidedBuilderChoiceSourceKeys,
+    getGuidedBuilderOwnedChoiceSourceKeys,
     getGuidedBuilderSectionStates,
     humanizeBuilderStatus,
     type SheetSection
@@ -408,16 +410,17 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Class", choices: ["startingClass", "subclass"] }));
-            const masteryChoices = renderRulesChoices(
+            const classChoices = renderRulesChoices(
                 mechanics,
                 routine,
                 handlers,
                 {
-                    choiceKinds: ["weapon-mastery"],
+                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "class"),
+                    excludedChoiceKinds: ["subclass"],
                     includeConflicts: false,
-                    heading: "Weapon Mastery"
+                    heading: "Class Choices"
                 });
-            if (masteryChoices !== null) panel.append(masteryChoices);
+            if (classChoices !== null) panel.append(classChoices);
             const hitPointGains = renderHitPointGainEditors(
                 advancement?.occurrences ?? [],
                 routine,
@@ -426,28 +429,50 @@ function renderGuidedBuilder(
             if (hitPointGains !== null) panel.append(hitPointGains);
             break;
         }
-        case "background":
+        case "background": {
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
                 { title: "Background", choices: ["background", "deity"] }));
+            const backgroundChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers,
+                {
+                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "background"),
+                    includeConflicts: false,
+                    heading: "Background Choices"
+                });
+            if (backgroundChoices !== null) panel.append(backgroundChoices);
             break;
-        case "species":
+        }
+        case "species": {
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
                 { title: "Species", choices: ["species", "subspecies"] }));
+            const speciesChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers,
+                {
+                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "species"),
+                    includeConflicts: false,
+                    heading: "Species Choices"
+                });
+            if (speciesChoices !== null) panel.append(speciesChoices);
             break;
+        }
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");
             abilities.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "Enter the base Ability Scores used for this Character. Complete any rule-required Ability choices below so effective scores and modifiers can be resolved."));
+                "Enter the base Ability Scores used for this Character. Source-owned Ability choices remain with the Class, Background, or Species that grants them."));
             const grid = createElement("div", "dd-core-stats__abilities dd-guided-builder__ability-grid");
             for (const definition of ABILITY_SCORE_DEFINITIONS) {
                 grid.append(renderAbilityScoreCard(
@@ -465,8 +490,9 @@ function renderGuidedBuilder(
                 handlers,
                 {
                     choiceKinds: ["ability-score", "ability-score-set"],
+                    excludedSourceConceptKeys: getGuidedBuilderOwnedChoiceSourceKeys(builder),
                     includeConflicts: false,
-                    heading: "Required Ability Choices"
+                    heading: "General Ability Choices"
                 });
             if (abilityChoices !== null) panel.append(abilityChoices);
             break;
@@ -504,6 +530,9 @@ function renderGuidedBuilder(
 
 interface RulesChoiceRenderOptions {
     choiceKinds?: readonly string[];
+    excludedChoiceKinds?: readonly string[];
+    sourceConceptKeys?: readonly string[];
+    excludedSourceConceptKeys?: readonly string[];
     includeConflicts?: boolean;
     heading?: string;
 }
@@ -518,8 +547,21 @@ function renderRulesChoices(
         return null;
     }
 
-    const choices = (mechanics.ruleChoices ?? []).filter(choice =>
-        options.choiceKinds === undefined || options.choiceKinds.includes(choice.kind));
+    const allChoices = mechanics.ruleChoices ?? [];
+    const sourceConceptKeys = options.sourceConceptKeys === undefined
+        ? null
+        : new Set(options.sourceConceptKeys);
+    const excludedSourceConceptKeys = options.excludedSourceConceptKeys === undefined
+        ? null
+        : new Set(options.excludedSourceConceptKeys);
+    const choices = allChoices
+        .filter(choice => options.choiceKinds === undefined || options.choiceKinds.includes(choice.kind))
+        .filter(choice => options.excludedChoiceKinds === undefined || !options.excludedChoiceKinds.includes(choice.kind))
+        .filter(choice => sourceConceptKeys === null
+            || (choice.sourceConceptKey !== undefined && sourceConceptKeys.has(choice.sourceConceptKey)))
+        .filter(choice => excludedSourceConceptKeys === null
+            || choice.sourceConceptKey === undefined
+            || !excludedSourceConceptKeys.has(choice.sourceConceptKey));
     const conflicts = options.includeConflicts === false
         ? []
         : mechanics.projectionConflicts ?? [];
@@ -552,20 +594,8 @@ function renderRulesChoices(
             "dd-build-choice__value",
             selectedLabel));
 
-        const metadata = [
-            choice.kind,
-            choice.sourceConceptKey
-        ].filter((value): value is string =>
-            value !== undefined && value.trim().length > 0);
-        if (metadata.length > 0) {
-            card.append(createElement(
-                "p",
-                "dd-build-choice__detail",
-                metadata.join(" • ")));
-        }
-
         const selectedElsewhere = new Set(
-            choices
+            allChoices
                 .filter(other =>
                     other.choiceKey !== choice.choiceKey
                     && other.groupKey === choice.groupKey
