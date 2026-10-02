@@ -98,7 +98,7 @@ export function renderFeaturesSection(
         }
     }
 
-    const masteryChoices = resolvedWeaponMasteries(ruleChoices);
+    const masteryChoices = resolveWeaponMasteries(ruleChoices);
     const masteries = createElement("section", "dd-feature-subsection");
     masteries.append(createElement("h3", "dd-feature-subsection__title", "Weapon Mastery"));
     if (masteryChoices.length === 0) {
@@ -108,21 +108,15 @@ export function renderFeaturesSection(
             "No weapon masteries are currently resolved."));
     } else {
         const list = createElement("div", "dd-feat-list");
-        const rendered = new Set<string>();
         for (const mastery of masteryChoices) {
-            const identity = mastery.value.trim().toLowerCase();
-            if (!rendered.add(identity)) {
-                continue;
-            }
-
             const item = createElement("article", "dd-feat");
             item.setAttribute("data-weapon-mastery", mastery.value);
             item.append(createElement("h4", "dd-feat__name", mastery.displayName));
-            if (mastery.sourceConceptKey !== undefined) {
+            if (mastery.sourceConceptKeys.length > 0) {
                 item.append(createElement(
                     "p",
                     "dd-routine-meta",
-                    mastery.sourceConceptKey));
+                    mastery.sourceConceptKeys.join(" • ")));
             }
             const sources = renderSourceAttributions(mastery.sourceAttributions, true);
             if (sources !== null) item.append(sources);
@@ -174,21 +168,17 @@ export function renderFeaturesSection(
     return content;
 }
 
-function resolvedWeaponMasteries(
-    ruleChoices: readonly CharacterRuleChoiceView[] | undefined
-): Array<{
+export interface ResolvedWeaponMasteryPresentation {
     value: string;
     displayName: string;
-    sourceConceptKey?: string;
+    sourceConceptKeys: readonly string[];
     sourceAttributions?: CharacterRuleChoiceView["sourceAttributions"];
-}> {
-    const seen = new Set<string>();
-    const result: Array<{
-        value: string;
-        displayName: string;
-        sourceConceptKey?: string;
-        sourceAttributions?: CharacterRuleChoiceView["sourceAttributions"];
-    }> = [];
+}
+
+export function resolveWeaponMasteries(
+    ruleChoices: readonly CharacterRuleChoiceView[] | undefined
+): ResolvedWeaponMasteryPresentation[] {
+    const byValue = new Map<string, ResolvedWeaponMasteryPresentation>();
 
     for (const choice of ruleChoices ?? []) {
         if (choice.kind !== "weapon-mastery"
@@ -197,21 +187,33 @@ function resolvedWeaponMasteries(
             continue;
         }
 
-        const identity = choice.selectedValue.trim().toLowerCase();
-        if (!seen.add(identity)) {
+        const value = choice.selectedValue.trim();
+        const identity = value.toLowerCase();
+        const option = choice.options.find(candidate => candidate.value === choice.selectedValue);
+        const existing = byValue.get(identity);
+        if (existing !== undefined) {
+            const sourceConceptKeys = new Set(existing.sourceConceptKeys);
+            if (choice.sourceConceptKey !== undefined) {
+                sourceConceptKeys.add(choice.sourceConceptKey);
+            }
+            byValue.set(identity, {
+                ...existing,
+                sourceConceptKeys: [...sourceConceptKeys]
+            });
             continue;
         }
 
-        const option = choice.options.find(value => value.value === choice.selectedValue);
-        result.push({
-            value: choice.selectedValue,
-            displayName: option?.displayName ?? choice.selectedValue,
-            sourceConceptKey: choice.sourceConceptKey,
+        byValue.set(identity, {
+            value,
+            displayName: option?.displayName ?? value,
+            sourceConceptKeys: choice.sourceConceptKey === undefined
+                ? []
+                : [choice.sourceConceptKey],
             sourceAttributions: choice.sourceAttributions
         });
     }
 
-    return result.sort((left, right) =>
+    return [...byValue.values()].sort((left, right) =>
         left.displayName.localeCompare(right.displayName, undefined, { sensitivity: "base" }));
 }
 
