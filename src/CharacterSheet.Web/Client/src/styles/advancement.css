@@ -95,6 +95,77 @@
     font-size: 0.78rem;
 }
 
+.dd-character-advancement {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    margin-bottom: var(--dd-sheet-space-4);
+}
+
+.dd-character-advancement__copy,
+.dd-character-advancement__summary {
+    margin: 0;
+    color: var(--dd-sheet-muted);
+    font-size: 0.82rem;
+}
+
+.dd-character-advancement__classes,
+.dd-character-advancement__actions,
+.dd-character-advancement__choice-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dd-sheet-space-2);
+}
+
+.dd-character-advancement__plan {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface-muted);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-character-advancement__plan-title {
+    margin: 0;
+    color: var(--dd-sheet-ink);
+    font-size: 1rem;
+}
+
+.dd-character-advancement__changes,
+.dd-character-advancement__requirements,
+.dd-character-advancement__hit-points,
+.dd-character-advancement__choice {
+    display: grid;
+    gap: var(--dd-sheet-space-2);
+}
+
+.dd-character-advancement__list {
+    display: grid;
+    gap: var(--dd-sheet-space-1);
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.dd-character-advancement__list-item {
+    color: var(--dd-sheet-ink);
+    font-size: 0.82rem;
+}
+
+.dd-character-advancement__list-item--blocked {
+    font-weight: 700;
+}
+
+.dd-character-advancement__choice {
+    padding: var(--dd-sheet-space-2);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+}
+
+.dd-character-advancement__chooser {
+    margin-top: 0;
+}
+
 @media (max-width: 720px) {
     .dd-advancement-overview {
         margin-right: var(--dd-sheet-space-3);
@@ -104,6 +175,11 @@
     .dd-advancement-entry__heading {
         display: grid;
     }
-}
 
+    .dd-character-advancement__classes,
+    .dd-character-advancement__actions,
+    .dd-character-advancement__choice-options {
+        display: grid;
+    }
+}
 
