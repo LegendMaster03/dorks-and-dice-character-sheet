@@ -21,7 +21,10 @@ export interface StructuralCharacterHandlers extends CharacterBuilderHandlers {
 }
 
 export interface PlayerAdvancementHandlers {
-    previewExistingClass(occurrenceId: string): void;
+    open(): void;
+    close(): void;
+    backToSelection(): void;
+    previewExistingProgression(occurrenceId: string): void;
     openCandidateChooser(target: AdvancementCandidateTarget): void;
     closeCandidateChooser(): void;
     searchCandidates(target: AdvancementCandidateTarget, query: string): void;
@@ -29,7 +32,6 @@ export interface PlayerAdvancementHandlers {
     reviewHitPointGain(hitDieValue: number): void;
     resolveChoice(choiceKey: string, value: string): void;
     apply(): void;
-    cancel(): void;
 }
 
 export interface RoutineCharacterHandlers {
