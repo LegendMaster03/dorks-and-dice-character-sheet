@@ -7,7 +7,6 @@ import {
     type SheetMode
 } from "../app-state.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
-import type { CharacterBuilderHandlers } from "./builder.js";
 import { renderCharacterBuilder } from "./builder.js";
 import {
     createCompactAdvancementSummary,
@@ -250,8 +249,9 @@ export function renderCharacterWorkspace(
         shell.append(renderCharacterEditorOverlay(
             character.characterId,
             builder,
-            handlers.structural,
-            handlers.leaveEditMode));
+            routine,
+            mechanics,
+            handlers));
     }
     if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
         shell.append(renderHarvestingCraftingOverlay(
@@ -323,8 +323,9 @@ function renderModeControls(
 function renderCharacterEditorOverlay(
     characterId: string,
     builder: CharacterBuilderUiState,
-    handlers: CharacterBuilderHandlers,
-    close: () => void
+    routine: CharacterRoutineUiState,
+    mechanics: CharacterMechanicsView | null,
+    handlers: CharacterSheetHandlers
 ): HTMLElement {
     const overlay = createElement("div", "dd-character-editor-overlay");
     overlay.setAttribute("data-character-editor-overlay", "true");
@@ -339,10 +340,20 @@ function renderCharacterEditorOverlay(
     title.id = "dd-character-editor-title";
     header.append(
         title,
-        createButton("Done", "dd-button dd-button--ghost", close));
+        createButton("Done", "dd-button dd-button--ghost", handlers.leaveEditMode));
 
     const body = createElement("div", "dd-character-editor-surface__body");
-    body.append(renderCharacterBuilder(characterId, builder, false, handlers));
+    body.append(renderCharacterBuilder(characterId, builder, false, handlers.structural));
+    const masteryChoices = renderRulesChoices(
+        mechanics,
+        routine,
+        handlers,
+        {
+            choiceKinds: ["weapon-mastery"],
+            includeConflicts: false,
+            heading: "Weapon Mastery"
+        });
+    if (masteryChoices !== null) body.append(masteryChoices);
     surface.append(header, body);
     overlay.append(surface);
     return overlay;
