@@ -1,5 +1,8 @@
 import type { CharacterBuilderUiState } from "../../app-state.js";
-import type { CharacterFeatureView } from "../../ui/character-mechanics.js";
+import type {
+    CharacterFeatureView,
+    CharacterRuleChoiceView
+} from "../../ui/character-mechanics.js";
 import { renderSourceAttributions } from "../../ui/source-attribution.js";
 import {
     createButton,
@@ -17,6 +20,7 @@ export function renderFeaturesSection(
     structuralEditing: boolean,
     readOnly: boolean,
     projectedFeatures: readonly CharacterFeatureView[] | undefined,
+    ruleChoices: readonly CharacterRuleChoiceView[] | undefined,
     handlers: FeatCharacterHandlers
 ): HTMLElement {
     const content = createElement("div", "dd-feature-sections");
@@ -94,6 +98,33 @@ export function renderFeaturesSection(
         }
     }
 
+    const masteryChoices = resolvedWeaponMasteries(ruleChoices);
+    const masteries = createElement("section", "dd-feature-subsection");
+    masteries.append(createElement("h3", "dd-feature-subsection__title", "Weapon Mastery"));
+    if (masteryChoices.length === 0) {
+        masteries.append(createElement(
+            "p",
+            "dd-routine-empty",
+            "No weapon masteries are currently resolved."));
+    } else {
+        const list = createElement("div", "dd-feat-list");
+        for (const mastery of masteryChoices) {
+            const item = createElement("article", "dd-feat");
+            item.setAttribute("data-weapon-mastery", mastery.value);
+            item.append(createElement("h4", "dd-feat__name", mastery.displayName));
+            if (mastery.sourceConceptKey !== undefined) {
+                item.append(createElement(
+                    "p",
+                    "dd-routine-meta",
+                    mastery.sourceConceptKey));
+            }
+            const sources = renderSourceAttributions(mastery.sourceAttributions, true);
+            if (sources !== null) item.append(sources);
+            list.append(item);
+        }
+        masteries.append(list);
+    }
+
     const other = createElement("section", "dd-feature-subsection");
     other.append(createElement("h3", "dd-feature-subsection__title", "Other Features & Traits"));
     if (projectedFeatures === undefined) {
@@ -133,8 +164,49 @@ export function renderFeaturesSection(
         }
         other.append(list);
     }
-    content.append(feats, other);
+    content.append(feats, masteries, other);
     return content;
+}
+
+function resolvedWeaponMasteries(
+    ruleChoices: readonly CharacterRuleChoiceView[] | undefined
+): Array<{
+    value: string;
+    displayName: string;
+    sourceConceptKey?: string;
+    sourceAttributions?: CharacterRuleChoiceView["sourceAttributions"];
+}> {
+    const seen = new Set<string>();
+    const result: Array<{
+        value: string;
+        displayName: string;
+        sourceConceptKey?: string;
+        sourceAttributions?: CharacterRuleChoiceView["sourceAttributions"];
+    }> = [];
+
+    for (const choice of ruleChoices ?? []) {
+        if (choice.kind !== "weapon-mastery"
+            || choice.state !== "resolved"
+            || choice.selectedValue === undefined) {
+            continue;
+        }
+
+        const option = choice.options.find(value => value.value === choice.selectedValue);
+        const identity = option?.conceptKey ?? option?.value ?? choice.selectedValue;
+        if (!seen.add(identity.toLowerCase())) {
+            continue;
+        }
+
+        result.push({
+            value: option?.value ?? choice.selectedValue,
+            displayName: option?.displayName ?? choice.selectedValue,
+            sourceConceptKey: choice.sourceConceptKey,
+            sourceAttributions: choice.sourceAttributions
+        });
+    }
+
+    return result.sort((left, right) =>
+        left.displayName.localeCompare(right.displayName, undefined, { sensitivity: "base" }));
 }
 
 function renderFeatChooser(
@@ -196,4 +268,3 @@ function renderFeatChooser(
     section.append(results);
     return section;
 }
-
