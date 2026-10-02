@@ -133,7 +133,7 @@ const routine = {
 
 const guidedBuilder = {
     open: true,
-    activeSection: "advancement",
+    activeSection: "class",
     returnSheetMode: "view"
 };
 

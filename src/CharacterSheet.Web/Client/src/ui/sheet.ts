@@ -90,7 +90,7 @@ export function renderCharacterWorkspace(
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = guidedBuilder.open
             && editable
-            && guidedBuilder.activeSection === "advancement";
+            && guidedBuilder.activeSection === "class";
         shell.append(renderAdvancementDetails(
             advancement,
             builder,
@@ -401,21 +401,13 @@ function renderGuidedBuilder(
     panel.setAttribute("data-guided-builder-active-section", guidedBuilder.activeSection);
 
     switch (guidedBuilder.activeSection) {
-        case "species":
+        case "class": {
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
-                { title: "Identity", choices: ["species", "subspecies", "background", "deity"] }));
-            break;
-        case "advancement": {
-            panel.append(renderCharacterBuilder(
-                characterId,
-                builder,
-                false,
-                handlers.structural,
-                { title: "Advancement", choices: ["startingClass", "subclass"] }));
+                { title: "Class", choices: ["startingClass", "subclass"] }));
             const masteryChoices = renderRulesChoices(
                 mechanics,
                 routine,
@@ -434,6 +426,22 @@ function renderGuidedBuilder(
             if (hitPointGains !== null) panel.append(hitPointGains);
             break;
         }
+        case "background":
+            panel.append(renderCharacterBuilder(
+                characterId,
+                builder,
+                false,
+                handlers.structural,
+                { title: "Background", choices: ["background", "deity"] }));
+            break;
+        case "species":
+            panel.append(renderCharacterBuilder(
+                characterId,
+                builder,
+                false,
+                handlers.structural,
+                { title: "Species", choices: ["species", "subspecies"] }));
+            break;
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");
             abilities.append(createElement(
