@@ -41,9 +41,15 @@ export interface GuidedEquipmentChoiceView {
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
+export interface GuidedEquipmentConflictView {
+    conflictKey: string;
+    message: string;
+}
+
 export interface GuidedStartingEquipmentView {
     grants: readonly GuidedEquipmentItemView[];
     choices: readonly GuidedEquipmentChoiceView[];
+    conflicts: readonly GuidedEquipmentConflictView[];
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
@@ -63,10 +69,14 @@ export function projectGuidedStartingEquipment(
         STARTING_EQUIPMENT_GRANT_KINDS.has(grant.kind));
     const ruleChoices = (mechanics.ruleChoices ?? []).filter(choice =>
         choice.kind === "starting-equipment");
-    const hasStartingEquipmentConflict = (mechanics.projectionConflicts ?? []).some(conflict =>
-        conflict.conflictKey.includes("starting-equipment"));
+    const conflicts = (mechanics.projectionConflicts ?? [])
+        .filter(conflict => conflict.conflictKey.includes("starting-equipment"))
+        .map(conflict => ({
+            conflictKey: conflict.conflictKey,
+            message: conflict.message
+        }));
 
-    if (rawGrants.length === 0 && ruleChoices.length === 0 && !hasStartingEquipmentConflict) {
+    if (rawGrants.length === 0 && ruleChoices.length === 0 && conflicts.length === 0) {
         return null;
     }
 
@@ -110,7 +120,13 @@ export function projectGuidedStartingEquipment(
         options: choice.options.map(option => ({
             value: option.value,
             displayName: option.displayName,
-            items: []
+            items: option.conceptKey === undefined
+                ? []
+                : [{
+                    conceptKey: option.conceptKey,
+                    displayName: option.displayName,
+                    quantity: 1
+                }]
         })),
         selectedValue: choice.selectedValue,
         sourceAttributions: choice.sourceAttributions
@@ -123,6 +139,7 @@ export function projectGuidedStartingEquipment(
         grants: [...grouped.values()].sort((left, right) =>
             left.displayName.localeCompare(right.displayName)),
         choices,
+        conflicts,
         sourceAttributions: sourceAttributions.length === 0 ? undefined : sourceAttributions
     };
 }
@@ -144,7 +161,7 @@ export function renderGuidedStartingEquipment(
     }
 
     if (equipment.choices.length === 0) {
-        if (equipment.grants.length === 0) {
+        if (equipment.grants.length === 0 && equipment.conflicts.length === 0) {
             section.append(createInlineState(
                 "No starting equipment grants or choices are required.",
                 "neutral"));
@@ -155,6 +172,20 @@ export function renderGuidedStartingEquipment(
             choices.append(renderEquipmentChoice(choice, handlers, pending));
         }
         section.append(choices);
+    }
+
+    if (equipment.conflicts.length > 0) {
+        const conflicts = createElement("section", "dd-guided-builder__conflicts");
+        conflicts.append(createElement(
+            "h3",
+            "dd-guided-builder__subheading",
+            "Starting Equipment Conflicts"));
+        for (const conflict of equipment.conflicts) {
+            const item = createInlineState(conflict.message, "warning");
+            item.setAttribute("data-rule-conflict-key", conflict.conflictKey);
+            conflicts.append(item);
+        }
+        section.append(conflicts);
     }
 
     const sources = renderSourceAttributions(equipment.sourceAttributions, true);
