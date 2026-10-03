@@ -299,7 +299,7 @@ test("ordinary advancement uses a dedicated floating workspace instead of raw le
     assert.match(panel, /Qualify for a Prestige Class/);
     assert.match(panel, /What will change/);
     assert.match(panel, /Apply Advancement/);
-    assert.match(panel, /Level 21\+ progression is reserved for the planned Epic advancement update/);
+    assert.doesNotMatch(panel, /Save Level|data-advancement-level-editor/);
 
     assert.match(css, /\.dd-character-advancement-overlay\s*\{[\s\S]*position:\s*fixed/);
     assert.match(css, /\.dd-character-advancement-surface\s*\{[\s\S]*width:\s*min\(78rem, 100%\)/);
