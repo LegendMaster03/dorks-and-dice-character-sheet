@@ -18,6 +18,10 @@ import {
     partitionCompetencyCollection,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
+import {
+    projectGuidedStartingEquipment,
+    renderGuidedStartingEquipment
+} from "./guided-equipment.js";
 import { renderGuidedSourceFeatures } from "./guided-source-features.js";
 import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
@@ -384,7 +388,25 @@ function renderGuidedBuilder(
             "dd-guided-builder__intro",
             "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
 
-    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
+    const startingEquipment = projectGuidedStartingEquipment(mechanics);
+    const hasStartingEquipment = startingEquipment !== null
+        && (startingEquipment.grants.length > 0 || startingEquipment.choices.length > 0);
+    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics).map(section => {
+        if (section.id !== "equipment" || !hasStartingEquipment || startingEquipment === null) {
+            return section;
+        }
+        const unresolvedChoices = startingEquipment.choices.filter(choice =>
+            choice.required && choice.state !== "resolved");
+        return {
+            ...section,
+            status: unresolvedChoices.length === 0 ? "resolved" as const : "incomplete" as const,
+            detail: unresolvedChoices.length === 0
+                ? "Starting equipment grants and required choices are resolved."
+                : unresolvedChoices.length === 1
+                    ? "1 required starting-equipment choice remains."
+                    : `${unresolvedChoices.length} required starting-equipment choices remain.`
+        };
+    });
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const [index, section] of sectionStates.entries()) {
@@ -427,7 +449,7 @@ function renderGuidedBuilder(
                 handlers,
                 {
                     sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "class"),
-                    excludedChoiceKinds: ["subclass"],
+                    excludedChoiceKinds: ["subclass", "starting-equipment"],
                     includeConflicts: false,
                     heading: "Class Choices"
                 });
@@ -458,6 +480,7 @@ function renderGuidedBuilder(
                 handlers,
                 {
                     sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "background"),
+                    excludedChoiceKinds: ["starting-equipment"],
                     includeConflicts: false,
                     heading: "Background Choices"
                 });
@@ -519,16 +542,25 @@ function renderGuidedBuilder(
             break;
         }
         case "equipment": {
-            const equipment = createSectionCard("Starting Equipment", "dd-guided-builder__equipment");
-            equipment.append(
-                createElement(
-                    "p",
-                    "dd-guided-builder__section-copy",
-                    "This step is staged for rule-guided starting equipment. It will be enabled when Rules Core exposes the Character's starting-equipment grants and choices."),
-                createInlineState(
-                    "Starting equipment is not available in Guided Setup yet. General inventory remains available on the Character Sheet.",
-                    "warning"));
-            panel.append(equipment);
+            if (hasStartingEquipment && startingEquipment !== null) {
+                const pending = routine.mutation?.kind === "rules-input-update"
+                    || routine.mutation?.kind === "rules-input-delete";
+                panel.append(renderGuidedStartingEquipment(
+                    startingEquipment,
+                    { selectChoice: handlers.rules.setChoice },
+                    pending));
+            } else {
+                const equipment = createSectionCard("Starting Equipment", "dd-guided-builder__equipment");
+                equipment.append(
+                    createElement(
+                        "p",
+                        "dd-guided-builder__section-copy",
+                        "This step is staged for rule-guided starting equipment. It becomes available when Rules Core projects starting-equipment grants or choices for this Character."),
+                    createInlineState(
+                        "Starting equipment is not available in Guided Setup yet. General inventory remains available on the Character Sheet.",
+                        "warning"));
+                panel.append(equipment);
+            }
             break;
         }
         case "review": {
@@ -551,7 +583,10 @@ function renderGuidedBuilder(
             const rulesChoices = renderRulesChoices(
                 mechanics,
                 routine,
-                handlers);
+                handlers,
+                {
+                    excludedChoiceKinds: ["starting-class", "subclass", "starting-equipment"]
+                });
             if (rulesChoices !== null) review.append(rulesChoices);
             const nextSteps = createElement("div", "dd-build-choice__actions");
             const viewSheet = createButton(
