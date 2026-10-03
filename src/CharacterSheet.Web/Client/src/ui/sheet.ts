@@ -472,7 +472,7 @@ function renderGuidedBuilder(
             abilities.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "Enter the base Ability Scores used for this Character. Source-owned Ability choices remain with the Class, Background, or Species that grants them."));
+                "Enter the base Ability Scores used for this Character. Ability choices granted by your Class, Background, or Species appear in those sections."));
             const grid = createElement("div", "dd-core-stats__abilities dd-guided-builder__ability-grid");
             for (const definition of ABILITY_SCORE_DEFINITIONS) {
                 grid.append(renderAbilityScoreCard(
@@ -492,7 +492,7 @@ function renderGuidedBuilder(
                     choiceKinds: ["ability-score", "ability-score-set"],
                     excludedSourceConceptKeys: getGuidedBuilderOwnedChoiceSourceKeys(builder),
                     includeConflicts: false,
-                    heading: "General Ability Choices"
+                    heading: "Required Ability Choices"
                 });
             if (abilityChoices !== null) panel.append(abilityChoices);
             break;
