@@ -14,9 +14,23 @@ export interface RulesCoreCharacterAttackResolutionView {
     targetStateKeys: readonly string[];
 }
 
+export interface RulesCoreCharacterMechanicContributionContextView {
+    contributionKey: string;
+    label: string;
+    numericValue?: number | null;
+    textValue?: string | null;
+}
+
 export interface RulesCoreCharacterResolvedMechanicContextView {
     mechanicKey: string;
+    kind?: string;
     displayName: string;
+    state?: string;
+    numericValue?: number | null;
+    textValue?: string | null;
+    unit?: string | null;
+    requiredRolls?: readonly string[];
+    contributions?: readonly RulesCoreCharacterMechanicContributionContextView[];
     help?: RulesCoreContextualHelpView | null;
 }
 
