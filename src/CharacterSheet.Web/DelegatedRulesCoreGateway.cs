@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -253,72 +254,120 @@ public sealed class DelegatedRulesCoreGateway(
         CancellationToken cancellationToken)
         where T : class
     {
-        var (capability, delegationPrefix) = GetDelegation();
-        using var request = new HttpRequestMessage(method, $"{delegationPrefix}{targetPath}")
+        var timingContext = httpContextAccessor.HttpContext;
+        if (timingContext is not null)
         {
-            Content = content
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", capability);
-        request.Headers.Accept.ParseAdd("application/json");
+            CharacterSheetServerTiming.EnsureRequestTiming(timingContext);
+        }
 
-        HttpResponseMessage response;
+        var dependencyTimer = Stopwatch.StartNew();
+        var timingOutcome = "failed";
+
         try
         {
-            response = await httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
-        }
-        catch (HttpRequestException exception)
-        {
-            logger.LogWarning(exception, "Delegated Rules Core request failed before a response was received.");
-            throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
-        }
-        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(exception, "Delegated Rules Core request timed out.");
-            throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
-        }
-
-        using (response)
-        {
-            if (allowUnavailableRule
-                && response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
-            {
-                return null;
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                logger.LogWarning(
-                    "Delegated Rules Core request {Method} {Path} returned status {StatusCode}.",
-                    method,
-                    targetPath,
-                    (int)response.StatusCode);
-                var message = response.StatusCode == HttpStatusCode.BadRequest
-                    ? "Rules Core rejected a mechanics evaluation request."
-                    : "Rules Core is unavailable for this projection.";
-                throw new RulesCoreGatewayException(message);
-            }
-
+            string capability;
+            string delegationPrefix;
             try
             {
-                var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
-                return value ?? throw new RulesCoreGatewayException(
-                    "Rules Core returned an empty response.");
+                (capability, delegationPrefix) = GetDelegation();
             }
-            catch (Exception exception) when (exception is JsonException
-                or NotSupportedException
-                or HttpRequestException)
+            catch (RulesCoreGatewayException)
             {
-                logger.LogWarning(exception, "Rules Core returned an unreadable projection response.");
-                throw new RulesCoreGatewayException("Rules Core returned an invalid response.", exception);
+                timingOutcome = "delegation-unavailable";
+                throw;
             }
-            catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+
+            using var request = new HttpRequestMessage(method, $"{delegationPrefix}{targetPath}")
             {
-                logger.LogWarning(exception, "Rules Core response reading timed out.");
+                Content = content
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", capability);
+            request.Headers.Accept.ParseAdd("application/json");
+
+            HttpResponseMessage response;
+            try
+            {
+                response = await httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken);
+            }
+            catch (HttpRequestException exception)
+            {
+                timingOutcome = "transport-failed";
+                logger.LogWarning(exception, "Delegated Rules Core request failed before a response was received.");
                 throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
             }
+            catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                timingOutcome = "transport-failed";
+                logger.LogWarning(exception, "Delegated Rules Core request timed out.");
+                throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
+            }
+
+            using (response)
+            {
+                CharacterSheetServerTiming.AppendDownstreamRulesCoreMetrics(timingContext, response);
+
+                if (allowUnavailableRule
+                    && response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
+                {
+                    timingOutcome = "unavailable";
+                    return null;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    timingOutcome = response.StatusCode == HttpStatusCode.BadRequest
+                        ? "rejected"
+                        : "downstream-error";
+                    logger.LogWarning(
+                        "Delegated Rules Core request {Method} {Path} returned status {StatusCode}.",
+                        method,
+                        targetPath,
+                        (int)response.StatusCode);
+                    var message = response.StatusCode == HttpStatusCode.BadRequest
+                        ? "Rules Core rejected a mechanics evaluation request."
+                        : "Rules Core is unavailable for this projection.";
+                    throw new RulesCoreGatewayException(message);
+                }
+
+                try
+                {
+                    var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+                    if (value is null)
+                    {
+                        timingOutcome = "invalid-response";
+                        throw new RulesCoreGatewayException("Rules Core returned an empty response.");
+                    }
+
+                    timingOutcome = "ok";
+                    return value;
+                }
+                catch (Exception exception) when (exception is JsonException
+                    or NotSupportedException
+                    or HttpRequestException)
+                {
+                    timingOutcome = "invalid-response";
+                    logger.LogWarning(exception, "Rules Core returned an unreadable projection response.");
+                    throw new RulesCoreGatewayException("Rules Core returned an invalid response.", exception);
+                }
+                catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    timingOutcome = "transport-failed";
+                    logger.LogWarning(exception, "Rules Core response reading timed out.");
+                    throw new RulesCoreGatewayException("Rules Core transport is unavailable.", exception);
+                }
+            }
+        }
+        finally
+        {
+            dependencyTimer.Stop();
+            CharacterSheetServerTiming.AppendDuration(
+                timingContext,
+                CharacterSheetServerTiming.RulesCoreDependencyMetricName,
+                dependencyTimer.Elapsed.TotalMilliseconds,
+                timingOutcome);
         }
     }
 

@@ -69,6 +69,42 @@ public sealed class DelegatedRulesCoreGatewayTests
     }
 
     [Fact]
+    public async Task ExposesRulesCoreDependencyTimingAndPropagatesOnlyRulesCoreMetrics()
+    {
+        var handler = new RecordingHandler(_ =>
+        {
+            var response = Ok(Rule("feat:alert", "feat", "Alert"));
+            response.Headers.TryAddWithoutValidation(
+                CharacterSheetServerTiming.HeaderName,
+                "rules-core-auth;dur=1.2, platform-site;dur=9.9, rules-core;dur=2.4");
+            return response;
+        });
+        var httpContext = await AuthenticatedContextAsync(withDelegation: true);
+        var gateway = new DelegatedRulesCoreGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+            new HttpContextAccessor { HttpContext = httpContext },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+
+        var resolved = await gateway.ResolveGlobalRulesAsync(["feat:alert"]);
+        Assert.Single(resolved);
+
+        await httpContext.Response.StartAsync();
+        var timing = string.Join(
+            ", ",
+            httpContext.Response.Headers[CharacterSheetServerTiming.HeaderName].ToArray());
+
+        Assert.Contains("character-sheet-auth;dur=", timing, StringComparison.Ordinal);
+        Assert.Contains(
+            "character-sheet-rules-core;desc=\"ok\";dur=",
+            timing,
+            StringComparison.Ordinal);
+        Assert.Contains("rules-core-auth;dur=1.2", timing, StringComparison.Ordinal);
+        Assert.Contains("rules-core;dur=2.4", timing, StringComparison.Ordinal);
+        Assert.Contains("character-sheet;dur=", timing, StringComparison.Ordinal);
+        Assert.DoesNotContain("platform-site", timing, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MissingDelegationCapabilityFailsBeforeAnyRulesCoreRequest()
     {
         var handler = new RecordingHandler(_ =>
@@ -84,6 +120,13 @@ public sealed class DelegatedRulesCoreGatewayTests
                 new RulesCoreCharacterRulesProjectionRequest()));
 
         Assert.Empty(handler.Requests);
+        var timing = string.Join(
+            ", ",
+            httpContext.Response.Headers[CharacterSheetServerTiming.HeaderName].ToArray());
+        Assert.Contains(
+            "character-sheet-rules-core;desc=\"delegation-unavailable\";dur=",
+            timing,
+            StringComparison.Ordinal);
     }
 
     private static async Task<DefaultHttpContext> AuthenticatedContextAsync(bool withDelegation)

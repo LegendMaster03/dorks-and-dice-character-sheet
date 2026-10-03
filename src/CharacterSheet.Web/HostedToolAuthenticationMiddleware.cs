@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using CharacterSheet.Application.Hosting;
 
@@ -11,6 +12,8 @@ public sealed class HostedToolAuthenticationMiddleware(RequestDelegate next)
         HttpContext httpContext,
         IToolHostAuthenticationClient authenticationClient)
     {
+        CharacterSheetServerTiming.EnsureRequestTiming(httpContext);
+
         var tickets = httpContext.Request.Headers[ToolHostAuthenticationHeaders.Ticket];
         var introspectionPaths = httpContext.Request.Headers[ToolHostAuthenticationHeaders.IntrospectionPath];
         var hasTicketHeader = tickets.Count > 0;
@@ -35,6 +38,7 @@ public sealed class HostedToolAuthenticationMiddleware(RequestDelegate next)
         }
 
         ToolHostAuthenticationContext? authenticationContext;
+        var authenticationTimer = Stopwatch.StartNew();
         try
         {
             authenticationContext = await authenticationClient.RedeemAsync(
@@ -66,6 +70,14 @@ public sealed class HostedToolAuthenticationMiddleware(RequestDelegate next)
         {
             httpContext.Response.StatusCode = StatusCodes.Status504GatewayTimeout;
             return;
+        }
+        finally
+        {
+            authenticationTimer.Stop();
+            CharacterSheetServerTiming.AppendDuration(
+                httpContext,
+                CharacterSheetServerTiming.AuthenticationMetricName,
+                authenticationTimer.Elapsed.TotalMilliseconds);
         }
 
         if (authenticationContext is null)
