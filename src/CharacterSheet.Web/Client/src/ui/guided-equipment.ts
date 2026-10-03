@@ -71,7 +71,6 @@ export interface GuidedStartingEquipmentView {
 
 export interface GuidedEquipmentHandlers {
     selectChoice(choiceKey: string, value: string): void;
-    setRoll(rollKey: string, value: number): void;
     materializeItems(): void;
 }
 
@@ -101,7 +100,7 @@ export function projectGuidedStartingEquipment(
 
     const storedRolls = new Map<string, number>();
     for (const input of rulesInputs) {
-        if ((input.kind !== "resource" && input.kind !== "integerFact")
+        if (input.kind !== "integerFact"
             || input.integerValue === null
             || !input.key.startsWith(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX)) {
             continue;
@@ -403,7 +402,11 @@ function renderEquipmentRoll(
                 return;
             }
             const value = Number(input.value);
-            if (Number.isInteger(value)) handlers.setRoll(roll.rollKey, value);
+            if (Number.isInteger(value)) {
+                handlers.selectChoice(
+                    toRulesCoreRuntimeRollStateKey(roll.rollKey),
+                    String(value));
+            }
         },
         pending);
     actions.append(input, save);
