@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createInitialState } from "../.test-dist/app-state.js";
+import { attachRulesCoreContext } from "../.test-dist/rules-core-context.js";
 import { getGuidedSourceFeatures } from "../.test-dist/ui/guided-source-features.js";
 import {
     getGuidedBuilderChoiceSourceKeys,
@@ -158,6 +159,70 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(sourceResolvedStates.find(section => section.id === "equipment").status, "unavailable");
 });
 
+test("starting-equipment choices and conflicts belong to Equipment rather than Class or Background status", () => {
+    const builder = readyBuilder();
+    const pendingEquipment = {
+        ruleChoices: [choice(
+            "choice.class-fighter.starting-equipment.0.0",
+            "starting-equipment",
+            "class:fighter")],
+        projectionConflicts: []
+    };
+    attachRulesCoreContext(pendingEquipment, {
+        grants: [{
+            grantKey: "grant.class-fighter.starting-equipment.fixed.item",
+            kind: "starting-equipment-item",
+            targetKey: "item:dagger",
+            displayName: "Dagger",
+            sourceConceptKey: "class:fighter"
+        }]
+    });
+
+    const pendingStates = getGuidedBuilderSectionStates(builder, pendingEquipment);
+    assert.equal(pendingStates.find(section => section.id === "class").status, "resolved");
+    assert.equal(pendingStates.find(section => section.id === "equipment").status, "incomplete");
+    assert.match(
+        pendingStates.find(section => section.id === "equipment").detail,
+        /1 required starting-equipment choice remains/);
+
+    const resolvedEquipment = {
+        ruleChoices: [{
+            ...pendingEquipment.ruleChoices[0],
+            state: "resolved",
+            selectedValue: "package-a"
+        }],
+        projectionConflicts: []
+    };
+    attachRulesCoreContext(resolvedEquipment, {
+        grants: [{
+            grantKey: "grant.class-fighter.starting-equipment.selected.item",
+            kind: "starting-equipment-item",
+            targetKey: "item:longsword",
+            displayName: "Longsword",
+            sourceConceptKey: "class:fighter"
+        }]
+    });
+    const resolvedStates = getGuidedBuilderSectionStates(builder, resolvedEquipment);
+    assert.equal(resolvedStates.find(section => section.id === "equipment").status, "resolved");
+
+    const conflictOnly = {
+        projectionConflicts: [{
+            conflictKey: "conflict.class:fighter.starting-equipment.item.0",
+            kind: "source-unavailable",
+            message: "Fighter: starting equipment can not be resolved.",
+            relatedMechanicKeys: [],
+            relatedConceptKeys: ["class:fighter"]
+        }]
+    };
+    attachRulesCoreContext(conflictOnly, { grants: [] });
+    const conflictStates = getGuidedBuilderSectionStates(builder, conflictOnly);
+    assert.equal(conflictStates.find(section => section.id === "class").status, "resolved");
+    assert.equal(conflictStates.find(section => section.id === "equipment").status, "incomplete");
+    assert.match(
+        conflictStates.find(section => section.id === "equipment").detail,
+        /starting-equipment Rules Core conflict/);
+});
+
 test("guided feature summaries follow explicit owning sources without name parsing", () => {
     const builder = readyBuilder();
     const mechanics = {
@@ -196,6 +261,7 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Class Features"/);
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Background Features"/);
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Species Traits"/);
+    assert.doesNotMatch(source, /getGuidedBuilderSectionStates\(builder, mechanics\)\.map/);
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });
 
