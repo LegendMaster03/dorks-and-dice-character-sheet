@@ -141,7 +141,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(states.find(section => section.id === "species").status, "incomplete");
     assert.equal(states.find(section => section.id === "abilities").status, "incomplete");
     assert.equal(states.find(section => section.id === "equipment").status, "unavailable");
-    assert.match(states.find(section => section.id === "equipment").detail, /not available from Rules Core yet/);
+    assert.match(states.find(section => section.id === "equipment").detail, /current Rules Core projection/);
     assert.match(states.find(section => section.id === "background").detail, /2 required Background choices remain/);
     assert.match(states.find(section => section.id === "species").detail, /1 required Species choice remains/);
     assert.match(states.find(section => section.id === "abilities").detail, /1 required Ability Score choice remains/);
@@ -190,13 +190,16 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     assert.match(source, /sourceConceptKeys:\s*getGuidedBuilderChoiceSourceKeys\(builder, "background"\)/);
     assert.match(source, /sourceConceptKeys:\s*getGuidedBuilderChoiceSourceKeys\(builder, "species"\)/);
     assert.match(source, /excludedSourceConceptKeys:\s*getGuidedBuilderOwnedChoiceSourceKeys\(builder\)/);
+    assert.match(source, /excludedChoiceKinds:\s*\["subclass", "starting-equipment"\]/);
+    assert.match(source, /excludedChoiceKinds:\s*\["starting-equipment"\]/);
+    assert.match(source, /excludedChoiceKinds:\s*\["starting-class", "subclass", "starting-equipment"\]/);
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Class Features"/);
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Background Features"/);
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Species Traits"/);
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });
 
-test("guided builder uses numbered steps, sequential navigation, a staged Equipment step, and a non-blocking sheet exit", async () => {
+test("guided builder uses numbered steps, sequential navigation, a Rules Core-backed Equipment step, and a non-blocking sheet exit", async () => {
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     const builderSource = await readFile(new URL("../src/ui/builder.ts", import.meta.url), "utf8");
 
@@ -205,6 +208,9 @@ test("guided builder uses numbered steps, sequential navigation, a staged Equipm
     assert.match(source, /createButton\([\s\S]*handlers\.selectGuidedBuilderSection\(section\.id\),\s*unavailable\)/);
     assert.match(source, /sectionStates\.slice\(activeIndex \+ 1\)\.find\(section => section\.status !== "unavailable"\)/);
     assert.match(source, /case "equipment":/);
+    assert.match(source, /projectGuidedStartingEquipment\(mechanics\)/);
+    assert.match(source, /renderGuidedStartingEquipment\(/);
+    assert.match(source, /handlers\.rules\.setChoice/);
     assert.match(source, /"Starting Equipment"/);
     assert.match(source, /not available in Guided Setup yet/);
     assert.match(source, /`Previous: \$\{previousSection\.label\}`/);
