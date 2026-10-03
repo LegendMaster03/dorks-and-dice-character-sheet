@@ -388,7 +388,9 @@ function renderGuidedBuilder(
             "dd-guided-builder__intro",
             "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
 
-    const startingEquipment = projectGuidedStartingEquipment(mechanics);
+    const startingEquipment = projectGuidedStartingEquipment(
+        mechanics,
+        routine.state?.rulesInputs ?? []);
     const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
@@ -527,10 +529,14 @@ function renderGuidedBuilder(
         case "equipment": {
             if (startingEquipment !== null) {
                 const pending = routine.mutation?.kind === "rules-input-update"
-                    || routine.mutation?.kind === "rules-input-delete";
+                    || routine.mutation?.kind === "rules-input-delete"
+                    || routine.mutation?.kind === "inventory-transaction";
                 panel.append(renderGuidedStartingEquipment(
                     startingEquipment,
-                    { selectChoice: handlers.rules.setChoice },
+                    {
+                        selectChoice: handlers.rules.setChoice,
+                        materializeItems: handlers.routine.materializeStartingEquipment
+                    },
                     pending));
             } else {
                 const equipment = createSectionCard("Starting Equipment", "dd-guided-builder__equipment");
