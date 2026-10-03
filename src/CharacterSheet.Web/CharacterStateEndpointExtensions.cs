@@ -1,4 +1,6 @@
 using CharacterSheet.Application.Characters;
+using CharacterSheet.Application.Persistence;
+using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Web;
@@ -14,6 +16,39 @@ public static class CharacterStateEndpointExtensions
             ToApiResult(
                 await service.GetAsync(characterId, cancellationToken),
                 mutating: false));
+
+        app.MapPost("/api/characters/{characterId:guid}/state/starting-equipment/apply", async (
+            Guid characterId,
+            CharacterBuildService buildService,
+            CharacterStateService stateService,
+            ICharacterStateStore stateStore,
+            IRulesCoreGateway rulesCore,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var service = new CharacterStartingEquipmentService(
+                    buildService,
+                    stateService,
+                    stateStore,
+                    rulesCore,
+                    timeProvider);
+                return ToApiResult(
+                    await service.ApplyAsync(characterId, cancellationToken),
+                    mutating: true);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { error = exception.Message });
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException
+                or OverflowException)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
 
         app.MapPut("/api/characters/{characterId:guid}/state/progression", async (
             Guid characterId,
