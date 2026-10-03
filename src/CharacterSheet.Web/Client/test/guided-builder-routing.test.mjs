@@ -140,6 +140,8 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(states.find(section => section.id === "background").status, "incomplete");
     assert.equal(states.find(section => section.id === "species").status, "incomplete");
     assert.equal(states.find(section => section.id === "abilities").status, "incomplete");
+    assert.equal(states.find(section => section.id === "equipment").status, "unavailable");
+    assert.match(states.find(section => section.id === "equipment").detail, /not available from Rules Core yet/);
     assert.match(states.find(section => section.id === "background").detail, /2 required Background choices remain/);
     assert.match(states.find(section => section.id === "species").detail, /1 required Species choice remains/);
     assert.match(states.find(section => section.id === "abilities").detail, /1 required Ability Score choice remains/);
@@ -153,6 +155,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(sourceResolvedStates.find(section => section.id === "background").status, "resolved");
     assert.equal(sourceResolvedStates.find(section => section.id === "species").status, "resolved");
     assert.equal(sourceResolvedStates.find(section => section.id === "abilities").status, "incomplete");
+    assert.equal(sourceResolvedStates.find(section => section.id === "equipment").status, "unavailable");
 });
 
 test("guided feature summaries follow explicit owning sources without name parsing", () => {
@@ -193,11 +196,17 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });
 
-test("guided builder uses numbered steps, sequential navigation, and a non-blocking sheet exit", async () => {
+test("guided builder uses numbered steps, sequential navigation, a staged Equipment step, and a non-blocking sheet exit", async () => {
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     const builderSource = await readFile(new URL("../src/ui/builder.ts", import.meta.url), "utf8");
 
     assert.match(source, /`\$\{index \+ 1\}\. \$\{section\.label\} · \$\{guidedStatusLabel\(section\.status\)\}`/);
+    assert.match(source, /const unavailable = section\.status === "unavailable"/);
+    assert.match(source, /createButton\([\s\S]*handlers\.selectGuidedBuilderSection\(section\.id\),\s*unavailable\)/);
+    assert.match(source, /sectionStates\.slice\(activeIndex \+ 1\)\.find\(section => section\.status !== "unavailable"\)/);
+    assert.match(source, /case "equipment":/);
+    assert.match(source, /"Starting Equipment"/);
+    assert.match(source, /not available in Guided Setup yet/);
     assert.match(source, /`Previous: \$\{previousSection\.label\}`/);
     assert.match(source, /`Next: \$\{nextSection\.label\}`/);
     assert.match(source, /"Review Character"/);
