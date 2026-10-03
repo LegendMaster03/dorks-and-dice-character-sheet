@@ -18,6 +18,7 @@ import {
     partitionCompetencyCollection,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
+import { renderGuidedSourceFeatures } from "./guided-source-features.js";
 import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
@@ -411,6 +412,11 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Class", choices: ["startingClass", "subclass"] }));
+            const classFeatures = renderGuidedSourceFeatures(
+                mechanics,
+                getGuidedBuilderChoiceSourceKeys(builder, "class"),
+                "Class Features");
+            if (classFeatures !== null) panel.append(classFeatures);
             const classChoices = renderRulesChoices(
                 mechanics,
                 routine,
@@ -437,6 +443,11 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Background", choices: ["background", "deity"] }));
+            const backgroundFeatures = renderGuidedSourceFeatures(
+                mechanics,
+                getGuidedBuilderChoiceSourceKeys(builder, "background"),
+                "Background Features");
+            if (backgroundFeatures !== null) panel.append(backgroundFeatures);
             const backgroundChoices = renderRulesChoices(
                 mechanics,
                 routine,
@@ -456,6 +467,11 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Species", choices: ["species", "subspecies"] }));
+            const speciesFeatures = renderGuidedSourceFeatures(
+                mechanics,
+                getGuidedBuilderChoiceSourceKeys(builder, "species"),
+                "Species Traits");
+            if (speciesFeatures !== null) panel.append(speciesFeatures);
             const speciesChoices = renderRulesChoices(
                 mechanics,
                 routine,
