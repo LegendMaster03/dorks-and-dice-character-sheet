@@ -25,9 +25,18 @@ export interface RulesCoreCharacterActionContextView {
     attackResolution?: RulesCoreCharacterAttackResolutionView | null;
 }
 
+export interface RulesCoreCharacterGrantContextView {
+    grantKey: string;
+    kind: string;
+    targetKey: string;
+    displayName: string;
+    sourceConceptKey?: string | null;
+}
+
 export interface RulesCoreCharacterProjectionContextView {
     mechanics?: readonly RulesCoreCharacterResolvedMechanicContextView[];
     actions?: readonly RulesCoreCharacterActionContextView[];
+    grants?: readonly RulesCoreCharacterGrantContextView[];
     helpTopics?: readonly RulesCoreContextualHelpView[] | null;
 }
 
