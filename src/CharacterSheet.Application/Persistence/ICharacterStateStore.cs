@@ -88,6 +88,14 @@ public interface ICharacterStateStore
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default);
 
+    Task<CharacterSheetRoot?> ApplyStartingEquipmentAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterInventoryAddition> additions,
+        IReadOnlyDictionary<string, long> currencyAdditions,
+        string fingerprint,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default);
+
     Task<CharacterSheetRoot?> UpdateInventoryItemOccurrenceAsync(
         Guid characterId,
         Guid occurrenceId,
