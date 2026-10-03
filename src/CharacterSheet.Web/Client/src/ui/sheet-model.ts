@@ -9,6 +9,7 @@ import { getStartingClassEntry, getStoredChoiceConceptKey } from "../builder-rul
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterMechanicsView } from "./character-mechanics.js";
+import { projectGuidedStartingEquipment } from "./guided-equipment.js";
 
 export type SheetSection = "actions" | "spells" | "inventory" | "features" | "details" | "notes";
 
@@ -148,6 +149,8 @@ export function getGuidedBuilderSectionStates(
     const ownedSourceKeys = new Set(getGuidedBuilderOwnedChoiceSourceKeys(builder));
     const ruleChoices = mechanics?.ruleChoices ?? [];
     const projectionConflicts = mechanics?.projectionConflicts ?? [];
+    const nonEquipmentConflicts = projectionConflicts.filter(conflict =>
+        !conflict.conflictKey.includes("starting-equipment"));
     const rulesVerificationAvailable = mechanics !== null;
 
     const pendingClassChoices = ruleChoices.filter(choice =>
@@ -166,9 +169,9 @@ export function getGuidedBuilderSectionStates(
         && choice.sourceConceptKey !== undefined
         && speciesSourceKeys.has(choice.sourceConceptKey));
 
-    const classHasConflict = hasRelatedProjectionConflict(projectionConflicts, classSourceKeys);
-    const backgroundHasConflict = hasRelatedProjectionConflict(projectionConflicts, backgroundSourceKeys);
-    const speciesHasConflict = hasRelatedProjectionConflict(projectionConflicts, speciesSourceKeys);
+    const classHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, classSourceKeys);
+    const backgroundHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, backgroundSourceKeys);
+    const speciesHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, speciesSourceKeys);
 
     const configuredAbilities = new Set(
         builder.build.baseAbilityScoreInputs.map(input => input.abilityKey)
@@ -230,6 +233,33 @@ export function getGuidedBuilderSectionStates(
         abilityDetail = "All base Ability Scores and required Ability Score choices are configured.";
     }
 
+    const startingEquipment = projectGuidedStartingEquipment(mechanics);
+    const pendingEquipmentChoices = startingEquipment?.choices.filter(choice =>
+        choice.state !== "resolved") ?? [];
+    const equipmentConflicts = projectionConflicts.filter(conflict =>
+        conflict.conflictKey.includes("starting-equipment"));
+    const equipmentAvailable = startingEquipment !== null;
+    const equipmentResolved = equipmentAvailable
+        && pendingEquipmentChoices.length === 0
+        && equipmentConflicts.length === 0;
+
+    let equipmentDetail: string;
+    if (!equipmentAvailable) {
+        equipmentDetail = "Starting equipment is not available from the current Rules Core projection.";
+    } else if (equipmentConflicts.length > 0) {
+        equipmentDetail = equipmentConflicts.length === 1
+            ? "Resolve the starting-equipment Rules Core conflict before this section is complete."
+            : `Resolve ${equipmentConflicts.length} starting-equipment Rules Core conflicts before this section is complete.`;
+    } else if (pendingEquipmentChoices.length > 0) {
+        equipmentDetail = pendingEquipmentChoices.length === 1
+            ? "1 required starting-equipment choice remains."
+            : `${pendingEquipmentChoices.length} required starting-equipment choices remain.`;
+    } else if (startingEquipment.choices.length === 0) {
+        equipmentDetail = "Starting equipment grants are resolved; no player choices are required.";
+    } else {
+        equipmentDetail = "Starting equipment grants and required choices are resolved.";
+    }
+
     return [
         {
             id: "class",
@@ -258,8 +288,10 @@ export function getGuidedBuilderSectionStates(
         {
             id: "equipment",
             label: "Equipment",
-            status: "unavailable",
-            detail: "Starting equipment choices are not available from Rules Core yet."
+            status: equipmentAvailable
+                ? (equipmentResolved ? "resolved" : "incomplete")
+                : "unavailable",
+            detail: equipmentDetail
         },
         {
             id: "review",
