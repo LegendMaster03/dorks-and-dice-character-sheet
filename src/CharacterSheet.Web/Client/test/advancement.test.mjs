@@ -181,3 +181,13 @@ test("advancement type does not enumerate only current advancement kinds or make
     assert.doesNotMatch(source, /kind:\s*"class"\s*\|/);
     assert.doesNotMatch(source, /Acquisitions Incorporated|Cartographer|PositionProgression|positionRank/);
 });
+
+test("player advancement delegates progression limits to effective rules instead of imposing level 20", async () => {
+    const source = await readFile(
+        new URL("../src/features/advancement/advancement-panel.ts", import.meta.url),
+        "utf8");
+    assert.doesNotMatch(source, /MAX_NORMAL_CHARACTER_LEVEL|epicBoundary|level 20|Level 21\+/i);
+    assert.match(source, /handlers\.previewExistingProgression\(entry\.id\)/);
+    assert.match(source, /handlers\.openCandidateChooser\("class"\)/);
+    assert.match(source, /handlers\.openCandidateChooser\("prestigeClass"\)/);
+});
