@@ -4,10 +4,10 @@ using CharacterSheet.Application.RulesCore;
 namespace CharacterSheet.Application.Characters;
 
 /// <summary>
-/// Materializes resolved Rules Core starting-equipment item grants into ordinary Character-owned
-/// inventory. This is an acquisition boundary, not a live mirror: inventory remains ordinary
-/// mutable Character state after materialization. Stable Core grant provenance makes explicit
-/// re-application idempotent and isolates generated occurrences from identical manual inventory.
+/// Materializes resolved Rules Core starting-equipment grants into ordinary Character-owned
+/// inventory and currency state. This is an acquisition boundary, not a live mirror: materialized
+/// state remains ordinary mutable Character state. Stable Core grant provenance makes explicit
+/// re-application idempotent and isolates generated state from identical manual acquisitions.
 /// </summary>
 public sealed class CharacterStartingEquipmentService(
     CharacterBuildService buildService,
@@ -20,6 +20,7 @@ public sealed class CharacterStartingEquipmentService(
     private const string MechanicKind = "starting-equipment";
     private const string ItemGrantKind = "starting-equipment-item";
     private const string CustomGrantKind = "starting-equipment-custom";
+    private const string CurrencyGrantKind = "starting-equipment-currency";
 
     public async Task<CharacterStateResult> MaterializeInventoryAsync(
         Guid characterId,
@@ -69,8 +70,8 @@ public sealed class CharacterStartingEquipmentService(
         {
             throw new InvalidOperationException(
                 unresolvedChoices.Length == 1
-                    ? "Resolve the remaining starting-equipment choice before adding starting items to Inventory."
-                    : $"Resolve the {unresolvedChoices.Length} remaining starting-equipment choices before adding starting items to Inventory.");
+                    ? "Resolve the remaining starting-equipment choice before applying starting equipment."
+                    : $"Resolve the {unresolvedChoices.Length} remaining starting-equipment choices before applying starting equipment.");
         }
 
         var unresolvedRolls = projection.Mechanics
@@ -86,8 +87,8 @@ public sealed class CharacterStartingEquipmentService(
         {
             throw new InvalidOperationException(
                 unresolvedRolls.Length == 1
-                    ? "Resolve the remaining starting-equipment roll before adding starting items to Inventory."
-                    : $"Resolve the {unresolvedRolls.Length} remaining starting-equipment rolls before adding starting items to Inventory.");
+                    ? "Resolve the remaining starting-equipment roll before applying starting equipment."
+                    : $"Resolve the {unresolvedRolls.Length} remaining starting-equipment rolls before applying starting equipment.");
         }
 
         var equipmentConflicts = projection.Conflicts
@@ -99,14 +100,16 @@ public sealed class CharacterStartingEquipmentService(
         {
             throw new InvalidOperationException(
                 equipmentConflicts.Length == 1
-                    ? "Resolve the starting-equipment rules conflict before adding starting items to Inventory."
-                    : $"Resolve the {equipmentConflicts.Length} starting-equipment rules conflicts before adding starting items to Inventory.");
+                    ? "Resolve the starting-equipment rules conflict before applying starting equipment."
+                    : $"Resolve the {equipmentConflicts.Length} starting-equipment rules conflicts before applying starting equipment.");
         }
 
         var desiredItems = ProjectInventoryItems(projection.Grants);
+        var desiredCurrencies = ProjectCurrencyGrants(projection.Grants);
         var root = await inventoryStore.SynchronizeAsync(
             characterId,
             desiredItems,
+            desiredCurrencies,
             timeProvider.GetUtcNow(),
             cancellationToken);
         if (root is null)
@@ -148,6 +151,29 @@ public sealed class CharacterStartingEquipmentService(
                         first.DisplayName,
                         group.Count());
             })
+            .OrderBy(value => value.SourceGrantKey, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    internal static IReadOnlyList<CharacterStartingEquipmentCurrencyGrant> ProjectCurrencyGrants(
+        IReadOnlyList<RulesCoreCharacterGrantView> grants)
+    {
+        ArgumentNullException.ThrowIfNull(grants);
+
+        return grants
+            .Where(value => string.Equals(
+                value.Kind,
+                CurrencyGrantKind,
+                StringComparison.OrdinalIgnoreCase))
+            .GroupBy(value => new
+            {
+                SourceGrantKey = GrantFamilyKey(value.GrantKey),
+                CurrencyKey = value.TargetKey
+            })
+            .Select(group => new CharacterStartingEquipmentCurrencyGrant(
+                group.Key.SourceGrantKey,
+                group.Key.CurrencyKey,
+                group.LongCount()))
             .OrderBy(value => value.SourceGrantKey, StringComparer.Ordinal)
             .ToArray();
     }
