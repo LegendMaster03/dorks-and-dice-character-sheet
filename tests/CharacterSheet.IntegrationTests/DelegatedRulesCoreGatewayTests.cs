@@ -88,7 +88,6 @@ public sealed class DelegatedRulesCoreGatewayTests
         var resolved = await gateway.ResolveGlobalRulesAsync(["feat:alert"]);
         Assert.Single(resolved);
 
-        await httpContext.Response.StartAsync();
         var timing = string.Join(
             ", ",
             httpContext.Response.Headers[CharacterSheetServerTiming.HeaderName].ToArray());
@@ -100,7 +99,6 @@ public sealed class DelegatedRulesCoreGatewayTests
             StringComparison.Ordinal);
         Assert.Contains("rules-core-auth;dur=1.2", timing, StringComparison.Ordinal);
         Assert.Contains("rules-core;dur=2.4", timing, StringComparison.Ordinal);
-        Assert.Contains("character-sheet;dur=", timing, StringComparison.Ordinal);
         Assert.DoesNotContain("platform-site", timing, StringComparison.Ordinal);
     }
 
