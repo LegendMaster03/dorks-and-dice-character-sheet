@@ -47,6 +47,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
             var root = await materializer.SynchronizeAsync(
                 characterId,
                 firstProjection,
+                [],
                 DateTimeOffset.UtcNow.AddMinutes(1));
             Assert.NotNull(root);
         }
@@ -75,6 +76,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
             await materializer.SynchronizeAsync(
                 characterId,
                 firstProjection,
+                [],
                 DateTimeOffset.UtcNow.AddMinutes(2));
         }
 
@@ -100,6 +102,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
             await materializer.SynchronizeAsync(
                 characterId,
                 changedProjection,
+                [],
                 DateTimeOffset.UtcNow.AddMinutes(3));
         }
 
@@ -144,6 +147,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
             var root = await materializer.SynchronizeAsync(
                 characterId,
                 projection,
+                [],
                 DateTimeOffset.UtcNow);
             generatedId = Assert.Single(root!.InventoryItemOccurrences).Id;
         }
@@ -162,10 +166,93 @@ public sealed class StartingEquipmentInventoryPersistenceTests
                 .SynchronizeAsync(
                     characterId,
                     projection,
+                    [],
                     DateTimeOffset.UtcNow.AddMinutes(2));
             var reacquired = Assert.Single(root!.InventoryItemOccurrences);
             Assert.NotEqual(generatedId, reacquired.Id);
             Assert.Equal("item:holy-symbol", reacquired.RuleConceptKey);
+        }
+    }
+
+    [Fact]
+    public async Task CurrencySynchronizationUsesProvenanceDeltasAndPreservesLaterBalanceChanges()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+        var initialGrant = new CharacterStartingEquipmentCurrencyGrant[]
+        {
+            new("grant.class-fighter.starting-equipment.gold", "gp", 100)
+        };
+
+        await using (var setup = new CharacterSheetDbContext(options))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(characterId);
+            await new PostgresCharacterStateStore(setup).SetCurrencyBalanceAsync(
+                characterId,
+                "gp",
+                25,
+                DateTimeOffset.UtcNow);
+
+            await new PostgresCharacterStartingEquipmentInventoryStore(setup).SynchronizeAsync(
+                characterId,
+                [],
+                initialGrant,
+                DateTimeOffset.UtcNow.AddMinutes(1));
+        }
+
+        await using (var verifyInitial = new CharacterSheetDbContext(options))
+        {
+            var state = await new PostgresCharacterStateStore(verifyInitial).GetAsync(characterId);
+            Assert.NotNull(state);
+            Assert.Equal(125, Assert.Single(state.CurrencyBalances).Amount);
+        }
+
+        await using (var repeat = new CharacterSheetDbContext(options))
+        {
+            await new PostgresCharacterStartingEquipmentInventoryStore(repeat).SynchronizeAsync(
+                characterId,
+                [],
+                initialGrant,
+                DateTimeOffset.UtcNow.AddMinutes(2));
+            var state = await new PostgresCharacterStateStore(repeat).GetAsync(characterId);
+            Assert.Equal(125, Assert.Single(state!.CurrencyBalances).Amount);
+        }
+
+        await using (var spend = new CharacterSheetDbContext(options))
+        {
+            await new PostgresCharacterStateStore(spend).SetCurrencyBalanceAsync(
+                characterId,
+                "gp",
+                105,
+                DateTimeOffset.UtcNow.AddMinutes(3));
+        }
+
+        var changedGrant = new CharacterStartingEquipmentCurrencyGrant[]
+        {
+            new("grant.class-fighter.starting-equipment.gold", "gp", 120)
+        };
+        await using (var changed = new CharacterSheetDbContext(options))
+        {
+            await new PostgresCharacterStartingEquipmentInventoryStore(changed).SynchronizeAsync(
+                characterId,
+                [],
+                changedGrant,
+                DateTimeOffset.UtcNow.AddMinutes(4));
+            var state = await new PostgresCharacterStateStore(changed).GetAsync(characterId);
+            Assert.Equal(125, Assert.Single(state!.CurrencyBalances).Amount);
+        }
+
+        await using (var removeGrant = new CharacterSheetDbContext(options))
+        {
+            await new PostgresCharacterStartingEquipmentInventoryStore(removeGrant).SynchronizeAsync(
+                characterId,
+                [],
+                [],
+                DateTimeOffset.UtcNow.AddMinutes(5));
+            var state = await new PostgresCharacterStateStore(removeGrant).GetAsync(characterId);
+            Assert.Equal(5, Assert.Single(state!.CurrencyBalances).Amount);
         }
     }
 }
