@@ -260,6 +260,7 @@ public sealed class DelegatedRulesCoreGateway(
             CharacterSheetServerTiming.EnsureRequestTiming(timingContext);
         }
 
+        var timingOperation = TimingOperationFor(targetPath);
         var dependencyTimer = Stopwatch.StartNew();
         var timingOutcome = "failed";
 
@@ -312,15 +313,13 @@ public sealed class DelegatedRulesCoreGateway(
                 if (allowUnavailableRule
                     && response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
                 {
-                    timingOutcome = "unavailable";
+                    timingOutcome = $"unavailable-{(int)response.StatusCode}";
                     return null;
                 }
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    timingOutcome = response.StatusCode == HttpStatusCode.BadRequest
-                        ? "rejected"
-                        : "downstream-error";
+                    timingOutcome = $"http-{(int)response.StatusCode}";
                     logger.LogWarning(
                         "Delegated Rules Core request {Method} {Path} returned status {StatusCode}.",
                         method,
@@ -367,8 +366,43 @@ public sealed class DelegatedRulesCoreGateway(
                 timingContext,
                 CharacterSheetServerTiming.RulesCoreDependencyMetricName,
                 dependencyTimer.Elapsed.TotalMilliseconds,
-                timingOutcome);
+                $"{timingOperation}:{timingOutcome}");
         }
+    }
+
+    private static string TimingOperationFor(string targetPath)
+    {
+        if (targetPath.Contains("/character-mechanics/resolve", StringComparison.Ordinal))
+        {
+            return "character-mechanics";
+        }
+
+        if (targetPath.Contains("/character-advancement/eligibility", StringComparison.Ordinal))
+        {
+            return "advancement-eligibility";
+        }
+
+        if (targetPath.Contains("/mechanics/support", StringComparison.Ordinal))
+        {
+            return "support";
+        }
+
+        if (targetPath.Contains("/mechanics/recovery/", StringComparison.Ordinal))
+        {
+            return "recovery";
+        }
+
+        if (targetPath.Contains("/rules/crafting/", StringComparison.Ordinal))
+        {
+            return "crafting";
+        }
+
+        if (targetPath.StartsWith("/api/rules/", StringComparison.Ordinal))
+        {
+            return "rule-resolution";
+        }
+
+        return "rules-core";
     }
 
     private (string Capability, string DelegationPrefix) GetDelegation()

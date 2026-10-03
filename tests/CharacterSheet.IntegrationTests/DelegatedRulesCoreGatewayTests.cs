@@ -5,7 +5,10 @@ using CharacterSheet.Application.Hosting;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Infrastructure.Hosting;
 using CharacterSheet.Web;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CharacterSheet.IntegrationTests;
@@ -69,6 +72,44 @@ public sealed class DelegatedRulesCoreGatewayTests
     }
 
     [Fact]
+    public async Task EmitsWholeRequestTimingWhenHostedResponseStarts()
+    {
+        var authenticationContext = new ToolHostAuthenticationContext(
+            1,
+            "character-sheet",
+            "dorks-and-dice",
+            new ToolHostUserContext("site-user-1", "Owner"),
+            [],
+            [],
+            []);
+        using var server = new TestServer(new WebHostBuilder().Configure(app =>
+        {
+            app.Run(context =>
+            {
+                var middleware = new HostedToolAuthenticationMiddleware(
+                    nextContext => nextContext.Response.WriteAsync("ok"));
+                return middleware.InvokeAsync(
+                    context,
+                    new StaticAuthenticationClient(authenticationContext));
+            });
+        }));
+        using var client = server.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/");
+        request.Headers.Add(ToolHostAuthenticationHeaders.Ticket, "source-tool-ticket");
+        request.Headers.Add(
+            ToolHostAuthenticationHeaders.IntrospectionPath,
+            DorksAndDiceToolHostAuthenticationClient.ExpectedIntrospectionPath);
+
+        using var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var timing = string.Join(
+            ", ",
+            response.Headers.GetValues(CharacterSheetServerTiming.HeaderName));
+        Assert.Contains("character-sheet-auth;dur=", timing, StringComparison.Ordinal);
+        Assert.Contains("character-sheet;dur=", timing, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExposesRulesCoreDependencyTimingAndPropagatesOnlyRulesCoreMetrics()
     {
         var handler = new RecordingHandler(_ =>
@@ -94,12 +135,36 @@ public sealed class DelegatedRulesCoreGatewayTests
 
         Assert.Contains("character-sheet-auth;dur=", timing, StringComparison.Ordinal);
         Assert.Contains(
-            "character-sheet-rules-core;desc=\"ok\";dur=",
+            "character-sheet-rules-core;desc=\"rule-resolution:ok\";dur=",
             timing,
             StringComparison.Ordinal);
         Assert.Contains("rules-core-auth;dur=1.2", timing, StringComparison.Ordinal);
         Assert.Contains("rules-core;dur=2.4", timing, StringComparison.Ordinal);
         Assert.DoesNotContain("platform-site", timing, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DependencyTimingIdentifiesOperationAndDownstreamStatus()
+    {
+        var handler = new RecordingHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.Forbidden));
+        var httpContext = await AuthenticatedContextAsync(withDelegation: true);
+        var gateway = new DelegatedRulesCoreGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+            new HttpContextAccessor { HttpContext = httpContext },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+
+        await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+            gateway.ResolveGlobalCharacterMechanicsAsync(
+                new RulesCoreCharacterRulesProjectionRequest()));
+
+        var timing = string.Join(
+            ", ",
+            httpContext.Response.Headers[CharacterSheetServerTiming.HeaderName].ToArray());
+        Assert.Contains(
+            "character-sheet-rules-core;desc=\"character-mechanics:http-403\";dur=",
+            timing,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -122,7 +187,7 @@ public sealed class DelegatedRulesCoreGatewayTests
             ", ",
             httpContext.Response.Headers[CharacterSheetServerTiming.HeaderName].ToArray());
         Assert.Contains(
-            "character-sheet-rules-core;desc=\"delegation-unavailable\";dur=",
+            "character-sheet-rules-core;desc=\"character-mechanics:delegation-unavailable\";dur=",
             timing,
             StringComparison.Ordinal);
     }
