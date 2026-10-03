@@ -153,6 +153,16 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
                     Now),
                 new CharacterRulesInputStateView(
                     Guid.NewGuid(),
+                    CharacterRulesInputKinds.IntegerFact,
+                    CharacterRulesProjectionRequestBuilder.RulesCoreRuntimeRollInputPrefix
+                        + "starting-equipment.gold-roll.class.fighter",
+                    13,
+                    null,
+                    null,
+                    Now,
+                    Now),
+                new CharacterRulesInputStateView(
+                    Guid.NewGuid(),
                     CharacterRulesInputKinds.BooleanFact,
                     "character.flat-footed",
                     null,
@@ -221,8 +231,15 @@ public sealed class CharacterRulesProjectionRequestBuilderTests
         Assert.Equal(
             "spell-points",
             Assert.Single(request.Choices!).Value);
+        var roll = Assert.Single(request.Rolls!);
+        Assert.Equal("starting-equipment.gold-roll.class.fighter", roll.RollKey);
+        Assert.Equal(13, roll.Value);
         Assert.Equal(9, request.CurrentResources["resource.spell-points"]);
         Assert.Equal(2, request.IntegerFacts!["combat.initiative.other"]);
+        Assert.DoesNotContain(
+            CharacterRulesProjectionRequestBuilder.RulesCoreRuntimeRollInputPrefix
+                + "starting-equipment.gold-roll.class.fighter",
+            request.IntegerFacts.Keys);
         Assert.True(request.BooleanFacts!["character.flat-footed"]);
         Assert.Equal("large", request.StringFacts!["character.size-category"]);
         var hpGain = Assert.Single(request.HitPointGains!);
