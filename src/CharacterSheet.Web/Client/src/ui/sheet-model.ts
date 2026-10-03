@@ -58,7 +58,7 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     }
 ];
 
-export type GuidedBuilderSection = "class" | "background" | "species" | "abilities" | "review";
+export type GuidedBuilderSection = "class" | "background" | "species" | "abilities" | "equipment" | "review";
 export type GuidedBuilderChoiceOwnerSection = "class" | "background" | "species";
 
 export interface GuidedBuilderSectionDefinition {
@@ -71,6 +71,7 @@ export const GUIDED_BUILDER_SECTIONS: readonly GuidedBuilderSectionDefinition[] 
     { id: "background", label: "Background" },
     { id: "species", label: "Species" },
     { id: "abilities", label: "Abilities" },
+    { id: "equipment", label: "Equipment" },
     { id: "review", label: "Review" }
 ];
 
@@ -225,6 +226,12 @@ export function getGuidedBuilderSectionStates(
             label: "Abilities",
             status: abilitiesResolved ? "resolved" : "incomplete",
             detail: abilityDetail
+        },
+        {
+            id: "equipment",
+            label: "Equipment",
+            status: "unavailable",
+            detail: "Starting equipment choices are not available from Rules Core yet."
         },
         {
             id: "review",
