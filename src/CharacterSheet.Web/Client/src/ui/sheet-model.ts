@@ -147,19 +147,28 @@ export function getGuidedBuilderSectionStates(
     const speciesSourceKeys = new Set(getGuidedBuilderChoiceSourceKeys(builder, "species"));
     const ownedSourceKeys = new Set(getGuidedBuilderOwnedChoiceSourceKeys(builder));
     const ruleChoices = mechanics?.ruleChoices ?? [];
+    const projectionConflicts = mechanics?.projectionConflicts ?? [];
+    const rulesVerificationAvailable = mechanics !== null;
 
     const pendingClassChoices = ruleChoices.filter(choice =>
-        choice.state !== "resolved"
+        choice.kind !== "starting-equipment"
+        && choice.state !== "resolved"
         && choice.sourceConceptKey !== undefined
         && classSourceKeys.has(choice.sourceConceptKey));
     const pendingBackgroundChoices = ruleChoices.filter(choice =>
-        choice.state !== "resolved"
+        choice.kind !== "starting-equipment"
+        && choice.state !== "resolved"
         && choice.sourceConceptKey !== undefined
         && backgroundSourceKeys.has(choice.sourceConceptKey));
     const pendingSpeciesChoices = ruleChoices.filter(choice =>
-        choice.state !== "resolved"
+        choice.kind !== "starting-equipment"
+        && choice.state !== "resolved"
         && choice.sourceConceptKey !== undefined
         && speciesSourceKeys.has(choice.sourceConceptKey));
+
+    const classHasConflict = hasRelatedProjectionConflict(projectionConflicts, classSourceKeys);
+    const backgroundHasConflict = hasRelatedProjectionConflict(projectionConflicts, backgroundSourceKeys);
+    const speciesHasConflict = hasRelatedProjectionConflict(projectionConflicts, speciesSourceKeys);
 
     const configuredAbilities = new Set(
         builder.build.baseAbilityScoreInputs.map(input => input.abilityKey)
@@ -170,30 +179,49 @@ export function getGuidedBuilderSectionStates(
         && choice.state !== "resolved"
         && (choice.sourceConceptKey === undefined || !ownedSourceKeys.has(choice.sourceConceptKey)));
 
-    const classResolved = startingClassSelected && pendingClassChoices.length === 0;
-    const backgroundResolved = backgroundSelected && pendingBackgroundChoices.length === 0;
-    const speciesResolved = speciesSelected && pendingSpeciesChoices.length === 0;
-    const abilitiesResolved = allBaseAbilitiesConfigured && pendingAbilityChoices.length === 0;
+    const classResolved = startingClassSelected
+        && rulesVerificationAvailable
+        && pendingClassChoices.length === 0
+        && !classHasConflict;
+    const backgroundResolved = backgroundSelected
+        && rulesVerificationAvailable
+        && pendingBackgroundChoices.length === 0
+        && !backgroundHasConflict;
+    const speciesResolved = speciesSelected
+        && rulesVerificationAvailable
+        && pendingSpeciesChoices.length === 0
+        && !speciesHasConflict;
+    const abilitiesResolved = allBaseAbilitiesConfigured
+        && rulesVerificationAvailable
+        && pendingAbilityChoices.length === 0;
 
     const classDetail = guidedSelectionDetail(
         "Starting Class",
         startingClassSelected,
         pendingClassChoices.length,
-        "Class");
+        "Class",
+        rulesVerificationAvailable,
+        classHasConflict);
     const backgroundDetail = guidedSelectionDetail(
         "Background",
         backgroundSelected,
         pendingBackgroundChoices.length,
-        "Background");
+        "Background",
+        rulesVerificationAvailable,
+        backgroundHasConflict);
     const speciesDetail = guidedSelectionDetail(
         "Species",
         speciesSelected,
         pendingSpeciesChoices.length,
-        "Species");
+        "Species",
+        rulesVerificationAvailable,
+        speciesHasConflict);
 
     let abilityDetail: string;
     if (!allBaseAbilitiesConfigured) {
         abilityDetail = `${configuredAbilities} of ${CHARACTER_ABILITY_KEYS.length} base Ability Score inputs are configured.`;
+    } else if (!rulesVerificationAvailable) {
+        abilityDetail = "Base Ability Scores are configured, but rules-derived choices could not be verified.";
     } else if (pendingAbilityChoices.length > 0) {
         abilityDetail = pendingAbilityChoices.length === 1
             ? "1 required Ability Score choice remains."
@@ -246,10 +274,18 @@ function guidedSelectionDetail(
     selectionLabel: string,
     selected: boolean,
     pendingChoiceCount: number,
-    choiceLabel: string
+    choiceLabel: string,
+    rulesVerificationAvailable: boolean,
+    hasConflict: boolean
 ): string {
     if (!selected) {
         return `No ${selectionLabel} is selected.`;
+    }
+    if (!rulesVerificationAvailable) {
+        return `${selectionLabel} selected. Rules-derived choices could not be verified.`;
+    }
+    if (hasConflict) {
+        return `${selectionLabel} selected. Resolve the related Rules Core conflict before this section is complete.`;
     }
     if (pendingChoiceCount === 1) {
         return `${selectionLabel} selected. 1 required ${choiceLabel} choice remains.`;
@@ -258,6 +294,15 @@ function guidedSelectionDetail(
         return `${selectionLabel} selected. ${pendingChoiceCount} required ${choiceLabel} choices remain.`;
     }
     return `${selectionLabel} and current ${choiceLabel} choices are configured.`;
+}
+
+function hasRelatedProjectionConflict(
+    conflicts: readonly { relatedConceptKeys: readonly string[] }[],
+    sourceKeys: ReadonlySet<string>
+): boolean {
+    if (sourceKeys.size === 0) return false;
+    return conflicts.some(conflict =>
+        conflict.relatedConceptKeys.some(key => sourceKeys.has(key)));
 }
 
 export interface MechanicPlaceholderDefinition {
