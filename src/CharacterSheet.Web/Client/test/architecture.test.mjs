@@ -57,7 +57,7 @@ test("sheet shell delegates feature sections and top-stat composition", async ()
     ]) {
         assert.doesNotMatch(
             sheet,
-            new RegExp(`function\\s+${implementation}\\s*\\(`),
+            new RegExp(`\\bfunction\\s+${implementation}\\s*\\(`),
             `${implementation} should remain owned outside the sheet shell`);
     }
 });
@@ -137,6 +137,7 @@ test("stylesheet entrypoint is composition-only", async () => {
     assert.deepEqual(lines, [
         '@import "./styles/foundation.css";',
         '@import "./styles/builder.css";',
+        '@import "./styles/guided-equipment.css";',
         '@import "./styles/editor-overlay.css";',
         '@import "./styles/advancement.css";',
         '@import "./styles/mechanics.css";',

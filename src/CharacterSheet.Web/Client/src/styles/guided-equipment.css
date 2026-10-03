@@ -1,0 +1,106 @@
+.dd-guided-builder__equipment,
+.dd-guided-equipment__choices,
+.dd-guided-equipment__grants,
+.dd-guided-equipment__option-content,
+.dd-guided-equipment__option-details {
+    display: grid;
+    gap: var(--dd-sheet-space-3);
+    min-width: 0;
+}
+
+.dd-guided-equipment__choice {
+    min-width: 0;
+    margin: 0;
+}
+
+.dd-guided-equipment__choice > legend {
+    padding: 0;
+}
+
+.dd-guided-equipment__options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--dd-sheet-space-2);
+    margin-top: var(--dd-sheet-space-2);
+}
+
+.dd-guided-equipment__option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--dd-sheet-space-2);
+    align-items: start;
+    min-width: 0;
+    padding: var(--dd-sheet-space-3);
+    background: var(--dd-sheet-surface);
+    border: 1px solid var(--dd-sheet-border);
+    border-radius: var(--dd-sheet-radius-sm);
+    cursor: pointer;
+}
+
+.dd-guided-equipment__option:has(input:checked) {
+    background: var(--dd-sheet-accent-soft);
+    border-color: var(--dd-sheet-accent);
+}
+
+.dd-guided-equipment__option input {
+    margin-top: 0.2rem;
+}
+
+.dd-guided-equipment__option-title {
+    color: var(--dd-sheet-ink);
+}
+
+.dd-guided-equipment__item-list {
+    display: grid;
+    gap: var(--dd-sheet-space-1);
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.dd-guided-equipment__item {
+    color: var(--dd-sheet-ink);
+}
+
+.dd-guided-equipment__item-detail {
+    display: block;
+    margin-top: 0.1rem;
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+}
+
+.dd-guided-equipment__fields {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--dd-sheet-space-1) var(--dd-sheet-space-2);
+    margin: 0;
+}
+
+.dd-guided-equipment__field-label,
+.dd-guided-equipment__field-value {
+    margin: 0;
+}
+
+.dd-guided-equipment__field-label {
+    color: var(--dd-sheet-muted);
+    font-size: 0.78rem;
+    font-weight: 750;
+}
+
+.dd-guided-equipment__field-value {
+    color: var(--dd-sheet-ink);
+}
+
+.dd-guided-builder__nav-button:disabled,
+.dd-guided-builder__nav-button:disabled:hover {
+    color: var(--dd-sheet-muted);
+    background: var(--dd-sheet-surface-muted);
+    border-color: var(--dd-sheet-border);
+    cursor: not-allowed;
+    opacity: 0.68;
+}
+
+@media (max-width: 720px) {
+    .dd-guided-equipment__options {
+        grid-template-columns: 1fr;
+    }
+}

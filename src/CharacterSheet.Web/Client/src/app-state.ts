@@ -611,7 +611,7 @@ export function createInitialHarvestingCraftingState(): HarvestingCraftingUiStat
 function createInitialGuidedBuilderState(): GuidedBuilderUiState {
     return {
         open: false,
-        activeSection: "species",
+        activeSection: "class",
         returnSheetMode: "view"
     };
 }

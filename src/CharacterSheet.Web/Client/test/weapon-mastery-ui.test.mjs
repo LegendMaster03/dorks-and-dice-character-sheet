@@ -94,7 +94,16 @@ const builder = {
         readOnly: false,
         foundationalSelections: [],
         baseAbilityScoreInputs: [],
-        progressionEntries: []
+        progressionEntries: [{
+            id: "11111111-1111-1111-1111-111111111111",
+            ordinal: 0,
+            kind: "class",
+            ruleConceptKey: "class:fighter",
+            parentAdvancementEntryId: null,
+            createdAt: "now",
+            updatedAt: "now",
+            level: 1
+        }]
     },
     references: {
         species: { status: "none" },

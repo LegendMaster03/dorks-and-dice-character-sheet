@@ -59,6 +59,7 @@ export interface RoutineCharacterHandlers {
         input: CharacterInventoryItemOccurrenceStateInput
     ): void;
     removeInventoryItem(occurrenceId: string): void;
+    materializeStartingEquipment(): void;
     openConditionChooser(): void;
     closeConditionChooser(): void;
     searchConditions(query: string): void;

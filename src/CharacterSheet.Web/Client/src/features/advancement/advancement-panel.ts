@@ -17,8 +17,6 @@ import type {
     CharacterAdvancementPrerequisite
 } from "./advancement-api.js";
 
-const MAX_NORMAL_CHARACTER_LEVEL = 20;
-
 export function renderCharacterAdvancementPanel(
     builder: CharacterBuilderUiState,
     advancement: CharacterAdvancementView,
@@ -111,16 +109,6 @@ function renderProgressionSelection(
             "dd-character-advancement__copy",
             "Advance an existing Class or Prestige Class, or add a new progression. Subclass decisions appear inside the parent Class advancement when the effective rules require them."));
 
-    const totalLevel = builder.build?.progressionEntries
-        .filter(value => value.kind === "class" || value.kind === "prestigeClass")
-        .reduce((sum, value) => sum + Math.max(value.level ?? 0, 0), 0) ?? 0;
-    const epicBoundary = totalLevel >= MAX_NORMAL_CHARACTER_LEVEL;
-    if (epicBoundary) {
-        section.append(createInlineState(
-            "This Character is level 20. Level 21+ progression is reserved for the planned Epic advancement update.",
-            "neutral"));
-    }
-
     const pending = state.status === "previewing" || state.status === "applying";
     const progressions = builder.build?.progressionEntries.filter(value =>
         value.kind === "class" || value.kind === "prestigeClass") ?? [];
@@ -158,7 +146,7 @@ function renderProgressionSelection(
             `Advance ${name}`,
             "dd-button dd-button--secondary",
             () => handlers.previewExistingProgression(entry.id),
-            pending || epicBoundary || currentLevel <= 0));
+            pending || currentLevel <= 0));
         cards.append(card);
     }
     section.append(cards);
@@ -171,12 +159,12 @@ function renderProgressionSelection(
             "Take a level in another Class",
             "dd-button dd-button--secondary",
             () => handlers.openCandidateChooser("class"),
-            pending || epicBoundary),
+            pending),
         createButton(
             "Qualify for a Prestige Class",
             "dd-button dd-button--secondary",
             () => handlers.openCandidateChooser("prestigeClass"),
-            pending || epicBoundary));
+            pending));
     add.append(actions);
     section.append(add);
     return section;

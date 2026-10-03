@@ -594,6 +594,7 @@ test("guided setup reports only backend-known unresolved structural configuratio
             ["background", "incomplete"],
             ["species", "incomplete"],
             ["abilities", "incomplete"],
+            ["equipment", "unavailable"],
             ["review", "available"]
         ]
     );

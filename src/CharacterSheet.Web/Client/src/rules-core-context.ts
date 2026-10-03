@@ -14,9 +14,23 @@ export interface RulesCoreCharacterAttackResolutionView {
     targetStateKeys: readonly string[];
 }
 
+export interface RulesCoreCharacterMechanicContributionContextView {
+    contributionKey: string;
+    label: string;
+    numericValue?: number | null;
+    textValue?: string | null;
+}
+
 export interface RulesCoreCharacterResolvedMechanicContextView {
     mechanicKey: string;
+    kind?: string;
     displayName: string;
+    state?: string;
+    numericValue?: number | null;
+    textValue?: string | null;
+    unit?: string | null;
+    requiredRolls?: readonly string[];
+    contributions?: readonly RulesCoreCharacterMechanicContributionContextView[];
     help?: RulesCoreContextualHelpView | null;
 }
 
@@ -25,9 +39,18 @@ export interface RulesCoreCharacterActionContextView {
     attackResolution?: RulesCoreCharacterAttackResolutionView | null;
 }
 
+export interface RulesCoreCharacterGrantContextView {
+    grantKey: string;
+    kind: string;
+    targetKey: string;
+    displayName: string;
+    sourceConceptKey?: string | null;
+}
+
 export interface RulesCoreCharacterProjectionContextView {
     mechanics?: readonly RulesCoreCharacterResolvedMechanicContextView[];
     actions?: readonly RulesCoreCharacterActionContextView[];
+    grants?: readonly RulesCoreCharacterGrantContextView[];
     helpTopics?: readonly RulesCoreContextualHelpView[] | null;
 }
 

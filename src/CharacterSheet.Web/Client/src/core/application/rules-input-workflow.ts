@@ -7,6 +7,10 @@ import {
     type CharacterRulesInputStateInput
 } from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
+import {
+    RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX,
+    toRulesCoreRuntimeRollStateKey
+} from "../../rules-core-runtime-input.js";
 import type { RoutineStateWorkflow } from "./routine-state-workflow.js";
 import type { PresentationWorkflow } from "./presentation-workflow.js";
 
@@ -29,6 +33,7 @@ export interface RulesInputWorkflow {
     setChoice(characterId: string, choiceKey: string, value: string): Promise<boolean>;
     clearChoice(characterId: string, choiceKey: string): Promise<boolean>;
     setResource(characterId: string, resourceKey: string, currentValue: number): Promise<boolean>;
+    setRuntimeRoll(characterId: string, rollKey: string, value: number): Promise<boolean>;
     setBooleanFact(
         characterId: string,
         factKey: string,
@@ -109,11 +114,34 @@ export function createRulesInputWorkflow(
                 `${kind}:${key}`));
     }
 
+    async function setRuntimeRoll(
+        characterId: string,
+        rollKey: string,
+        value: number
+    ): Promise<boolean> {
+        if (!Number.isInteger(value)) {
+            throw new RangeError("Rules Core runtime roll must be an integer.");
+        }
+        return await set(characterId, {
+            kind: "integerFact",
+            key: toRulesCoreRuntimeRollStateKey(rollKey),
+            integerValue: value
+        });
+    }
+
     return {
         set,
         remove,
 
         setChoice(characterId, choiceKey, value): Promise<boolean> {
+            if (choiceKey.startsWith(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX)) {
+                const rollKey = choiceKey.slice(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX.length);
+                const rollValue = Number(value);
+                if (rollKey.length === 0 || !Number.isInteger(rollValue)) {
+                    return Promise.reject(new RangeError("Rules Core runtime roll must provide a key and integer value."));
+                }
+                return setRuntimeRoll(characterId, rollKey, rollValue);
+            }
             return set(characterId, {
                 kind: "choice",
                 key: choiceKey,
@@ -122,6 +150,9 @@ export function createRulesInputWorkflow(
         },
 
         clearChoice(characterId, choiceKey): Promise<boolean> {
+            if (choiceKey.startsWith(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX)) {
+                return remove(characterId, "integerFact", choiceKey);
+            }
             return remove(characterId, "choice", choiceKey);
         },
 
@@ -132,6 +163,8 @@ export function createRulesInputWorkflow(
                 integerValue: currentValue
             });
         },
+
+        setRuntimeRoll,
 
         setBooleanFact(characterId, factKey, value, options): Promise<boolean> {
             return setWithOptions(characterId, {

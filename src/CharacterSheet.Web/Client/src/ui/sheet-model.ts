@@ -5,10 +5,11 @@ import {
     type CharacterBuilderChoice
 } from "../builder-api.js";
 import type { CharacterBuilderUiState } from "../app-state.js";
-import { getStartingClassEntry } from "../builder-rules.js";
+import { getStartingClassEntry, getStoredChoiceConceptKey } from "../builder-rules.js";
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterMechanicsView } from "./character-mechanics.js";
+import { projectGuidedStartingEquipment } from "./guided-equipment.js";
 
 export type SheetSection = "actions" | "spells" | "inventory" | "features" | "details" | "notes";
 
@@ -58,7 +59,8 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     }
 ];
 
-export type GuidedBuilderSection = "class" | "background" | "species" | "abilities" | "review";
+export type GuidedBuilderSection = "class" | "background" | "species" | "abilities" | "equipment" | "review";
+export type GuidedBuilderChoiceOwnerSection = "class" | "background" | "species";
 
 export interface GuidedBuilderSectionDefinition {
     id: GuidedBuilderSection;
@@ -70,6 +72,7 @@ export const GUIDED_BUILDER_SECTIONS: readonly GuidedBuilderSectionDefinition[] 
     { id: "background", label: "Background" },
     { id: "species", label: "Species" },
     { id: "abilities", label: "Abilities" },
+    { id: "equipment", label: "Equipment" },
     { id: "review", label: "Review" }
 ];
 
@@ -78,6 +81,51 @@ export type GuidedBuilderSectionStatus = "resolved" | "incomplete" | "available"
 export interface GuidedBuilderSectionState extends GuidedBuilderSectionDefinition {
     status: GuidedBuilderSectionStatus;
     detail: string;
+}
+
+export function getGuidedBuilderChoiceSourceKeys(
+    builder: CharacterBuilderUiState,
+    section: GuidedBuilderChoiceOwnerSection
+): readonly string[] {
+    if (builder.status !== "ready" || builder.build === null) {
+        return [];
+    }
+
+    const keys = new Set<string>();
+    if (section === "class") {
+        const startingClass = getStartingClassEntry(builder.build);
+        if (startingClass === null) {
+            return [];
+        }
+        keys.add(startingClass.ruleConceptKey);
+        for (const entry of builder.build.progressionEntries) {
+            if (entry.kind === "subclass" && entry.parentAdvancementEntryId === startingClass.id) {
+                keys.add(entry.ruleConceptKey);
+            }
+        }
+        return [...keys];
+    }
+
+    const targets: readonly CharacterBuilderChoice[] = section === "background"
+        ? ["background", "deity"]
+        : ["species", "subspecies"];
+    for (const target of targets) {
+        const conceptKey = getStoredChoiceConceptKey(builder.build, target);
+        if (conceptKey !== null) {
+            keys.add(conceptKey);
+        }
+    }
+    return [...keys];
+}
+
+export function getGuidedBuilderOwnedChoiceSourceKeys(
+    builder: CharacterBuilderUiState
+): readonly string[] {
+    return [...new Set([
+        ...getGuidedBuilderChoiceSourceKeys(builder, "class"),
+        ...getGuidedBuilderChoiceSourceKeys(builder, "background"),
+        ...getGuidedBuilderChoiceSourceKeys(builder, "species")
+    ])];
 }
 
 export function getGuidedBuilderSectionStates(
@@ -92,56 +140,131 @@ export function getGuidedBuilderSectionStates(
         }));
     }
 
-    const speciesSelected = builder.build.foundationalSelections
-        .some(selection => selection.category === "species");
-    const backgroundSelected = builder.build.foundationalSelections
-        .some(selection => selection.category === "background");
-    const startingClass = getStartingClassEntry(builder.build);
-    const startingClassSelected = startingClass !== null;
-    const classSourceKeys = new Set<string>();
-    if (startingClass !== null) {
-        classSourceKeys.add(startingClass.ruleConceptKey);
-        for (const entry of builder.build.progressionEntries) {
-            if (entry.kind === "subclass" && entry.parentAdvancementEntryId === startingClass.id) {
-                classSourceKeys.add(entry.ruleConceptKey);
-            }
-        }
-    }
-    const pendingClassChoices = (mechanics?.ruleChoices ?? []).filter(choice =>
-        choice.state !== "resolved"
+    const speciesSelected = getStoredChoiceConceptKey(builder.build, "species") !== null;
+    const backgroundSelected = getStoredChoiceConceptKey(builder.build, "background") !== null;
+    const startingClassSelected = getStartingClassEntry(builder.build) !== null;
+    const classSourceKeys = new Set(getGuidedBuilderChoiceSourceKeys(builder, "class"));
+    const backgroundSourceKeys = new Set(getGuidedBuilderChoiceSourceKeys(builder, "background"));
+    const speciesSourceKeys = new Set(getGuidedBuilderChoiceSourceKeys(builder, "species"));
+    const ownedSourceKeys = new Set(getGuidedBuilderOwnedChoiceSourceKeys(builder));
+    const ruleChoices = mechanics?.ruleChoices ?? [];
+    const projectionConflicts = mechanics?.projectionConflicts ?? [];
+    const nonEquipmentConflicts = projectionConflicts.filter(conflict =>
+        !conflict.conflictKey.includes("starting-equipment"));
+    const rulesVerificationAvailable = mechanics !== null;
+
+    const pendingClassChoices = ruleChoices.filter(choice =>
+        choice.kind !== "starting-equipment"
+        && choice.state !== "resolved"
         && choice.sourceConceptKey !== undefined
         && classSourceKeys.has(choice.sourceConceptKey));
-    const classResolved = startingClassSelected && pendingClassChoices.length === 0;
+    const pendingBackgroundChoices = ruleChoices.filter(choice =>
+        choice.kind !== "starting-equipment"
+        && choice.state !== "resolved"
+        && choice.sourceConceptKey !== undefined
+        && backgroundSourceKeys.has(choice.sourceConceptKey));
+    const pendingSpeciesChoices = ruleChoices.filter(choice =>
+        choice.kind !== "starting-equipment"
+        && choice.state !== "resolved"
+        && choice.sourceConceptKey !== undefined
+        && speciesSourceKeys.has(choice.sourceConceptKey));
+
+    const classHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, classSourceKeys);
+    const backgroundHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, backgroundSourceKeys);
+    const speciesHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, speciesSourceKeys);
 
     const configuredAbilities = new Set(
         builder.build.baseAbilityScoreInputs.map(input => input.abilityKey)
     ).size;
     const allBaseAbilitiesConfigured = configuredAbilities === CHARACTER_ABILITY_KEYS.length;
-    const pendingAbilityChoices = (mechanics?.ruleChoices ?? []).filter(choice =>
+    const pendingAbilityChoices = ruleChoices.filter(choice =>
         (choice.kind === "ability-score" || choice.kind === "ability-score-set")
-        && choice.state !== "resolved");
-    const abilitiesResolved = allBaseAbilitiesConfigured && pendingAbilityChoices.length === 0;
+        && choice.state !== "resolved"
+        && (choice.sourceConceptKey === undefined || !ownedSourceKeys.has(choice.sourceConceptKey)));
 
-    let classDetail: string;
-    if (!startingClassSelected) {
-        classDetail = "No Starting Class is selected.";
-    } else if (pendingClassChoices.length === 1) {
-        classDetail = "Starting Class selected. 1 required Class choice remains.";
-    } else if (pendingClassChoices.length > 1) {
-        classDetail = `Starting Class selected. ${pendingClassChoices.length} required Class choices remain.`;
-    } else {
-        classDetail = "Starting Class and current Class choices are configured.";
-    }
+    const classResolved = startingClassSelected
+        && rulesVerificationAvailable
+        && pendingClassChoices.length === 0
+        && !classHasConflict;
+    const backgroundResolved = backgroundSelected
+        && rulesVerificationAvailable
+        && pendingBackgroundChoices.length === 0
+        && !backgroundHasConflict;
+    const speciesResolved = speciesSelected
+        && rulesVerificationAvailable
+        && pendingSpeciesChoices.length === 0
+        && !speciesHasConflict;
+    const abilitiesResolved = allBaseAbilitiesConfigured
+        && rulesVerificationAvailable
+        && pendingAbilityChoices.length === 0;
+
+    const classDetail = guidedSelectionDetail(
+        "Starting Class",
+        startingClassSelected,
+        pendingClassChoices.length,
+        "Class",
+        rulesVerificationAvailable,
+        classHasConflict);
+    const backgroundDetail = guidedSelectionDetail(
+        "Background",
+        backgroundSelected,
+        pendingBackgroundChoices.length,
+        "Background",
+        rulesVerificationAvailable,
+        backgroundHasConflict);
+    const speciesDetail = guidedSelectionDetail(
+        "Species",
+        speciesSelected,
+        pendingSpeciesChoices.length,
+        "Species",
+        rulesVerificationAvailable,
+        speciesHasConflict);
 
     let abilityDetail: string;
     if (!allBaseAbilitiesConfigured) {
         abilityDetail = `${configuredAbilities} of ${CHARACTER_ABILITY_KEYS.length} base Ability Score inputs are configured.`;
+    } else if (!rulesVerificationAvailable) {
+        abilityDetail = "Base Ability Scores are configured, but rules-derived choices could not be verified.";
     } else if (pendingAbilityChoices.length > 0) {
         abilityDetail = pendingAbilityChoices.length === 1
             ? "1 required Ability Score choice remains."
             : `${pendingAbilityChoices.length} required Ability Score choices remain.`;
     } else {
         abilityDetail = "All base Ability Scores and required Ability Score choices are configured.";
+    }
+
+    const startingEquipment = projectGuidedStartingEquipment(mechanics);
+    const pendingEquipmentChoices = startingEquipment?.choices.filter(choice =>
+        choice.state !== "resolved") ?? [];
+    const pendingEquipmentRolls = startingEquipment?.rolls.filter(roll =>
+        roll.required && roll.state !== "resolved") ?? [];
+    const equipmentConflicts = projectionConflicts.filter(conflict =>
+        conflict.conflictKey.includes("starting-equipment"));
+    const equipmentAvailable = startingEquipment !== null;
+    const equipmentResolved = equipmentAvailable
+        && pendingEquipmentChoices.length === 0
+        && pendingEquipmentRolls.length === 0
+        && equipmentConflicts.length === 0;
+
+    let equipmentDetail: string;
+    if (!equipmentAvailable) {
+        equipmentDetail = "Starting equipment is not available from the current Rules Core projection.";
+    } else if (equipmentConflicts.length > 0) {
+        equipmentDetail = equipmentConflicts.length === 1
+            ? "Resolve the starting-equipment Rules Core conflict before this section is complete."
+            : `Resolve ${equipmentConflicts.length} starting-equipment Rules Core conflicts before this section is complete.`;
+    } else if (pendingEquipmentChoices.length > 0) {
+        equipmentDetail = pendingEquipmentChoices.length === 1
+            ? "1 required starting-equipment choice remains."
+            : `${pendingEquipmentChoices.length} required starting-equipment choices remain.`;
+    } else if (pendingEquipmentRolls.length > 0) {
+        equipmentDetail = pendingEquipmentRolls.length === 1
+            ? "1 required starting-equipment roll remains."
+            : `${pendingEquipmentRolls.length} required starting-equipment rolls remain.`;
+    } else if (startingEquipment.choices.length === 0 && startingEquipment.rolls.length === 0) {
+        equipmentDetail = "Starting equipment grants are resolved; no player choices or rolls are required.";
+    } else {
+        equipmentDetail = "Starting equipment grants, choices, and rolls are resolved.";
     }
 
     return [
@@ -154,14 +277,14 @@ export function getGuidedBuilderSectionStates(
         {
             id: "background",
             label: "Background",
-            status: backgroundSelected ? "resolved" : "incomplete",
-            detail: backgroundSelected ? "Background selected." : "No Background is selected."
+            status: backgroundResolved ? "resolved" : "incomplete",
+            detail: backgroundDetail
         },
         {
             id: "species",
             label: "Species",
-            status: speciesSelected ? "resolved" : "incomplete",
-            detail: speciesSelected ? "Species selected." : "No Species is selected."
+            status: speciesResolved ? "resolved" : "incomplete",
+            detail: speciesDetail
         },
         {
             id: "abilities",
@@ -170,12 +293,55 @@ export function getGuidedBuilderSectionStates(
             detail: abilityDetail
         },
         {
+            id: "equipment",
+            label: "Equipment",
+            status: equipmentAvailable
+                ? (equipmentResolved ? "resolved" : "incomplete")
+                : "unavailable",
+            detail: equipmentDetail
+        },
+        {
             id: "review",
             label: "Review",
             status: "available",
             detail: "Review the Character setup currently available in the sheet."
         }
     ];
+}
+
+function guidedSelectionDetail(
+    selectionLabel: string,
+    selected: boolean,
+    pendingChoiceCount: number,
+    choiceLabel: string,
+    rulesVerificationAvailable: boolean,
+    hasConflict: boolean
+): string {
+    if (!selected) {
+        return `No ${selectionLabel} is selected.`;
+    }
+    if (!rulesVerificationAvailable) {
+        return `${selectionLabel} selected. Rules-derived choices could not be verified.`;
+    }
+    if (hasConflict) {
+        return `${selectionLabel} selected. Resolve the related Rules Core conflict before this section is complete.`;
+    }
+    if (pendingChoiceCount === 1) {
+        return `${selectionLabel} selected. 1 required ${choiceLabel} choice remains.`;
+    }
+    if (pendingChoiceCount > 1) {
+        return `${selectionLabel} selected. ${pendingChoiceCount} required ${choiceLabel} choices remain.`;
+    }
+    return `${selectionLabel} and current ${choiceLabel} choices are configured.`;
+}
+
+function hasRelatedProjectionConflict(
+    conflicts: readonly { relatedConceptKeys: readonly string[] }[],
+    sourceKeys: ReadonlySet<string>
+): boolean {
+    if (sourceKeys.size === 0) return false;
+    return conflicts.some(conflict =>
+        conflict.relatedConceptKeys.some(key => sourceKeys.has(key)));
 }
 
 export interface MechanicPlaceholderDefinition {

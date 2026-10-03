@@ -18,6 +18,11 @@ import {
     partitionCompetencyCollection,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
+import {
+    projectGuidedStartingEquipment,
+    renderGuidedStartingEquipment
+} from "./guided-equipment.js";
+import { renderGuidedSourceFeatures } from "./guided-source-features.js";
 import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
@@ -36,6 +41,8 @@ import {
 import {
     ABILITY_SCORE_DEFINITIONS,
     createCharacterHeaderModel,
+    getGuidedBuilderChoiceSourceKeys,
+    getGuidedBuilderOwnedChoiceSourceKeys,
     getGuidedBuilderSectionStates,
     humanizeBuilderStatus,
     type SheetSection
@@ -379,20 +386,28 @@ function renderGuidedBuilder(
         createElement(
             "p",
             "dd-guided-builder__intro",
-            "Use any section that is useful. The Character Sheet remains available even when setup is incomplete."));
+            "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
 
+    const startingEquipment = projectGuidedStartingEquipment(
+        mechanics,
+        routine.state?.rulesInputs ?? []);
     const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
-    for (const section of sectionStates) {
+    for (const [index, section] of sectionStates.entries()) {
         const active = section.id === guidedBuilder.activeSection;
+        const unavailable = section.status === "unavailable";
         const button = createButton(
-            `${section.label} · ${guidedStatusLabel(section.status)}`,
+            `${index + 1}. ${section.label} · ${guidedStatusLabel(section.status)}`,
             active
                 ? "dd-guided-builder__nav-button dd-guided-builder__nav-button--active"
                 : "dd-guided-builder__nav-button",
-            () => handlers.selectGuidedBuilderSection(section.id));
+            () => handlers.selectGuidedBuilderSection(section.id),
+            unavailable);
         button.setAttribute("data-guided-builder-section", section.id);
+        button.setAttribute("data-guided-builder-step", String(index + 1));
+        button.setAttribute("data-guided-builder-status", section.status);
+        if (unavailable) button.setAttribute("aria-disabled", "true");
         if (active) button.setAttribute("aria-current", "page");
         nav.append(button);
     }
@@ -408,16 +423,22 @@ function renderGuidedBuilder(
                 false,
                 handlers.structural,
                 { title: "Class", choices: ["startingClass", "subclass"] }));
-            const masteryChoices = renderRulesChoices(
+            const classFeatures = renderGuidedSourceFeatures(
+                mechanics,
+                getGuidedBuilderChoiceSourceKeys(builder, "class"),
+                "Class Features");
+            if (classFeatures !== null) panel.append(classFeatures);
+            const classChoices = renderRulesChoices(
                 mechanics,
                 routine,
                 handlers,
                 {
-                    choiceKinds: ["weapon-mastery"],
+                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "class"),
+                    excludedChoiceKinds: ["subclass", "starting-equipment"],
                     includeConflicts: false,
-                    heading: "Weapon Mastery"
+                    heading: "Class Choices"
                 });
-            if (masteryChoices !== null) panel.append(masteryChoices);
+            if (classChoices !== null) panel.append(classChoices);
             const hitPointGains = renderHitPointGainEditors(
                 advancement?.occurrences ?? [],
                 routine,
@@ -426,28 +447,61 @@ function renderGuidedBuilder(
             if (hitPointGains !== null) panel.append(hitPointGains);
             break;
         }
-        case "background":
+        case "background": {
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
                 { title: "Background", choices: ["background", "deity"] }));
+            const backgroundFeatures = renderGuidedSourceFeatures(
+                mechanics,
+                getGuidedBuilderChoiceSourceKeys(builder, "background"),
+                "Background Features");
+            if (backgroundFeatures !== null) panel.append(backgroundFeatures);
+            const backgroundChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers,
+                {
+                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "background"),
+                    excludedChoiceKinds: ["starting-equipment"],
+                    includeConflicts: false,
+                    heading: "Background Choices"
+                });
+            if (backgroundChoices !== null) panel.append(backgroundChoices);
             break;
-        case "species":
+        }
+        case "species": {
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
                 { title: "Species", choices: ["species", "subspecies"] }));
+            const speciesFeatures = renderGuidedSourceFeatures(
+                mechanics,
+                getGuidedBuilderChoiceSourceKeys(builder, "species"),
+                "Species Traits");
+            if (speciesFeatures !== null) panel.append(speciesFeatures);
+            const speciesChoices = renderRulesChoices(
+                mechanics,
+                routine,
+                handlers,
+                {
+                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "species"),
+                    includeConflicts: false,
+                    heading: "Species Choices"
+                });
+            if (speciesChoices !== null) panel.append(speciesChoices);
             break;
+        }
         case "abilities": {
             const abilities = createSectionCard("Base Ability Scores", "dd-guided-builder__abilities");
             abilities.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "Enter the base Ability Scores used for this Character. Complete any rule-required Ability choices below so effective scores and modifiers can be resolved."));
+                "Enter the base Ability Scores used for this Character. Ability choices granted by your Class, Background, or Species appear in those sections."));
             const grid = createElement("div", "dd-core-stats__abilities dd-guided-builder__ability-grid");
             for (const definition of ABILITY_SCORE_DEFINITIONS) {
                 grid.append(renderAbilityScoreCard(
@@ -465,18 +519,45 @@ function renderGuidedBuilder(
                 handlers,
                 {
                     choiceKinds: ["ability-score", "ability-score-set"],
+                    excludedSourceConceptKeys: getGuidedBuilderOwnedChoiceSourceKeys(builder),
                     includeConflicts: false,
                     heading: "Required Ability Choices"
                 });
             if (abilityChoices !== null) panel.append(abilityChoices);
             break;
         }
+        case "equipment": {
+            if (startingEquipment !== null) {
+                const pending = routine.mutation?.kind === "rules-input-update"
+                    || routine.mutation?.kind === "rules-input-delete"
+                    || routine.mutation?.kind === "inventory-transaction";
+                panel.append(renderGuidedStartingEquipment(
+                    startingEquipment,
+                    {
+                        selectChoice: handlers.rules.setChoice,
+                        materializeItems: handlers.routine.materializeStartingEquipment
+                    },
+                    pending));
+            } else {
+                const equipment = createSectionCard("Starting Equipment", "dd-guided-builder__equipment");
+                equipment.append(
+                    createElement(
+                        "p",
+                        "dd-guided-builder__section-copy",
+                        "This step is staged for rule-guided starting equipment. It becomes available when Rules Core projects starting-equipment grants or choices for this Character."),
+                    createInlineState(
+                        "Starting equipment is not available in Guided Setup yet. General inventory remains available on the Character Sheet.",
+                        "warning"));
+                panel.append(equipment);
+            }
+            break;
+        }
         case "review": {
-            const review = createSectionCard("Character Setup", "dd-guided-builder__review");
+            const review = createSectionCard("Review & What's Next", "dd-guided-builder__review");
             review.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "This review shows the Character setup the sheet can currently verify. Edition-specific requirements that are not represented here are not marked complete."));
+                "Review what the Character Sheet can currently verify. Setup does not need to be complete before you return to the sheet."));
             const list = createElement("ul", "dd-guided-builder__review-list");
             for (const section of sectionStates.filter(value => value.id !== "review")) {
                 const item = createElement("li", "dd-guided-builder__review-item");
@@ -491,11 +572,52 @@ function renderGuidedBuilder(
             const rulesChoices = renderRulesChoices(
                 mechanics,
                 routine,
-                handlers);
+                handlers,
+                {
+                    excludedChoiceKinds: ["starting-class", "subclass", "starting-equipment"]
+                });
             if (rulesChoices !== null) review.append(rulesChoices);
+            const nextSteps = createElement("div", "dd-build-choice__actions");
+            const viewSheet = createButton(
+                "View Character Sheet",
+                "dd-button dd-button--primary",
+                handlers.closeGuidedBuilder);
+            viewSheet.setAttribute("data-guided-builder-navigation-action", "sheet");
+            nextSteps.append(viewSheet);
+            review.append(nextSteps);
             panel.append(review);
             break;
         }
+    }
+
+    const activeIndex = sectionStates.findIndex(section => section.id === guidedBuilder.activeSection);
+    const previousSection = activeIndex > 0
+        ? sectionStates.slice(0, activeIndex).reverse().find(section => section.status !== "unavailable")
+        : undefined;
+    const nextSection = activeIndex >= 0
+        ? sectionStates.slice(activeIndex + 1).find(section => section.status !== "unavailable")
+        : undefined;
+    if (previousSection !== undefined || nextSection !== undefined) {
+        const navigation = createElement("div", "dd-build-choice__actions");
+        navigation.setAttribute("data-guided-builder-navigation", "true");
+        navigation.setAttribute("aria-label", "Guided setup navigation");
+        if (previousSection !== undefined) {
+            const previous = createButton(
+                `Previous: ${previousSection.label}`,
+                "dd-button dd-button--ghost",
+                () => handlers.selectGuidedBuilderSection(previousSection.id));
+            previous.setAttribute("data-guided-builder-navigation-action", "previous");
+            navigation.append(previous);
+        }
+        if (nextSection !== undefined) {
+            const next = createButton(
+                nextSection.id === "review" ? "Review Character" : `Next: ${nextSection.label}`,
+                "dd-button dd-button--primary",
+                () => handlers.selectGuidedBuilderSection(nextSection.id));
+            next.setAttribute("data-guided-builder-navigation-action", "next");
+            navigation.append(next);
+        }
+        panel.append(navigation);
     }
 
     container.append(panel);
@@ -504,6 +626,9 @@ function renderGuidedBuilder(
 
 interface RulesChoiceRenderOptions {
     choiceKinds?: readonly string[];
+    excludedChoiceKinds?: readonly string[];
+    sourceConceptKeys?: readonly string[];
+    excludedSourceConceptKeys?: readonly string[];
     includeConflicts?: boolean;
     heading?: string;
 }
@@ -518,8 +643,21 @@ function renderRulesChoices(
         return null;
     }
 
-    const choices = (mechanics.ruleChoices ?? []).filter(choice =>
-        options.choiceKinds === undefined || options.choiceKinds.includes(choice.kind));
+    const allChoices = mechanics.ruleChoices ?? [];
+    const sourceConceptKeys = options.sourceConceptKeys === undefined
+        ? null
+        : new Set(options.sourceConceptKeys);
+    const excludedSourceConceptKeys = options.excludedSourceConceptKeys === undefined
+        ? null
+        : new Set(options.excludedSourceConceptKeys);
+    const choices = allChoices
+        .filter(choice => options.choiceKinds === undefined || options.choiceKinds.includes(choice.kind))
+        .filter(choice => options.excludedChoiceKinds === undefined || !options.excludedChoiceKinds.includes(choice.kind))
+        .filter(choice => sourceConceptKeys === null
+            || (choice.sourceConceptKey !== undefined && sourceConceptKeys.has(choice.sourceConceptKey)))
+        .filter(choice => excludedSourceConceptKeys === null
+            || choice.sourceConceptKey === undefined
+            || !excludedSourceConceptKeys.has(choice.sourceConceptKey));
     const conflicts = options.includeConflicts === false
         ? []
         : mechanics.projectionConflicts ?? [];
@@ -552,20 +690,8 @@ function renderRulesChoices(
             "dd-build-choice__value",
             selectedLabel));
 
-        const metadata = [
-            choice.kind,
-            choice.sourceConceptKey
-        ].filter((value): value is string =>
-            value !== undefined && value.trim().length > 0);
-        if (metadata.length > 0) {
-            card.append(createElement(
-                "p",
-                "dd-build-choice__detail",
-                metadata.join(" • ")));
-        }
-
         const selectedElsewhere = new Set(
-            choices
+            allChoices
                 .filter(other =>
                     other.choiceKey !== choice.choiceKey
                     && other.groupKey === choice.groupKey
