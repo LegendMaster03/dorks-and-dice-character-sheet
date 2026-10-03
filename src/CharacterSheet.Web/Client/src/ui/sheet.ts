@@ -389,24 +389,7 @@ function renderGuidedBuilder(
             "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
 
     const startingEquipment = projectGuidedStartingEquipment(mechanics);
-    const hasStartingEquipment = startingEquipment !== null
-        && (startingEquipment.grants.length > 0 || startingEquipment.choices.length > 0);
-    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics).map(section => {
-        if (section.id !== "equipment" || !hasStartingEquipment || startingEquipment === null) {
-            return section;
-        }
-        const unresolvedChoices = startingEquipment.choices.filter(choice =>
-            choice.required && choice.state !== "resolved");
-        return {
-            ...section,
-            status: unresolvedChoices.length === 0 ? "resolved" as const : "incomplete" as const,
-            detail: unresolvedChoices.length === 0
-                ? "Starting equipment grants and required choices are resolved."
-                : unresolvedChoices.length === 1
-                    ? "1 required starting-equipment choice remains."
-                    : `${unresolvedChoices.length} required starting-equipment choices remain.`
-        };
-    });
+    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const [index, section] of sectionStates.entries()) {
@@ -542,7 +525,7 @@ function renderGuidedBuilder(
             break;
         }
         case "equipment": {
-            if (hasStartingEquipment && startingEquipment !== null) {
+            if (startingEquipment !== null) {
                 const pending = routine.mutation?.kind === "rules-input-update"
                     || routine.mutation?.kind === "rules-input-delete";
                 panel.append(renderGuidedStartingEquipment(
