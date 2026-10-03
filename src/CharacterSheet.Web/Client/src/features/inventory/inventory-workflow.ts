@@ -12,6 +12,7 @@ import { searchResolvedRules } from "../../rules-core-api.js";
 import type { RoutineStateWorkflow } from "../../core/application/routine-state-workflow.js";
 import type { PresentationWorkflow } from "../../core/application/presentation-workflow.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
+import { materializeStartingEquipmentInventory } from "./starting-equipment-api.js";
 
 export interface InventoryWorkflow {
     openChooser(): void;
@@ -26,6 +27,7 @@ export interface InventoryWorkflow {
     remove(characterId: string, occurrenceId: string): Promise<void>;
     setCurrency(characterId: string, currencyKey: string, amount: number): Promise<void>;
     removeCurrency(characterId: string, currencyKey: string): Promise<void>;
+    materializeStartingEquipment(characterId: string): Promise<void>;
 }
 
 export function createInventoryWorkflow(
@@ -133,6 +135,16 @@ export function createInventoryWorkflow(
                     characterId,
                     occurrenceId),
                 occurrenceId);
+            if (changed) await presentation.load(characterId);
+        },
+
+        async materializeStartingEquipment(characterId: string): Promise<void> {
+            const changed = await routine.mutate(
+                "inventory-transaction",
+                () => materializeStartingEquipmentInventory(
+                    environment,
+                    characterId),
+                "starting-equipment");
             if (changed) await presentation.load(characterId);
         }
     };
