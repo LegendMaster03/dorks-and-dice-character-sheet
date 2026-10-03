@@ -381,21 +381,22 @@ function renderGuidedBuilder(
         createElement(
             "p",
             "dd-guided-builder__intro",
-            "Use any section that is useful. The Character Sheet remains available even when setup is incomplete."));
+            "Work through the sections in any order. You can return to the Character Sheet at any time, and incomplete setup does not block use."));
 
     const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
-    for (const section of sectionStates) {
+    for (const [index, section] of sectionStates.entries()) {
         const active = section.id === guidedBuilder.activeSection;
         const button = createButton(
-            `${section.label} · ${guidedStatusLabel(section.status)}`,
+            `${index + 1}. ${section.label} · ${guidedStatusLabel(section.status)}`,
             active
                 ? "dd-guided-builder__nav-button dd-guided-builder__nav-button--active"
                 : "dd-guided-builder__nav-button",
             () => handlers.selectGuidedBuilderSection(section.id));
         button.setAttribute("data-guided-builder-section", section.id);
-        if (active) button.setAttribute("aria-current", "page");
+        button.setAttribute("data-guided-builder-step", String(index + 1));
+        if (active) button.setAttribute("aria-current", "step");
         nav.append(button);
     }
     container.append(nav);
@@ -498,11 +499,11 @@ function renderGuidedBuilder(
             break;
         }
         case "review": {
-            const review = createSectionCard("Character Setup", "dd-guided-builder__review");
+            const review = createSectionCard("Review & What's Next", "dd-guided-builder__review");
             review.append(createElement(
                 "p",
                 "dd-guided-builder__section-copy",
-                "This review shows the Character setup the sheet can currently verify. Edition-specific requirements that are not represented here are not marked complete."));
+                "Review what the Character Sheet can currently verify. Setup does not need to be complete before you return to the sheet."));
             const list = createElement("ul", "dd-guided-builder__review-list");
             for (const section of sectionStates.filter(value => value.id !== "review")) {
                 const item = createElement("li", "dd-guided-builder__review-item");
@@ -519,9 +520,45 @@ function renderGuidedBuilder(
                 routine,
                 handlers);
             if (rulesChoices !== null) review.append(rulesChoices);
+            const nextSteps = createElement("div", "dd-build-choice__actions");
+            const viewSheet = createButton(
+                "View Character Sheet",
+                "dd-button dd-button--primary",
+                handlers.closeGuidedBuilder);
+            viewSheet.setAttribute("data-guided-builder-navigation-action", "sheet");
+            nextSteps.append(viewSheet);
+            review.append(nextSteps);
             panel.append(review);
             break;
         }
+    }
+
+    const activeIndex = sectionStates.findIndex(section => section.id === guidedBuilder.activeSection);
+    const previousSection = activeIndex > 0 ? sectionStates[activeIndex - 1] : undefined;
+    const nextSection = activeIndex >= 0 && activeIndex < sectionStates.length - 1
+        ? sectionStates[activeIndex + 1]
+        : undefined;
+    if (previousSection !== undefined || nextSection !== undefined) {
+        const navigation = createElement("div", "dd-build-choice__actions");
+        navigation.setAttribute("data-guided-builder-navigation", "true");
+        navigation.setAttribute("aria-label", "Guided setup navigation");
+        if (previousSection !== undefined) {
+            const previous = createButton(
+                `Previous: ${previousSection.label}`,
+                "dd-button dd-button--ghost",
+                () => handlers.selectGuidedBuilderSection(previousSection.id));
+            previous.setAttribute("data-guided-builder-navigation-action", "previous");
+            navigation.append(previous);
+        }
+        if (nextSection !== undefined) {
+            const next = createButton(
+                nextSection.id === "review" ? "Review Character" : `Next: ${nextSection.label}`,
+                "dd-button dd-button--primary",
+                () => handlers.selectGuidedBuilderSection(nextSection.id));
+            next.setAttribute("data-guided-builder-navigation-action", "next");
+            navigation.append(next);
+        }
+        panel.append(navigation);
     }
 
     container.append(panel);
