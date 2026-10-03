@@ -81,7 +81,7 @@ function renderGuidedFeature(feature: CharacterFeatureView): HTMLElement {
         card.append(effects);
     }
 
-    const sources = renderSourceAttributions(feature.sourceAttributions, "Feature source");
+    const sources = renderSourceAttributions(feature.sourceAttributions, true);
     if (sources !== null) {
         card.append(sources);
     }
