@@ -165,3 +165,18 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     assert.match(source, /excludedSourceConceptKeys:\s*getGuidedBuilderOwnedChoiceSourceKeys\(builder\)/);
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });
+
+test("guided builder uses numbered steps, sequential navigation, and a non-blocking sheet exit", async () => {
+    const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    const builderSource = await readFile(new URL("../src/ui/builder.ts", import.meta.url), "utf8");
+
+    assert.match(source, /`\$\{index \+ 1\}\. \$\{section\.label\} · \$\{guidedStatusLabel\(section\.status\)\}`/);
+    assert.match(source, /`Previous: \$\{previousSection\.label\}`/);
+    assert.match(source, /`Next: \$\{nextSection\.label\}`/);
+    assert.match(source, /"Review Character"/);
+    assert.match(source, /"Review & What's Next"/);
+    assert.match(source, /"View Character Sheet"/);
+    assert.match(source, /handlers\.closeGuidedBuilder/);
+    assert.match(builderSource, /reference\.status === "none" \? "Choose" : "Change"/);
+    assert.match(builderSource, /const actionLabel = reference\.status === "none" \? "Choose" : "Change"/);
+});
