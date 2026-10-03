@@ -299,6 +299,8 @@ function renderWorkspace(
                 updateInventoryItem: (occurrenceId, input) =>
                     void inventoryWorkflow.update(character.characterId, occurrenceId, input),
                 removeInventoryItem: occurrenceId => void inventoryWorkflow.remove(character.characterId, occurrenceId),
+                materializeStartingEquipment: () =>
+                    void inventoryWorkflow.materializeStartingEquipment(character.characterId),
                 openConditionChooser: () => conditionsWorkflow.openChooser(),
                 closeConditionChooser: () => conditionsWorkflow.closeChooser(),
                 searchConditions: query => void conditionsWorkflow.search(query),
