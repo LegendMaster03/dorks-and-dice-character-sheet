@@ -5,6 +5,7 @@ import {
     toRulesCoreRuntimeRollStateKey
 } from "../rules-core-runtime-input.js";
 import {
+    createButton,
     createElement,
     createInlineState,
     createSectionCard
@@ -71,6 +72,7 @@ export interface GuidedStartingEquipmentView {
 export interface GuidedEquipmentHandlers {
     selectChoice(choiceKey: string, value: string): void;
     setRoll(rollKey: string, value: number): void;
+    materializeItems(): void;
 }
 
 export function projectGuidedStartingEquipment(
@@ -277,6 +279,35 @@ export function renderGuidedStartingEquipment(
         }
         section.append(conflicts);
     }
+
+    const hasUnresolvedChoice = equipment.choices.some(choice =>
+        choice.required && choice.state !== "resolved");
+    const hasUnresolvedRoll = equipment.rolls.some(roll =>
+        roll.required && roll.state !== "resolved");
+    const canMaterialize = !pending
+        && !hasUnresolvedChoice
+        && !hasUnresolvedRoll
+        && equipment.conflicts.length === 0;
+    const materialization = createElement("section", "dd-guided-equipment__materialize");
+    materialization.append(createElement(
+        "p",
+        "dd-guided-builder__section-copy",
+        "Apply the resolved starting items to this Character's normal Inventory. Reapplying updates only inventory previously generated from starting equipment; manually added items are left alone."));
+    if (equipment.grants.some(grant => grant.detail === "Starting currency")) {
+        materialization.append(createInlineState(
+            "Starting currency remains separate from Inventory; this action applies item and special-equipment grants.",
+            "neutral"));
+    }
+    const actions = createElement("div", "dd-build-choice__actions");
+    const apply = createButton(
+        "Apply Starting Items to Inventory",
+        "dd-button dd-button--primary",
+        handlers.materializeItems,
+        !canMaterialize);
+    apply.setAttribute("data-guided-equipment-materialize", "true");
+    actions.append(apply);
+    materialization.append(actions);
+    section.append(materialization);
 
     const sources = renderSourceAttributions(equipment.sourceAttributions, true);
     if (sources !== null) section.append(sources);
