@@ -7,6 +7,7 @@ public static class CharacterRulesProjectionRequestBuilder
     private const string DeathSaveSuccessesResourceKey = "resource.death-save.successes";
     private const string DeathSaveFailuresResourceKey = "resource.death-save.failures";
     private const string StartingClassFactKey = "advancement.starting-class";
+    public const string RulesCoreRuntimeRollInputPrefix = "rules-core-roll:";
 
     public static RulesCoreCharacterRulesProjectionRequest Build(
         CharacterBuildView build,
@@ -78,6 +79,26 @@ public static class CharacterRulesProjectionRequestBuilder
         var classSkillKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.ClassSkill);
         var knownSpellConceptKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.KnownSpell);
         var integerFacts = ToIntegerDictionary(ruleInputs, CharacterRulesInputKinds.IntegerFact);
+        var rollInputs = ruleInputs
+            .Where(value =>
+                value.Kind == CharacterRulesInputKinds.IntegerFact
+                && value.IntegerValue is not null
+                && value.Key.StartsWith(RulesCoreRuntimeRollInputPrefix, StringComparison.Ordinal)
+                && value.Key.Length > RulesCoreRuntimeRollInputPrefix.Length)
+            .GroupBy(
+                value => value.Key[RulesCoreRuntimeRollInputPrefix.Length..],
+                StringComparer.Ordinal)
+            .Select(group => group.Last())
+            .ToArray();
+        var rolls = rollInputs
+            .Select(value => new RulesCoreCharacterRuntimeRollInput(
+                value.Key[RulesCoreRuntimeRollInputPrefix.Length..],
+                value.IntegerValue!.Value))
+            .ToArray();
+        foreach (var rollInput in rollInputs)
+        {
+            integerFacts.Remove(rollInput.Key);
+        }
         var booleanFacts = ruleInputs
             .Where(value => value.Kind == CharacterRulesInputKinds.BooleanFact && value.BooleanValue is not null)
             .GroupBy(value => value.Key, StringComparer.Ordinal)
@@ -155,6 +176,7 @@ public static class CharacterRulesProjectionRequestBuilder
             ClassSkillKeys: classSkillKeys.Length == 0 ? null : classSkillKeys,
             KnownSpellConceptKeys: knownSpellConceptKeys.Length == 0 ? null : knownSpellConceptKeys,
             Choices: choices.Length == 0 ? null : choices,
+            Rolls: rolls.Length == 0 ? null : rolls,
             IntegerFacts: NullIfEmpty(integerFacts),
             BooleanFacts: NullIfEmpty(booleanFacts),
             StringFacts: NullIfEmpty(stringFacts),
