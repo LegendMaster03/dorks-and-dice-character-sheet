@@ -7,6 +7,7 @@ import {
     type CharacterRulesInputStateInput
 } from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
+import { toRulesCoreRuntimeRollStateKey } from "../../rules-core-runtime-input.js";
 import type { RoutineStateWorkflow } from "./routine-state-workflow.js";
 import type { PresentationWorkflow } from "./presentation-workflow.js";
 
@@ -29,6 +30,7 @@ export interface RulesInputWorkflow {
     setChoice(characterId: string, choiceKey: string, value: string): Promise<boolean>;
     clearChoice(characterId: string, choiceKey: string): Promise<boolean>;
     setResource(characterId: string, resourceKey: string, currentValue: number): Promise<boolean>;
+    setRuntimeRoll(characterId: string, rollKey: string, value: number): Promise<boolean>;
     setBooleanFact(
         characterId: string,
         factKey: string,
@@ -130,6 +132,17 @@ export function createRulesInputWorkflow(
                 kind: "resource",
                 key: resourceKey,
                 integerValue: currentValue
+            });
+        },
+
+        setRuntimeRoll(characterId, rollKey, value): Promise<boolean> {
+            if (!Number.isInteger(value)) {
+                return Promise.reject(new RangeError("Rules Core runtime roll must be an integer."));
+            }
+            return set(characterId, {
+                kind: "integerFact",
+                key: toRulesCoreRuntimeRollStateKey(rollKey),
+                integerValue: value
             });
         },
 
