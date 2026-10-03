@@ -291,15 +291,15 @@ export function renderGuidedStartingEquipment(
     materialization.append(createElement(
         "p",
         "dd-guided-builder__section-copy",
-        "Apply the resolved starting items to this Character's normal Inventory. Reapplying updates only inventory previously generated from starting equipment; manually added items are left alone."));
+        "Apply the resolved starting equipment to this Character. Item and special-equipment grants become normal Inventory entries, and starting currency is added to the Character's Currency balances. Reapplying adjusts only state previously acquired from starting equipment; later manual changes are preserved."));
     if (equipment.grants.some(grant => grant.detail === "Starting currency")) {
         materialization.append(createInlineState(
-            "Starting currency remains separate from Inventory; this action applies item and special-equipment grants.",
+            "Starting currency is applied to the Character's Currency balances rather than represented as an Inventory item.",
             "neutral"));
     }
     const actions = createElement("div", "dd-build-choice__actions");
     const apply = createButton(
-        "Apply Starting Items to Inventory",
+        "Apply Starting Equipment",
         "dd-button dd-button--primary",
         handlers.materializeItems,
         !canMaterialize);
