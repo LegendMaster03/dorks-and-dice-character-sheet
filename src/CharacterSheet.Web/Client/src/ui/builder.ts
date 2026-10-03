@@ -151,7 +151,7 @@ function renderChoice(
 
     const actions = createElement("div", "dd-build-choice__actions");
     actions.append(createButton(
-        policy.chooseLabel,
+        reference.status === "none" ? "Choose" : "Change",
         "dd-button dd-button--secondary",
         () => handlers.openChooser(target),
         !policy.canChoose));
@@ -176,6 +176,8 @@ function renderRuleChooser(
     }
 
     const target = chooser.target;
+    const reference = builder.references[target] ?? { status: "none" as const };
+    const actionLabel = reference.status === "none" ? "Choose" : "Change";
     const container = createElement("aside", "dd-rule-chooser");
     container.setAttribute("data-rule-chooser", target);
     container.setAttribute("role", "dialog");
@@ -188,14 +190,14 @@ function renderRuleChooser(
         "h3",
         "dd-rule-chooser__title",
         target === "species"
-            ? "Choose Species"
+            ? `${actionLabel} Species`
             : target === "subspecies"
-                ? "Choose Subspecies"
+                ? `${actionLabel} Subspecies`
                 : target === "background"
-                    ? "Choose Background"
+                    ? `${actionLabel} Background`
                     : target === "deity"
-                        ? "Choose Deity"
-                        : target === "startingClass" ? "Choose Starting Class" : "Choose Subclass");
+                        ? `${actionLabel} Deity`
+                        : target === "startingClass" ? `${actionLabel} Starting Class` : `${actionLabel} Subclass`);
     heading.id = headingId;
     header.append(heading, createButton("Close", "dd-button dd-button--ghost", handlers.closeChooser));
     container.append(header);
