@@ -381,7 +381,7 @@ function renderGuidedBuilder(
         createElement(
             "p",
             "dd-guided-builder__intro",
-            "Work through the sections in any order. You can return to the Character Sheet at any time, and incomplete setup does not block use."));
+            "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
 
     const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
     const nav = createElement("nav", "dd-guided-builder__nav");
@@ -396,7 +396,7 @@ function renderGuidedBuilder(
             () => handlers.selectGuidedBuilderSection(section.id));
         button.setAttribute("data-guided-builder-section", section.id);
         button.setAttribute("data-guided-builder-step", String(index + 1));
-        if (active) button.setAttribute("aria-current", "step");
+        if (active) button.setAttribute("aria-current", "page");
         nav.append(button);
     }
     container.append(nav);
