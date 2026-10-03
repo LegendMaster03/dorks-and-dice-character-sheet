@@ -54,32 +54,36 @@ public static class CharacterRulesProjectionRequestBuilder
         var choices = ruleInputs
             .Where(value =>
                 value.Kind == CharacterRulesInputKinds.Choice
-                && value.TextValue is not null
-                && !value.Key.StartsWith(RulesCoreRuntimeRollInputPrefix, StringComparison.Ordinal))
+                && value.TextValue is not null)
             .Select(value => new RulesCoreCharacterRuntimeChoiceInput(value.Key, value.TextValue!))
             .ToArray();
         var rolls = ruleInputs
             .Where(value =>
-                value.Kind == CharacterRulesInputKinds.Choice
-                && value.TextValue is not null
+                value.Kind == CharacterRulesInputKinds.IntegerFact
+                && value.IntegerValue is not null
                 && value.Key.StartsWith(RulesCoreRuntimeRollInputPrefix, StringComparison.Ordinal)
                 && value.Key.Length > RulesCoreRuntimeRollInputPrefix.Length)
             .Select(value => new
             {
                 RollKey = value.Key[RulesCoreRuntimeRollInputPrefix.Length..],
-                Value = int.TryParse(value.TextValue, out var parsed) ? parsed : (int?)null,
+                Value = value.IntegerValue!.Value,
                 value.UpdatedAt
             })
-            .Where(value => value.Value is not null)
             .GroupBy(value => value.RollKey, StringComparer.Ordinal)
             .Select(group => group.OrderByDescending(value => value.UpdatedAt).First())
-            .Select(value => new RulesCoreCharacterRuntimeRollInput(value.RollKey, value.Value!.Value))
+            .Select(value => new RulesCoreCharacterRuntimeRollInput(value.RollKey, value.Value))
             .ToArray();
         var competencyRanks = ToIntegerDictionary(ruleInputs, CharacterRulesInputKinds.CompetencyRank);
         var trainingKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.Training);
         var classSkillKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.ClassSkill);
         var knownSpellConceptKeys = ToFlagKeys(ruleInputs, CharacterRulesInputKinds.KnownSpell);
-        var integerFacts = ToIntegerDictionary(ruleInputs, CharacterRulesInputKinds.IntegerFact);
+        var integerFacts = ruleInputs
+            .Where(value =>
+                value.Kind == CharacterRulesInputKinds.IntegerFact
+                && value.IntegerValue is not null
+                && !value.Key.StartsWith(RulesCoreRuntimeRollInputPrefix, StringComparison.Ordinal))
+            .GroupBy(value => value.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Last().IntegerValue!.Value, StringComparer.Ordinal);
         var booleanFacts = ruleInputs
             .Where(value => value.Kind == CharacterRulesInputKinds.BooleanFact && value.BooleanValue is not null)
             .GroupBy(value => value.Key, StringComparer.Ordinal)
