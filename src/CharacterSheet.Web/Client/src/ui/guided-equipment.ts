@@ -3,8 +3,19 @@ import {
     createInlineState,
     createSectionCard
 } from "./components.js";
-import type { DisplayFieldView, SourceAttributionView } from "./character-mechanics.js";
+import type {
+    CharacterMechanicsView,
+    DisplayFieldView,
+    SourceAttributionView
+} from "./character-mechanics.js";
+import { getRulesCoreContext } from "../rules-core-context.js";
 import { renderSourceAttributions } from "./source-attribution.js";
+
+const STARTING_EQUIPMENT_GRANT_KINDS = new Set([
+    "starting-equipment-item",
+    "starting-equipment-custom",
+    "starting-equipment-currency"
+]);
 
 export interface GuidedEquipmentItemView {
     conceptKey?: string;
@@ -38,6 +49,82 @@ export interface GuidedStartingEquipmentView {
 
 export interface GuidedEquipmentHandlers {
     selectChoice(choiceKey: string, value: string): void;
+}
+
+export function projectGuidedStartingEquipment(
+    mechanics: CharacterMechanicsView | null
+): GuidedStartingEquipmentView | null {
+    if (mechanics === null) return null;
+
+    const projection = getRulesCoreContext(mechanics);
+    if (projection === undefined) return null;
+
+    const rawGrants = (projection.grants ?? []).filter(grant =>
+        STARTING_EQUIPMENT_GRANT_KINDS.has(grant.kind));
+    const ruleChoices = (mechanics.ruleChoices ?? []).filter(choice =>
+        choice.kind === "starting-equipment");
+    const hasStartingEquipmentConflict = (mechanics.projectionConflicts ?? []).some(conflict =>
+        conflict.conflictKey.includes("starting-equipment"));
+
+    if (rawGrants.length === 0 && ruleChoices.length === 0 && !hasStartingEquipmentConflict) {
+        return null;
+    }
+
+    const grouped = new Map<string, GuidedEquipmentItemView>();
+    for (const grant of rawGrants) {
+        const conceptKey = grant.kind === "starting-equipment-item"
+            ? grant.targetKey
+            : undefined;
+        const detail = grant.kind === "starting-equipment-currency"
+            ? "Starting currency"
+            : grant.kind === "starting-equipment-custom"
+                ? "Special starting equipment"
+                : undefined;
+        const groupingKey = [
+            grant.kind,
+            grant.targetKey,
+            grant.displayName,
+            grant.sourceConceptKey ?? ""
+        ].join("|");
+        const existing = grouped.get(groupingKey);
+        if (existing === undefined) {
+            grouped.set(groupingKey, {
+                conceptKey,
+                displayName: grant.displayName,
+                quantity: 1,
+                detail
+            });
+        } else {
+            grouped.set(groupingKey, {
+                ...existing,
+                quantity: existing.quantity + 1
+            });
+        }
+    }
+
+    const choices: GuidedEquipmentChoiceView[] = ruleChoices.map(choice => ({
+        choiceKey: choice.choiceKey,
+        displayName: choice.displayName,
+        state: choice.state,
+        required: true,
+        options: choice.options.map(option => ({
+            value: option.value,
+            displayName: option.displayName,
+            items: []
+        })),
+        selectedValue: choice.selectedValue,
+        sourceAttributions: choice.sourceAttributions
+    }));
+
+    const sourceAttributions = uniqueSourceAttributions(
+        ruleChoices.flatMap(choice => choice.sourceAttributions ?? []));
+
+    return {
+        grants: [...grouped.values()].sort((left, right) =>
+            left.displayName.localeCompare(right.displayName)),
+        choices,
+        sourceAttributions: sourceAttributions.length === 0 ? undefined : sourceAttributions
+    };
 }
 
 export function renderGuidedStartingEquipment(
@@ -192,4 +279,14 @@ function renderEquipmentOptionContents(option: GuidedEquipmentOptionView): HTMLE
         content.append(fields);
     }
     return content;
+}
+
+function uniqueSourceAttributions(
+    values: readonly SourceAttributionView[]
+): readonly SourceAttributionView[] {
+    const unique = new Map<string, SourceAttributionView>();
+    for (const value of values) {
+        if (!unique.has(value.key)) unique.set(value.key, value);
+    }
+    return [...unique.values()];
 }
