@@ -7,6 +7,8 @@ namespace CharacterSheet.Infrastructure.Persistence;
 public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContext)
     : ICharacterStateStore
 {
+    private const string StartingEquipmentAppliedKey = "starting-equipment.applied";
+
     public Task<CharacterSheetRoot?> GetAsync(
         Guid characterId,
         CancellationToken cancellationToken = default) =>
@@ -193,6 +195,74 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         }
 
         root.ApplyInventoryTransaction(consumptions, additions, changedAt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return root;
+    }
+
+    public async Task<CharacterSheetRoot?> ApplyStartingEquipmentAsync(
+        Guid characterId,
+        IReadOnlyList<CharacterInventoryAddition> additions,
+        IReadOnlyDictionary<string, long> currencyAdditions,
+        string fingerprint,
+        DateTimeOffset changedAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+        {
+            throw new ArgumentException("Starting-equipment fingerprint can not be blank.", nameof(fingerprint));
+        }
+
+        var root = await GetTrackedAsync(characterId, cancellationToken);
+        if (root is null)
+        {
+            return null;
+        }
+
+        var existingMarker = root.RulesInputs.SingleOrDefault(value =>
+            value.Kind == CharacterRulesInputKind.StringFact
+            && value.Key == StartingEquipmentAppliedKey);
+        if (existingMarker is not null)
+        {
+            if (string.Equals(existingMarker.TextValue, fingerprint, StringComparison.Ordinal))
+            {
+                return root;
+            }
+
+            throw new InvalidOperationException(
+                "Starting equipment was already applied for a different resolved Class/Background configuration. Adjust the existing inventory and currency manually before changing the starting package.");
+        }
+
+        root.ApplyInventoryTransaction([], additions, changedAt);
+        foreach (var addition in currencyAdditions)
+        {
+            if (addition.Value < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(currencyAdditions),
+                    "Starting-equipment currency additions can not be negative.");
+            }
+            if (addition.Value == 0)
+            {
+                continue;
+            }
+
+            var normalizedKey = addition.Key.Trim().ToLowerInvariant();
+            var current = root.CurrencyBalances.SingleOrDefault(value =>
+                value.CurrencyKey == normalizedKey)?.Amount ?? 0;
+            root.SetCurrencyBalance(
+                normalizedKey,
+                checked(current + addition.Value),
+                changedAt);
+        }
+
+        root.SetRulesInput(
+            CharacterRulesInputKind.StringFact,
+            StartingEquipmentAppliedKey,
+            integerValue: null,
+            booleanValue: null,
+            textValue: fingerprint.Trim(),
+            changedAt);
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return root;
     }
