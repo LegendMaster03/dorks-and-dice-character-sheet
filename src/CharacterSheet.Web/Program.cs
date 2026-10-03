@@ -95,6 +95,7 @@ builder.Services.AddSingleton<ICharacterArtStorage>(new FileSystemCharacterArtSt
 builder.Services.AddScoped<ICharacterSheetStore, PostgresCharacterSheetStore>();
 builder.Services.AddScoped<ICharacterBuildStore, PostgresCharacterBuildStore>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
+builder.Services.AddScoped<ICharacterStartingEquipmentInventoryStore, PostgresCharacterStartingEquipmentInventoryStore>();
 builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
@@ -103,6 +104,7 @@ builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
+builder.Services.AddScoped<CharacterStartingEquipmentService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
 builder.Services.AddScoped<CharacterCraftingService>();
@@ -163,6 +165,7 @@ app.MapGet("/api", () => Results.Ok(new
 
 app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
 app.MapCharacterStateEndpoints();
+app.MapCharacterStartingEquipmentEndpoints();
 app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
 app.MapCharacterCraftingEndpoints();
