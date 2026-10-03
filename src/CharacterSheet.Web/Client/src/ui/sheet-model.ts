@@ -236,11 +236,14 @@ export function getGuidedBuilderSectionStates(
     const startingEquipment = projectGuidedStartingEquipment(mechanics);
     const pendingEquipmentChoices = startingEquipment?.choices.filter(choice =>
         choice.state !== "resolved") ?? [];
+    const pendingEquipmentRolls = startingEquipment?.rolls.filter(roll =>
+        roll.required && roll.state !== "resolved") ?? [];
     const equipmentConflicts = projectionConflicts.filter(conflict =>
         conflict.conflictKey.includes("starting-equipment"));
     const equipmentAvailable = startingEquipment !== null;
     const equipmentResolved = equipmentAvailable
         && pendingEquipmentChoices.length === 0
+        && pendingEquipmentRolls.length === 0
         && equipmentConflicts.length === 0;
 
     let equipmentDetail: string;
@@ -254,10 +257,14 @@ export function getGuidedBuilderSectionStates(
         equipmentDetail = pendingEquipmentChoices.length === 1
             ? "1 required starting-equipment choice remains."
             : `${pendingEquipmentChoices.length} required starting-equipment choices remain.`;
-    } else if (startingEquipment.choices.length === 0) {
-        equipmentDetail = "Starting equipment grants are resolved; no player choices are required.";
+    } else if (pendingEquipmentRolls.length > 0) {
+        equipmentDetail = pendingEquipmentRolls.length === 1
+            ? "1 required starting-equipment roll remains."
+            : `${pendingEquipmentRolls.length} required starting-equipment rolls remain.`;
+    } else if (startingEquipment.choices.length === 0 && startingEquipment.rolls.length === 0) {
+        equipmentDetail = "Starting equipment grants are resolved; no player choices or rolls are required.";
     } else {
-        equipmentDetail = "Starting equipment grants and required choices are resolved.";
+        equipmentDetail = "Starting equipment grants, choices, and rolls are resolved.";
     }
 
     return [
