@@ -39,6 +39,13 @@ function readyBuilder() {
                     ruleConceptKey: "subspecies:variant-human",
                     createdAt: "now",
                     updatedAt: "now"
+                },
+                {
+                    id: "20000000-0000-0000-0000-000000000004",
+                    category: "deity",
+                    ruleConceptKey: "deity:pelor",
+                    createdAt: "now",
+                    updatedAt: "now"
                 }
             ],
             progressionEntries: [
@@ -101,8 +108,8 @@ test("guided builder routes rule choices to the selected entity that owns them",
         new Set(getGuidedBuilderChoiceSourceKeys(builder, "class")),
         new Set(["class:fighter", "subclass:champion"]));
     assert.deepEqual(
-        getGuidedBuilderChoiceSourceKeys(builder, "background"),
-        ["background:acolyte"]);
+        new Set(getGuidedBuilderChoiceSourceKeys(builder, "background")),
+        new Set(["background:acolyte", "deity:pelor"]));
     assert.deepEqual(
         new Set(getGuidedBuilderChoiceSourceKeys(builder, "species")),
         new Set(["species:human", "subspecies:variant-human"]));
@@ -112,6 +119,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
             "class:fighter",
             "subclass:champion",
             "background:acolyte",
+            "deity:pelor",
             "species:human",
             "subspecies:variant-human"
         ]));
@@ -120,6 +128,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
         ruleChoices: [
             choice("Fighting Style", "fighting-style", "class:fighter"),
             choice("Background Ability", "ability-score", "background:acolyte"),
+            choice("Deity Language", "language", "deity:pelor"),
             choice("Variant Human Feat", "feat", "species:human"),
             choice("General Ability", "ability-score-set", undefined)
         ]
@@ -130,7 +139,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(states.find(section => section.id === "background").status, "incomplete");
     assert.equal(states.find(section => section.id === "species").status, "incomplete");
     assert.equal(states.find(section => section.id === "abilities").status, "incomplete");
-    assert.match(states.find(section => section.id === "background").detail, /1 required Background choice remains/);
+    assert.match(states.find(section => section.id === "background").detail, /2 required Background choices remain/);
     assert.match(states.find(section => section.id === "species").detail, /1 required Species choice remains/);
     assert.match(states.find(section => section.id === "abilities").detail, /1 required Ability Score choice remains/);
 
