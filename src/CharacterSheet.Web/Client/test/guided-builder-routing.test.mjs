@@ -274,9 +274,10 @@ test("guided builder uses numbered steps, sequential navigation, a Rules Core-ba
     assert.match(source, /createButton\([\s\S]*handlers\.selectGuidedBuilderSection\(section\.id\),\s*unavailable\)/);
     assert.match(source, /sectionStates\.slice\(activeIndex \+ 1\)\.find\(section => section\.status !== "unavailable"\)/);
     assert.match(source, /case "equipment":/);
-    assert.match(source, /projectGuidedStartingEquipment\(mechanics\)/);
+    assert.match(source, /projectGuidedStartingEquipment\(\s*mechanics,\s*routine\.state\?\.rulesInputs \?\? \[\]\s*\)/);
     assert.match(source, /renderGuidedStartingEquipment\(/);
     assert.match(source, /handlers\.rules\.setChoice/);
+    assert.match(source, /handlers\.routine\.materializeStartingEquipment/);
     assert.match(source, /"Starting Equipment"/);
     assert.match(source, /not available in Guided Setup yet/);
     assert.match(source, /`Previous: \$\{previousSection\.label\}`/);
