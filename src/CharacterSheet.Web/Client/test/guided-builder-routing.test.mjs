@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createInitialState } from "../.test-dist/app-state.js";
+import { getGuidedSourceFeatures } from "../.test-dist/ui/guided-source-features.js";
 import {
     getGuidedBuilderChoiceSourceKeys,
     getGuidedBuilderOwnedChoiceSourceKeys,
@@ -154,6 +155,29 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(sourceResolvedStates.find(section => section.id === "abilities").status, "incomplete");
 });
 
+test("guided feature summaries follow explicit owning sources without name parsing", () => {
+    const builder = readyBuilder();
+    const mechanics = {
+        features: [
+            { key: "fighter-one", label: "Fighting Style", kind: "class-feature", state: "active", sourceConceptKey: "class:fighter", acquisitionLevel: 1 },
+            { key: "champion-three", label: "Improved Critical", kind: "subclass-feature", state: "active", sourceConceptKey: "subclass:champion", acquisitionLevel: 3 },
+            { key: "human-trait", label: "Versatile", kind: "species-trait", state: "active", sourceConceptKey: "species:human" },
+            { key: "other", label: "Unrelated Feature", kind: "feature", state: "active", sourceConceptKey: "class:wizard", acquisitionLevel: 1 }
+        ]
+    };
+
+    const classFeatures = getGuidedSourceFeatures(
+        mechanics,
+        getGuidedBuilderChoiceSourceKeys(builder, "class"));
+    assert.deepEqual(classFeatures.map(feature => feature.label), ["Fighting Style", "Improved Critical"]);
+
+    const speciesFeatures = getGuidedSourceFeatures(
+        mechanics,
+        getGuidedBuilderChoiceSourceKeys(builder, "species"));
+    assert.deepEqual(speciesFeatures.map(feature => feature.label), ["Versatile"]);
+    assert.equal(classFeatures.some(feature => feature.label === "Unrelated Feature"), false);
+});
+
 test("guided builder opens on Class and renderer uses the same source routing model", async () => {
     const state = createInitialState({ kind: "new" });
     assert.equal(state.guidedBuilder.activeSection, "class");
@@ -163,6 +187,9 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     assert.match(source, /sourceConceptKeys:\s*getGuidedBuilderChoiceSourceKeys\(builder, "background"\)/);
     assert.match(source, /sourceConceptKeys:\s*getGuidedBuilderChoiceSourceKeys\(builder, "species"\)/);
     assert.match(source, /excludedSourceConceptKeys:\s*getGuidedBuilderOwnedChoiceSourceKeys\(builder\)/);
+    assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Class Features"/);
+    assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Background Features"/);
+    assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Species Traits"/);
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });
 
