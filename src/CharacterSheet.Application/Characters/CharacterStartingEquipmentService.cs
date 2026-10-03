@@ -17,6 +17,7 @@ public sealed class CharacterStartingEquipmentService(
     TimeProvider timeProvider)
 {
     private const string ChoiceKind = "starting-equipment";
+    private const string MechanicKind = "starting-equipment";
     private const string ItemGrantKind = "starting-equipment-item";
     private const string CustomGrantKind = "starting-equipment-custom";
 
@@ -70,6 +71,23 @@ public sealed class CharacterStartingEquipmentService(
                 unresolvedChoices.Length == 1
                     ? "Resolve the remaining starting-equipment choice before adding starting items to Inventory."
                     : $"Resolve the {unresolvedChoices.Length} remaining starting-equipment choices before adding starting items to Inventory.");
+        }
+
+        var unresolvedRolls = projection.Mechanics
+            .Where(value => string.Equals(
+                value.Kind,
+                MechanicKind,
+                StringComparison.OrdinalIgnoreCase))
+            .SelectMany(value => value.RequiredRolls)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (unresolvedRolls.Length > 0)
+        {
+            throw new InvalidOperationException(
+                unresolvedRolls.Length == 1
+                    ? "Resolve the remaining starting-equipment roll before adding starting items to Inventory."
+                    : $"Resolve the {unresolvedRolls.Length} remaining starting-equipment rolls before adding starting items to Inventory.");
         }
 
         var equipmentConflicts = projection.Conflicts
