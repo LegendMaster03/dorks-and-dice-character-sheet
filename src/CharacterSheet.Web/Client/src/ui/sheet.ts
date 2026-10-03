@@ -389,14 +389,18 @@ function renderGuidedBuilder(
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const [index, section] of sectionStates.entries()) {
         const active = section.id === guidedBuilder.activeSection;
+        const unavailable = section.status === "unavailable";
         const button = createButton(
             `${index + 1}. ${section.label} · ${guidedStatusLabel(section.status)}`,
             active
                 ? "dd-guided-builder__nav-button dd-guided-builder__nav-button--active"
                 : "dd-guided-builder__nav-button",
-            () => handlers.selectGuidedBuilderSection(section.id));
+            () => handlers.selectGuidedBuilderSection(section.id),
+            unavailable);
         button.setAttribute("data-guided-builder-section", section.id);
         button.setAttribute("data-guided-builder-step", String(index + 1));
+        button.setAttribute("data-guided-builder-status", section.status);
+        if (unavailable) button.setAttribute("aria-disabled", "true");
         if (active) button.setAttribute("aria-current", "page");
         nav.append(button);
     }
@@ -514,6 +518,19 @@ function renderGuidedBuilder(
             if (abilityChoices !== null) panel.append(abilityChoices);
             break;
         }
+        case "equipment": {
+            const equipment = createSectionCard("Starting Equipment", "dd-guided-builder__equipment");
+            equipment.append(
+                createElement(
+                    "p",
+                    "dd-guided-builder__section-copy",
+                    "This step is staged for rule-guided starting equipment. It will be enabled when Rules Core exposes the Character's starting-equipment grants and choices."),
+                createInlineState(
+                    "Starting equipment is not available in Guided Setup yet. General inventory remains available on the Character Sheet.",
+                    "warning"));
+            panel.append(equipment);
+            break;
+        }
         case "review": {
             const review = createSectionCard("Review & What's Next", "dd-guided-builder__review");
             review.append(createElement(
@@ -550,9 +567,11 @@ function renderGuidedBuilder(
     }
 
     const activeIndex = sectionStates.findIndex(section => section.id === guidedBuilder.activeSection);
-    const previousSection = activeIndex > 0 ? sectionStates[activeIndex - 1] : undefined;
-    const nextSection = activeIndex >= 0 && activeIndex < sectionStates.length - 1
-        ? sectionStates[activeIndex + 1]
+    const previousSection = activeIndex > 0
+        ? sectionStates.slice(0, activeIndex).reverse().find(section => section.status !== "unavailable")
+        : undefined;
+    const nextSection = activeIndex >= 0
+        ? sectionStates.slice(activeIndex + 1).find(section => section.status !== "unavailable")
         : undefined;
     if (previousSection !== undefined || nextSection !== undefined) {
         const navigation = createElement("div", "dd-build-choice__actions");
