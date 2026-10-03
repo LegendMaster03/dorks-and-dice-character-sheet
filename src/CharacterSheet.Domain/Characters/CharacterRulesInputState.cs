@@ -10,8 +10,7 @@ public enum CharacterRulesInputKind
     Resource = 6,
     IntegerFact = 7,
     BooleanFact = 8,
-    StringFact = 9,
-    Roll = 10
+    StringFact = 9
 }
 
 public static class CharacterRulesInputKey
@@ -143,7 +142,6 @@ public sealed class CharacterRulesInputState
                 break;
             case CharacterRulesInputKind.Resource:
             case CharacterRulesInputKind.IntegerFact:
-            case CharacterRulesInputKind.Roll:
                 IntegerValue = integerValue
                     ?? throw new ArgumentException(
                         "This rules input requires an integer value.",
