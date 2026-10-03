@@ -1,3 +1,9 @@
+import type { CharacterRulesInputStateResponse } from "../character-state-api.js";
+import { getRulesCoreContext } from "../rules-core-context.js";
+import {
+    RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX,
+    toRulesCoreRuntimeRollStateKey
+} from "../rules-core-runtime-input.js";
 import {
     createElement,
     createInlineState,
@@ -8,7 +14,6 @@ import type {
     DisplayFieldView,
     SourceAttributionView
 } from "./character-mechanics.js";
-import { getRulesCoreContext } from "../rules-core-context.js";
 import { renderSourceAttributions } from "./source-attribution.js";
 
 const STARTING_EQUIPMENT_GRANT_KINDS = new Set([
@@ -41,6 +46,15 @@ export interface GuidedEquipmentChoiceView {
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
+export interface GuidedEquipmentRollView {
+    rollKey: string;
+    displayName: string;
+    state: string;
+    required: boolean;
+    selectedValue?: number;
+    detail?: string;
+}
+
 export interface GuidedEquipmentConflictView {
     conflictKey: string;
     message: string;
@@ -49,16 +63,19 @@ export interface GuidedEquipmentConflictView {
 export interface GuidedStartingEquipmentView {
     grants: readonly GuidedEquipmentItemView[];
     choices: readonly GuidedEquipmentChoiceView[];
+    rolls: readonly GuidedEquipmentRollView[];
     conflicts: readonly GuidedEquipmentConflictView[];
     sourceAttributions?: readonly SourceAttributionView[];
 }
 
 export interface GuidedEquipmentHandlers {
     selectChoice(choiceKey: string, value: string): void;
+    setRoll(rollKey: string, value: number): void;
 }
 
 export function projectGuidedStartingEquipment(
-    mechanics: CharacterMechanicsView | null
+    mechanics: CharacterMechanicsView | null,
+    rulesInputs: readonly CharacterRulesInputStateResponse[] = []
 ): GuidedStartingEquipmentView | null {
     if (mechanics === null) return null;
 
@@ -69,14 +86,75 @@ export function projectGuidedStartingEquipment(
         STARTING_EQUIPMENT_GRANT_KINDS.has(grant.kind));
     const ruleChoices = (mechanics.ruleChoices ?? []).filter(choice =>
         choice.kind === "starting-equipment");
-    const conflicts = (mechanics.projectionConflicts ?? [])
-        .filter(conflict => conflict.conflictKey.includes("starting-equipment"))
-        .map(conflict => ({
-            conflictKey: conflict.conflictKey,
-            message: conflict.message
-        }));
+    const rawMechanics = (projection.mechanics ?? []).filter(value =>
+        value.kind === "starting-equipment");
+    const startingMechanicKeys = new Set(rawMechanics.map(value => value.mechanicKey));
+    const rawConflicts = (mechanics.projectionConflicts ?? []).filter(conflict =>
+        conflict.conflictKey.includes("starting-equipment")
+        || conflict.relatedMechanicKeys.some(key => startingMechanicKeys.has(key)));
+    const conflicts = rawConflicts.map(conflict => ({
+        conflictKey: conflict.conflictKey,
+        message: conflict.message
+    }));
 
-    if (rawGrants.length === 0 && ruleChoices.length === 0 && conflicts.length === 0) {
+    const storedRolls = new Map<string, number>();
+    for (const input of rulesInputs) {
+        if ((input.kind !== "resource" && input.kind !== "integerFact")
+            || input.integerValue === null
+            || !input.key.startsWith(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX)) {
+            continue;
+        }
+        const rollKey = input.key.slice(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX.length);
+        if (rollKey.length > 0) storedRolls.set(rollKey, input.integerValue);
+    }
+
+    const rollKeys = new Set<string>();
+    const rollMechanics = new Map<string, (typeof rawMechanics)[number]>();
+    for (const mechanic of rawMechanics) {
+        for (const rollKey of mechanic.requiredRolls ?? []) {
+            rollKeys.add(rollKey);
+            rollMechanics.set(rollKey, mechanic);
+        }
+        for (const contribution of mechanic.contributions ?? []) {
+            if (storedRolls.has(contribution.contributionKey)) {
+                rollKeys.add(contribution.contributionKey);
+                rollMechanics.set(contribution.contributionKey, mechanic);
+            }
+        }
+    }
+    for (const conflict of rawConflicts) {
+        if (!conflict.conflictKey.startsWith("conflict.")) continue;
+        const candidate = conflict.conflictKey.slice("conflict.".length);
+        if (!storedRolls.has(candidate)) continue;
+        const relatedMechanic = rawMechanics.find(value =>
+            conflict.relatedMechanicKeys.includes(value.mechanicKey));
+        if (relatedMechanic !== undefined) {
+            rollKeys.add(candidate);
+            rollMechanics.set(candidate, relatedMechanic);
+        }
+    }
+
+    const rolls: GuidedEquipmentRollView[] = [...rollKeys]
+        .map(rollKey => {
+            const mechanic = rollMechanics.get(rollKey);
+            const required = mechanic?.requiredRolls?.includes(rollKey) === true;
+            return {
+                rollKey,
+                displayName: mechanic === undefined
+                    ? "Starting Equipment Roll"
+                    : `${mechanic.displayName} Roll`,
+                state: mechanic?.state ?? (required ? "roll-required" : "resolved"),
+                required,
+                selectedValue: storedRolls.get(rollKey),
+                detail: formatMechanicDetail(mechanic)
+            };
+        })
+        .sort((left, right) => left.displayName.localeCompare(right.displayName));
+
+    if (rawGrants.length === 0
+        && ruleChoices.length === 0
+        && rolls.length === 0
+        && conflicts.length === 0) {
         return null;
     }
 
@@ -139,6 +217,7 @@ export function projectGuidedStartingEquipment(
         grants: [...grouped.values()].sort((left, right) =>
             left.displayName.localeCompare(right.displayName)),
         choices,
+        rolls,
         conflicts,
         sourceAttributions: sourceAttributions.length === 0 ? undefined : sourceAttributions
     };
@@ -154,24 +233,35 @@ export function renderGuidedStartingEquipment(
     section.append(createElement(
         "p",
         "dd-guided-builder__section-copy",
-        "Review equipment granted automatically and make any required starting-equipment choices."));
+        "Review equipment granted automatically and make any required starting-equipment choices or rolls."));
 
     if (equipment.grants.length > 0) {
         section.append(renderEquipmentItems("Granted Equipment", equipment.grants));
     }
 
-    if (equipment.choices.length === 0) {
-        if (equipment.grants.length === 0 && equipment.conflicts.length === 0) {
-            section.append(createInlineState(
-                "No starting equipment grants or choices are required.",
-                "neutral"));
-        }
-    } else {
+    if (equipment.choices.length > 0) {
         const choices = createElement("div", "dd-guided-equipment__choices");
         for (const choice of equipment.choices) {
             choices.append(renderEquipmentChoice(choice, handlers, pending));
         }
         section.append(choices);
+    }
+
+    if (equipment.rolls.length > 0) {
+        const rolls = createElement("div", "dd-guided-equipment__choices");
+        for (const roll of equipment.rolls) {
+            rolls.append(renderEquipmentRoll(roll, handlers, pending));
+        }
+        section.append(rolls);
+    }
+
+    if (equipment.grants.length === 0
+        && equipment.choices.length === 0
+        && equipment.rolls.length === 0
+        && equipment.conflicts.length === 0) {
+        section.append(createInlineState(
+            "No starting equipment grants, choices, or rolls are required.",
+            "neutral"));
     }
 
     if (equipment.conflicts.length > 0) {
@@ -248,6 +338,48 @@ function renderEquipmentChoice(
     return fieldset;
 }
 
+function renderEquipmentRoll(
+    roll: GuidedEquipmentRollView,
+    handlers: GuidedEquipmentHandlers,
+    pending: boolean
+): HTMLElement {
+    const fieldset = createElement("fieldset", "dd-build-choice dd-guided-equipment__choice");
+    fieldset.setAttribute("data-guided-equipment-roll", roll.rollKey);
+    fieldset.setAttribute("data-guided-equipment-roll-state", roll.state);
+    fieldset.disabled = pending;
+    fieldset.append(createElement("legend", "dd-build-choice__label", roll.displayName));
+
+    if (roll.detail !== undefined) {
+        fieldset.append(createElement("p", "dd-guided-builder__section-copy", roll.detail));
+    }
+    if (roll.required && roll.selectedValue === undefined) {
+        fieldset.append(createInlineState("Enter the roll result required by Rules Core.", "warning"));
+    }
+
+    const actions = createElement("div", "dd-build-choice__actions");
+    const input = createElement("input", "dd-rule-chooser__input");
+    input.type = "number";
+    input.step = "1";
+    input.required = true;
+    input.setAttribute("aria-label", roll.displayName);
+    if (roll.selectedValue !== undefined) input.value = String(roll.selectedValue);
+    const save = createButton(
+        roll.selectedValue === undefined ? "Set Roll" : "Replace Roll",
+        "dd-button dd-button--secondary",
+        () => {
+            if (!input.checkValidity()) {
+                input.reportValidity();
+                return;
+            }
+            const value = Number(input.value);
+            if (Number.isInteger(value)) handlers.setRoll(roll.rollKey, value);
+        },
+        pending);
+    actions.append(input, save);
+    fieldset.append(actions);
+    return fieldset;
+}
+
 function renderEquipmentItems(
     heading: string,
     items: readonly GuidedEquipmentItemView[]
@@ -312,6 +444,20 @@ function renderEquipmentOptionContents(option: GuidedEquipmentOptionView): HTMLE
     return content;
 }
 
+function formatMechanicDetail(
+    mechanic: ReturnType<typeof getRulesCoreContext> extends infer _ ? {
+        textValue?: string | null;
+        unit?: string | null;
+    } | undefined : never
+): string | undefined {
+    if (mechanic === undefined) return undefined;
+    const text = mechanic.textValue?.trim();
+    const unit = mechanic.unit?.trim();
+    if (text === undefined || text.length === 0) return unit || undefined;
+    if (unit === undefined || unit.length === 0) return text;
+    return `${text} ${unit}`;
+}
+
 function uniqueSourceAttributions(
     values: readonly SourceAttributionView[]
 ): readonly SourceAttributionView[] {
@@ -321,3 +467,5 @@ function uniqueSourceAttributions(
     }
     return [...unique.values()];
 }
+
+export { toRulesCoreRuntimeRollStateKey };
