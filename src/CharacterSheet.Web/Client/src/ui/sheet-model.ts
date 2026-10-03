@@ -105,7 +105,7 @@ export function getGuidedBuilderChoiceSourceKeys(
     }
 
     const targets: readonly CharacterBuilderChoice[] = section === "background"
-        ? ["background"]
+        ? ["background", "deity"]
         : ["species", "subspecies"];
     for (const target of targets) {
         const conceptKey = getStoredChoiceConceptKey(builder.build, target);
