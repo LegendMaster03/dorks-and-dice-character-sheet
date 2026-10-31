@@ -16,6 +16,51 @@ namespace CharacterSheet.IntegrationTests;
 public sealed class DelegatedRulesCoreGatewayTests
 {
     [Fact]
+    public async Task NativeMechanicsUseCharacterSheetServerDelegationRatherThanBrowserUpstream()
+    {
+        var handler = new RecordingHandler(request =>
+        {
+            Assert.EndsWith("/api/mechanics/v1/ruleset",
+                request.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+            return Ok(new {
+                contractVersion = 1,
+                rulesetId = "first-party-001",
+                fingerprint = new string('a', 64)
+            });
+        });
+        var httpContext = await AuthenticatedContextAsync(withDelegation: true);
+        var gateway = new DelegatedRulesCoreGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+            new HttpContextAccessor { HttpContext = httpContext },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+
+        var metadata = await gateway.GetNativeRulesetAsync(CancellationToken.None);
+        Assert.Equal("first-party-001", metadata["rulesetId"]!.GetValue<string>());
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("Bearer", request.Authorization?.Scheme);
+        Assert.Equal("ddtd_v1_test-capability", request.Authorization?.Parameter);
+        Assert.False(request.HasToolTicket);
+        Assert.False(request.HasToolIntrospectionPath);
+        Assert.StartsWith("/tool-host/character-sheet/api/delegate/rules-core/upstream/",
+            request.Uri.AbsolutePath, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NativeMechanicsPreserveVersionConflictWithoutLeakingCoreResponse()
+    {
+        var handler = new RecordingHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.Conflict));
+        var httpContext = await AuthenticatedContextAsync(withDelegation: true);
+        var gateway = new DelegatedRulesCoreGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+            new HttpContextAccessor { HttpContext = httpContext },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+        var error = await Assert.ThrowsAsync<RulesCoreGatewayException>(
+            () => gateway.GetNativeRulesetAsync(CancellationToken.None));
+        Assert.Equal(409, error.StatusCode);
+    }
+
+    [Fact]
     public async Task UsesStableConceptResolutionAndServerIssuedDelegationWithoutForwardingToolHeaders()
     {
         var handler = new RecordingHandler(request =>
