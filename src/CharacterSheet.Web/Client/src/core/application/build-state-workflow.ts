@@ -11,7 +11,7 @@ import {
 } from "../../builder-rules.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
-import { resolveRuleConcept } from "../../rules-core-api.js";
+
 import { requestErrorMessage } from "./request-error.js";
 
 export interface BuildStateWorkflow {
@@ -44,45 +44,17 @@ export function createBuildStateWorkflow(
         });
 
         const feats = build.progressionEntries
-            .filter(value => value.kind === "feat")
-            .map(async occurrence => {
-                try {
-                    const rule = await resolveRuleConcept(
-                        environment,
-                        occurrence.ruleConceptKey);
-                    const reference = rule !== null
-                        && rule.entityType === "feat"
-                        && rule.conceptKey === occurrence.ruleConceptKey
-                        ? {
-                            status: "resolved" as const,
-                            conceptKey: occurrence.ruleConceptKey,
-                            rule
-                        }
-                        : {
-                            status: "unavailable" as const,
-                            conceptKey: occurrence.ruleConceptKey
-                        };
-                    application.dispatch({
-                        type: "feat-reference-resolved",
-                        occurrenceId: occurrence.id,
-                        conceptKey: occurrence.ruleConceptKey,
-                        reference
-                    });
-                } catch (error) {
-                    application.dispatch({
-                        type: "feat-reference-resolved",
-                        occurrenceId: occurrence.id,
-                        conceptKey: occurrence.ruleConceptKey,
-                        reference: {
-                            status: "error",
-                            conceptKey: occurrence.ruleConceptKey,
-                            message: requestErrorMessage(error)
-                        }
-                    });
-                }
+            .filter(value => value.kind === "feat");
+        for (const occurrence of feats) {
+            application.dispatch({
+                type: "feat-reference-resolved",
+                occurrenceId: occurrence.id,
+                conceptKey: occurrence.ruleConceptKey,
+                reference: { status: "unavailable", conceptKey: occurrence.ruleConceptKey }
             });
+        }
 
-        await Promise.all([...structural, ...feats]);
+        await Promise.all(structural);
     }
 
     return {

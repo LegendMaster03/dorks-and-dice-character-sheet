@@ -12,6 +12,7 @@ import type {
     CharacterStateResponse
 } from "./character-state-api.js";
 import type { RuleReferenceState } from "./builder-rules.js";
+import type { NativeOptionSummary } from "./rules-core-native-api.js";
 import type {
     HarvestingHelperInput,
     HarvestingOutcomeResponse,
@@ -53,7 +54,7 @@ export type RuleChooserState =
         target: CharacterBuilderChoice;
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -149,7 +150,7 @@ export type ConditionChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -191,6 +192,8 @@ export interface CharacterPresentationUiState {
     requestId: number;
     advancement: CharacterPresentationResponse["advancement"] | null;
     mechanics: CharacterPresentationResponse["mechanics"];
+    mechanicsStatus?: CharacterPresentationResponse["mechanicsStatus"];
+    mechanicsMessage?: CharacterPresentationResponse["mechanicsMessage"];
     message?: string;
 }
 
@@ -300,7 +303,7 @@ export type CharacterSheetAction =
     | { type: "chooser-opened"; target: CharacterBuilderChoice }
     | { type: "chooser-query-changed"; query: string }
     | { type: "chooser-load-started"; target: CharacterBuilderChoice; query: string }
-    | { type: "chooser-loaded"; target: CharacterBuilderChoice; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "chooser-loaded"; target: CharacterBuilderChoice; query: string; results: NativeOptionSummary[] }
     | { type: "chooser-load-failed"; target: CharacterBuilderChoice; query: string; message: string }
     | { type: "chooser-closed" }
     | { type: "selection-save-started"; target: CharacterBuilderChoice }
@@ -341,7 +344,7 @@ export type CharacterSheetAction =
     | { type: "condition-chooser-opened" }
     | { type: "condition-chooser-query-changed"; query: string }
     | { type: "condition-chooser-load-started"; query: string }
-    | { type: "condition-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "condition-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "condition-chooser-load-failed"; query: string; message: string }
     | { type: "condition-chooser-closed" }
     | { type: "recovery-started"; procedureKey: string; request: CharacterRecoveryRequestInput }

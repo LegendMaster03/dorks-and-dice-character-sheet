@@ -474,18 +474,12 @@ export function toRuleReferenceDisplay(reference: RuleReferenceState): RuleRefer
             return { value: "Not selected", tone: "empty" };
         case "loading":
             return { value: "Resolving selection", detail: reference.conceptKey, tone: "loading" };
-        case "resolved": {
-            const metadata = [
-                reference.rule.editionDisplayName,
-                reference.rule.sourceCode,
-                reference.rule.packageDisplayName
-            ].map(value => value.trim()).filter(value => value.length > 0);
+        case "resolved":
             return {
-                value: reference.rule.displayName,
-                detail: metadata.length > 0 ? metadata.join(" • ") : undefined,
+                value: reference.rule.name,
+                detail: reference.rule.id,
                 tone: "resolved"
             };
-        }
         case "unavailable":
             return {
                 value: "Unavailable saved selection",

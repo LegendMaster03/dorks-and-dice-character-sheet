@@ -1195,8 +1195,9 @@ test("Known Spells renders Character-owned spell concepts and delegates add/remo
         status: "resolved",
         conceptKey: "spell.magic-missile",
         rule: {
-            ...resolvedItem("spell.magic-missile", "Magic Missile").rule,
-            entityType: "spell"
+            id: "spell.magic-missile",
+            name: "Magic Missile",
+            kind: "spell"
         }
     };
     const spellHandlers = {

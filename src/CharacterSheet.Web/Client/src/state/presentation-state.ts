@@ -23,7 +23,9 @@ export function reducePresentationState(
                     status: "ready",
                     requestId: action.requestId,
                     advancement: action.presentation.advancement,
-                    mechanics: action.presentation.mechanics
+                    mechanics: action.presentation.mechanics,
+                    mechanicsStatus: action.presentation.mechanicsStatus,
+                    mechanicsMessage: action.presentation.mechanicsMessage
                 };
             }
             break;
@@ -34,6 +36,8 @@ export function reducePresentationState(
                     requestId: action.requestId,
                     advancement: null,
                     mechanics: null,
+                    mechanicsStatus: "unavailable",
+                    mechanicsMessage: action.message,
                     message: action.message
                 };
             }

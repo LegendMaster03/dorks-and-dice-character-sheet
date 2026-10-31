@@ -71,7 +71,8 @@ export function renderCharacterWorkspace(
     advancement: CharacterAdvancementView | null,
     mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers,
-    harvestingCrafting: HarvestingCraftingUiState = createInitialHarvestingCraftingState()
+    harvestingCrafting: HarvestingCraftingUiState = createInitialHarvestingCraftingState(),
+    mechanicsAvailability?: { status: "resolved" | "partial" | "unconfigured" | "unavailable" | "loading"; message?: string | null }
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -122,6 +123,19 @@ export function renderCharacterWorkspace(
     }
     if (readOnly) {
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
+    }
+    if (mechanicsAvailability && mechanicsAvailability.status !== "resolved" &&
+        mechanicsAvailability.status !== "loading") {
+        const descriptions = {
+            partial: "Some character mechanics are unresolved. Displayed calculations cover only supported native rules.",
+            unconfigured: "Set base ability scores and choose a starting class to calculate character mechanics.",
+            unavailable: "Character mechanics could not be calculated. Saved character data is unchanged."
+        } as const;
+        const banner = createInlineState(
+            mechanicsAvailability.message || descriptions[mechanicsAvailability.status],
+            mechanicsAvailability.status === "unavailable" ? "warning" : "neutral");
+        banner.setAttribute("data-mechanics-projection-status", mechanicsAvailability.status);
+        shell.append(banner);
     }
 
     if (guidedBuilder.open && editable) {

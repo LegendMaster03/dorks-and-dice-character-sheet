@@ -333,7 +333,16 @@ function renderWorkspace(
                 { type: "guided-builder-section-selected", section },
                 `[data-guided-builder-section="${section}"]`)
         },
-        state.harvestingCrafting);
+        state.harvestingCrafting,
+        state.presentation.status === "ready"
+            ? {
+                status: state.presentation.mechanicsStatus ?? (
+                    state.presentation.mechanics === null ? "unavailable" : "resolved"),
+                message: state.presentation.mechanicsMessage
+              }
+            : state.presentation.status === "error"
+                ? { status: "unavailable", message: state.presentation.message }
+                : { status: "loading" });
     return workspace;
 }
 

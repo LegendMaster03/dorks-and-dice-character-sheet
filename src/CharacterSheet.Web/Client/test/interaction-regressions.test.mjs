@@ -311,7 +311,9 @@ test("Prestige Class advancement remains inspectable when eligibility is unresol
 
     assert.match(workflow, /"class" \| "prestigeClass" \| "subclass"/);
     assert.match(workflow, /prestigeClassConceptKey/);
-    assert.match(workflow, /searchResolvedRules\(environment, entityType, normalizedQuery\)/);
+    assert.match(workflow, /searchNativeOptions/);
+    assert.doesNotMatch(workflow, /searchResolvedRules\(environment, entityType, normalizedQuery\)/);
+    assert.match(workflow, /Native eligibility for this advancement category is not implemented yet/);
     assert.doesNotMatch(workflow, /eligible[^\n]*filter/i);
 
     assert.match(panel, /Eligibility unresolved/);

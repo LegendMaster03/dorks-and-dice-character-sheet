@@ -43,18 +43,7 @@ const build = {
 const resolved = (conceptKey, entityType, displayName) => ({
     status: "resolved",
     conceptKey,
-    rule: {
-        ruleConceptId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-        conceptKey,
-        entityType,
-        displayName,
-        sourceEntityName: displayName,
-        sourceCode: "SRD",
-        packageKey: "fixture",
-        packageDisplayName: "Fixture",
-        editionKey: "5e",
-        editionDisplayName: "5e"
-    }
+    rule: { id: conceptKey, kind: entityType, name: displayName }
 });
 
 function builder(overrides = {}) {
