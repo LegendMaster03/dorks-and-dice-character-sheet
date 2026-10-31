@@ -2,9 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace CharacterSheet.Application.RulesCore;
 
-public sealed class RulesCoreGatewayException(string message, Exception? innerException = null)
+public sealed class RulesCoreGatewayException(
+    string message, Exception? innerException = null, int? statusCode = null)
     : Exception(message, innerException)
 {
+    public int? StatusCode { get; } = statusCode;
 }
 
 public sealed record RulesCoreResolvedRuleRelationshipView(

@@ -64,6 +64,17 @@ builder.Services
         UseCookies = false
     });
 builder.Services
+    .AddHttpClient<INativeRulesCoreGateway, DelegatedRulesCoreGateway>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.BaseAddress = toolHostBaseUri;
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
+builder.Services
     .AddHttpClient<IToolLifecycleIntrospectionClient, DorksAndDiceToolLifecycleIntrospectionClient>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(3);
@@ -169,6 +180,7 @@ app.MapCharacterStartingEquipmentEndpoints();
 app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
 app.MapCharacterCraftingEndpoints();
+app.MapNativeRulesCoreEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,

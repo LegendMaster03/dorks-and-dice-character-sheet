@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CharacterSheet.Application.Hosting;
 using CharacterSheet.Application.RulesCore;
 
@@ -12,11 +13,37 @@ public sealed class DelegatedRulesCoreGateway(
     HttpClient httpClient,
     IHttpContextAccessor httpContextAccessor,
     ILogger<DelegatedRulesCoreGateway> logger)
-    : IRulesCoreAdvancementGateway
+    : IRulesCoreAdvancementGateway, INativeRulesCoreGateway
 {
     private const string TargetSlug = "rules-core";
     private const int MaximumRuleResolutionCalls = 28;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public Task<JsonNode> GetNativeRulesetAsync(CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Get, "/api/mechanics/v1/ruleset",
+            content: null, cancellationToken);
+
+    public Task<JsonNode> SearchNativeOptionsAsync(
+        string fingerprint, string category, string? query, int limit, int offset,
+        CancellationToken cancellationToken = default)
+    {
+        var path = "/api/mechanics/v1/catalog/options?fingerprint=" +
+            Uri.EscapeDataString(fingerprint) + "&category=" + Uri.EscapeDataString(category) +
+            "&q=" + Uri.EscapeDataString(query ?? "") +
+            "&limit=" + limit.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+            "&offset=" + offset.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return SendJsonAsync<JsonNode>(HttpMethod.Get, path, content: null, cancellationToken);
+    }
+
+    public Task<JsonNode> EvaluateNativeAdvancementAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/advancements/eligibility",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
+    public Task<JsonNode> ProjectNativeCharacterAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/project",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
     public async Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
         IReadOnlyCollection<string> conceptKeys,
@@ -328,7 +355,7 @@ public sealed class DelegatedRulesCoreGateway(
                     var message = response.StatusCode == HttpStatusCode.BadRequest
                         ? "Rules Core rejected a mechanics evaluation request."
                         : "Rules Core is unavailable for this projection.";
-                    throw new RulesCoreGatewayException(message);
+                    throw new RulesCoreGatewayException(message, statusCode: (int)response.StatusCode);
                 }
 
                 try

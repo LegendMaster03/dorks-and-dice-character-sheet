@@ -65,6 +65,15 @@ public sealed class HostingContractTests : IClassFixture<PostgresWebApplicationF
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? string.Empty, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("/api/native-rules/ruleset")]
+    [InlineData("/api/native-rules/options?category=class&fingerprint=test")]
+    public async Task NativeRulesEndpointWithoutRedeemedCharacterSheetTicketIsUnauthorized(string path)
+    {
+        using var response = await _client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Fact]
     public void AuthenticationContractIsPinnedToCharacterSheet()
     {
