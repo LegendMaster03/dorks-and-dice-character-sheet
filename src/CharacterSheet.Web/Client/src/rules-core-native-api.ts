@@ -1,4 +1,5 @@
-import { buildRulesCoreUrl, RulesCoreApiError } from "./rules-core-api.js";
+import { RulesCoreApiError } from "./rules-core-api.js";
+import { buildCharacterSheetApiUrl } from "./character-api.js";
 import type { HostEnvironment } from "./host-environment.js";
 
 // This client does not reinterpret legacy RuleConceptKey values. Native
@@ -142,7 +143,7 @@ async function requestJson(
 ): Promise<unknown> {
     let response: Response;
     try {
-        response = await fetcher(buildRulesCoreUrl(environment, path), {
+        response = await fetcher(buildCharacterSheetApiUrl(environment, path), {
             method,
             credentials: "same-origin",
             headers: body === undefined
@@ -185,7 +186,7 @@ export async function loadNativeRuleset(
     environment: HostEnvironment,
     fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)
 ): Promise<NativeRulesetMetadata> {
-    const result = await requestJson(environment, "/api/mechanics/v1/ruleset", "GET", undefined, fetcher);
+    const result = await requestJson(environment, "/api/native-rules/ruleset", "GET", undefined, fetcher);
     if (!isObject(result)) throw new Error("Rules Core native ruleset metadata is invalid.");
     const metadata = result as unknown as NativeRulesetMetadata;
     assertRuleset(metadata);
@@ -215,7 +216,7 @@ export async function searchNativeOptions(
         limit: String(limit), offset: String(offset)
     });
     const result = await requestJson(environment,
-        `/api/mechanics/v1/catalog/options?${params.toString()}`, "GET", undefined, fetcher);
+        `/api/native-rules/options?${params.toString()}`, "GET", undefined, fetcher);
     assertMatchingSnapshot(metadata, result);
     if (result.category !== category || !Array.isArray(result.options) ||
         typeof result.total !== "number" || result.total < 0 || !Number.isInteger(result.total)) {
@@ -246,7 +247,7 @@ export async function evaluateNativeAdvancement(
 ): Promise<NativeEligibilityResult> {
     assertCharacter(metadata, character);
     if (!validNativeId.test(candidateId)) throw new Error("Native candidate ID is invalid.");
-    const result = await requestJson(environment, "/api/mechanics/v1/advancements/eligibility",
+    const result = await requestJson(environment, "/api/native-rules/advancements/eligibility",
         "POST", { rulesetId: metadata.rulesetId, fingerprint: metadata.fingerprint,
             candidateId, character }, fetcher);
     assertMatchingSnapshot(metadata, result);
@@ -267,7 +268,7 @@ export async function projectNativeCharacter(
     fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)
 ): Promise<NativeCharacterProjection> {
     assertCharacter(metadata, character);
-    const result = await requestJson(environment, "/api/mechanics/v1/characters/project",
+    const result = await requestJson(environment, "/api/native-rules/characters/project",
         "POST", character, fetcher);
     assertMatchingSnapshot(metadata, result);
     if (!["resolved", "partial", "invalid"].includes(String(result.status)) ||

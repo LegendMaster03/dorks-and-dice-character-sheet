@@ -11,7 +11,7 @@ const metadata = {
         advancementEligibility: "supported-subset", conditionRollMode: "conditional-subset",
         campaignEffectiveRules: false }
 };
-const env = { embedded: true };
+const env = { embedded: true, contextUrl: "/tool-host/registrations/character-sheet/context" };
 const character = {
     rulesetId: metadata.rulesetId, fingerprint, abilityScores: {
         strength: 10, dexterity: 14, constitution: 12,
@@ -24,7 +24,7 @@ const reply = (value, status = 200) => async () =>
     new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 
 // The local compilation stub matches the upstream buildRulesCoreUrl path shape.
-test("ruleset metadata uses the existing delegated Site route", async () => {
+test("ruleset metadata calls the Character Sheet backend, not direct Rules Core", async () => {
     let observed;
     const result = await loadNativeRuleset(env, async (url, options) => {
         observed = { url, options };
@@ -32,7 +32,7 @@ test("ruleset metadata uses the existing delegated Site route", async () => {
     });
     assert.deepEqual(result, metadata);
     assert.equal(observed.url,
-        "/tool-host/registrations/rules-core/api/upstream/api/mechanics/v1/ruleset");
+        "/tool-host/registrations/character-sheet/api/upstream/api/native-rules/ruleset");
     assert.equal(observed.options.credentials, "same-origin");
 });
 
