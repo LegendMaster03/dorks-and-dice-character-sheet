@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Hosting;
 using CharacterSheet.Application.RulesCore;
@@ -14,518 +16,300 @@ namespace CharacterSheet.IntegrationTests;
 public sealed class CharacterAdvancementWorkflowTests
 {
     [Fact]
-    public async Task SubclassAcquisitionRequiresExplicitEligibleAdvancementChoiceAndPersistsParentOccurrence()
+    public async Task NativeClassAdvancementRequiresHitPointGainAndPersistsApprovedLevel()
     {
-        using var factory = new AdvancementWorkflowFactory();
-        var characterId = Guid.NewGuid();
-        factory.Context = Context(new ToolHostCharacterContext(
-            characterId,
-            "Advancing Character",
-            "Active",
-            null,
-            []));
-
-        using (var initialize = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/sheet"))
-        {
-            Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
-        }
-
-        CharacterBuildView startingBuild;
-        using (var startingClass = await factory.SendHostedAsync(
-                   HttpMethod.Put,
-                   $"/api/characters/{characterId:D}/build/starting-class",
-                   new { conceptKey = "class:fighter" }))
-        {
-            Assert.Equal(HttpStatusCode.OK, startingClass.StatusCode);
-            startingBuild = (await startingClass.Content.ReadFromJsonAsync<CharacterBuildView>())!;
-        }
-        var classEntry = Assert.Single(startingBuild.ProgressionEntries);
-
-        using (var setLevel = await factory.SendHostedAsync(
-                   HttpMethod.Put,
-                   $"/api/characters/{characterId:D}/build/advancements/{classEntry.Id:D}/level",
-                   new { level = 2 }))
-        {
-            Assert.Equal(HttpStatusCode.OK, setLevel.StatusCode);
-        }
-
-        using (var noExplicitSubclass = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/advancement/preview",
-                   new { classAdvancementEntryId = classEntry.Id }))
-        {
-            Assert.Equal(HttpStatusCode.OK, noExplicitSubclass.StatusCode);
-            var plan = await noExplicitSubclass.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
-            Assert.NotNull(plan);
-            Assert.False(plan.CanApply);
-            Assert.Equal("choices-required", plan.Status);
-            var required = Assert.Single(plan.RequiredChoices);
-            Assert.Equal("subclass", required.Kind);
-            Assert.Equal("choice-required", required.State);
-            Assert.Null(required.SelectedValue);
-        }
-
-        using (var selectedSubclass = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/advancement/preview",
-                   new
-                   {
-                       classAdvancementEntryId = classEntry.Id,
-                       subclassConceptKey = "subclass:champion"
-                   }))
-        {
-            Assert.Equal(HttpStatusCode.OK, selectedSubclass.StatusCode);
-            var plan = await selectedSubclass.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
-            Assert.NotNull(plan);
-            Assert.True(plan.CanApply);
-            Assert.Equal("ready", plan.Status);
-            Assert.Equal("subclass:champion", plan.SubclassConceptKey);
-            Assert.Equal("Champion", plan.SubclassDisplayName);
-            Assert.NotNull(plan.SubclassEligibility);
-            Assert.True(plan.SubclassEligibility!.Eligible);
-            Assert.Contains(plan.Changes, value =>
-                value.Kind == "subclass-acquired"
-                && value.Label.Contains("Champion", StringComparison.Ordinal));
-            Assert.Contains(plan.Changes, value =>
-                value.Kind == "feature"
-                && value.Label == "Improved Critical");
-        }
-
-        Assert.NotNull(factory.RulesCore.LastEligibilityRequest);
-        Assert.Equal("subclass:champion", factory.RulesCore.LastEligibilityRequest!.CandidateConceptKey);
-        Assert.Equal(
-            classEntry.Id.ToString("D"),
-            factory.RulesCore.LastEligibilityRequest.ParentAdvancementOccurrenceKey);
-
-        using var apply = await factory.SendHostedAsync(
-            HttpMethod.Post,
-            $"/api/characters/{characterId:D}/advancement/apply",
-            new
-            {
-                classAdvancementEntryId = classEntry.Id,
-                subclassConceptKey = "subclass:champion"
-            });
-        Assert.Equal(HttpStatusCode.OK, apply.StatusCode);
-        var result = await apply.Content.ReadFromJsonAsync<AdvancementApplyResponse>();
-        Assert.NotNull(result);
-        Assert.Equal("applied", result.Plan.Status);
-
-        var fighter = Assert.Single(result.Build.ProgressionEntries, value => value.Kind == "class");
-        Assert.Equal(3, fighter.Level);
-        var champion = Assert.Single(result.Build.ProgressionEntries, value => value.Kind == "subclass");
-        Assert.Equal("subclass:champion", champion.RuleConceptKey);
-        Assert.Equal(fighter.Id, champion.ParentAdvancementEntryId);
-        Assert.Null(champion.Level);
-    }
-
-    [Fact]
-    public async Task EligiblePrestigeClassCanBeAcquiredAndAdvancedThroughTheSameWorkflow()
-    {
-        using var factory = new AdvancementWorkflowFactory();
-        var characterId = Guid.NewGuid();
-        factory.Context = Context(new ToolHostCharacterContext(
-            characterId,
-            "Prestige Character",
-            "Active",
-            null,
-            []));
-
-        using (var initialize = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/sheet"))
-        {
-            Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
-        }
-
-        CharacterBuildView startingBuild;
-        using (var startingClass = await factory.SendHostedAsync(
-                   HttpMethod.Put,
-                   $"/api/characters/{characterId:D}/build/starting-class",
-                   new { conceptKey = "class:fighter" }))
-        {
-            Assert.Equal(HttpStatusCode.OK, startingClass.StatusCode);
-            startingBuild = (await startingClass.Content.ReadFromJsonAsync<CharacterBuildView>())!;
-        }
-        var fighter = Assert.Single(startingBuild.ProgressionEntries);
-        using (var setLevel = await factory.SendHostedAsync(
-                   HttpMethod.Put,
-                   $"/api/characters/{characterId:D}/build/advancements/{fighter.Id:D}/level",
-                   new { level = 5 }))
-        {
-            Assert.Equal(HttpStatusCode.OK, setLevel.StatusCode);
-        }
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Advancing Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
 
         using (var preview = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/advancement/preview",
-                   new { prestigeClassConceptKey = "prestige:weapon-master" }))
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classAdvancementEntryId = entry.Id }))
         {
             Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
             var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
             Assert.NotNull(plan);
-            Assert.Equal("prestigeClass", plan.AdvancementKind);
-            Assert.Equal("prestige-class-acquire", plan.Operation);
-            Assert.Equal("Weapon Master", plan.ClassDisplayName);
-            Assert.Equal(0, plan.CurrentClassLevel);
-            Assert.Equal(1, plan.TargetClassLevel);
-            Assert.Equal(5, plan.CurrentCharacterLevel);
-            Assert.Equal(6, plan.TargetCharacterLevel);
-            Assert.True(plan.CanApply);
-            Assert.NotNull(plan.AdvancementEligibility);
-            Assert.True(plan.AdvancementEligibility!.Eligible);
-        }
-
-        Assert.NotNull(factory.RulesCore.LastEligibilityRequest);
-        Assert.Equal(
-            "prestige:weapon-master",
-            factory.RulesCore.LastEligibilityRequest!.CandidateConceptKey);
-        Assert.Null(factory.RulesCore.LastEligibilityRequest.ParentAdvancementOccurrenceKey);
-
-        CharacterAdvancementEntryView prestige;
-        using (var apply = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/advancement/apply",
-                   new { prestigeClassConceptKey = "prestige:weapon-master" }))
-        {
-            Assert.Equal(HttpStatusCode.OK, apply.StatusCode);
-            var result = await apply.Content.ReadFromJsonAsync<AdvancementApplyResponse>();
-            Assert.NotNull(result);
-            Assert.Equal("applied", result.Plan.Status);
-            prestige = Assert.Single(
-                result.Build.ProgressionEntries,
-                value => value.Kind == "prestigeClass");
-            Assert.Equal("prestige:weapon-master", prestige.RuleConceptKey);
-            Assert.Equal(1, prestige.Level);
-        }
-
-        using (var previewLevelTwo = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/advancement/preview",
-                   new { prestigeClassAdvancementEntryId = prestige.Id }))
-        {
-            Assert.Equal(HttpStatusCode.OK, previewLevelTwo.StatusCode);
-            var plan = await previewLevelTwo.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
-            Assert.NotNull(plan);
-            Assert.Equal("prestige-class-level-up", plan.Operation);
+            Assert.Equal("class.warlock", plan.ClassConceptKey);
+            Assert.Equal("Warlock", plan.ClassDisplayName);
             Assert.Equal(1, plan.CurrentClassLevel);
             Assert.Equal(2, plan.TargetClassLevel);
-            Assert.True(plan.CanApply);
+            Assert.False(plan.CanApply);
+            Assert.Contains(plan.BlockingConflicts, conflict =>
+                conflict.ConflictKey == "hit-point-gain");
         }
 
-        using (var applyLevelTwo = await factory.SendHostedAsync(
-                   HttpMethod.Post,
-                   $"/api/characters/{characterId:D}/advancement/apply",
-                   new { prestigeClassAdvancementEntryId = prestige.Id }))
+        using (var preview = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 }))
         {
-            Assert.Equal(HttpStatusCode.OK, applyLevelTwo.StatusCode);
-            var result = await applyLevelTwo.Content.ReadFromJsonAsync<AdvancementApplyResponse>();
-            Assert.NotNull(result);
-            var updatedPrestige = Assert.Single(
-                result.Build.ProgressionEntries,
-                value => value.Kind == "prestigeClass");
-            Assert.Equal(2, updatedPrestige.Level);
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+            var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+            Assert.NotNull(plan);
+            Assert.True(plan.CanApply);
+            Assert.Equal("ready", plan.Status);
         }
+
+        using var apply = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/apply",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 });
+        Assert.Equal(HttpStatusCode.OK, apply.StatusCode);
+        var applied = await apply.Content.ReadFromJsonAsync<ApplyView>();
+        Assert.NotNull(applied);
+        Assert.Equal("applied", applied.Plan.Status);
+        var updated = Assert.Single(applied.Build.ProgressionEntries);
+        Assert.Equal(entry.Id, updated.Id);
+        Assert.Equal("class.warlock", updated.RuleConceptKey);
+        Assert.Equal(2, updated.Level);
+        Assert.True(factory.Native.EligibilityCalls >= 3);
+        Assert.All(factory.Native.RequestedLevels, level => Assert.Equal(1, level));
+    }
+
+    [Fact]
+    public async Task HitPointGainOutsideNativeHitDieCannotBeApplied()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+        using var preview = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 9 });
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+        Assert.NotNull(plan);
+        Assert.False(plan.CanApply);
+        Assert.Contains(plan.BlockingConflicts, conflict => conflict.ConflictKey == "hit-die");
+        using var apply = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/apply",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 9 });
+        Assert.Equal(HttpStatusCode.BadRequest, apply.StatusCode);
+    }
+
+    [Fact]
+    public async Task RequiredNativePatronOrPactChoiceBlocksAdvancement()
+    {
+        using var factory = new Factory { Native = new FakeNativeGateway {
+            RequiredChoices = ["advancement.class.warlock.patron",
+                "advancement.class.warlock.pact"]
+        } };
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+        using var preview = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 });
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+        Assert.NotNull(plan);
+        Assert.False(plan.CanApply);
+        Assert.Contains(plan.BlockingConflicts, c =>
+            c.ConflictKey == "advancement.class.warlock.patron");
+        Assert.Contains(plan.BlockingConflicts, c =>
+            c.ConflictKey == "advancement.class.warlock.pact");
+    }
+
+    [Fact]
+    public async Task NativeEligibilityUnavailableDoesNotAdvanceOrPersistChanges()
+    {
+        using var factory = new Factory { Native = new FakeNativeGateway { IsEligible = false } };
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+
+        using (var preview = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 }))
+        {
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+            var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+            Assert.NotNull(plan);
+            Assert.False(plan.CanApply);
+            Assert.Contains(plan.BlockingConflicts, conflict =>
+                conflict.ConflictKey == "class-level");
+        }
+        using var rejected = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/apply",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 });
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+
+        using var read = await factory.SendHostedAsync(
+            HttpMethod.Get, $"/api/characters/{id:D}/build");
+        var build = await read.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.NotNull(build);
+        Assert.Equal(1, Assert.Single(build.ProgressionEntries).Level);
+    }
+
+    [Fact]
+    public async Task UnsupportedSubclassAndRetiredClassIdentityFailClosed()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+
+        using var unsupported = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new {
+                classAdvancementEntryId = entry.Id,
+                subclassConceptKey = "subclass.warlock.demo"
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, unsupported.StatusCode);
+
+        using var legacy = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classConceptKey = "class:warlock" });
+        Assert.Equal(HttpStatusCode.BadRequest, legacy.StatusCode);
+    }
+
+    [Fact]
+    public async Task UnauthenticatedOrMissingCharacterCannotInvokeNativeEligibility()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        using var response = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classConceptKey = "class.warlock" });
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(0, factory.Native.EligibilityCalls);
+    }
+
+    private static async Task<CharacterAdvancementEntryView> InitializeClassAsync(
+        Factory factory, Guid id)
+    {
+        using (var start = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/sheet"))
+            Assert.Equal(HttpStatusCode.OK, start.StatusCode);
+
+        using var save = await factory.SendHostedAsync(
+            HttpMethod.Put, $"/api/characters/{id:D}/build/starting-class",
+            new { conceptKey = "class.warlock" });
+        Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        var build = await save.Content.ReadFromJsonAsync<CharacterBuildView>();
+        return Assert.Single(build!.ProgressionEntries);
     }
 
     private static ToolHostAuthenticationContext Context(params ToolHostCharacterContext[] characters) =>
-        new(
-            1,
-            "character-sheet",
-            "dorks-and-dice",
-            new ToolHostUserContext(Guid.NewGuid().ToString("D"), "Owner"),
-            [],
-            [],
-            characters);
+        new(1, "character-sheet", "dorks-and-dice",
+            new ToolHostUserContext(Guid.NewGuid().ToString("D"), "Owner"), [], [], characters);
 
-    private sealed record AdvancementApplyResponse(
-        CharacterAdvancementPlanView Plan,
-        CharacterBuildView Build);
+    private sealed record ApplyView(CharacterAdvancementPlanView Plan, CharacterBuildView Build);
 
-    private sealed class AdvancementWorkflowFactory : WebApplicationFactory<Program>
+    private sealed class Factory : WebApplicationFactory<Program>
     {
-        private readonly PostgresTestDatabase database = PostgresTestDatabase.Create();
-
+        private readonly PostgresTestDatabase _database = PostgresTestDatabase.Create();
         public ToolHostAuthenticationContext Context { get; set; } = Context();
-        public FakeRulesCoreGateway RulesCore { get; } = new();
+        public FakeNativeGateway Native { get; init; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            builder.UseSetting("ConnectionStrings:CharacterSheet", database.ConnectionString);
+            builder.UseSetting("ConnectionStrings:CharacterSheet", _database.ConnectionString);
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IToolHostAuthenticationClient>();
-                services.AddSingleton<IToolHostAuthenticationClient>(new MutableAuthenticationClient(this));
-                services.RemoveAll<IRulesCoreGateway>();
-                services.AddSingleton<IRulesCoreGateway>(RulesCore);
+                services.AddSingleton<IToolHostAuthenticationClient>(new AuthenticationClient(this));
+                services.RemoveAll<INativeRulesCoreGateway>();
+                services.AddSingleton<INativeRulesCoreGateway>(Native);
             });
         }
 
         public async Task<HttpResponseMessage> SendHostedAsync(
-            HttpMethod method,
-            string path,
-            object? body = null)
+            HttpMethod method, string path, object? body = null)
         {
             using var client = CreateClient();
             using var request = new HttpRequestMessage(method, path);
             request.Headers.Add(ToolHostAuthenticationHeaders.Ticket, "test-ticket");
-            request.Headers.Add(
-                ToolHostAuthenticationHeaders.IntrospectionPath,
+            request.Headers.Add(ToolHostAuthenticationHeaders.IntrospectionPath,
                 DorksAndDiceToolHostAuthenticationClient.ExpectedIntrospectionPath);
-            if (body is not null)
-            {
-                request.Content = JsonContent.Create(body);
-            }
+            if (body is not null) request.Content = JsonContent.Create(body);
             return await client.SendAsync(request);
         }
 
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
-            if (disposing)
-            {
-                database.Dispose();
-            }
+            if (disposing) _database.Dispose();
         }
 
-        private sealed class MutableAuthenticationClient(AdvancementWorkflowFactory factory)
-            : IToolHostAuthenticationClient
+        private sealed class AuthenticationClient(Factory factory) : IToolHostAuthenticationClient
         {
             public Task<ToolHostAuthenticationContext?> RedeemAsync(
-                string ticket,
-                string introspectionPath,
-                CancellationToken cancellationToken = default) =>
+                string ticket, string path, CancellationToken cancellationToken = default) =>
                 Task.FromResult<ToolHostAuthenticationContext?>(factory.Context);
         }
     }
 
-    private sealed class FakeRulesCoreGateway : IRulesCoreAdvancementGateway
+    private sealed class FakeNativeGateway : INativeRulesCoreGateway
     {
-        private const string ClassKey = "class:fighter";
-        private const string SubclassKey = "subclass:champion";
-        private const string PrestigeKey = "prestige:weapon-master";
+        private static readonly string Fingerprint = new('a', 64);
+        public bool IsEligible { get; init; } = true;
+        public IReadOnlyList<string> RequiredChoices { get; init; } = [];
+        public int EligibilityCalls { get; private set; }
+        public List<int> RequestedLevels { get; } = [];
 
-        public RulesCoreCharacterAdvancementEligibilityRequest? LastEligibilityRequest { get; private set; }
+        public Task<JsonNode> GetNativeRulesetAsync(CancellationToken token) =>
+            Task.FromResult(JsonSerializer.SerializeToNode(new {
+                contractVersion = 1, rulesetId = "first-party-001",
+                fingerprint = Fingerprint,
+                capabilities = new { advancementEligibility = "supported-subset" }
+            })!);
 
-        public Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
-            IReadOnlyCollection<string> conceptKeys,
-            CancellationToken cancellationToken = default)
+        public Task<JsonNode> SearchNativeOptionsAsync(
+            string fingerprint, string category, string? query, int limit, int offset,
+            CancellationToken token)
         {
-            var rules = new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal);
-            foreach (var conceptKey in conceptKeys)
-            {
-                if (conceptKey == ClassKey)
-                {
-                    rules[conceptKey] = Rule(ClassKey, "class", "Fighter");
-                }
-                else if (conceptKey == SubclassKey)
-                {
-                    rules[conceptKey] = Rule(
-                        SubclassKey,
-                        "subclass",
-                        "Champion",
-                        [new RulesCoreResolvedRuleRelationshipView(
-                            "parent-class",
-                            Guid.NewGuid(),
-                            ClassKey,
-                            "class",
-                            "Fighter")]);
-                }
-                else if (conceptKey == PrestigeKey)
-                {
-                    rules[conceptKey] = Rule(PrestigeKey, "prestigeClass", "Weapon Master");
-                }
-            }
-            return Task.FromResult<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>>(rules);
+            Assert.Equal("class", category);
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                rulesetId = "first-party-001", fingerprint = Fingerprint,
+                options = new[] { new { id = "class.warlock", kind = "class", name = "Warlock" } }
+            })!);
         }
 
-        public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
-            RulesCoreCharacterRulesProjectionRequest request,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(Project(request));
-
-        public Task<RulesCoreCharacterAdvancementEligibilityView> ResolveGlobalCharacterAdvancementEligibilityAsync(
-            RulesCoreCharacterAdvancementEligibilityRequest request,
-            CancellationToken cancellationToken = default)
+        public Task<JsonNode> EvaluateNativeAdvancementAsync(
+            JsonElement request, CancellationToken token)
         {
-            LastEligibilityRequest = request;
-            var classFact = Assert.Single(request.Character.Advancements!, value => value.ConceptKey == ClassKey);
-            if (request.CandidateConceptKey == PrestigeKey)
-            {
-                return Task.FromResult(new RulesCoreCharacterAdvancementEligibilityView(
-                    "global",
-                    null,
-                    PrestigeKey,
-                    "Weapon Master",
-                    "prestigeClass",
-                    "eligible",
-                    classFact.Level >= 5,
-                    null,
-                    null,
-                    []));
-            }
-
-            return Task.FromResult(new RulesCoreCharacterAdvancementEligibilityView(
-                "global",
-                null,
-                SubclassKey,
-                "Champion",
-                "subclass",
-                "eligible",
-                true,
-                new RulesCoreCharacterAdvancementParentRequirementView(
-                    ClassKey,
-                    "Fighter",
-                    3,
-                    classFact.Level,
-                    classFact.Level >= 3,
-                    "resolved",
-                    "Fighter level 3 is sufficient."),
-                null,
-                []));
+            EligibilityCalls++;
+            var current = request.GetProperty("character")
+                .GetProperty("advancements").EnumerateArray().Single();
+            Assert.Equal("class.warlock", current.GetProperty("classId").GetString());
+            RequestedLevels.Add(current.GetProperty("level").GetInt32());
+            var die = request.TryGetProperty("hitDieValue", out var gain)
+                && gain.ValueKind == JsonValueKind.Number ? gain.GetInt32() : (int?)null;
+            var withinDie = die is null or >= 1 and <= 8;
+            var accepted = IsEligible && withinDie;
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                contractVersion = 1, rulesetId = "first-party-001",
+                fingerprint = Fingerprint,
+                candidateId = "class.warlock", candidateKind = "class",
+                status = accepted ? "eligible" : "ineligible",
+                eligible = accepted,
+                requirements = new[] {
+                    new {
+                        key = "class-level",
+                        status = IsEligible ? "satisfied" : "failed",
+                        detail = "Native class progression prerequisite"
+                    },
+                    new {
+                        key = "hit-die",
+                        status = withinDie ? "satisfied" : "failed",
+                        detail = "Hit point gain must fit a d8."
+                    }
+                }
+            })!);
         }
 
-        public Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
-            Guid campaignId,
-            RulesCoreCharacterRulesProjectionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<RulesCoreCharacterAdvancementEligibilityView> ResolveCampaignCharacterAdvancementEligibilityAsync(
-            Guid campaignId,
-            RulesCoreCharacterAdvancementEligibilityRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
-            RulesCoreCharacterSupportProjectionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
-            string procedureKey,
-            RulesCoreCharacterRecoveryResolutionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalManufacturingAsync(
-            RulesCoreManufacturingResolutionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignManufacturingAsync(
-            Guid campaignId,
-            RulesCoreManufacturingResolutionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalEnchantingAsync(
-            RulesCoreEnchantingResolutionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignEnchantingAsync(
-            Guid campaignId,
-            RulesCoreEnchantingResolutionRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        private static RulesCoreCharacterRulesProjectionView Project(
-            RulesCoreCharacterRulesProjectionRequest request)
+        public Task<JsonNode> ProjectNativeCharacterAsync(
+            JsonElement request, CancellationToken token)
         {
-            var classFact = request.Advancements?.SingleOrDefault(value => value.ConceptKey == ClassKey);
-            var classLevel = classFact?.Level ?? 0;
-            var occurrence = classFact?.OccurrenceKey ?? "missing-occurrence";
-            var choiceKey = $"advancement.{ClassKey}.{occurrence}.subclass";
-            var structuralSubclass = request.Advancements?.Any(value =>
-                value.ConceptKey == SubclassKey
-                && value.ParentConceptKey == ClassKey
-                && value.ParentOccurrenceKey == occurrence) == true;
-            var suppliedChoice = request.Choices?.LastOrDefault(value =>
-                value.ChoiceKey == choiceKey)?.Value;
-            var explicitChoice = string.Equals(
-                suppliedChoice,
-                SubclassKey,
-                StringComparison.OrdinalIgnoreCase);
-
-            var choices = classLevel >= 3
-                ? new[]
-                {
-                    new RulesCoreCharacterChoiceView(
-                        choiceKey,
-                        $"choice-group.{choiceKey}",
-                        "Fighter Subclass",
-                        "subclass",
-                        "resolved",
-                        [new RulesCoreCharacterChoiceOptionView(SubclassKey, "Champion", SubclassKey)],
-                        // Deliberately simulate a stale persisted choice even when this advancement
-                        // request did not explicitly select the Subclass.
-                        structuralSubclass || explicitChoice ? SubclassKey : SubclassKey,
-                        ClassKey,
-                        Provenance())
-                }
-                : [];
-
-            var features = structuralSubclass
-                ? new[]
-                {
-                    new RulesCoreCharacterFeatureView(
-                        "feature.champion.improved-critical",
-                        "Improved Critical",
-                        "class-feature",
-                        "resolved",
-                        SubclassKey,
-                        [],
-                        Provenance(),
-                        OccurrenceKey: request.Advancements!
-                            .Single(value => value.ConceptKey == SubclassKey).OccurrenceKey,
-                        GrantingSourceKind: "subclass",
-                        AcquisitionLevel: 3)
-                }
-                : [];
-
-            return new RulesCoreCharacterRulesProjectionView(
-                "global",
-                null,
-                1,
-                DateTimeOffset.UtcNow,
-                Mechanics: [],
-                Capabilities: [],
-                Grants: [],
-                Effects: [],
-                Movement: [],
-                Qualifications: [],
-                Actions: [],
-                Features: features,
-                Resources: [],
-                Spellcasting: [],
-                Procedures: [],
-                Choices: choices,
-                Prerequisites: [],
-                Conflicts: [],
-                Equipment: []);
+            Assert.Equal("first-party-001", request.GetProperty("rulesetId").GetString());
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                contractVersion = 1, rulesetId = "first-party-001",
+                fingerprint = Fingerprint, status = "partial",
+                values = new Dictionary<string, object>(),
+                featureIds = Array.Empty<string>(),
+                requiredChoices = RequiredChoices,
+                issues = new[] { new { code = "defense-input-required" } }
+            })!);
         }
-
-        private static RulesCoreResolvedRuleSummaryView Rule(
-            string conceptKey,
-            string entityType,
-            string displayName,
-            IReadOnlyList<RulesCoreResolvedRuleRelationshipView>? relationships = null) =>
-            new(
-                conceptKey,
-                entityType,
-                displayName,
-                1,
-                displayName,
-                "TEST",
-                "test-package",
-                "Test Package",
-                "unified",
-                "Unified",
-                Relationships: relationships);
-
-        private static RulesCoreCharacterMechanicProvenanceView Provenance() =>
-            new([], [], []);
     }
 }
