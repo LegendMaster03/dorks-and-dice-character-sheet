@@ -4,11 +4,11 @@ import type {
 } from "../../app-state.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
+import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import {
     loadCharacterState,
     type CharacterStateResponse
 } from "../../character-state-api.js";
-import { resolveRuleConcept } from "../../rules-core-api.js";
 import { requestErrorMessage } from "./request-error.js";
 
 export interface RoutineMutationOptions {
@@ -32,127 +32,74 @@ export function createRoutineStateWorkflow(
     environment: HostEnvironment
 ): RoutineStateWorkflow {
     async function resolveReferences(state: CharacterStateResponse): Promise<void> {
-        const inventoryReferences = state.inventoryItemOccurrences
-            .filter(occurrence => occurrence.ruleConceptKey !== null)
-            .map(async occurrence => {
-            const conceptKey = occurrence.ruleConceptKey!;
-            try {
-                const rule = await resolveRuleConcept(
-                    environment,
-                    conceptKey);
-                const reference = rule !== null
-                    && rule.entityType === "item"
-                    && rule.conceptKey === conceptKey
-                    ? {
-                        status: "resolved" as const,
-                        conceptKey,
-                        rule
-                    }
-                    : {
-                        status: "unavailable" as const,
-                        conceptKey
-                    };
+        // Native item and spell summaries are not currently exposed. Keep
+        // their Character-owned identities without calling the deleted API.
+        const withoutCatalog = [
+            ...state.inventoryItemOccurrences
+                .filter(occurrence => occurrence.ruleConceptKey !== null)
+                .map(occurrence => ({ id: occurrence.id, key: occurrence.ruleConceptKey! })),
+            ...(state.rulesInputs ?? [])
+                .filter(input => input.kind === "knownSpell")
+                .map(input => ({ id: input.id, key: input.key }))
+        ];
+        for (const item of withoutCatalog) {
+            application.dispatch({
+                type: "routine-reference-resolved",
+                occurrenceId: item.id,
+                conceptKey: item.key,
+                reference: { status: "unavailable", conceptKey: item.key }
+            });
+        }
+
+        const conditions = (state.conditions ?? [])
+            .filter(condition => condition.ruleConceptKey !== null);
+        if (conditions.length === 0) return;
+        let metadata: Awaited<ReturnType<typeof loadNativeRuleset>>;
+        try {
+            metadata = await loadNativeRuleset(environment);
+        } catch (error) {
+            for (const condition of conditions) {
                 application.dispatch({
                     type: "routine-reference-resolved",
-                    occurrenceId: occurrence.id,
-                    conceptKey,
-                    reference
-                });
-            } catch (error) {
-                application.dispatch({
-                    type: "routine-reference-resolved",
-                    occurrenceId: occurrence.id,
-                    conceptKey,
+                    occurrenceId: condition.id,
+                    conceptKey: condition.ruleConceptKey!,
                     reference: {
-                        status: "error",
-                        conceptKey,
+                        status: "error", conceptKey: condition.ruleConceptKey!,
                         message: requestErrorMessage(error)
                     }
                 });
             }
-        });
-
-        const knownSpellReferences = (state.rulesInputs ?? [])
-            .filter(input => input.kind === "knownSpell")
-            .map(async input => {
-                const conceptKey = input.key;
-                try {
-                    const rule = await resolveRuleConcept(environment, conceptKey);
-                    const reference = rule !== null
-                        && rule.entityType === "spell"
-                        && rule.conceptKey === conceptKey
-                        ? {
-                            status: "resolved" as const,
-                            conceptKey,
-                            rule
-                        }
-                        : {
-                            status: "unavailable" as const,
-                            conceptKey
-                        };
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: input.id,
-                        conceptKey,
-                        reference
-                    });
-                } catch (error) {
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: input.id,
-                        conceptKey,
-                        reference: {
-                            status: "error",
-                            conceptKey,
-                            message: requestErrorMessage(error)
-                        }
-                    });
-                }
-            });
-
-        const conditionReferences = (state.conditions ?? [])
-            .filter(condition => condition.ruleConceptKey !== null)
-            .map(async condition => {
-                const conceptKey = condition.ruleConceptKey!;
-                try {
-                    const rule = await resolveRuleConcept(environment, conceptKey);
-                    const reference = rule !== null
-                        && rule.entityType === "condition"
-                        && rule.conceptKey === conceptKey
-                        ? {
-                            status: "resolved" as const,
-                            conceptKey,
-                            rule
-                        }
-                        : {
-                            status: "unavailable" as const,
-                            conceptKey
-                        };
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: condition.id,
-                        conceptKey,
-                        reference
-                    });
-                } catch (error) {
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: condition.id,
-                        conceptKey,
-                        reference: {
-                            status: "error",
-                            conceptKey,
-                            message: requestErrorMessage(error)
-                        }
-                    });
-                }
-            });
-
-        await Promise.all([
-            ...inventoryReferences,
-            ...knownSpellReferences,
-            ...conditionReferences
-        ]);
+            return;
+        }
+        await Promise.all(conditions.map(async condition => {
+            const conceptKey = condition.ruleConceptKey!;
+            try {
+                const [regular, leveled] = await Promise.all([
+                    searchNativeOptions(environment, metadata, "condition", conceptKey, 100),
+                    searchNativeOptions(environment, metadata, "leveled-condition", conceptKey, 100)
+                ]);
+                const rule = [...regular.options, ...leveled.options]
+                    .find(option => option.id === conceptKey);
+                application.dispatch({
+                    type: "routine-reference-resolved",
+                    occurrenceId: condition.id,
+                    conceptKey,
+                    reference: rule === undefined
+                        ? { status: "unavailable", conceptKey }
+                        : { status: "resolved", conceptKey, rule }
+                });
+            } catch (error) {
+                application.dispatch({
+                    type: "routine-reference-resolved",
+                    occurrenceId: condition.id,
+                    conceptKey,
+                    reference: {
+                        status: "error", conceptKey,
+                        message: requestErrorMessage(error)
+                    }
+                });
+            }
+        }));
     }
 
     return {
