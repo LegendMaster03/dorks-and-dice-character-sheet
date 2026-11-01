@@ -40,12 +40,15 @@ test("retired Rules Core HTTP routes are absent from active Character Sheet clie
     const files = await tsFiles(".");
     for (const file of files) {
         const content = await source(file);
-        assert.doesNotMatch(content, /\\/api\\/rules(?:\\/|\\?|["'`])/,
+        assert.equal(content.includes("/api/rules/"), false,
             `Legacy Rules Core route found in ${file}`);
+        assert.equal(content.includes('"/api/rules"'), false,
+            `Legacy Rules Core catalog found in ${file}`);
     }
     const gateway = await readFile(
         path.join(srcRoot, "../../DelegatedRulesCoreGateway.cs"), "utf8");
-    assert.doesNotMatch(gateway, /\\/api\\/rules(?:\\/|\\?|["'`])/);
+    assert.equal(gateway.includes("/api/rules/"), false);
+    assert.equal(gateway.includes('"/api/rules"'), false);
 });
 
 test("mechanics compatibility surface re-exports feature owners instead of implementing them", async () => {
