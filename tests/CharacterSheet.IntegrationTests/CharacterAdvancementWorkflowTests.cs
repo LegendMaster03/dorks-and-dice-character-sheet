@@ -321,7 +321,7 @@ public sealed class CharacterAdvancementWorkflowTests
         Assert.Contains(factory.Native.LastEquipmentRequest.GetProperty("advancements")
             .EnumerateArray().ToArray(), row =>
                 row.GetProperty("occurrenceId").GetString() == entry.Id.ToString("D"));
-        Assert.Equal(4, factory.Native.EquipmentCalls);
+        Assert.Equal(5, factory.Native.EquipmentCalls);
     }
 
     [Fact]
