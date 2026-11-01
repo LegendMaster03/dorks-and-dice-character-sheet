@@ -127,7 +127,7 @@ public sealed class CharacterStartingEquipmentService(
                 .OrderBy(entry => entry.Ordinal ?? int.MaxValue)
                 .ThenBy(entry => entry.Id)
                 .ToArray();
-            if (classHistory.Count == 0 || classHistory.Any(entry =>
+            if (classHistory.Length == 0 || classHistory.Any(entry =>
                 entry.Kind != CharacterBuildAdvancementKinds.Class ||
                 entry.Level is not > 0 ||
                 !entry.RuleConceptKey.StartsWith("class.", StringComparison.Ordinal)))
