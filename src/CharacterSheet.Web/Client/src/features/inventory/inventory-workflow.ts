@@ -8,7 +8,7 @@ import {
 } from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
-import { searchResolvedRules } from "../../rules-core-api.js";
+import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import type { RoutineStateWorkflow } from "../../core/application/routine-state-workflow.js";
 import type { PresentationWorkflow } from "../../core/application/presentation-workflow.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
@@ -43,14 +43,12 @@ export function createInventoryWorkflow(
             query: normalizedQuery
         });
         try {
-            const catalog = await searchResolvedRules(
-                environment,
-                "item",
-                normalizedQuery);
+            const metadata = await loadNativeRuleset(environment);
+            const catalog = await searchNativeOptions(environment, metadata, "item", normalizedQuery, 100);
             application.dispatch({
                 type: "inventory-chooser-loaded",
                 query: normalizedQuery,
-                results: catalog.rules.filter(rule => rule.entityType === "item")
+                results: catalog.options
             });
         } catch (error) {
             application.dispatch({

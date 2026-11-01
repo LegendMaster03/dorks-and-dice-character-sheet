@@ -286,8 +286,8 @@ function renderCreatureSelection(
             select.append(placeholder);
             for (const monster of state.monsterResults) {
                 const option = createElement("option");
-                option.value = monster.conceptKey;
-                option.textContent = monster.displayName;
+                option.value = monster.id;
+                option.textContent = monster.name;
                 select.append(option);
             }
             select.value = state.creatureConceptKey;

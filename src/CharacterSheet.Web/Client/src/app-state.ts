@@ -18,8 +18,7 @@ import type {
     HarvestingOutcomeResponse,
     HarvestingResolvedTableResponse,
     HarvestingRulesCatalogResponse,
-    HarvestingTableResolutionInput,
-    ResolvedRuleCatalogItem
+    HarvestingTableResolutionInput
 } from "./rules-core-api.js";
 import type { CharacterSheetRoute } from "./routes.js";
 import type { GuidedBuilderSection, SheetSection } from "./ui/sheet-model.js";
@@ -64,7 +63,7 @@ export type FeatChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -130,7 +129,7 @@ export type InventoryChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -140,7 +139,7 @@ export type SpellChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -219,7 +218,7 @@ export interface HarvestingCraftingUiState {
     catalog: HarvestingRulesCatalogResponse | null;
     monsterQuery: string;
     monsterStatus: "idle" | "loading" | "ready" | "error";
-    monsterResults: ResolvedRuleCatalogItem[];
+    monsterResults: NativeOptionSummary[];
     sourceKind: "creature-type" | "monster";
     creatureType: string;
     creatureConceptKey: string;
