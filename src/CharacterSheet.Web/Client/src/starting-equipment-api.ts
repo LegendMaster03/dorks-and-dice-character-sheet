@@ -2,9 +2,9 @@ import {
     buildCharacterSheetApiUrl,
     CharacterSheetApiError,
     type FetchLike
-} from "../../character-api.js";
-import type { CharacterStateResponse } from "../../character-state-api.js";
-import type { HostEnvironment } from "../../host-environment.js";
+} from "./character-api.js";
+import type { CharacterStateResponse } from "./character-state-api.js";
+import type { HostEnvironment } from "./host-environment.js";
 
 export function buildStartingEquipmentMaterializationUrl(
     environment: HostEnvironment,
