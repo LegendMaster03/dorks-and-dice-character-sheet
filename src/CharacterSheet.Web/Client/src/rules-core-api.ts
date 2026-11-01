@@ -1,155 +1,12 @@
-import type { FetchLike } from "./character-api.js";
-import type { HostEnvironment } from "./host-environment.js";
-
-export interface ResolvedRulesCatalogResponse {
-    scope: string;
-    campaignId: string | null;
-    revisionNumber: number | null;
-    publishedAt: string | null;
-    rules: ResolvedRuleCatalogItem[];
-}
-
-export interface ResolvedRuleRelationship {
-    kind: string;
-    relatedRuleConceptId: string;
-    relatedConceptKey: string;
-    relatedEntityType: string;
-    relatedDisplayName: string;
-}
-
-export interface ResolvedRuleCatalogItem {
-    ruleConceptId: string;
-    conceptKey: string;
-    entityType: string;
-    displayName: string;
-    effectiveDecisionKind: string;
-    hasCampaignOverride: boolean;
-    sourceEntityId: string;
-    sourceEntityRevisionId: string;
-    sourceRevisionNumber: number;
-    sourceEntityName: string;
-    sourceCode: string;
-    packageKey: string;
-    packageDisplayName: string;
-    editionKey: string;
-    editionDisplayName: string;
-    relationships: ResolvedRuleRelationship[];
-}
-
-export interface ResolvedRuleDetail {
-    ruleConceptId: string;
-    conceptKey: string;
-    entityType: string;
-    displayName: string;
-    sourceEntityName: string;
-    sourceCode: string;
-    packageKey: string;
-    packageDisplayName: string;
-    editionKey: string;
-    editionDisplayName: string;
-}
-
+// The old /api/rules application interface is no longer part of Rules Core.
+// Keep harvesting transport shapes while the native harvesting contract is built.
+// Unsupported operations fail locally, without attempting legacy HTTP routes.
 export class RulesCoreApiError extends Error {
     constructor(message: string, public readonly status: number) {
         super(message);
         this.name = "RulesCoreApiError";
     }
 }
-
-export function buildRulesCoreUrl(
-    environment: HostEnvironment,
-    apiPath: string,
-    query?: URLSearchParams
-): string {
-    if (!apiPath.startsWith("/api/")) {
-        throw new Error("Rules Core API paths must begin with /api/.");
-    }
-
-    let baseUrl: string;
-    if (environment.embedded) {
-        // Rules Core is a headless Tool service. Resolve it by stable registration key rather
-        // than the retired application slug route. The Site issues a Rules Core-scoped Tool Host
-        // context; Character Sheet's own Tool Host ticket is never forwarded to Rules Core.
-        baseUrl = "/tool-host/registrations/rules-core/api/upstream";
-    } else {
-        if (!environment.standaloneDevelopment || environment.rulesCoreDevelopmentBaseUrl === null) {
-            throw new Error(
-                "Standalone Rules Core access is available only through the development-only RulesCore:DevelopmentBaseUrl adapter.");
-        }
-        baseUrl = environment.rulesCoreDevelopmentBaseUrl;
-    }
-
-    const suffix = query !== undefined && query.size > 0 ? `?${query.toString()}` : "";
-    return `${baseUrl}${apiPath}${suffix}`;
-}
-
-export async function searchResolvedRules(
-    environment: HostEnvironment,
-    entityType: string,
-    search: string,
-    fetcher: FetchLike = window.fetch.bind(window)
-): Promise<ResolvedRulesCatalogResponse> {
-    const query = new URLSearchParams();
-    query.set("entityType", entityType);
-    const normalizedSearch = search.trim();
-    if (normalizedSearch.length > 0) {
-        query.set("q", normalizedSearch);
-    }
-    query.set("limit", "200");
-
-    const response = await fetcher(buildRulesCoreUrl(environment, "/api/rules", query), {
-        method: "GET",
-        headers: { Accept: "application/json" }
-    });
-    if (!response.ok) {
-        throw new RulesCoreApiError(
-            await readRulesCoreError(response, "Rules Core catalog is unavailable."),
-            response.status);
-    }
-
-    return await response.json() as ResolvedRulesCatalogResponse;
-}
-
-export async function resolveRuleConcept(
-    environment: HostEnvironment,
-    conceptKey: string,
-    fetcher: FetchLike = window.fetch.bind(window)
-): Promise<ResolvedRuleDetail | null> {
-    const normalizedKey = conceptKey.trim();
-    if (normalizedKey.length === 0) {
-        throw new Error("Rules Core concept key is required.");
-    }
-
-    const response = await fetcher(
-        buildRulesCoreUrl(environment, `/api/rules/${encodeURIComponent(normalizedKey)}`),
-        {
-            method: "GET",
-            headers: { Accept: "application/json" }
-        });
-    if (response.status === 404) {
-        return null;
-    }
-    if (!response.ok) {
-        throw new RulesCoreApiError(
-            await readRulesCoreError(response, "Rules Core rule resolution failed."),
-            response.status);
-    }
-
-    return await response.json() as ResolvedRuleDetail;
-}
-
-async function readRulesCoreError(response: Response, fallback: string): Promise<string> {
-    try {
-        const payload = await response.json() as { error?: unknown; detail?: unknown; title?: unknown };
-        if (typeof payload.error === "string" && payload.error.trim().length > 0) return payload.error;
-        if (typeof payload.detail === "string" && payload.detail.trim().length > 0) return payload.detail;
-        if (typeof payload.title === "string" && payload.title.trim().length > 0) return payload.title;
-        return fallback;
-    } catch {
-        return fallback;
-    }
-}
-
 
 export interface HarvestingSourceResponse {
     workKey: string;
@@ -274,85 +131,31 @@ export interface HarvestingOutcomeResponse {
     components: HarvestingComponentOutcomeResponse[];
 }
 
+
+const nativeHarvestingUnavailable =
+    "Harvesting is unavailable until Rules Core exposes a native harvesting contract.";
+
 export async function loadHarvestingRules(
-    environment: HostEnvironment,
-    fetcher: FetchLike = window.fetch.bind(window)
+    _environment: unknown,
+    _fetcher?: unknown
 ): Promise<HarvestingRulesCatalogResponse> {
-    return await requestRulesCoreJson<HarvestingRulesCatalogResponse>(
-        environment,
-        "/api/rules/harvesting",
-        "GET",
-        undefined,
-        "Harvesting rules are unavailable.",
-        fetcher);
+    throw new RulesCoreApiError(nativeHarvestingUnavailable, 501);
 }
 
 export async function resolveHarvestingTable(
-    environment: HostEnvironment,
-    input: HarvestingTableResolutionInput,
-    campaignId: string | null = null,
-    fetcher: FetchLike = window.fetch.bind(window)
+    _environment: unknown,
+    _input: HarvestingTableResolutionInput,
+    _campaignId: string | null = null,
+    _fetcher?: unknown
 ): Promise<HarvestingResolvedTableResponse> {
-    const campaignScoped = campaignId !== null
-        && input.creatureConceptKey !== undefined
-        && input.creatureConceptKey !== null
-        && input.creatureConceptKey.trim().length > 0;
-    const path = campaignScoped
-        ? `/api/campaigns/${encodeURIComponent(campaignId!)}/rules/harvesting/resolve`
-        : "/api/rules/harvesting/resolve";
-    return await requestRulesCoreJson<HarvestingResolvedTableResponse>(
-        environment,
-        path,
-        "POST",
-        input,
-        "Harvesting table resolution failed.",
-        fetcher);
+    throw new RulesCoreApiError(nativeHarvestingUnavailable, 501);
 }
 
 export async function resolveHarvestingOutcome(
-    environment: HostEnvironment,
-    input: HarvestingOutcomeInput,
-    campaignId: string | null = null,
-    fetcher: FetchLike = window.fetch.bind(window)
+    _environment: unknown,
+    _input: HarvestingOutcomeInput,
+    _campaignId: string | null = null,
+    _fetcher?: unknown
 ): Promise<HarvestingOutcomeResponse> {
-    const campaignScoped = campaignId !== null
-        && input.table.creatureConceptKey !== undefined
-        && input.table.creatureConceptKey !== null
-        && input.table.creatureConceptKey.trim().length > 0;
-    const path = campaignScoped
-        ? `/api/campaigns/${encodeURIComponent(campaignId!)}/rules/harvesting/outcome`
-        : "/api/rules/harvesting/outcome";
-    return await requestRulesCoreJson<HarvestingOutcomeResponse>(
-        environment,
-        path,
-        "POST",
-        input,
-        "Harvesting outcome resolution failed.",
-        fetcher);
-}
-
-async function requestRulesCoreJson<T>(
-    environment: HostEnvironment,
-    path: string,
-    method: "GET" | "POST",
-    body: object | undefined,
-    fallback: string,
-    fetcher: FetchLike
-): Promise<T> {
-    const response = await fetcher(buildRulesCoreUrl(environment, path), {
-        method,
-        headers: body === undefined
-            ? { Accept: "application/json" }
-            : {
-                Accept: "application/json",
-                "Content-Type": "application/json"
-            },
-        body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    if (!response.ok) {
-        throw new RulesCoreApiError(
-            await readRulesCoreError(response, fallback),
-            response.status);
-    }
-    return await response.json() as T;
+    throw new RulesCoreApiError(nativeHarvestingUnavailable, 501);
 }
