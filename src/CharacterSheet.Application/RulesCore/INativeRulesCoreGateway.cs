@@ -17,6 +17,10 @@ public interface INativeRulesCoreGateway
         JsonElement request, CancellationToken cancellationToken);
     Task<JsonNode> ProjectNativeCharacterAsync(
         JsonElement request, CancellationToken cancellationToken);
+    Task<JsonNode> ResolveNativeStartingEquipmentAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Native starting equipment is unsupported by this gateway."));
     Task<JsonNode> ResolveNativeResourceAsync(
         JsonElement request, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
