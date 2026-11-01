@@ -272,12 +272,38 @@ public sealed class CharacterAdvancementWorkflowTests
 
         // An unresolved Core response is never mistaken for zero starting items.
         factory.Native.EquipmentStatus = "needs-choices";
+        using (var preview = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment/preview"))
+        {
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+            using var payload = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
+            Assert.Equal("needs-choices",
+                payload.RootElement.GetProperty("status").GetString());
+            Assert.Empty(payload.RootElement.GetProperty("grants").EnumerateArray());
+            Assert.Single(payload.RootElement.GetProperty("choices").EnumerateArray());
+        }
         using (var incomplete = await factory.SendHostedAsync(HttpMethod.Post,
             $"/api/characters/{id:D}/state/inventory/starting-equipment"))
             Assert.Equal(HttpStatusCode.ServiceUnavailable, incomplete.StatusCode);
-        Assert.Equal(1, factory.Native.EquipmentCalls);
+        Assert.Equal(2, factory.Native.EquipmentCalls);
 
+        var choiceKey = "starting-equipment." + entry.Id.ToString("D");
+        using (var choice = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "choice", key = choiceKey, textValue = "gold" }))
+            Assert.Equal(HttpStatusCode.OK, choice.StatusCode);
         factory.Native.EquipmentStatus = "resolved";
+        using (var selectedPreview = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment/preview"))
+        {
+            Assert.Equal(HttpStatusCode.OK, selectedPreview.StatusCode);
+            using var payload = JsonDocument.Parse(await selectedPreview.Content.ReadAsStringAsync());
+            Assert.Equal("resolved", payload.RootElement.GetProperty("status").GetString());
+            Assert.Equal(2, payload.RootElement.GetProperty("grants")[0]
+                .GetProperty("quantity").GetInt32());
+        }
+        Assert.Equal("gold", factory.Native.LastEquipmentRequest
+            .GetProperty("selectedPackages").GetProperty(choiceKey).GetString());
         using (var materialize = await factory.SendHostedAsync(HttpMethod.Post,
             $"/api/characters/{id:D}/state/inventory/starting-equipment"))
             Assert.Equal(HttpStatusCode.OK, materialize.StatusCode);
@@ -295,7 +321,7 @@ public sealed class CharacterAdvancementWorkflowTests
         Assert.Contains(factory.Native.LastEquipmentRequest.GetProperty("advancements")
             .EnumerateArray().ToArray(), row =>
                 row.GetProperty("occurrenceId").GetString() == entry.Id.ToString("D"));
-        Assert.Equal(3, factory.Native.EquipmentCalls);
+        Assert.Equal(4, factory.Native.EquipmentCalls);
     }
 
     [Fact]
@@ -492,7 +518,15 @@ public sealed class CharacterAdvancementWorkflowTests
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
                 fingerprint = Fingerprint, status = EquipmentStatus,
-                grants, choices = Array.Empty<object>(), issues = Array.Empty<object>()
+                grants,
+                choices = new[] { new {
+                    choiceKey = "starting-equipment." +
+                        request.GetProperty("advancements")[0]
+                            .GetProperty("occurrenceId").GetString(),
+                    options = new[] { new { id = "gold", name = "Starting Gold" },
+                        new { id = "kit", name = "Adventurer Kit" } }
+                } },
+                issues = Array.Empty<object>()
             })!);
         }
 
