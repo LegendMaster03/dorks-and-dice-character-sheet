@@ -101,6 +101,34 @@ public sealed class NativeCharacterPresentationBridgeTests
     }
 
     [Fact]
+    public async Task InvalidHitPointHistoryKeepsCurrentHitPointsAndIndependentClassValues()
+    {
+        var gateway = new FixtureGateway();
+        var occurrence = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var build = Build(occurrence) with
+        {
+            BaseAbilityScoreInputs = [
+                new BaseAbilityScoreInputView(Guid.NewGuid(), "strength", 14, Now, Now)
+            ]
+        };
+        var state = new CharacterStateView(
+            Guid.NewGuid(), false, 7, new CharacterDeathSavesView(0, 0), [], [], [],
+            HitPointGains: [new CharacterHitPointGainStateView(
+                Guid.NewGuid(), occurrence.Id, 0, 5, Now, Now)]);
+
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, state, CancellationToken.None);
+
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(14, Assert.Single(result.Mechanics!.AbilityValues!).EffectiveValue);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        var health = Assert.Single(result.Mechanics.HealthTracks!);
+        Assert.Equal(7, health.Current);
+        Assert.Null(health.Maximum);
+    }
+
+    [Fact]
     public async Task CatalogWithoutExactNativeIdentityDoesNotProject()
     {
         var gateway = new FixtureGateway { ReturnClass = false };

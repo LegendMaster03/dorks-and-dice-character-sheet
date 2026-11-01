@@ -191,11 +191,13 @@ public sealed class CharacterAdvancementService(
             build.ProgressionEntries.Any(entry => entry.Kind != CharacterBuildAdvancementKinds.Class))
             throw new ArgumentException(
                 "The saved advancement history includes an unsupported option or ambiguous class occurrence.");
-        if (build.FoundationalSelections.Count != 0 ||
-            state?.Conditions.Count > 0 || state?.RulesInputs?.Count > 0 ||
-            state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true)
+        // Foundational choices, conditions, equipment and ordinary resource
+        // state are not class-level advancements. Do not block advancement
+        // merely because this routine state exists. Unknown rule choices must
+        // still fail closed until they have native option identities.
+        if (state?.RulesInputs?.Any(input => input.Kind == CharacterRulesInputKinds.Choice) == true)
             throw new ArgumentException(
-                "Native class advancement cannot yet evaluate all existing rule or equipment selections.");
+                "Saved rule choices require native option identities before advancement.");
         if (request.HitDieValue is < 1 or > 1000)
             throw new ArgumentException("Hit point gain must be a positive bounded integer.");
 

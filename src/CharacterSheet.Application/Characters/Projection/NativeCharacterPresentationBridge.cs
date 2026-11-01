@@ -104,8 +104,10 @@ public static class NativeCharacterPresentationBridge
                 StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Last().HitDieValue,
                 StringComparer.Ordinal);
-        if (hitPointGains.Count != (state?.HitPointGains?.Count ?? 0))
-            unmodeledSelections = true;
+        // Inconsistent HP history invalidates derived maximum HP, not otherwise
+        // independent abilities, saves, or class proficiency.
+        var invalidHitPointHistory =
+            hitPointGains.Count != (state?.HitPointGains?.Count ?? 0);
 
         var request = JsonSerializer.SerializeToElement(new
         {
@@ -167,12 +169,14 @@ public static class NativeCharacterPresentationBridge
         var combat = initiative is int init
             ? new[] { new CalculatedMechanicalValuePresentationView("initiative", "Initiative", init) }
             : null;
-        var maximumHp = unmodeledSelections
+        var maximumHp = unmodeledSelections || invalidHitPointHistory
             ? null : Numeric(values, "hit-points.maximum");
-        var health = maximumHp is int hp
+        // Current HP is persisted Character Sheet state and does not require a
+        // resolved Rules Core maximum in order to remain visible.
+        var health = maximumHp is not null || state?.CurrentHitPoints is not null
             ? new[] { new HealthTrackPresentationView(
                 "hit-points", "Hit Points", "hit-points",
-                Current: state?.CurrentHitPoints, Maximum: hp) }
+                Current: state?.CurrentHitPoints, Maximum: maximumHp) }
             : null;
 
         var mechanics = new CharacterMechanicsPresentationView(
@@ -181,7 +185,7 @@ public static class NativeCharacterPresentationBridge
             SavingThrows: savingThrows.Count == 0 ? null : savingThrows,
             CombatFundamentals: combat,
             HealthTracks: health);
-        var partial = unmodeledSelections ||
+        var partial = unmodeledSelections || invalidHitPointHistory ||
             ReadText(projection, "status") != "resolved" ||
             (projection["issues"] is JsonArray issues && issues.Count != 0) ||
             (projection["requiredChoices"] is JsonArray choices && choices.Count != 0);
