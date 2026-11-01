@@ -11,8 +11,8 @@ public sealed record NativeStartingEquipmentPreviewResult(
 /// <summary>
 /// Materializes resolved Rules Core starting-equipment grants into ordinary Character-owned
 /// inventory and currency state. This is an acquisition boundary, not a live mirror: materialized
-/// state remains ordinary mutable Character state. Stable Core grant provenance makes explicit
-/// repeated requests idempotent. Awarded equipment is subsequently ordinary inventory.
+/// state remains ordinary mutable Character state. A server-owned receipt makes
+/// repeat requests idempotent even when the active ruleset is later revised.
 /// </summary>
 public sealed class CharacterStartingEquipmentService(
     CharacterBuildService buildService,
@@ -21,10 +21,6 @@ public sealed class CharacterStartingEquipmentService(
     ICharacterStartingEquipmentInventoryStore inventoryStore,
     TimeProvider timeProvider)
 {
-    private const string ItemGrantKind = "starting-equipment-item";
-    private const string CustomGrantKind = "starting-equipment-custom";
-    private const string CurrencyGrantKind = "starting-equipment-currency";
-
     public async Task<CharacterStateResult> MaterializeInventoryAsync(
         Guid characterId,
         CancellationToken cancellationToken = default)
@@ -169,81 +165,6 @@ public sealed class CharacterStartingEquipmentService(
         {
             return new(CharacterStateAccessStatus.ProjectionUnavailable);
         }
-    }
-
-    internal static IReadOnlyList<CharacterStartingEquipmentInventoryItem> ProjectInventoryItems(
-        IReadOnlyList<RulesCoreCharacterGrantView> grants)
-    {
-        ArgumentNullException.ThrowIfNull(grants);
-
-        return grants
-            .Where(value =>
-                string.Equals(value.Kind, ItemGrantKind, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value.Kind, CustomGrantKind, StringComparison.OrdinalIgnoreCase))
-            .GroupBy(value => new
-            {
-                SourceGrantKey = GrantFamilyKey(value.GrantKey),
-                Kind = value.Kind.ToLowerInvariant(),
-                TargetKey = value.TargetKey,
-                DisplayName = value.DisplayName
-            })
-            .Select(group =>
-            {
-                var first = group.First();
-                return string.Equals(first.Kind, ItemGrantKind, StringComparison.OrdinalIgnoreCase)
-                    ? new CharacterStartingEquipmentInventoryItem(
-                        group.Key.SourceGrantKey,
-                        first.TargetKey,
-                        CustomName: null,
-                        group.Count())
-                    : new CharacterStartingEquipmentInventoryItem(
-                        group.Key.SourceGrantKey,
-                        RuleConceptKey: null,
-                        first.DisplayName,
-                        group.Count());
-            })
-            .OrderBy(value => value.SourceGrantKey, StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    internal static IReadOnlyList<CharacterStartingEquipmentCurrencyGrant> ProjectCurrencyGrants(
-        IReadOnlyList<RulesCoreCharacterGrantView> grants)
-    {
-        ArgumentNullException.ThrowIfNull(grants);
-
-        return grants
-            .Where(value => string.Equals(
-                value.Kind,
-                CurrencyGrantKind,
-                StringComparison.OrdinalIgnoreCase))
-            .GroupBy(value => new
-            {
-                SourceGrantKey = GrantFamilyKey(value.GrantKey),
-                CurrencyKey = value.TargetKey
-            })
-            .Select(group => new CharacterStartingEquipmentCurrencyGrant(
-                group.Key.SourceGrantKey,
-                group.Key.CurrencyKey,
-                group.LongCount()))
-            .OrderBy(value => value.SourceGrantKey, StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    private static string GrantFamilyKey(string grantKey)
-    {
-        if (string.IsNullOrWhiteSpace(grantKey))
-        {
-            throw new ArgumentException("Rules Core starting-equipment grant key can not be blank.");
-        }
-
-        var normalized = grantKey.Trim();
-        var finalSeparator = normalized.LastIndexOf('.');
-        if (finalSeparator > 0
-            && int.TryParse(normalized[(finalSeparator + 1)..], out _))
-        {
-            return normalized[..finalSeparator];
-        }
-        return normalized;
     }
 
     private static CharacterStateAccessStatus MapBuildStatus(
