@@ -17,4 +17,8 @@ public interface INativeRulesCoreGateway
         JsonElement request, CancellationToken cancellationToken);
     Task<JsonNode> ProjectNativeCharacterAsync(
         JsonElement request, CancellationToken cancellationToken);
+    Task<JsonNode> ResolveNativeResourceAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Native resource resolution is not supported by this Rules Core gateway."));
 }

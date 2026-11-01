@@ -44,6 +44,11 @@ public sealed class DelegatedRulesCoreGateway(
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/project",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    public Task<JsonNode> ResolveNativeResourceAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/resources/resolve",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     // These contract members are retained for callers awaiting a native
     // equivalent. Do not send requests to the removed application API.
     public Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
@@ -243,6 +248,8 @@ public sealed class DelegatedRulesCoreGateway(
     {
         if (targetPath.EndsWith("/characters/project", StringComparison.Ordinal))
             return "native-character-projection";
+        if (targetPath.EndsWith("/resources/resolve", StringComparison.Ordinal))
+            return "native-resource-resolution";
         if (targetPath.EndsWith("/advancements/eligibility", StringComparison.Ordinal))
             return "native-advancement-eligibility";
         if (targetPath.Contains("/catalog/options", StringComparison.Ordinal))
