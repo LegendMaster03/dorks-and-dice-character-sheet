@@ -201,6 +201,67 @@ public sealed class CharacterAdvancementWorkflowTests
         Assert.Contains("patron.warlock.fiend", factory.Native.RequestedOptionCandidateIds);
     }
 
+    [Fact]
+    public async Task NativeResourceSpendAndRestUsePersistedCharacterState()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Resource Tester", "Active", null, []));
+        await InitializeClassAsync(factory, id);
+
+        using (var input = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "resource", key = "resource.pact-magic", integerValue = 2 }))
+            Assert.Equal(HttpStatusCode.OK, input.StatusCode);
+
+        using (var spend = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/resources/resolve",
+            new { resourceId = "resource.pact-magic", spend = 1 }))
+        {
+            Assert.Equal(HttpStatusCode.OK, spend.StatusCode);
+            using var parsed = JsonDocument.Parse(await spend.Content.ReadAsStringAsync());
+            Assert.Equal(1, parsed.RootElement.GetProperty("resolution")
+                .GetProperty("current").GetInt32());
+        }
+        using (var restore = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/resources/resolve",
+            new { resourceId = "resource.pact-magic", rest = "short-rest" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
+            using var parsed = JsonDocument.Parse(await restore.Content.ReadAsStringAsync());
+            Assert.Equal(2, parsed.RootElement.GetProperty("resolution")
+                .GetProperty("current").GetInt32());
+        }
+        using (var invalid = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/resources/resolve",
+            new { resourceId = "resource.pact-magic", spend = 1, rest = "long-rest" }))
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        using var read = await factory.SendHostedAsync(
+            HttpMethod.Get, $"/api/characters/{id:D}/state");
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        var state = await read.Content.ReadFromJsonAsync<CharacterStateView>();
+        Assert.NotNull(state);
+        Assert.Equal(2, Assert.Single(state.RulesInputs!,
+            value => value.Key == "resource.pact-magic").IntegerValue);
+        Assert.Equal(2, factory.Native.ResourceActionCalls);
+    }
+
+    [Fact]
+    public async Task NativeResourceActionsRejectMissingCurrentOrUnsupportedRest()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Resource Tester", "Active", null, []));
+        await InitializeClassAsync(factory, id);
+
+        using (var unconfigured = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/resources/resolve",
+            new { resourceId = "resource.pact-magic", spend = 1 }))
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, unconfigured.StatusCode);
+        Assert.Equal(0, factory.Native.ResourceActionCalls);
+    }
+
     private static async Task<CharacterAdvancementEntryView> InitializeClassAsync(
         Factory factory, Guid id)
     {
@@ -272,6 +333,7 @@ public sealed class CharacterAdvancementWorkflowTests
         public bool IsEligible { get; init; } = true;
         public IReadOnlyList<string> RequiredChoices { get; init; } = [];
         public int EligibilityCalls { get; private set; }
+        public int ResourceActionCalls { get; private set; }
         public List<int> RequestedLevels { get; } = [];
         public List<string> RequestedOptionCandidateIds { get; } = [];
         public string[] LastProjectedOptions { get; private set; } = [];
@@ -280,7 +342,7 @@ public sealed class CharacterAdvancementWorkflowTests
             Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
                 fingerprint = Fingerprint,
-                capabilities = new { advancementEligibility = "supported-subset" }
+                capabilities = new { advancementEligibility = "supported-subset", resourceResolution = true }
             })!);
 
         public Task<JsonNode> SearchNativeOptionsAsync(
@@ -343,13 +405,36 @@ public sealed class CharacterAdvancementWorkflowTests
             Assert.Equal("first-party-001", request.GetProperty("rulesetId").GetString());
             LastProjectedOptions = request.GetProperty("selectedOptions")
                 .EnumerateArray().Select(value => value.GetString()!).ToArray();
+            var resources = request.TryGetProperty("currentResources", out var currents)
+                && currents.TryGetProperty("resource.pact-magic", out var value)
+                ? new[] { new { id = "resource.pact-magic", maximum = 2,
+                    current = value.GetInt32(), recovery = "short-or-long-rest" } }
+                : [];
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
                 fingerprint = Fingerprint, status = "partial",
                 values = new Dictionary<string, object>(),
                 featureIds = Array.Empty<string>(),
+                resources,
                 requiredChoices = RequiredChoices,
                 issues = new[] { new { code = "defense-input-required" } }
+            })!);
+        }
+        public Task<JsonNode> ResolveNativeResourceAsync(
+            JsonElement request, CancellationToken cancellationToken)
+        {
+            ResourceActionCalls++;
+            Assert.Equal("resource.pact-magic", request.GetProperty("resourceId").GetString());
+            var current = request.GetProperty("current").GetInt32();
+            var spend = request.GetProperty("spend");
+            var rest = request.GetProperty("rest");
+            var next = spend.ValueKind == JsonValueKind.Number
+                ? current - spend.GetInt32()
+                : rest.GetInt32() == 0 || rest.GetInt32() == 1
+                    ? 2 : current;
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                status = "resolved", resourceId = "resource.pact-magic",
+                current = next, maximum = 2
             })!);
         }
     }

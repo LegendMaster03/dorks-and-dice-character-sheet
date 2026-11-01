@@ -224,6 +224,32 @@ public sealed class CharacterStateModelTests
     }
 
     [Fact]
+    public void NativeResourceMutationRejectsStaleExpectedCurrentValueAtomically()
+    {
+        var root = Root();
+        var now = DateTimeOffset.UtcNow;
+        root.SetCurrentHitPoints(8, now);
+        root.SetRulesInput(CharacterRulesInputKind.Resource,
+            "resource.pact-magic", 2, null, null, now);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            root.ApplyIntegerStateMutations([
+                new CharacterIntegerStateMutation(
+                    CharacterIntegerStateMutationTarget.CurrentHitPoints,
+                    CharacterIntegerStateMutationOperation.Adjust, 4),
+                new CharacterIntegerStateMutation(
+                    CharacterIntegerStateMutationTarget.Resource,
+                    CharacterIntegerStateMutationOperation.Set, 1,
+                    "resource.pact-magic", ExpectedValue: 3)
+            ], now.AddMinutes(1)));
+
+        Assert.Equal(8, root.CurrentHitPoints);
+        Assert.Equal(2, Assert.Single(root.RulesInputs,
+            value => value.Kind == CharacterRulesInputKind.Resource &&
+                value.Key == "resource.pact-magic").IntegerValue);
+    }
+
+    [Fact]
     public void InventoryOccurrencesUseStableConceptKeysAndPermitDuplicates()
     {
         var root = Root();
