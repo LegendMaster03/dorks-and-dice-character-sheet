@@ -1,6 +1,48 @@
 // The old /api/rules application interface is no longer part of Rules Core.
 // Keep harvesting transport shapes while the native harvesting contract is built.
 // Unsupported operations fail locally, without attempting legacy HTTP routes.
+// Data-only relationship shape retained for authored selection compatibility checks.
+// It no longer represents a callable Rules Core API.
+export interface ResolvedRuleRelationship {
+    kind: string;
+    relatedRuleConceptId: string;
+    relatedConceptKey: string;
+    relatedEntityType: string;
+    relatedDisplayName: string;
+}
+
+export interface ResolvedRuleCatalogItem {
+    ruleConceptId: string;
+    conceptKey: string;
+    entityType: string;
+    displayName: string;
+    effectiveDecisionKind: string;
+    hasCampaignOverride: boolean;
+    sourceEntityId: string;
+    sourceEntityRevisionId: string;
+    sourceRevisionNumber: number;
+    sourceEntityName: string;
+    sourceCode: string;
+    packageKey: string;
+    packageDisplayName: string;
+    editionKey: string;
+    editionDisplayName: string;
+    relationships: ResolvedRuleRelationship[];
+}
+
+export interface ResolvedRuleDetail {
+    ruleConceptId: string;
+    conceptKey: string;
+    entityType: string;
+    displayName: string;
+    sourceEntityName: string;
+    sourceCode: string;
+    packageKey: string;
+    packageDisplayName: string;
+    editionKey: string;
+    editionDisplayName: string;
+}
+
 export class RulesCoreApiError extends Error {
     constructor(message: string, public readonly status: number) {
         super(message);

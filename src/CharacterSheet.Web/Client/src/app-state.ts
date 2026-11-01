@@ -318,7 +318,7 @@ export type CharacterSheetAction =
     | { type: "feat-chooser-opened" }
     | { type: "feat-chooser-query-changed"; query: string }
     | { type: "feat-chooser-load-started"; query: string }
-    | { type: "feat-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "feat-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "feat-chooser-load-failed"; query: string; message: string }
     | { type: "feat-chooser-closed" }
     | { type: "feat-save-started"; occurrenceId?: string }
@@ -331,13 +331,13 @@ export type CharacterSheetAction =
     | { type: "inventory-chooser-opened" }
     | { type: "inventory-chooser-query-changed"; query: string }
     | { type: "inventory-chooser-load-started"; query: string }
-    | { type: "inventory-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "inventory-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "inventory-chooser-load-failed"; query: string; message: string }
     | { type: "inventory-chooser-closed" }
     | { type: "spell-chooser-opened" }
     | { type: "spell-chooser-query-changed"; query: string }
     | { type: "spell-chooser-load-started"; query: string }
-    | { type: "spell-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "spell-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "spell-chooser-load-failed"; query: string; message: string }
     | { type: "spell-chooser-closed" }
     | { type: "condition-chooser-opened" }
