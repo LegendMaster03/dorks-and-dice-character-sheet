@@ -170,12 +170,12 @@ export interface SpellcastingResourceControlOptions {
 }
 
 export function renderSpellcastingPresentation(
-    profiles: readonly SpellcastingProfileView[] | undefined,
+    profiles: readonly SpellcastingProfileView[] | null | undefined,
     control: SpellcastingResourceControlOptions = {}
 ): HTMLElement {
     const root = createElement("div", "dd-spellcasting-profiles");
     root.setAttribute("data-spellcasting-state", profiles === undefined ? "unavailable" : "resolved");
-    if (profiles === undefined || profiles.length === 0) {
+    if (!Array.isArray(profiles) || profiles.length === 0) {
         root.append(createInlineState("-", "neutral"));
         return root;
     }
@@ -196,7 +196,7 @@ function renderSpellcastingProfile(
         ["Prohibited schools", profile.prohibitedSchools?.join(", ")], fieldTuple(profile.arcaneSpellFailure)
     ]);
     if (facts !== null) root.append(facts);
-    if (profile.resources !== undefined && profile.resources.length > 0) {
+    if (Array.isArray(profile.resources) && profile.resources.length > 0) {
         root.append(renderSpellcastingResources(profile.resources, control));
     }
     if (profile.saveDc) root.append(renderMechanicalValue(profile.saveDc, true));
