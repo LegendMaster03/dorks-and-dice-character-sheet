@@ -218,11 +218,15 @@ public sealed class CharacterPresentationWorkflowTests
             CancellationToken cancellationToken)
         {
             Calls++;
-            Assert.Equal("class", category);
+            var options = category switch
+            {
+                "class" => HasWarlock ? new[] { new {
+                    id = "class.warlock", name = "Warlock", kind = "class" } } : [],
+                "skill" or "competency" => [],
+                _ => throw new InvalidOperationException("Unexpected native catalog category.")
+            };
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
-                rulesetId = "first-party-001", fingerprint = Fingerprint,
-                options = HasWarlock ? new[] { new {
-                    id = "class.warlock", name = "Warlock", kind = "class" } } : []
+                rulesetId = "first-party-001", fingerprint = Fingerprint, options
             })!);
         }
 
