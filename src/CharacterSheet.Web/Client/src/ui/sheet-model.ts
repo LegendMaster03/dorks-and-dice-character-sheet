@@ -10,6 +10,7 @@ import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterMechanicsView } from "./character-mechanics.js";
 import { projectGuidedStartingEquipment } from "./guided-equipment.js";
+import type { NativeStartingEquipmentPreview } from "../features/inventory/starting-equipment-api.js";
 
 export type SheetSection = "actions" | "spells" | "inventory" | "features" | "details" | "notes";
 
@@ -130,7 +131,8 @@ export function getGuidedBuilderOwnedChoiceSourceKeys(
 
 export function getGuidedBuilderSectionStates(
     builder: CharacterBuilderUiState,
-    mechanics: CharacterMechanicsView | null = null
+    mechanics: CharacterMechanicsView | null = null,
+    nativeEquipment: NativeStartingEquipmentPreview | null = null
 ): readonly GuidedBuilderSectionState[] {
     if (builder.status !== "ready" || builder.build === null) {
         return GUIDED_BUILDER_SECTIONS.map(section => ({
@@ -240,15 +242,24 @@ export function getGuidedBuilderSectionStates(
         roll.required && roll.state !== "resolved") ?? [];
     const equipmentConflicts = projectionConflicts.filter(conflict =>
         conflict.conflictKey.includes("starting-equipment"));
-    const equipmentAvailable = startingEquipment !== null;
-    const equipmentResolved = equipmentAvailable
-        && pendingEquipmentChoices.length === 0
-        && pendingEquipmentRolls.length === 0
-        && equipmentConflicts.length === 0;
+    const equipmentAvailable = nativeEquipment !== null
+        || startingEquipment !== null || startingClassSelected;
+    const equipmentResolved = nativeEquipment !== null
+        ? nativeEquipment.status === "resolved" && nativeEquipment.issues.length === 0
+        : startingEquipment !== null
+            && pendingEquipmentChoices.length === 0
+            && pendingEquipmentRolls.length === 0
+            && equipmentConflicts.length === 0;
 
     let equipmentDetail: string;
-    if (!equipmentAvailable) {
-        equipmentDetail = "Starting equipment is not available from the current Rules Core projection.";
+    if (nativeEquipment?.status === "unavailable") {
+        equipmentDetail = "The current native starting-equipment rules are not yet executable.";
+    } else if (nativeEquipment?.status === "needs-choices") {
+        equipmentDetail = "Choose a native starting-equipment package before applying grants.";
+    } else if (nativeEquipment?.status === "resolved") {
+        equipmentDetail = "Native starting-equipment package and grants are resolved.";
+    } else if (!equipmentAvailable || startingEquipment === null) {
+        equipmentDetail = "Starting-equipment options have not yet been resolved by Rules Core.";
     } else if (equipmentConflicts.length > 0) {
         equipmentDetail = equipmentConflicts.length === 1
             ? "Resolve the starting-equipment Rules Core conflict before this section is complete."

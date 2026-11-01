@@ -346,7 +346,9 @@ function renderWorkspace(
               }
             : state.presentation.status === "error"
                 ? { status: "unavailable", message: state.presentation.message }
-                : { status: "loading" });
+                : { status: "loading" },
+        state.presentation.equipmentPreview ?? null,
+        state.presentation.equipmentPreviewMessage);
     return workspace;
 }
 

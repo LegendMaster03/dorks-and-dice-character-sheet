@@ -20,8 +20,10 @@ import {
 } from "./character-mechanics.js";
 import {
     projectGuidedStartingEquipment,
-    renderGuidedStartingEquipment
+    renderGuidedStartingEquipment,
+    projectNativeStartingEquipment
 } from "./guided-equipment.js";
+import type { NativeStartingEquipmentPreview } from "../features/inventory/starting-equipment-api.js";
 import { renderGuidedSourceFeatures } from "./guided-source-features.js";
 import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
@@ -72,7 +74,9 @@ export function renderCharacterWorkspace(
     mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers,
     harvestingCrafting: HarvestingCraftingUiState = createInitialHarvestingCraftingState(),
-    mechanicsAvailability?: { status: "resolved" | "partial" | "unconfigured" | "unavailable" | "loading"; message?: string | null }
+    mechanicsAvailability?: { status: "resolved" | "partial" | "unconfigured" | "unavailable" | "loading"; message?: string | null },
+    equipmentPreview: NativeStartingEquipmentPreview | null = null,
+    equipmentPreviewMessage?: string
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -146,7 +150,9 @@ export function renderCharacterWorkspace(
             guidedBuilder,
             advancement,
             mechanics,
-            handlers));
+            handlers,
+            equipmentPreview,
+            equipmentPreviewMessage));
         if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
             shell.append(renderHarvestingCraftingOverlay(
                 character,
@@ -387,7 +393,9 @@ function renderGuidedBuilder(
     guidedBuilder: GuidedBuilderUiState,
     advancement: CharacterAdvancementView | null,
     mechanics: CharacterMechanicsView | null,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    nativeEquipment: NativeStartingEquipmentPreview | null,
+    equipmentError?: string
 ): HTMLElement {
     const container = createElement("section", "dd-guided-builder");
     container.setAttribute("aria-labelledby", "dd-guided-builder-heading");
@@ -402,10 +410,10 @@ function renderGuidedBuilder(
             "dd-guided-builder__intro",
             "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
 
-    const startingEquipment = projectGuidedStartingEquipment(
-        mechanics,
-        routine.state?.rulesInputs ?? []);
-    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics);
+    const startingEquipment = nativeEquipment !== null
+        ? projectNativeStartingEquipment(nativeEquipment, routine.state?.rulesInputs ?? [])
+        : projectGuidedStartingEquipment(mechanics, routine.state?.rulesInputs ?? []);
+    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics, nativeEquipment);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const [index, section] of sectionStates.entries()) {
@@ -560,7 +568,7 @@ function renderGuidedBuilder(
                         "dd-guided-builder__section-copy",
                         "This step is staged for rule-guided starting equipment. It becomes available when Rules Core projects starting-equipment grants or choices for this Character."),
                     createInlineState(
-                        "Starting equipment is not available in Guided Setup yet. General inventory remains available on the Character Sheet.",
+                        equipmentError ?? "Starting equipment is not yet available from the native Rules Core contract. General inventory remains available.",
                         "warning"));
                 panel.append(equipment);
             }
