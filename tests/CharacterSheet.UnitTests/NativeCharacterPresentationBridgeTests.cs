@@ -174,6 +174,33 @@ public sealed class NativeCharacterPresentationBridgeTests
     }
 
     [Fact]
+    public async Task NativeResourceProjectionKeepsPactSlotsAndSpellSlotsSeparate()
+    {
+        var gateway = new FixtureGateway { IncludeResources = true };
+        var occurrence = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var state = new CharacterStateView(
+            Guid.NewGuid(), false, null, new CharacterDeathSavesView(0, 0), [], [], [],
+            RulesInputs: [
+                new CharacterRulesInputStateView(Guid.NewGuid(),
+                    CharacterRulesInputKinds.Resource, "resource.pact-magic",
+                    1, null, null, Now, Now)
+            ]);
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(occurrence), state, CancellationToken.None);
+        var profiles = result.Mechanics!.SpellcastingProfiles!;
+        var pact = Assert.Single(profiles, profile => profile.Key == "native.pact-magic");
+        var pactResource = Assert.Single(pact.Resources!);
+        Assert.Equal("resource.pact-magic", pactResource.Key);
+        Assert.Equal(1, pactResource.Current);
+        Assert.Equal(2, pactResource.Maximum);
+        var slots = Assert.Single(profiles, profile => profile.Key == "native.spell-slots");
+        Assert.Equal("resource.spell-slot.1", Assert.Single(slots.Resources!).Key);
+        Assert.Null(Assert.Single(slots.Resources!).RecoveryProcedureKey);
+        Assert.Equal(1, gateway.LastCurrentResources["resource.pact-magic"]);
+    }
+
+    [Fact]
     public async Task CatalogWithoutExactNativeIdentityDoesNotProject()
     {
         var gateway = new FixtureGateway { ReturnClass = false };
@@ -195,6 +222,8 @@ public sealed class NativeCharacterPresentationBridgeTests
     {
         public int Calls { get; private set; }
         public bool ReturnClass { get; init; } = true;
+        public bool IncludeResources { get; init; }
+        public Dictionary<string, int> LastCurrentResources { get; private set; } = [];
         public string? LastAdvancementClassId { get; private set; }
         public int? LastAdvancementLevel { get; private set; }
         public string[] LastSelectedOptions { get; private set; } = [];
@@ -229,6 +258,9 @@ public sealed class NativeCharacterPresentationBridgeTests
             LastAdvancementLevel = item.GetProperty("level").GetInt32();
             LastSelectedOptions = request.GetProperty("selectedOptions")
                 .EnumerateArray().Select(value => value.GetString()!).ToArray();
+            LastCurrentResources = request.GetProperty("currentResources")
+                .EnumerateObject().ToDictionary(
+                    entry => entry.Name, entry => entry.Value.GetInt32());
             return Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new {
                 contractVersion = 1, rulesetId = "first-party-001", fingerprint = Fingerprint,
                 status = "partial",
@@ -239,7 +271,17 @@ public sealed class NativeCharacterPresentationBridgeTests
                     ["ac.normal"] = new { status = "unsupported", value = (int?)null }
                 },
                 issues = new[] { new { code = "defense-input-required" } },
-                requiredChoices = Array.Empty<string>()
+                requiredChoices = Array.Empty<string>(),
+                resources = IncludeResources
+                    ? new[] {
+                        new { id = "resource.pact-magic", maximum = 2,
+                            current = (int?)1, recovery = "short-or-long-rest",
+                            spellLevel = (int?)1 },
+                        new { id = "resource.spell-slot.1", maximum = 4,
+                            current = (int?)null, recovery = "unsupported",
+                            spellLevel = (int?)1 }
+                    }
+                    : []
             }))!);
         }
 

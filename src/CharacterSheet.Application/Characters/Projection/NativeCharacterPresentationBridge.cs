@@ -94,7 +94,12 @@ public static class NativeCharacterPresentationBridge
         var unmodeledSelections = build.FoundationalSelections.Count != 0 ||
             state?.Conditions.Count > 0 ||
             state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true ||
-            state?.RulesInputs?.Count > 0 ||
+            state?.RulesInputs?.Any(input => input.Kind is not (
+                CharacterRulesInputKinds.Resource or
+                CharacterRulesInputKinds.CompetencyRank or
+                CharacterRulesInputKinds.Training or
+                CharacterRulesInputKinds.ClassSkill or
+                CharacterRulesInputKinds.KnownSpell)) == true ||
             build.BaseAbilityScoreInputs.Count != abilities.Count;
 
         // A feat, subclass, or prestige class requires its own effective rule.
@@ -110,6 +115,13 @@ public static class NativeCharacterPresentationBridge
         var invalidHitPointHistory =
             hitPointGains.Count != (state?.HitPointGains?.Count ?? 0);
 
+        var currentResources = (state?.RulesInputs ?? [])
+            .Where(input => input.Kind == CharacterRulesInputKinds.Resource &&
+                input.IntegerValue is not null)
+            .GroupBy(input => input.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key,
+                group => group.OrderByDescending(input => input.UpdatedAt)
+                    .First().IntegerValue!.Value, StringComparer.Ordinal);
         var request = JsonSerializer.SerializeToElement(new
         {
             rulesetId,
@@ -122,7 +134,8 @@ public static class NativeCharacterPresentationBridge
                 occurrenceId = entry.Id.ToString("D")
             }).ToArray(),
             hitPointGains = hitPointGains.Count == 0 ? null : hitPointGains,
-            selectedOptions = nativeChoices.Ids
+            selectedOptions = nativeChoices.Ids,
+            currentResources
         }, JsonOptions);
         var projection = await gateway.ProjectNativeCharacterAsync(request, cancellationToken);
         if (ReadText(projection, "rulesetId") != rulesetId ||
@@ -181,12 +194,14 @@ public static class NativeCharacterPresentationBridge
                 Current: state?.CurrentHitPoints, Maximum: maximumHp) }
             : null;
 
+        var spellcasting = ProjectNativeResources(projection["resources"] as JsonArray);
         var mechanics = new CharacterMechanicsPresentationView(
             AbilityValues: abilityValues.Count == 0 ? null : abilityValues,
             Training: training,
             SavingThrows: savingThrows.Count == 0 ? null : savingThrows,
             CombatFundamentals: combat,
-            HealthTracks: health);
+            HealthTracks: health,
+            SpellcastingProfiles: spellcasting);
         var partial = unmodeledSelections || nativeChoices.HasUnmappedChoices ||
             invalidHitPointHistory ||
             ReadText(projection, "status") != "resolved" ||
@@ -197,6 +212,63 @@ public static class NativeCharacterPresentationBridge
                 ? "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
                 : null,
             classNames);
+    }
+
+    /// <summary>
+    /// Render only resource systems that the native class projection actually
+    /// grants. A missing current value stays unconfigured; recovery is never
+    /// inferred for resources whose native schedule is unsupported.
+    /// </summary>
+    private static IReadOnlyList<SpellcastingProfilePresentationView>? ProjectNativeResources(
+        JsonArray? resources)
+    {
+        if (resources is null || resources.Count == 0) return null;
+        var groups = new Dictionary<string, List<SpellcastingResourcePresentationView>>(
+            StringComparer.Ordinal);
+        foreach (var resource in resources)
+        {
+            var id = ReadText(resource, "id");
+            var maximum = ReadInt(resource, "maximum");
+            if (string.IsNullOrWhiteSpace(id) ||
+                !id.StartsWith("resource.", StringComparison.Ordinal) ||
+                maximum is null or < 0)
+                continue;
+            var (family, label) = id switch
+            {
+                "resource.pact-magic" => ("pact-magic", "Pact Magic"),
+                "resource.sorcery-points" => ("sorcery-points", "Sorcery Points"),
+                _ when id.StartsWith("resource.spell-slot.", StringComparison.Ordinal) =>
+                    ("spell-slots", "Spell Slots"),
+                _ => (id, Display(id["resource.".Length..].Replace('-', ' ')))
+            };
+            if (!groups.TryGetValue(family, out var entries))
+            {
+                entries = [];
+                groups.Add(family, entries);
+            }
+            var level = ReadInt(resource, "spellLevel");
+            var resourceLabel = family == "spell-slots" && level is > 0
+                ? "Level " + level + " Slots" : label;
+            var current = ReadInt(resource, "current");
+            var recovery = ReadText(resource, "recovery");
+            entries.Add(new SpellcastingResourcePresentationView(
+                id, resourceLabel, current is null ? "unconfigured" : "resolved",
+                Current: current, Maximum: maximum,
+                RecoveryProcedureKey: recovery is "long-rest" or "short-or-long-rest"
+                    ? recovery : null));
+        }
+        if (groups.Count == 0) return null;
+        return groups.Select(group => new SpellcastingProfilePresentationView(
+            "native." + group.Key,
+            group.Key switch {
+                "pact-magic" => "Pact Magic",
+                "sorcery-points" => "Sorcery Points",
+                "spell-slots" => "Spell Slots",
+                _ => group.Value[0].Label
+            },
+            ResourceSystem: new DisplayFieldPresentationView(
+                "native-resource-system", "Resource System", group.Key),
+            Resources: group.Value)).ToArray();
     }
 
     private static string Display(string key) =>
