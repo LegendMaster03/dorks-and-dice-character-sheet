@@ -358,8 +358,10 @@ public sealed class CharacterStateService(
         int? integerValue,
         bool? booleanValue,
         string? textValue,
-        CancellationToken cancellationToken = default) =>
-        MutateAsync(
+        CancellationToken cancellationToken = default)
+    {
+        RejectSystemOwnedRulesInput(kind, key);
+        return MutateAsync(
             characterId,
             (changedAt, token) => stateStore.SetRulesInputAsync(
                 characterId,
@@ -371,13 +373,16 @@ public sealed class CharacterStateService(
                 changedAt,
                 token),
             cancellationToken);
+    }
 
     public Task<CharacterStateResult> RemoveRulesInputAsync(
         Guid characterId,
         string kind,
         string key,
-        CancellationToken cancellationToken = default) =>
-        MutateAsync(
+        CancellationToken cancellationToken = default)
+    {
+        RejectSystemOwnedRulesInput(kind, key);
+        return MutateAsync(
             characterId,
             (changedAt, token) => stateStore.RemoveRulesInputAsync(
                 characterId,
@@ -386,6 +391,17 @@ public sealed class CharacterStateService(
                 changedAt,
                 token),
             cancellationToken);
+    }
+
+    private static void RejectSystemOwnedRulesInput(string kind, string key)
+    {
+        if (string.Equals(kind, CharacterRulesInputKinds.BooleanFact,
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(key?.Trim(), CharacterStartingEquipmentReceipt.Key,
+                StringComparison.Ordinal))
+            throw new ArgumentException(
+                "Starting equipment acquisition is recorded by the server and can not be edited.");
+    }
 
     public Task<CharacterStateResult> SetHitPointGainAsync(
         Guid characterId,

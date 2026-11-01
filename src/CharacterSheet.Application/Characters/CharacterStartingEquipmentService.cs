@@ -29,16 +29,24 @@ public sealed class CharacterStartingEquipmentService(
         Guid characterId,
         CancellationToken cancellationToken = default)
     {
-        var preview = await PreviewAsync(characterId, cancellationToken);
-        if (preview.Status != CharacterStateAccessStatus.Ready ||
-            preview.Projection is null)
-            return new CharacterStateResult(preview.Status);
+        // Starting equipment is an initial acquisition, not a live inventory
+        // projection. A repeated call must not require the original ruleset
+        // definition to remain available or unchanged after the first award.
         var snapshot = await stateService.GetAsync(characterId, cancellationToken);
         if (snapshot.Status != CharacterStateAccessStatus.Ready ||
             snapshot.View is null)
             return snapshot;
         if (snapshot.View.ReadOnly)
             return new CharacterStateResult(CharacterStateAccessStatus.ArchivedReadOnly);
+        if (snapshot.View.RulesInputs?.Any(input =>
+            input.Kind == CharacterRulesInputKinds.BooleanFact &&
+            input.Key == CharacterStartingEquipmentReceipt.Key &&
+            input.BooleanValue == true) == true)
+            return snapshot;
+        var preview = await PreviewAsync(characterId, cancellationToken);
+        if (preview.Status != CharacterStateAccessStatus.Ready ||
+            preview.Projection is null)
+            return new CharacterStateResult(preview.Status);
         var projection = preview.Projection;
         if (projection["status"]?.GetValue<string>() != "resolved" ||
             projection["grants"] is not JsonArray grants ||

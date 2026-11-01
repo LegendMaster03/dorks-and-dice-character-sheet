@@ -307,9 +307,21 @@ public sealed class CharacterAdvancementWorkflowTests
         using (var materialize = await factory.SendHostedAsync(HttpMethod.Post,
             $"/api/characters/{id:D}/state/inventory/starting-equipment"))
             Assert.Equal(HttpStatusCode.OK, materialize.StatusCode);
+        // Core can remove or rewrite its experimental grants after playtesting.
+        // An already-awarded character retains its possessions and does not
+        // require successful Core resolution for subsequent requests.
+        factory.Native.EquipmentStatus = "unavailable";
         using (var repeat = await factory.SendHostedAsync(HttpMethod.Post,
             $"/api/characters/{id:D}/state/inventory/starting-equipment"))
             Assert.Equal(HttpStatusCode.OK, repeat.StatusCode);
+        using (var tamper = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "booleanFact", key = CharacterStartingEquipmentReceipt.Key,
+                booleanValue = false }))
+            Assert.Equal(HttpStatusCode.BadRequest, tamper.StatusCode);
+        using (var clear = await factory.SendHostedAsync(HttpMethod.Delete,
+            $"/api/characters/{id:D}/state/rules-inputs/booleanFact/{CharacterStartingEquipmentReceipt.Key}"))
+            Assert.Equal(HttpStatusCode.BadRequest, clear.StatusCode);
 
         using var read = await factory.SendHostedAsync(HttpMethod.Get,
             $"/api/characters/{id:D}/state");
@@ -321,7 +333,7 @@ public sealed class CharacterAdvancementWorkflowTests
         Assert.Contains(factory.Native.LastEquipmentRequest.GetProperty("advancements")
             .EnumerateArray().ToArray(), row =>
                 row.GetProperty("occurrenceId").GetString() == entry.Id.ToString("D"));
-        Assert.Equal(5, factory.Native.EquipmentCalls);
+        Assert.Equal(4, factory.Native.EquipmentCalls);
     }
 
     [Fact]
