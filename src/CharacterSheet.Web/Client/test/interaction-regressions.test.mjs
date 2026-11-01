@@ -136,11 +136,13 @@ test("Harvesting draft edits do not replace the action target before Calculate H
 
     await workflow.evaluate();
 
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].assessmentResult, 20);
-    assert.equal(requests[0].carvingResult, 20);
-    assert.equal(requests[0].table.manualEdits.upsertComponents[0].quantity, 1);
-    assert.ok(application.getState().harvestingCrafting.outcome);
+    // Native harvesting evaluation is not available. Drafts must survive, but
+    // a retired endpoint must not be called or produce an invented award.
+    assert.equal(requests.length, 0);
+    const result = application.getState().harvestingCrafting;
+    assert.equal(result.outcome, null);
+    assert.match(result.message ?? "", /native harvesting contract/);
+    assert.equal(result.tableRequest.manualEdits.upsertComponents[0].quantity, 1);
     assert.ok(harness.renderCount() >= 2);
 });
 
