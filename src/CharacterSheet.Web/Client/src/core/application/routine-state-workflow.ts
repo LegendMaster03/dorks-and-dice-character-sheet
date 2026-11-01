@@ -7,6 +7,7 @@ import type { CharacterSheetApplication } from "../../render-lifecycle.js";
 import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import {
     loadCharacterState,
+    CharacterSheetApiError,
     type CharacterStateResponse
 } from "../../character-state-api.js";
 import { requestErrorMessage } from "./request-error.js";
@@ -154,6 +155,22 @@ export function createRoutineStateWorkflow(
                 }
                 return true;
             } catch (error) {
+                if (kind === "native-resource-action" &&
+                    error instanceof CharacterSheetApiError &&
+                    error.status === 409) {
+                    // The conflict indicates that a previous resource value is
+                    // stale. Reload without automatically replaying expenditure.
+                    try {
+                        const fresh = await loadCharacterState(
+                            environment, routine.state.characterId);
+                        application.dispatch({
+                            type: "routine-loaded", state: fresh
+                        }, { render: options.render });
+                        await resolveReferences(fresh);
+                    } catch {
+                        // Keep the original conflict visible if reloading fails.
+                    }
+                }
                 application.dispatch({
                     type: "routine-mutation-failed",
                     message: requestErrorMessage(error)

@@ -174,8 +174,7 @@ export function createRulesInputWorkflow(
                         environment, characterId, {
                             resourceId: resourceKey, spend: amount
                         })).state,
-                    `resource:${resourceKey}`,
-                    { resolveReferences: false }));
+                    `resource:${resourceKey}`));
         },
 
         async recoverResource(characterId, resourceKey, rest): Promise<boolean> {
@@ -185,8 +184,7 @@ export function createRulesInputWorkflow(
                         environment, characterId, {
                             resourceId: resourceKey, rest
                         })).state,
-                    `resource:${resourceKey}`,
-                    { resolveReferences: false }));
+                    `resource:${resourceKey}`));
         },
 
         setRuntimeRoll,
