@@ -205,8 +205,17 @@ test("guided starting equipment navigates to ordinary inventory", () => {
         closeGuidedBuilder() { calls.push("close"); },
         selectSection(value) { calls.push(value); }
     };
+    const editableBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId, builderStatus: "BuildInProgress", readOnly: false,
+            foundationalSelections: [], baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
     const displayed = renderCharacterWorkspace(
-        character, builder,
+        character, editableBuilder,
         routine([], {}, false),
         "inventory", false, "view",
         { ...guidedBuilder, open: true, activeSection: "equipment" },
