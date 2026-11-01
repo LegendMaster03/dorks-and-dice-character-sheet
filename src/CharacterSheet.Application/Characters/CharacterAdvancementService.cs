@@ -258,6 +258,7 @@ public sealed class CharacterAdvancementService(
             throw new RulesCoreGatewayException("Native eligibility result is inconsistent.");
 
         var blockers = new List<RulesCoreCharacterProjectionConflictView>();
+        var displayChoices = new List<RulesCoreCharacterChoiceView>();
         if (eligibility["requirements"] is not JsonArray requirements)
             throw new RulesCoreGatewayException("Native eligibility requirements are missing.");
         foreach (var requirement in requirements)
@@ -317,14 +318,21 @@ public sealed class CharacterAdvancementService(
             if (projected["requiredChoices"] is not JsonArray required)
                 throw new RulesCoreGatewayException(
                     "Native projection did not describe required advancement choices.");
+            var requiredNames = new List<string>();
             foreach (var choice in required)
             {
                 var name = choice?.GetValue<string>();
                 if (!string.IsNullOrWhiteSpace(name))
+                {
+                    requiredNames.Add(name);
                     blockers.Add(new RulesCoreCharacterProjectionConflictView(
                         name, "native-choice",
                         "Resolve the mandatory native advancement choice: " + name, [], [classId]));
+                }
             }
+            if (classId == "class.warlock")
+                displayChoices.AddRange(await LoadWarlockChoicesAsync(
+                    state, rulesetId, fingerprint, requiredNames, cancellationToken));
             // A class-level eligibility result alone does not validate selected
             // option prerequisites. Evaluate each option as a prospective choice
             // against the proposed level and the other already-selected options.
@@ -385,11 +393,83 @@ public sealed class CharacterAdvancementService(
                 ? "choice-required" : eligibilityStatus,
             CanApply: canApply,
             Prerequisites: [],
-            RequiredChoices: [],
+            RequiredChoices: displayChoices,
             BlockingConflicts: blockers,
             Changes: [new CharacterAdvancementChangeView(
                 "class-level", className,
                 $"Level {currentLevel} → {targetLevel}")]);
+    }
+
+    private async Task<IReadOnlyList<RulesCoreCharacterChoiceView>> LoadWarlockChoicesAsync(
+        CharacterStateView? state, string rulesetId, string fingerprint,
+        IReadOnlyList<string> required, CancellationToken cancellationToken)
+    {
+        const string prefix = "native-option.class.warlock.";
+        var saved = (state?.RulesInputs ?? [])
+            .Where(input => input.Kind == CharacterRulesInputKinds.Choice &&
+                input.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .ToDictionary(input => input.Key, input => input.TextValue, StringComparer.Ordinal);
+        var slots = new List<(string Kind, string Key, string Label)>();
+        if (required.Contains("advancement.class.warlock.patron", StringComparer.Ordinal) ||
+            saved.ContainsKey(prefix + "patron"))
+            slots.Add(("patron", prefix + "patron", "Patron"));
+        if (required.Contains("advancement.class.warlock.pact", StringComparer.Ordinal) ||
+            saved.ContainsKey(prefix + "pact"))
+            slots.Add(("pact", prefix + "pact", "Pact"));
+
+        const string invocationRequirement = "advancement.class.warlock.invocations:";
+        var missing = 0;
+        foreach (var key in required.Where(key =>
+                     key.StartsWith(invocationRequirement, StringComparison.Ordinal)))
+        {
+            if (!int.TryParse(key[invocationRequirement.Length..], out var count) ||
+                count is < 0 or > 32)
+                throw new RulesCoreGatewayException("Invalid native Invocation requirement.");
+            missing = Math.Max(missing, count);
+        }
+        var used = saved.Keys.Where(key =>
+            key.StartsWith(prefix + "invocation.", StringComparison.Ordinal)).ToArray();
+        foreach (var key in used.OrderBy(key => key, StringComparer.Ordinal))
+            slots.Add(("invocation", key, "Invocation"));
+        for (var number = 1; missing > 0 && number <= 64; number++)
+        {
+            var key = prefix + "invocation." + number;
+            if (saved.ContainsKey(key)) continue;
+            slots.Add(("invocation", key, "Invocation " + number));
+            missing--;
+        }
+        if (slots.Count == 0) return [];
+
+        var searches = slots.Select(slot => slot.Kind)
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(kind => kind,
+                kind => native.SearchNativeOptionsAsync(
+                    fingerprint, kind, null, 100, 0, cancellationToken),
+                StringComparer.Ordinal);
+        await Task.WhenAll(searches.Values);
+        var options = new Dictionary<string, IReadOnlyList<RulesCoreCharacterChoiceOptionView>>(
+            StringComparer.Ordinal);
+        foreach (var (kind, resultTask) in searches)
+        {
+            var result = await resultTask;
+            if (Text(result, "rulesetId") != rulesetId ||
+                Text(result, "fingerprint") != fingerprint ||
+                result["options"] is not JsonArray entries)
+                throw new RulesCoreGatewayException("Native option catalog did not match the snapshot.");
+            options[kind] = entries
+                .Where(e => Text(e, "kind") == kind &&
+                    !string.IsNullOrWhiteSpace(Text(e, "id")) &&
+                    !string.IsNullOrWhiteSpace(Text(e, "name")))
+                .Select(e => new RulesCoreCharacterChoiceOptionView(
+                    Text(e, "id")!, Text(e, "name")!, Text(e, "id")))
+                .ToArray();
+        }
+        var unverifiedProvenance = new RulesCoreCharacterMechanicProvenanceView([], [], []);
+        return slots.Select(slot => new RulesCoreCharacterChoiceView(
+            slot.Key, "class.warlock", slot.Label, slot.Kind,
+            saved.GetValueOrDefault(slot.Key) is null ? "required" : "resolved",
+            options[slot.Kind], saved.GetValueOrDefault(slot.Key), "class.warlock",
+            unverifiedProvenance)).ToArray();
     }
 
     private static string? Text(JsonNode? value, string key)

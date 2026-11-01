@@ -107,6 +107,12 @@ public sealed class CharacterAdvancementWorkflowTests
             c.ConflictKey == "advancement.class.warlock.patron");
         Assert.Contains(plan.BlockingConflicts, c =>
             c.ConflictKey == "advancement.class.warlock.pact");
+        Assert.Contains(plan.RequiredChoices, c =>
+            c.Kind == "patron" && c.ChoiceKey == "native-option.class.warlock.patron"
+            && c.Options.Any(o => o.Value == "patron.warlock.fiend"));
+        Assert.Contains(plan.RequiredChoices, c =>
+            c.Kind == "pact" && c.ChoiceKey == "native-option.class.warlock.pact"
+            && c.Options.Any(o => o.Value == "pact.warlock.blade"));
     }
 
     [Fact]
@@ -172,6 +178,27 @@ public sealed class CharacterAdvancementWorkflowTests
             new { classConceptKey = "class.warlock" });
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(0, factory.Native.EligibilityCalls);
+    }
+
+    [Fact]
+    public async Task NativeChoiceStateReachesBothProjectionAndEligibility()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Warlock Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+        using (var saved = await factory.SendHostedAsync(
+            HttpMethod.Put, $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "choice", key = "native-option.class.warlock.patron",
+                textValue = "patron.warlock.fiend" }))
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+
+        using var preview = await factory.SendHostedAsync(
+            HttpMethod.Post, $"/api/characters/{id:D}/advancement/preview",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 });
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        Assert.Equal(["patron.warlock.fiend"], factory.Native.LastProjectedOptions);
+        Assert.Contains("patron.warlock.fiend", factory.Native.RequestedOptionCandidateIds);
     }
 
     private static async Task<CharacterAdvancementEntryView> InitializeClassAsync(
@@ -246,6 +273,8 @@ public sealed class CharacterAdvancementWorkflowTests
         public IReadOnlyList<string> RequiredChoices { get; init; } = [];
         public int EligibilityCalls { get; private set; }
         public List<int> RequestedLevels { get; } = [];
+        public List<string> RequestedOptionCandidateIds { get; } = [];
+        public string[] LastProjectedOptions { get; private set; } = [];
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken token) =>
             Task.FromResult(JsonSerializer.SerializeToNode(new {
@@ -258,10 +287,15 @@ public sealed class CharacterAdvancementWorkflowTests
             string fingerprint, string category, string? query, int limit, int offset,
             CancellationToken token)
         {
-            Assert.Equal("class", category);
+            var options = category switch {
+                "class" => new[] { new { id = "class.warlock", kind = "class", name = "Warlock" } },
+                "patron" => new[] { new { id = "patron.warlock.fiend", kind = "patron", name = "The Fiend" } },
+                "pact" => new[] { new { id = "pact.warlock.blade", kind = "pact", name = "Pact of the Blade" } },
+                "invocation" => new[] { new { id = "invocation.eldritch-sight", kind = "invocation", name = "Eldritch Sight" } },
+                _ => throw new InvalidOperationException("Unsupported test option category.")
+            };
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
-                rulesetId = "first-party-001", fingerprint = Fingerprint,
-                options = new[] { new { id = "class.warlock", kind = "class", name = "Warlock" } }
+                rulesetId = "first-party-001", fingerprint = Fingerprint, options
             })!);
         }
 
@@ -273,6 +307,8 @@ public sealed class CharacterAdvancementWorkflowTests
                 .GetProperty("advancements").EnumerateArray().Single();
             Assert.Equal("class.warlock", current.GetProperty("classId").GetString());
             RequestedLevels.Add(current.GetProperty("level").GetInt32());
+            var candidate = request.GetProperty("candidateId").GetString()!;
+            if (candidate != "class.warlock") RequestedOptionCandidateIds.Add(candidate);
             var die = request.TryGetProperty("hitDieValue", out var gain)
                 && gain.ValueKind == JsonValueKind.Number ? gain.GetInt32() : (int?)null;
             var withinDie = die is null or >= 1 and <= 8;
@@ -280,7 +316,10 @@ public sealed class CharacterAdvancementWorkflowTests
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
                 fingerprint = Fingerprint,
-                candidateId = "class.warlock", candidateKind = "class",
+                candidateId = candidate,
+                candidateKind = candidate == "class.warlock" ? "class"
+                    : candidate.StartsWith("patron.", StringComparison.Ordinal) ? "patron"
+                    : candidate.StartsWith("pact.", StringComparison.Ordinal) ? "pact" : "invocation",
                 status = accepted ? "eligible" : "ineligible",
                 eligible = accepted,
                 requirements = new[] {
@@ -302,6 +341,8 @@ public sealed class CharacterAdvancementWorkflowTests
             JsonElement request, CancellationToken token)
         {
             Assert.Equal("first-party-001", request.GetProperty("rulesetId").GetString());
+            LastProjectedOptions = request.GetProperty("selectedOptions")
+                .EnumerateArray().Select(value => value.GetString()!).ToArray();
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
                 fingerprint = Fingerprint, status = "partial",
