@@ -90,7 +90,35 @@ public static class NativeCharacterPresentationBridge
                 group => group.OrderByDescending(entry => entry.UpdatedAt).First().Score,
                 StringComparer.Ordinal);
 
+        var trainingCatalog = await LoadNativeTrainingCatalogAsync(
+            gateway, rulesetId, fingerprint, cancellationToken);
         var nativeChoices = NativeCharacterOptionSelections.FromState(state);
+        var storedRanks = (state?.RulesInputs ?? [])
+            .Where(input => input.Kind == CharacterRulesInputKinds.CompetencyRank &&
+                input.IntegerValue is not null)
+            .GroupBy(input => input.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key,
+                group => group.OrderByDescending(input => input.UpdatedAt)
+                    .First().IntegerValue!.Value, StringComparer.Ordinal);
+        var trained = (state?.RulesInputs ?? [])
+            .Where(input => input.Kind == CharacterRulesInputKinds.Training &&
+                input.BooleanValue != false)
+            .Select(input => input.Key).ToHashSet(StringComparer.Ordinal);
+        var skillIds = trainingCatalog.Where(item => item.Kind == "skill")
+            .Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var competencyIds = trainingCatalog.Where(item => item.Kind == "competency")
+            .Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var trainingIds = skillIds.Concat(competencyIds).ToHashSet(StringComparer.Ordinal);
+        var unknownTraining = storedRanks.Keys.Concat(trained)
+            .Any(key => !trainingIds.Contains(key));
+        var skills = skillIds.ToDictionary(id => id,
+            id => (object)new { ranks = storedRanks.GetValueOrDefault(id),
+                proficient = trained.Contains(id), miscModifier = 0 },
+            StringComparer.Ordinal);
+        var competencies = competencyIds.ToDictionary(id => id,
+            id => (object)new { ranks = storedRanks.GetValueOrDefault(id),
+                proficient = trained.Contains(id), miscModifier = 0 },
+            StringComparer.Ordinal);
         var unmodeledSelections = build.FoundationalSelections.Count != 0 ||
             state?.Conditions.Count > 0 ||
             state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true ||
@@ -98,8 +126,8 @@ public static class NativeCharacterPresentationBridge
                 CharacterRulesInputKinds.Resource or
                 CharacterRulesInputKinds.CompetencyRank or
                 CharacterRulesInputKinds.Training or
-                CharacterRulesInputKinds.ClassSkill or
                 CharacterRulesInputKinds.KnownSpell)) == true ||
+            unknownTraining ||
             build.BaseAbilityScoreInputs.Count != abilities.Count;
 
         // A feat, subclass, or prestige class requires its own effective rule.
@@ -135,7 +163,9 @@ public static class NativeCharacterPresentationBridge
             }).ToArray(),
             hitPointGains = hitPointGains.Count == 0 ? null : hitPointGains,
             selectedOptions = nativeChoices.Ids,
-            currentResources
+            currentResources,
+            skills,
+            competencies
         }, JsonOptions);
         var projection = await gateway.ProjectNativeCharacterAsync(request, cancellationToken);
         if (ReadText(projection, "rulesetId") != rulesetId ||
@@ -195,12 +225,25 @@ public static class NativeCharacterPresentationBridge
             : null;
 
         var spellcasting = ProjectNativeResources(projection["resources"] as JsonArray);
+        var calculatedTraining = new CompetencyCollectionPresentationView(
+            trainingCatalog.Select(item => {
+                var total = unmodeledSelections ? null : Numeric(values, item.Id + ".total");
+                return new CompetencyPresentationView(
+                    item.Id, item.Name, (object?)total ?? "—",
+                    FormattedValue: total is null ? "Unresolved" : null,
+                    Kind: item.Kind,
+                    Ranks: storedRanks.GetValueOrDefault(item.Id),
+                    Training: trained.Contains(item.Id) ? "proficient" : null,
+                    PresentationCategory: item.Kind == "skill" ? "skill" : "competency",
+                    RankInputKey: item.Id);
+            }).ToArray());
         var mechanics = new CharacterMechanicsPresentationView(
             AbilityValues: abilityValues.Count == 0 ? null : abilityValues,
             Training: training,
             SavingThrows: savingThrows.Count == 0 ? null : savingThrows,
             CombatFundamentals: combat,
             HealthTracks: health,
+            Competencies: calculatedTraining,
             SpellcastingProfiles: spellcasting);
         var partial = unmodeledSelections || nativeChoices.HasUnmappedChoices ||
             invalidHitPointHistory ||
@@ -212,6 +255,45 @@ public static class NativeCharacterPresentationBridge
                 ? "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
                 : null,
             classNames);
+    }
+
+    private sealed record NativeTrainingSummary(string Id, string Name, string Kind);
+
+    private static async Task<IReadOnlyList<NativeTrainingSummary>> LoadNativeTrainingCatalogAsync(
+        INativeRulesCoreGateway gateway, string rulesetId, string fingerprint,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<NativeTrainingSummary>();
+        foreach (var category in new[] { "skill", "competency" })
+        {
+            for (var offset = 0; offset < 500; offset += 100)
+            {
+                var page = await gateway.SearchNativeOptionsAsync(
+                    fingerprint, category, null, 100, offset, cancellationToken);
+                if (ReadText(page, "rulesetId") != rulesetId ||
+                    ReadText(page, "fingerprint") != fingerprint ||
+                    page["options"] is not JsonArray entries)
+                    throw new RulesCoreGatewayException(
+                        "Native Skill/Competency catalog does not match the active snapshot.");
+                foreach (var entry in entries)
+                {
+                    var id = ReadText(entry, "id");
+                    var name = ReadText(entry, "name");
+                    if (ReadText(entry, "kind") != category ||
+                        string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name))
+                        throw new RulesCoreGatewayException(
+                            "Native Skill/Competency catalog contains an invalid summary.");
+                    result.Add(new(id, name, category));
+                }
+                if (entries.Count < 100) break;
+                if (offset == 400)
+                    throw new RulesCoreGatewayException(
+                        "Native Skill/Competency catalog exceeds the supported page limit.");
+            }
+        }
+        if (result.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != result.Count)
+            throw new RulesCoreGatewayException("Native Skill/Competency identities are duplicated.");
+        return result;
     }
 
     /// <summary>

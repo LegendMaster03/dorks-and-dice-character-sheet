@@ -68,7 +68,7 @@ public sealed class NativeCharacterPresentationBridgeTests
         Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
         Assert.Equal("class.warlock", occurrence.RuleConceptKey);
         Assert.Equal(1, occurrence.Level);
-        Assert.Equal(3, gateway.Calls); // Ruleset, exact class search, projection.
+        Assert.Equal(5, gateway.Calls); // Ruleset, Class, Skill, Competency, projection.
         Assert.Equal("class.warlock", gateway.LastAdvancementClassId);
         Assert.Equal(1, gateway.LastAdvancementLevel);
         Assert.Equal("Warlock", result.NativeClassNames!["class.warlock"]);
@@ -201,6 +201,25 @@ public sealed class NativeCharacterPresentationBridgeTests
     }
 
     [Fact]
+    public async Task NativeSkillsAndCompetenciesStaySeparateAndUnresolvedValuesStayExplicit()
+    {
+        var gateway = new FixtureGateway();
+        var entry = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var build = Build(entry);
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None);
+        var items = result.Mechanics!.Competencies!.Entries;
+        var skill = Assert.Single(items, item => item.PresentationCategory == "skill");
+        Assert.Equal("Arcana", skill.Label);
+        Assert.Equal(3, skill.EffectiveValue);
+        var competency = Assert.Single(items, item => item.PresentationCategory == "competency");
+        Assert.Equal("Alchemy", competency.Label);
+        Assert.Equal("Unresolved", competency.FormattedValue);
+        Assert.Equal("competency.alchemy", competency.RankInputKey);
+    }
+
+    [Fact]
     public async Task CatalogWithoutExactNativeIdentityDoesNotProject()
     {
         var gateway = new FixtureGateway { ReturnClass = false };
@@ -242,10 +261,16 @@ public sealed class NativeCharacterPresentationBridgeTests
         {
             Calls++;
             Assert.Equal(Fingerprint, fingerprint);
-            Assert.Equal("class", category);
+            var options = category switch {
+                "class" => ReturnClass
+                    ? new[] { new { id = query, name = "Warlock", kind = "class" } }
+                    : [],
+                "skill" => new[] { new { id = "skill.arcana", name = "Arcana", kind = "skill" } },
+                "competency" => new[] { new { id = "competency.alchemy", name = "Alchemy", kind = "competency" } },
+                _ => throw new InvalidOperationException("Unexpected native catalog category.")
+            };
             return Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new {
-                rulesetId = "first-party-001", fingerprint = Fingerprint,
-                options = ReturnClass ? new[] { new { id = query, name = "Warlock", kind = "class" } } : []
+                rulesetId = "first-party-001", fingerprint = Fingerprint, options
             }))!);
         }
 
@@ -268,6 +293,8 @@ public sealed class NativeCharacterPresentationBridgeTests
                     ["ability.strength.score"] = new { status = "resolved", value = 14 },
                     ["ability.strength.modifier"] = new { status = "resolved", value = 2 },
                     ["proficiency.bonus"] = new { status = "resolved", value = 2 },
+                    ["skill.arcana.total"] = new { status = "resolved", value = 3 },
+                    ["competency.alchemy.total"] = new { status = "unsupported", value = (int?)null },
                     ["ac.normal"] = new { status = "unsupported", value = (int?)null }
                 },
                 issues = new[] { new { code = "defense-input-required" } },
