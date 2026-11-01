@@ -7,6 +7,37 @@ namespace CharacterSheet.IntegrationTests;
 public sealed class StartingEquipmentInventoryPersistenceTests
 {
     [Fact]
+    public async Task GrantSynchronizationTablesAreRetiredWithoutDeletingOrdinaryInventory()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var id = Guid.NewGuid();
+        await using var context = new CharacterSheetDbContext(options);
+        await context.Database.MigrateAsync();
+        var state = new PostgresCharacterStateStore(context);
+        await new PostgresCharacterSheetStore(context).GetOrCreateAsync(id);
+        await state.AddInventoryItemOccurrenceAsync(id, "item:dagger",
+            DateTimeOffset.UtcNow);
+        await state.SetCurrencyBalanceAsync(id, "gp", 8, DateTimeOffset.UtcNow);
+
+        await context.Database.OpenConnectionAsync();
+        await using var command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = """
+            SELECT to_regclass('public.character_starting_equipment_inventory_grants'),
+                   to_regclass('public.character_starting_equipment_currency_grants');
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.True(await reader.IsDBNullAsync(0));
+        Assert.True(await reader.IsDBNullAsync(1));
+        await reader.DisposeAsync();
+
+        var saved = await state.GetAsync(id);
+        Assert.Single(saved!.InventoryItemOccurrences);
+        Assert.Equal(8, Assert.Single(saved.CurrencyBalances).Amount);
+    }
+
+    [Fact]
     public async Task StartingEquipmentIsAwardedOnceAsOrdinaryInventory()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
