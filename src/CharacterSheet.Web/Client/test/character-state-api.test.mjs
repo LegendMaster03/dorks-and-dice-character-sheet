@@ -205,8 +205,6 @@ test("routine-state mutations send only Character-owned state inputs and return 
         3,
         fetcher);
     await addInventoryItemOccurrence(environment, characterId, "item:rope", fetcher);
-    await addCustomInventoryItemOccurrence(
-        environment, characterId, "Unreconciled Chitin", 3, fetcher);
     await updateInventoryItemOccurrence(
         environment,
         characterId,
