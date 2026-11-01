@@ -36,6 +36,25 @@ Ensure(projection.RequiredChoices.Count == 0,
     "Valid Patron, Pact, and Invocation selections did not satisfy choices.");
 Ensure(projection.Resources.Any(item => item.Id == "resource.pact-magic" && item.Maximum == 1),
     "Pact Magic tracker was not projected from the native class.");
+var pact = projection.Resources.Single(item => item.Id == "resource.pact-magic");
+var spent = NativeResourceResolution.Spend(pact, 1, 1);
+Ensure(spent.Status == "resolved" && spent.Current == 0,
+    "Native Pact Magic expenditure was not resolved.");
+var recovered = NativeResourceResolution.Recover(
+    pact, spent.Current!.Value, NativeRecoveryEvent.ShortRest);
+Ensure(recovered.Status == "resolved" && recovered.Current == pact.Maximum,
+    "Native Pact Magic Short Rest recovery was not resolved.");
+var insufficient = NativeResourceResolution.Spend(pact, 1, 2);
+Ensure(insufficient.Status == "insufficient-resource" &&
+    insufficient.Current == 1,
+    "Native Pact Magic overdraft was not rejected.");
+var unknownSlots = new NativeResource(
+    "resource.spell-slot.1", 2, 0, "unsupported", 1);
+var unsupportedRecovery = NativeResourceResolution.Recover(
+    unknownSlots, 0, NativeRecoveryEvent.LongRest);
+Ensure(unsupportedRecovery.Status == "unsupported",
+    "Unsupported spell-slot recovery must remain unavailable.");
+
 
 var eligibility = new NativeAdvancementEligibility(catalog).Evaluate(
     new NativeEligibilityRequest(catalog.RulesetId, catalog.Fingerprint,
