@@ -32,7 +32,7 @@ test("standalone hosting uses the browser pathname without a development adapter
     });
 });
 
-test("standalone development can expose an explicitly configured Rules Core base", () => {
+test("standalone development ignores the retired direct Rules Core base URL", () => {
     assert.deepEqual(resolveHostEnvironment({
         dataset: {
             standaloneDevelopment: "true",

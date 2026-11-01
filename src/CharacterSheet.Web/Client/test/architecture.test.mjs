@@ -36,6 +36,18 @@ async function tsFiles(relativeDir) {
     return files.sort();
 }
 
+test("retired Rules Core HTTP routes are absent from active Character Sheet clients", async () => {
+    const files = await tsFiles(".");
+    for (const file of files) {
+        const content = await source(file);
+        assert.doesNotMatch(content, /\\/api\\/rules(?:\\/|\\?|["'`])/,
+            `Legacy Rules Core route found in ${file}`);
+    }
+    const gateway = await readFile(
+        path.join(srcRoot, "../../DelegatedRulesCoreGateway.cs"), "utf8");
+    assert.doesNotMatch(gateway, /\\/api\\/rules(?:\\/|\\?|["'`])/);
+});
+
 test("mechanics compatibility surface re-exports feature owners instead of implementing them", async () => {
     const compatibility = await source("ui/mechanics-components.ts");
     assert.match(compatibility, /Compatibility exports/);
