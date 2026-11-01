@@ -209,6 +209,8 @@ test("spellcasting tab is absent only for a confirmed noncaster", () => {
     // Missing mechanics is not equivalent to proof that casting is impossible.
     const unavailable = render("spells", null);
     assert.equal(byAttribute(unavailable, "data-sheet-section-tab", "spells").length, 1);
+    const unresolved = render("spells", { spellcastingProfiles: null });
+    assert.equal(byAttribute(unresolved, "data-sheet-section-tab", "spells").length, 1);
 });
 
 test("primary sheet tabs use roving tabindex and horizontal arrow-key selection", () => {
