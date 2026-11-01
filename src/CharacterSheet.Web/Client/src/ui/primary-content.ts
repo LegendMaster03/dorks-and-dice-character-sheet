@@ -43,7 +43,7 @@ export function renderPrimaryContent(
     const hasRecordedSpells = routine.state?.rulesInputs
         ?.some(input => input.kind === "knownSpell") === true;
     const castingExplicitlyAbsent =
-        mechanics?.spellcastingProfiles !== undefined &&
+        Array.isArray(mechanics?.spellcastingProfiles) &&
         mechanics.spellcastingProfiles.length === 0 && !hasRecordedSpells;
     const visibleSections = SHEET_SECTIONS.filter(section =>
         section.id !== "spells" || !castingExplicitlyAbsent);
