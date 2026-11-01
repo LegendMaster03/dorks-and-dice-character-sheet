@@ -4,10 +4,10 @@ import type {
 } from "../../app-state.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
+import { CharacterSheetApiError } from "../../character-api.js";
 import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import {
     loadCharacterState,
-    CharacterSheetApiError,
     type CharacterStateResponse
 } from "../../character-state-api.js";
 import { requestErrorMessage } from "./request-error.js";
