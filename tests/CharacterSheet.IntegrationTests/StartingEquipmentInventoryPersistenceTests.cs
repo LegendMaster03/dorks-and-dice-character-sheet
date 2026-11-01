@@ -38,6 +38,43 @@ public sealed class StartingEquipmentInventoryPersistenceTests
     }
 
     [Fact]
+    public async Task ConcurrentStartingEquipmentRequestsGrantOnlyOneOrdinaryInventorySet()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var id = Guid.NewGuid();
+        await using (var setup = new CharacterSheetDbContext(options))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(id);
+        }
+
+        async Task AwardAsync()
+        {
+            await using var context = new CharacterSheetDbContext(options);
+            await new PostgresCharacterStartingEquipmentInventoryStore(context).ApplyOnceAsync(
+                id,
+                [new CharacterStartingEquipmentInventoryItem(
+                    "native.test.item", "item.demo.knife", null, 2)],
+                [new CharacterStartingEquipmentCurrencyGrant(
+                    "native.test.gold", "gp", 50)],
+                DateTimeOffset.UtcNow);
+        }
+
+        await Task.WhenAll(AwardAsync(), AwardAsync());
+
+        await using var verify = new CharacterSheetDbContext(options);
+        var state = await new PostgresCharacterStateStore(verify).GetAsync(id);
+        Assert.NotNull(state);
+        Assert.Equal(2, Assert.Single(state.InventoryItemOccurrences).Quantity);
+        Assert.Equal(50, Assert.Single(state.CurrencyBalances).Amount);
+        Assert.Single(state.RulesInputs, input =>
+            input.Kind == CharacterSheet.Domain.Characters.CharacterRulesInputKind.BooleanFact &&
+            input.Key == CharacterStartingEquipmentReceipt.Key &&
+            input.BooleanValue == true);
+    }
+
+    [Fact]
     public async Task StartingEquipmentIsAwardedOnceAsOrdinaryInventory()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
