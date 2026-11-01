@@ -76,6 +76,8 @@ export interface RulesInputCharacterHandlers {
     setChoice(choiceKey: string, value: string): void;
     clearChoice(choiceKey: string): void;
     setResource(resourceKey: string, currentValue: number): void;
+    spendResource(resourceKey: string, amount: number): void;
+    recoverResource(resourceKey: string, rest: "short-rest" | "long-rest"): void;
     setCompetencyRank(competencyKey: string, ranks: number): void;
     clearCompetencyRank(competencyKey: string): void;
     setHitPointGain(

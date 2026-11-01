@@ -116,6 +116,7 @@ export type RoutineMutationKind =
     | "inventory-update"
     | "inventory-delete"
     | "rules-input-update"
+    | "native-resource-action"
     | "rules-input-delete"
     | "hit-point-gain-update"
     | "hit-point-gain-delete"

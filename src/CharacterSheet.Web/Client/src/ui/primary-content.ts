@@ -142,11 +142,14 @@ export function renderPrimaryContent(
                     mechanics?.spellcastingProfiles,
                     {
                         readOnly: readOnly || routine.status !== "ready" || routine.state === null,
-                        savingResourceKey: routine.mutation?.kind === "rules-input-update"
+                        savingResourceKey: (routine.mutation?.kind === "rules-input-update" ||
+                            routine.mutation?.kind === "native-resource-action")
                             && routine.mutation.entryId?.startsWith("resource:")
                             ? routine.mutation.entryId.slice("resource:".length)
                             : null,
-                        onSetResource: handlers.rules.setResource
+                        onSetResource: handlers.rules.setResource,
+                        onSpendResource: handlers.rules.spendResource,
+                        onRecoverResource: handlers.rules.recoverResource
                     }),
                 renderKnownSpellsSection(
                     routine,

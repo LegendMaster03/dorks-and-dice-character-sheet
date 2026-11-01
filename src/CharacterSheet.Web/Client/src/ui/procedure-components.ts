@@ -165,6 +165,8 @@ export interface SpellcastingResourceControlOptions {
     readOnly?: boolean;
     savingResourceKey?: string | null;
     onSetResource?: (resourceKey: string, currentValue: number) => void;
+    onSpendResource?: (resourceKey: string, amount: number) => void;
+    onRecoverResource?: (resourceKey: string, rest: "short-rest" | "long-rest") => void;
 }
 
 export function renderSpellcastingPresentation(
@@ -218,9 +220,10 @@ function renderSpellcastingResources(
         const row = createElement("div", "dd-definition-row");
         row.setAttribute("data-spellcasting-resource-key", resource.key);
         const label = createElement("span", "dd-definition-row__term", resource.label);
-        const value = resource.current !== undefined && resource.maximum !== undefined
+        const configured = resource.current !== undefined && resource.current !== null;
+        const value = configured && resource.maximum !== undefined
             ? `${resource.current} / ${resource.maximum}`
-            : resource.current !== undefined
+            : configured
                 ? String(resource.current)
                 : resource.maximum !== undefined
                     ? `Max ${resource.maximum}`
@@ -241,7 +244,9 @@ function renderSpellcastingResources(
             input.type = "number";
             input.step = "1";
             input.inputMode = "numeric";
-            input.value = resource.current === undefined ? "" : String(resource.current);
+            input.value = !configured ? "" : String(resource.current);
+            input.min = "0";
+            if (resource.maximum !== undefined) input.max = String(resource.maximum);
             input.setAttribute("aria-label", `${resource.label} current value`);
             input.addEventListener("input", () => input.setCustomValidity(""));
 
@@ -255,7 +260,8 @@ function renderSpellcastingResources(
                 && control.savingResourceKey !== undefined;
             save.addEventListener("click", () => {
                 const parsed = parseResourceValue(input.value);
-                if (parsed === null) {
+                if (parsed === null || parsed < 0 ||
+                    (resource.maximum !== undefined && parsed > resource.maximum)) {
                     input.setCustomValidity(
                         "Enter a whole number that can be represented by the Character Sheet API.");
                     input.reportValidity();
@@ -265,6 +271,34 @@ function renderSpellcastingResources(
                 control.onSetResource!(resource.key, parsed);
             });
             editor.append(input, save);
+            if (configured && resource.maximum !== undefined) {
+                if (control.onSpendResource !== undefined) {
+                    const spend = createElement(
+                        "button", "dd-button dd-button--secondary",
+                        "Spend 1") as HTMLButtonElement;
+                    spend.type = "button";
+                    spend.disabled = save.disabled || resource.current! < 1;
+                    spend.addEventListener("click", () =>
+                        control.onSpendResource!(resource.key, 1));
+                    editor.append(spend);
+                }
+                const rest = resource.recoveryProcedureKey === "short-or-long-rest"
+                    ? "short-rest"
+                    : resource.recoveryProcedureKey === "long-rest"
+                        ? "long-rest"
+                        : null;
+                if (rest !== null && control.onRecoverResource !== undefined) {
+                    const recover = createElement(
+                        "button", "dd-button dd-button--secondary",
+                        rest === "short-rest" ? "Recover Resource (Short Rest)" :
+                            "Recover Resource (Long Rest)") as HTMLButtonElement;
+                    recover.type = "button";
+                    recover.disabled = save.disabled || resource.current! >= resource.maximum;
+                    recover.addEventListener("click", () =>
+                        control.onRecoverResource!(resource.key, rest));
+                    editor.append(recover);
+                }
+            }
             row.append(editor);
         }
 

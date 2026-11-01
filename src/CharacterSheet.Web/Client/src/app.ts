@@ -221,6 +221,10 @@ function renderWorkspace(
                     void rulesInputWorkflow.clearChoice(character.characterId, choiceKey),
                 setResource: (resourceKey, currentValue) =>
                     void rulesInputWorkflow.setResource(character.characterId, resourceKey, currentValue),
+                spendResource: (resourceKey, amount) =>
+                    void rulesInputWorkflow.spendResource(character.characterId, resourceKey, amount),
+                recoverResource: (resourceKey, rest) =>
+                    void rulesInputWorkflow.recoverResource(character.characterId, resourceKey, rest),
                 setCompetencyRank: (competencyKey, ranks) =>
                     void rulesInputWorkflow.set(character.characterId, {
                         kind: "competencyRank",
