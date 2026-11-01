@@ -17,6 +17,8 @@ import type {
 } from "./character-mechanics.js";
 import { renderSourceAttributions } from "./source-attribution.js";
 
+import type { NativeStartingEquipmentPreview } from "../features/inventory/starting-equipment-api.js";
+
 const STARTING_EQUIPMENT_GRANT_KINDS = new Set([
     "starting-equipment-item",
     "starting-equipment-custom",
@@ -222,6 +224,55 @@ export function projectGuidedStartingEquipment(
         conflicts,
         sourceAttributions: sourceAttributions.length === 0 ? undefined : sourceAttributions
     };
+}
+
+export function projectNativeStartingEquipment(
+    preview: NativeStartingEquipmentPreview,
+    rulesInputs: readonly CharacterRulesInputStateResponse[] = []
+): GuidedStartingEquipmentView {
+    const saved = new Map(rulesInputs
+        .filter(input => input.kind === "choice" && input.textValue !== null)
+        .map(input => [input.key, input.textValue!]));
+    const choices = preview.choices.map(choice => {
+        const selectedValue = saved.get(choice.choiceKey);
+        const accepted = choice.options.some(option => option.id === selectedValue);
+        return {
+            choiceKey: choice.choiceKey,
+            displayName: "Starting Equipment Package",
+            state: accepted ? "resolved" : "choice-required",
+            required: true,
+            options: choice.options.map(option => ({
+                value: option.id,
+                displayName: option.name,
+                items: []
+            })),
+            selectedValue: accepted ? selectedValue : undefined
+        };
+    });
+    const grants: GuidedEquipmentItemView[] = preview.status === "resolved"
+        ? preview.grants.map(grant => ({
+            conceptKey: grant.kind === "item" ? grant.targetKey : undefined,
+            displayName: grant.displayName,
+            quantity: grant.quantity,
+            detail: grant.kind === "currency" ? "Starting currency" : undefined
+        }))
+        : [];
+    const conflicts = preview.issues.map(issue => ({
+        conflictKey: issue.code + ":" + issue.path,
+        message: issue.detail
+    }));
+    if (preview.status === "unavailable" && conflicts.length === 0)
+        conflicts.push({
+            conflictKey: "native-equipment-unavailable",
+            message: "Native starting-equipment grants are not yet reconciled."
+        });
+    if (preview.status === "needs-choices" &&
+        choices.every(choice => choice.state === "resolved"))
+        conflicts.push({
+            conflictKey: "native-equipment-incomplete",
+            message: "The selected starting equipment is not yet resolved."
+        });
+    return { grants, choices, rolls: [], conflicts };
 }
 
 export function renderGuidedStartingEquipment(
