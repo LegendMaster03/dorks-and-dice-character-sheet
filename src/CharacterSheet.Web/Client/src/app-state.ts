@@ -188,6 +188,9 @@ export interface CharacterRoutineUiState {
 }
 
 export interface CharacterPresentationUiState {
+    equipmentPreviewStatus?: "loading" | "ready" | "error";
+    equipmentPreview?: import("./features/inventory/starting-equipment-api.js").NativeStartingEquipmentPreview | null;
+    equipmentPreviewMessage?: string;
     status: "idle" | "loading" | "ready" | "error";
     requestId: number;
     advancement: CharacterPresentationResponse["advancement"] | null;
@@ -358,6 +361,8 @@ export type CharacterSheetAction =
     | { type: "presentation-load-started"; requestId: number }
     | { type: "presentation-loaded"; requestId: number; presentation: CharacterPresentationResponse }
     | { type: "presentation-load-failed"; requestId: number; message: string }
+    | { type: "starting-equipment-preview-loaded"; requestId: number; preview: import("./features/inventory/starting-equipment-api.js").NativeStartingEquipmentPreview }
+    | { type: "starting-equipment-preview-failed"; requestId: number; message: string }
     | { type: "sheet-edit-entered" }
     | { type: "sheet-edit-exited" }
     | { type: "guided-builder-opened" }

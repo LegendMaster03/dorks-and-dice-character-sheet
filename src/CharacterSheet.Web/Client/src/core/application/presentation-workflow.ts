@@ -1,6 +1,7 @@
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import { loadCharacterPresentation } from "../../character-presentation-api.js";
+import { loadNativeStartingEquipmentPreview } from "../../features/inventory/starting-equipment-api.js";
 import { requestErrorMessage } from "./request-error.js";
 
 export interface PresentationWorkflow {
@@ -31,6 +32,20 @@ export function createPresentationWorkflow(
                     type: "presentation-load-failed",
                     requestId,
                     message: requestErrorMessage(error)
+                });
+            }
+            // Starting equipment is separate from derived mechanics. A missing
+            // grant contract must not hide independent abilities or training.
+            try {
+                const preview = await loadNativeStartingEquipmentPreview(
+                    environment, characterId);
+                application.dispatch({
+                    type: "starting-equipment-preview-loaded", requestId, preview
+                });
+            } catch (error) {
+                application.dispatch({
+                    type: "starting-equipment-preview-failed",
+                    requestId, message: requestErrorMessage(error)
                 });
             }
         }
