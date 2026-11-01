@@ -32,69 +32,76 @@ export function createRoutineStateWorkflow(
     environment: HostEnvironment
 ): RoutineStateWorkflow {
     async function resolveReferences(state: CharacterStateResponse): Promise<void> {
-        // Native item and spell summaries are not currently exposed. Keep
-        // their Character-owned identities without calling the deleted API.
-        const withoutCatalog = [
+        const entries = [
             ...state.inventoryItemOccurrences
-                .filter(occurrence => occurrence.ruleConceptKey !== null)
-                .map(occurrence => ({ id: occurrence.id, key: occurrence.ruleConceptKey! })),
+                .filter(entry => entry.ruleConceptKey !== null)
+                .map(entry => ({ id: entry.id, key: entry.ruleConceptKey!, category: "item" as const })),
             ...(state.rulesInputs ?? [])
-                .filter(input => input.kind === "knownSpell")
-                .map(input => ({ id: input.id, key: input.key }))
+                .filter(entry => entry.kind === "knownSpell")
+                .map(entry => ({ id: entry.id, key: entry.key, category: "spell" as const })),
+            ...(state.conditions ?? [])
+                .filter(entry => entry.ruleConceptKey !== null)
+                .map(entry => ({ id: entry.id, key: entry.ruleConceptKey!, category: "condition" as const }))
         ];
-        for (const item of withoutCatalog) {
+        if (entries.length === 0) return;
+
+        // Old saved source-specific IDs are never silently rewritten into native
+        // IDs. Unsupported identities remain visible with unavailable status.
+        const nativeEntries = entries.filter(entry =>
+            entry.key.startsWith(entry.category + "."));
+        for (const entry of entries.filter(entry =>
+            !entry.key.startsWith(entry.category + "."))) {
             application.dispatch({
                 type: "routine-reference-resolved",
-                occurrenceId: item.id,
-                conceptKey: item.key,
-                reference: { status: "unavailable", conceptKey: item.key }
+                occurrenceId: entry.id,
+                conceptKey: entry.key,
+                reference: { status: "unavailable", conceptKey: entry.key }
             });
         }
+        if (nativeEntries.length === 0) return;
 
-        const conditions = (state.conditions ?? [])
-            .filter(condition => condition.ruleConceptKey !== null);
-        if (conditions.length === 0) return;
         let metadata: Awaited<ReturnType<typeof loadNativeRuleset>>;
         try {
             metadata = await loadNativeRuleset(environment);
         } catch (error) {
-            for (const condition of conditions) {
+            for (const entry of nativeEntries) {
                 application.dispatch({
                     type: "routine-reference-resolved",
-                    occurrenceId: condition.id,
-                    conceptKey: condition.ruleConceptKey!,
+                    occurrenceId: entry.id,
+                    conceptKey: entry.key,
                     reference: {
-                        status: "error", conceptKey: condition.ruleConceptKey!,
+                        status: "error", conceptKey: entry.key,
                         message: requestErrorMessage(error)
                     }
                 });
             }
             return;
         }
-        await Promise.all(conditions.map(async condition => {
-            const conceptKey = condition.ruleConceptKey!;
+        await Promise.all(nativeEntries.map(async entry => {
             try {
-                const [regular, leveled] = await Promise.all([
-                    searchNativeOptions(environment, metadata, "condition", conceptKey, 100),
-                    searchNativeOptions(environment, metadata, "leveled-condition", conceptKey, 100)
-                ]);
-                const rule = [...regular.options, ...leveled.options]
-                    .find(option => option.id === conceptKey);
+                const regular = await searchNativeOptions(
+                    environment, metadata, entry.category, entry.key, 100);
+                const leveled = entry.category === "condition"
+                    ? await searchNativeOptions(
+                        environment, metadata, "leveled-condition", entry.key, 100)
+                    : null;
+                const rule = [...regular.options, ...(leveled?.options ?? [])]
+                    .find(option => option.id === entry.key);
                 application.dispatch({
                     type: "routine-reference-resolved",
-                    occurrenceId: condition.id,
-                    conceptKey,
+                    occurrenceId: entry.id,
+                    conceptKey: entry.key,
                     reference: rule === undefined
-                        ? { status: "unavailable", conceptKey }
-                        : { status: "resolved", conceptKey, rule }
+                        ? { status: "unavailable", conceptKey: entry.key }
+                        : { status: "resolved", conceptKey: entry.key, rule }
                 });
             } catch (error) {
                 application.dispatch({
                     type: "routine-reference-resolved",
-                    occurrenceId: condition.id,
-                    conceptKey,
+                    occurrenceId: entry.id,
+                    conceptKey: entry.key,
                     reference: {
-                        status: "error", conceptKey,
+                        status: "error", conceptKey: entry.key,
                         message: requestErrorMessage(error)
                     }
                 });

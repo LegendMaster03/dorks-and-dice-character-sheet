@@ -11,6 +11,7 @@ import {
 } from "../../builder-rules.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
+import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 
 import { requestErrorMessage } from "./request-error.js";
 
@@ -43,15 +44,60 @@ export function createBuildStateWorkflow(
             });
         });
 
-        const feats = build.progressionEntries
-            .filter(value => value.kind === "feat");
-        for (const occurrence of feats) {
+        const feats = build.progressionEntries.filter(value => value.kind === "feat");
+        const nativeFeats = feats.filter(value =>
+            value.ruleConceptKey.startsWith("feat."));
+        for (const entry of feats.filter(value =>
+            !value.ruleConceptKey.startsWith("feat."))) {
             application.dispatch({
                 type: "feat-reference-resolved",
-                occurrenceId: occurrence.id,
-                conceptKey: occurrence.ruleConceptKey,
-                reference: { status: "unavailable", conceptKey: occurrence.ruleConceptKey }
+                occurrenceId: entry.id,
+                conceptKey: entry.ruleConceptKey,
+                reference: { status: "unavailable", conceptKey: entry.ruleConceptKey }
             });
+        }
+        if (nativeFeats.length > 0) {
+            try {
+                const metadata = await loadNativeRuleset(environment);
+                await Promise.all(nativeFeats.map(async entry => {
+                    try {
+                        const page = await searchNativeOptions(
+                            environment, metadata, "feat", entry.ruleConceptKey, 100);
+                        const rule = page.options.find(value =>
+                            value.id === entry.ruleConceptKey);
+                        application.dispatch({
+                            type: "feat-reference-resolved",
+                            occurrenceId: entry.id,
+                            conceptKey: entry.ruleConceptKey,
+                            reference: rule === undefined
+                                ? { status: "unavailable", conceptKey: entry.ruleConceptKey }
+                                : { status: "resolved", conceptKey: entry.ruleConceptKey, rule }
+                        });
+                    } catch (error) {
+                        application.dispatch({
+                            type: "feat-reference-resolved",
+                            occurrenceId: entry.id,
+                            conceptKey: entry.ruleConceptKey,
+                            reference: {
+                                status: "error", conceptKey: entry.ruleConceptKey,
+                                message: requestErrorMessage(error)
+                            }
+                        });
+                    }
+                }));
+            } catch (error) {
+                for (const entry of nativeFeats) {
+                    application.dispatch({
+                        type: "feat-reference-resolved",
+                        occurrenceId: entry.id,
+                        conceptKey: entry.ruleConceptKey,
+                        reference: {
+                            status: "error", conceptKey: entry.ruleConceptKey,
+                            message: requestErrorMessage(error)
+                        }
+                    });
+                }
+            }
         }
 
         await Promise.all(structural);
