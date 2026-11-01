@@ -151,6 +151,28 @@ public sealed class NativeCharacterPresentationBridgeTests
         Assert.Equal("partial", result.Status);
         Assert.Equal(["patron.warlock.fiend", "pact.warlock.blade"],
             gateway.LastSelectedOptions);
+        // Valid native choices are evaluated by Rules Core, and must not be
+        // mistaken for unknown legacy input that hides independent numeric facts.
+        Assert.Equal(14, Assert.Single(result.Mechanics!.AbilityValues!).EffectiveValue);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+    }
+
+    [Fact]
+    public async Task UnmappedChoiceWithholdsIndependentNativeCalculations()
+    {
+        var gateway = new FixtureGateway();
+        var entry = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var state = new CharacterStateView(Guid.NewGuid(), false, null,
+            new CharacterDeathSavesView(0, 0), [], [], [],
+            RulesInputs: [new CharacterRulesInputStateView(
+                Guid.NewGuid(), "choice", "legacy.selection", null, null,
+                "source:unknown", Now, Now)]);
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(entry), state, CancellationToken.None);
+        Assert.Equal("partial", result.Status);
+        Assert.Null(result.Mechanics!.AbilityValues);
+        Assert.Null(result.Mechanics.Training);
     }
 
     [Fact]

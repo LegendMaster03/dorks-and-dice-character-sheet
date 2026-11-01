@@ -126,7 +126,9 @@ public static class NativeCharacterPresentationBridge
                 CharacterRulesInputKinds.Resource or
                 CharacterRulesInputKinds.CompetencyRank or
                 CharacterRulesInputKinds.Training or
-                CharacterRulesInputKinds.KnownSpell)) == true ||
+                CharacterRulesInputKinds.KnownSpell or
+                CharacterRulesInputKinds.Choice)) == true ||
+            nativeChoices.HasUnmappedChoices ||
             unknownTraining ||
             build.BaseAbilityScoreInputs.Count != abilities.Count;
 
