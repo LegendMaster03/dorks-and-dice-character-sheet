@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Characters;
+using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.Hosting;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Infrastructure.Hosting;
@@ -320,7 +321,7 @@ public sealed class CharacterAdvancementWorkflowTests
                 booleanValue = false }))
             Assert.Equal(HttpStatusCode.BadRequest, tamper.StatusCode);
         using (var clear = await factory.SendHostedAsync(HttpMethod.Delete,
-            $"/api/characters/{id:D}/state/rules-inputs/booleanFact/{CharacterStartingEquipmentReceipt.Key}"))
+            $"/api/characters/{id:D}/state/rules-inputs/booleanFact?key={CharacterStartingEquipmentReceipt.Key}"))
             Assert.Equal(HttpStatusCode.BadRequest, clear.StatusCode);
 
         using var read = await factory.SendHostedAsync(HttpMethod.Get,
