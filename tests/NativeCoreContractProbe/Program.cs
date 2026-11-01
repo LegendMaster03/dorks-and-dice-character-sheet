@@ -18,7 +18,7 @@ var abilities = new Dictionary<string, int>(StringComparer.Ordinal) {
 var knownOptions = new[] {
     "patron.warlock.fiend", "pact.warlock.blade", "invocation.eldritch-sight"
 };
-foreach (var id in new[] { "class.warlock", ..knownOptions })
+foreach (var id in new[] { "class.warlock" }.Concat(knownOptions))
     Ensure(catalog.TryGetById(id, out _), "Missing native catalog entry " + id);
 
 var request = new NativeCharacterRequest(catalog.RulesetId, catalog.Fingerprint,
@@ -106,7 +106,8 @@ sealed class RealEngineGateway(NativeCatalogSnapshot catalog) : INativeRulesCore
         string fingerprint, string category, string? query, int limit,
         int offset, CancellationToken ct)
     {
-        Ensure(fingerprint == catalog.Fingerprint, "Catalog fingerprint mismatch.");
+        if (fingerprint != catalog.Fingerprint)
+            throw new InvalidOperationException("Catalog fingerprint mismatch.");
         var page = catalog.Search(query, category, offset, limit);
         return Task.FromResult(JsonSerializer.SerializeToNode(new {
             contractVersion = 1, rulesetId = catalog.RulesetId,
