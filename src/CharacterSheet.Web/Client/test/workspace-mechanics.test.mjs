@@ -1316,6 +1316,43 @@ test("spellcasting resource editor persists the backend resource key and current
     assert.deepEqual(saved, ["resource.spell-points", 6]);
 });
 
+test("native resource actions expose spend and supported recovery without claiming a full rest", () => {
+    const actions = [];
+    const resourceHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            spendResource(key, amount) { actions.push(["spend", key, amount]); },
+            recoverResource(key, rest) { actions.push(["recover", key, rest]); }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character, builder, routine([], {}, false), "spells", false,
+        "view", guidedBuilder, null, {
+            spellcastingProfiles: [{
+                key: "warlock", label: "Pact Magic",
+                resources: [{
+                    key: "resource.pact-magic", label: "Pact Magic",
+                    state: "resolved", current: 1, maximum: 2,
+                    recoveryProcedureKey: "short-or-long-rest"
+                }]
+            }]
+        }, resourceHandlers);
+    const resource = byAttribute(rendered, "data-spellcasting-resource-key", "resource.pact-magic")[0];
+    assert.ok(resource);
+    const buttons = byTag(resource, "button");
+    const spend = buttons.find(button => button.textContent === "Spend 1");
+    const recover = buttons.find(button => button.textContent === "Recover Resource (Short Rest)");
+    assert.ok(spend);
+    assert.ok(recover);
+    spend.dispatchEvent({ type: "click" });
+    recover.dispatchEvent({ type: "click" });
+    assert.deepEqual(actions, [
+        ["spend", "resource.pact-magic", 1],
+        ["recover", "resource.pact-magic", "short-rest"]
+    ]);
+});
+
 test("guided advancement exposes one raw hit-die outcome per owned Class level", () => {
     let saved = null;
     const hpHandlers = {
