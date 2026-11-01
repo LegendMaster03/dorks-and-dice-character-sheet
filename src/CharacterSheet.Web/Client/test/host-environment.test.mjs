@@ -18,8 +18,7 @@ test("embedded host attributes override the browser pathname and disable standal
         toolBasePath: "/tools/character-sheet",
         toolRoute: "/characters/8f62ed58-0f5f-4e71-9a18-8d9dcfe71dc7",
         contextUrl: "/tool-host/character-sheet/context",
-        standaloneDevelopment: false,
-        rulesCoreDevelopmentBaseUrl: null
+        standaloneDevelopment: false
     });
 });
 
@@ -29,8 +28,7 @@ test("standalone hosting uses the browser pathname without a development adapter
         toolBasePath: "",
         toolRoute: "/new",
         contextUrl: null,
-        standaloneDevelopment: false,
-        rulesCoreDevelopmentBaseUrl: null
+        standaloneDevelopment: false
     });
 });
 
@@ -45,7 +43,6 @@ test("standalone development can expose an explicitly configured Rules Core base
         toolBasePath: "",
         toolRoute: "/characters/example",
         contextUrl: null,
-        standaloneDevelopment: true,
-        rulesCoreDevelopmentBaseUrl: "http://localhost:5188"
+        standaloneDevelopment: true
     });
 });

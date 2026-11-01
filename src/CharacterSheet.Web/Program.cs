@@ -24,23 +24,6 @@ if (!string.IsNullOrWhiteSpace(toolHostBaseUrl))
     }
 }
 
-string? rulesCoreDevelopmentBaseUrl = null;
-if (builder.Environment.IsDevelopment())
-{
-    var configuredRulesCoreDevelopmentBaseUrl = builder.Configuration["RulesCore:DevelopmentBaseUrl"];
-    if (!string.IsNullOrWhiteSpace(configuredRulesCoreDevelopmentBaseUrl))
-    {
-        if (!Uri.TryCreate(configuredRulesCoreDevelopmentBaseUrl, UriKind.Absolute, out var rulesCoreDevelopmentBaseUri)
-            || (rulesCoreDevelopmentBaseUri.Scheme != Uri.UriSchemeHttp
-                && rulesCoreDevelopmentBaseUri.Scheme != Uri.UriSchemeHttps))
-        {
-            throw new InvalidOperationException(
-                "RulesCore:DevelopmentBaseUrl must be an absolute HTTP or HTTPS URL when configured.");
-        }
-        rulesCoreDevelopmentBaseUrl = rulesCoreDevelopmentBaseUri.ToString().TrimEnd('/');
-    }
-}
-
 builder.Services
     .AddHttpClient<IToolHostAuthenticationClient, DorksAndDiceToolHostAuthenticationClient>(client =>
     {
@@ -445,9 +428,6 @@ app.MapDelete("/api/characters/{characterId:guid}/build/feats/{featAdvancementEn
 
 var standaloneDevelopmentAttributes = app.Environment.IsDevelopment()
     ? " data-standalone-development=\"true\""
-        + (rulesCoreDevelopmentBaseUrl is null
-            ? string.Empty
-            : $" data-rules-core-development-base-url=\"{System.Net.WebUtility.HtmlEncode(rulesCoreDevelopmentBaseUrl)}\"")
     : string.Empty;
 var standaloneShell = $$"""
 <!doctype html>
