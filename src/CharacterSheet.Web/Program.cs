@@ -101,6 +101,7 @@ builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
+builder.Services.AddScoped<NativeCharacterResourceService>();
 builder.Services.AddScoped<CharacterCraftingService>();
 builder.Services.AddScoped<CharacterPresentationService>();
 builder.Services.AddHealthChecks();
@@ -164,6 +165,7 @@ app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
 app.MapCharacterCraftingEndpoints();
 app.MapNativeRulesCoreEndpoints();
+app.MapNativeCharacterResourceEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,
