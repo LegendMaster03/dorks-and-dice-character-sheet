@@ -5,6 +5,9 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+public sealed record NativeStartingEquipmentPreviewResult(
+    CharacterStateAccessStatus Status, JsonNode? Projection = null);
+
 /// <summary>
 /// Materializes resolved Rules Core starting-equipment grants into ordinary Character-owned
 /// inventory and currency state. This is an acquisition boundary, not a live mirror: materialized
@@ -28,69 +31,23 @@ public sealed class CharacterStartingEquipmentService(
         Guid characterId,
         CancellationToken cancellationToken = default)
     {
-        var buildResult = await buildService.GetAsync(characterId, cancellationToken);
-        if (buildResult.Status != CharacterBuildAccessStatus.Ready || buildResult.View is null)
-        {
-            return new CharacterStateResult(MapBuildStatus(buildResult.Status));
-        }
-
-        var stateResult = await stateService.GetAsync(characterId, cancellationToken);
-        if (stateResult.Status != CharacterStateAccessStatus.Ready || stateResult.View is null)
-        {
-            return stateResult;
-        }
-        if (stateResult.View.ReadOnly || buildResult.View.ReadOnly)
-        {
+        var preview = await PreviewAsync(characterId, cancellationToken);
+        if (preview.Status != CharacterStateAccessStatus.Ready ||
+            preview.Projection is null)
+            return new CharacterStateResult(preview.Status);
+        var snapshot = await stateService.GetAsync(characterId, cancellationToken);
+        if (snapshot.Status != CharacterStateAccessStatus.Ready ||
+            snapshot.View is null)
+            return snapshot;
+        if (snapshot.View.ReadOnly)
             return new CharacterStateResult(CharacterStateAccessStatus.ArchivedReadOnly);
-        }
-
-        JsonNode projection;
+        var projection = preview.Projection;
+        if (projection["status"]?.GetValue<string>() != "resolved" ||
+            projection["grants"] is not JsonArray grants ||
+            projection["issues"] is not JsonArray issues || issues.Count != 0)
+            return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
         try
         {
-            var metadata = await nativeCore.GetNativeRulesetAsync(cancellationToken);
-            if (metadata["contractVersion"]?.GetValue<int>() != 1 ||
-                metadata["capabilities"]?["startingEquipmentResolution"]?.GetValue<string>() != "authored-grants-only")
-                return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
-            var rulesetId = metadata["rulesetId"]?.GetValue<string>();
-            var fingerprint = metadata["fingerprint"]?.GetValue<string>();
-            if (string.IsNullOrWhiteSpace(rulesetId) ||
-                string.IsNullOrWhiteSpace(fingerprint))
-                return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
-
-            var classHistory = buildResult.View.ProgressionEntries;
-            if (classHistory.Count == 0 || classHistory.Any(entry =>
-                entry.Kind != CharacterBuildAdvancementKinds.Class ||
-                entry.Level is not > 0 ||
-                !entry.RuleConceptKey.StartsWith("class.", StringComparison.Ordinal)))
-                return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
-
-            var selected = (stateResult.View.RulesInputs ?? [])
-                .Where(entry => entry.Kind == CharacterRulesInputKinds.Choice &&
-                    entry.Key.StartsWith("starting-equipment.", StringComparison.Ordinal) &&
-                    entry.TextValue is not null)
-                .ToDictionary(entry => entry.Key, entry => entry.TextValue!,
-                    StringComparer.Ordinal);
-            var request = JsonSerializer.SerializeToElement(new
-            {
-                rulesetId, fingerprint,
-                advancements = classHistory.Select(entry => new
-                {
-                    classId = entry.RuleConceptKey,
-                    level = entry.Level!.Value,
-                    occurrenceId = entry.Id.ToString("D")
-                }).ToArray(),
-                selectedPackages = selected
-            }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            projection = await nativeCore.ResolveNativeStartingEquipmentAsync(
-                request, cancellationToken);
-
-            if (projection["contractVersion"]?.GetValue<int>() != 1 ||
-                projection["rulesetId"]?.GetValue<string>() != rulesetId ||
-                projection["fingerprint"]?.GetValue<string>() != fingerprint ||
-                projection["status"]?.GetValue<string>() != "resolved" ||
-                projection["grants"] is not JsonArray grants)
-                return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
-
             var items = new List<CharacterStartingEquipmentInventoryItem>();
             var currencies = new List<CharacterStartingEquipmentCurrencyGrant>();
             var keys = new HashSet<string>(StringComparer.Ordinal);
@@ -131,6 +88,80 @@ public sealed class CharacterStartingEquipmentService(
         catch (RulesCoreGatewayException)
         {
             return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
+        }
+    }
+
+    /// <summary>
+    /// Returns non-mutating, native-only package choices and grant status.
+    /// Unavailable content is a valid preview result but never an award.
+    /// </summary>
+    public async Task<NativeStartingEquipmentPreviewResult> PreviewAsync(
+        Guid characterId, CancellationToken cancellationToken = default)
+    {
+        var buildResult = await buildService.GetAsync(characterId, cancellationToken);
+        if (buildResult.Status != CharacterBuildAccessStatus.Ready ||
+            buildResult.View is null)
+            return new(MapBuildStatus(buildResult.Status));
+
+        var stateResult = await stateService.GetAsync(characterId, cancellationToken);
+        if (stateResult.Status != CharacterStateAccessStatus.Ready ||
+            stateResult.View is null)
+            return new(stateResult.Status);
+
+        try
+        {
+            var metadata = await nativeCore.GetNativeRulesetAsync(cancellationToken);
+            if (metadata["contractVersion"]?.GetValue<int>() != 1 ||
+                metadata["capabilities"]?["startingEquipmentResolution"]?.GetValue<string>()
+                    != "authored-grants-only")
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
+            var rulesetId = metadata["rulesetId"]?.GetValue<string>();
+            var fingerprint = metadata["fingerprint"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(rulesetId) ||
+                string.IsNullOrWhiteSpace(fingerprint))
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
+
+            var classHistory = buildResult.View.ProgressionEntries;
+            if (classHistory.Count == 0 || classHistory.Any(entry =>
+                entry.Kind != CharacterBuildAdvancementKinds.Class ||
+                entry.Level is not > 0 ||
+                !entry.RuleConceptKey.StartsWith("class.", StringComparison.Ordinal)))
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
+
+            var selected = (stateResult.View.RulesInputs ?? [])
+                .Where(entry => entry.Kind == CharacterRulesInputKinds.Choice &&
+                    entry.Key.StartsWith("starting-equipment.", StringComparison.Ordinal) &&
+                    entry.TextValue is not null)
+                .ToDictionary(entry => entry.Key, entry => entry.TextValue!,
+                    StringComparer.Ordinal);
+            var request = JsonSerializer.SerializeToElement(new
+            {
+                rulesetId, fingerprint,
+                advancements = classHistory.Select(entry => new
+                {
+                    classId = entry.RuleConceptKey,
+                    level = entry.Level!.Value,
+                    occurrenceId = entry.Id.ToString("D")
+                }).ToArray(),
+                selectedPackages = selected
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var projection = await nativeCore.ResolveNativeStartingEquipmentAsync(
+                request, cancellationToken);
+            if (projection["contractVersion"]?.GetValue<int>() != 1 ||
+                projection["rulesetId"]?.GetValue<string>() != rulesetId ||
+                projection["fingerprint"]?.GetValue<string>() != fingerprint ||
+                projection["status"]?.GetValue<string>() is not
+                    ("resolved" or "needs-choices" or "unavailable") ||
+                projection["grants"] is not JsonArray ||
+                projection["choices"] is not JsonArray ||
+                projection["issues"] is not JsonArray)
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
+
+            return new(CharacterStateAccessStatus.Ready, projection);
+        }
+        catch (RulesCoreGatewayException)
+        {
+            return new(CharacterStateAccessStatus.ProjectionUnavailable);
         }
     }
 
