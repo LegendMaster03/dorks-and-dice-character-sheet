@@ -45,10 +45,7 @@ test("retired Rules Core HTTP routes are absent from active Character Sheet clie
         assert.equal(content.includes('"/api/rules"'), false,
             `Legacy Rules Core catalog found in ${file}`);
     }
-    const gateway = await readFile(
-        path.join(srcRoot, "../../DelegatedRulesCoreGateway.cs"), "utf8");
-    assert.equal(gateway.includes("/api/rules/"), false);
-    assert.equal(gateway.includes('"/api/rules"'), false);
+    // Server-side non-delegation is exercised by DelegatedRulesCoreGatewayTests.
 });
 
 test("mechanics compatibility surface re-exports feature owners instead of implementing them", async () => {
