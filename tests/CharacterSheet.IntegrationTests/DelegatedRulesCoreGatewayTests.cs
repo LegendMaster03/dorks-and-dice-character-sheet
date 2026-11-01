@@ -173,8 +173,7 @@ public sealed class DelegatedRulesCoreGatewayTests
             NullLogger<DelegatedRulesCoreGateway>.Instance);
 
         await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
-            gateway.ResolveGlobalCharacterMechanicsAsync(
-                new RulesCoreCharacterRulesProjectionRequest()));
+            gateway.GetNativeRulesetAsync(CancellationToken.None));
 
         var timing = string.Join(
             ", ",
@@ -197,8 +196,7 @@ public sealed class DelegatedRulesCoreGatewayTests
             NullLogger<DelegatedRulesCoreGateway>.Instance);
 
         await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
-            gateway.ResolveGlobalCharacterMechanicsAsync(
-                new RulesCoreCharacterRulesProjectionRequest()));
+            gateway.GetNativeRulesetAsync(CancellationToken.None));
 
         Assert.Empty(handler.Requests);
         var timing = string.Join(
