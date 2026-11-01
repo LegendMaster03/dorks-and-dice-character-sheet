@@ -294,6 +294,14 @@ public sealed class CharacterAdvancementWorkflowTests
             new { kind = "choice", key = choiceKey, textValue = "gold" }))
             Assert.Equal(HttpStatusCode.OK, choice.StatusCode);
         factory.Native.EquipmentStatus = "resolved";
+        // A replaced or removed earlier class can leave an old saved package.
+        // It must not make a valid current starting class fail to resolve.
+        using (var staleChoice = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "choice",
+                key = "starting-equipment.00000000-0000-0000-0000-000000000099",
+                textValue = "obsolete-kit" }))
+            Assert.Equal(HttpStatusCode.OK, staleChoice.StatusCode);
         using (var selectedPreview = await factory.SendHostedAsync(HttpMethod.Get,
             $"/api/characters/{id:D}/state/inventory/starting-equipment/preview"))
         {
@@ -303,8 +311,10 @@ public sealed class CharacterAdvancementWorkflowTests
             Assert.Equal(2, payload.RootElement.GetProperty("grants")[0]
                 .GetProperty("quantity").GetInt32());
         }
-        Assert.Equal("gold", factory.Native.LastEquipmentRequest
-            .GetProperty("selectedPackages").GetProperty(choiceKey).GetString());
+        var selectedPackages = factory.Native.LastEquipmentRequest
+            .GetProperty("selectedPackages");
+        Assert.Equal("gold", selectedPackages.GetProperty(choiceKey).GetString());
+        Assert.Single(selectedPackages.EnumerateObject());
         using (var materialize = await factory.SendHostedAsync(HttpMethod.Post,
             $"/api/characters/{id:D}/state/inventory/starting-equipment"))
             Assert.Equal(HttpStatusCode.OK, materialize.StatusCode);

@@ -123,16 +123,23 @@ public sealed class CharacterStartingEquipmentService(
                 string.IsNullOrWhiteSpace(fingerprint))
                 return new(CharacterStateAccessStatus.ProjectionUnavailable);
 
-            var classHistory = buildResult.View.ProgressionEntries;
+            var classHistory = buildResult.View.ProgressionEntries
+                .OrderBy(entry => entry.Ordinal ?? int.MaxValue)
+                .ThenBy(entry => entry.Id)
+                .ToArray();
             if (classHistory.Count == 0 || classHistory.Any(entry =>
                 entry.Kind != CharacterBuildAdvancementKinds.Class ||
                 entry.Level is not > 0 ||
                 !entry.RuleConceptKey.StartsWith("class.", StringComparison.Ordinal)))
                 return new(CharacterStateAccessStatus.ProjectionUnavailable);
 
+            // A class can be changed while its rules remain under development.
+            // Old package selections for replaced class occurrences are not
+            // selections for the current initial class and cannot block it.
+            var activeChoiceKey = "starting-equipment." + classHistory[0].Id.ToString("D");
             var selected = (stateResult.View.RulesInputs ?? [])
                 .Where(entry => entry.Kind == CharacterRulesInputKinds.Choice &&
-                    entry.Key.StartsWith("starting-equipment.", StringComparison.Ordinal) &&
+                    entry.Key == activeChoiceKey &&
                     entry.TextValue is not null)
                 .ToDictionary(entry => entry.Key, entry => entry.TextValue!,
                     StringComparer.Ordinal);
