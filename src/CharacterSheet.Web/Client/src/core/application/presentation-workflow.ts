@@ -1,7 +1,7 @@
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import { loadCharacterPresentation } from "../../character-presentation-api.js";
-import { loadNativeStartingEquipmentPreview } from "../../features/inventory/starting-equipment-api.js";
+import { loadNativeStartingEquipmentPreview } from "../../starting-equipment-api.js";
 import { requestErrorMessage } from "./request-error.js";
 
 export interface PresentationWorkflow {
