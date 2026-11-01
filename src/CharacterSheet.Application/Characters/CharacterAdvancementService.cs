@@ -195,9 +195,10 @@ public sealed class CharacterAdvancementService(
         // state are not class-level advancements. Do not block advancement
         // merely because this routine state exists. Unknown rule choices must
         // still fail closed until they have native option identities.
-        if (state?.RulesInputs?.Any(input => input.Kind == CharacterRulesInputKinds.Choice) == true)
+        var nativeChoices = NativeCharacterOptionSelections.FromState(state);
+        if (nativeChoices.HasUnmappedChoices)
             throw new ArgumentException(
-                "Saved rule choices require native option identities before advancement.");
+                "Saved rule choices must have distinct native option slots and identities before advancement.");
         if (request.HitDieValue is < 1 or > 1000)
             throw new ArgumentException("Hit point gain must be a positive bounded integer.");
 
@@ -238,7 +239,7 @@ public sealed class CharacterAdvancementService(
                 level = entry.Level!.Value,
                 occurrenceId = entry.Id.ToString("D")
             }).ToArray(),
-            selectedOptions = Array.Empty<string>()
+            selectedOptions = nativeChoices.Ids
         };
         var rawRequest = JsonSerializer.SerializeToElement(new
         {
@@ -284,7 +285,7 @@ public sealed class CharacterAdvancementService(
             var proposedInput = JsonSerializer.SerializeToElement(new {
                 rulesetId, fingerprint, abilityScores = scores,
                 advancements = proposedAdvancements,
-                selectedOptions = Array.Empty<string>()
+                selectedOptions = nativeChoices.Ids
             }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var projected = await native.ProjectNativeCharacterAsync(
                 proposedInput, cancellationToken);
@@ -297,6 +298,22 @@ public sealed class CharacterAdvancementService(
                 blockers.Add(new RulesCoreCharacterProjectionConflictView(
                     "native-projection", "native-eligibility",
                     "Rules Core rejected the proposed class progression.", [], [classId]));
+            // Projection may be partial for unrelated unresolved defenses,
+            // movement, or spells. Only option errors block this advancement.
+            // Individual selected option prerequisites are checked below.
+            if (projected["issues"] is JsonArray projectedIssues)
+                foreach (var issue in projectedIssues)
+                {
+                    var code = Text(issue, "code");
+                    if (code is "exclusive-selection-conflict" or "option-not-native"
+                        or "option-occurrence-unresolved" or "option-parent-unavailable"
+                        or "option-evaluation-unavailable" or "prerequisite-failed"
+                        or "invocation-cost-unresolved" or "invocation-budget-exceeded")
+                        blockers.Add(new RulesCoreCharacterProjectionConflictView(
+                            code, "native-option",
+                            Text(issue, "detail") ?? "A selected native option is not valid.",
+                            [], [Text(issue, "path") ?? classId]));
+                }
             if (projected["requiredChoices"] is not JsonArray required)
                 throw new RulesCoreGatewayException(
                     "Native projection did not describe required advancement choices.");
@@ -307,6 +324,35 @@ public sealed class CharacterAdvancementService(
                     blockers.Add(new RulesCoreCharacterProjectionConflictView(
                         name, "native-choice",
                         "Resolve the mandatory native advancement choice: " + name, [], [classId]));
+            }
+            // A class-level eligibility result alone does not validate selected
+            // option prerequisites. Evaluate each option as a prospective choice
+            // against the proposed level and the other already-selected options.
+            foreach (var selectedOption in nativeChoices.Ids)
+            {
+                var otherOptions = nativeChoices.Ids.Where(id => id != selectedOption).ToArray();
+                var optionRequest = JsonSerializer.SerializeToElement(new {
+                    rulesetId, fingerprint, candidateId = selectedOption,
+                    character = new {
+                        rulesetId, fingerprint, abilityScores = scores,
+                        advancements = proposedAdvancements,
+                        selectedOptions = otherOptions
+                    }
+                }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                var optionEligibility = await native.EvaluateNativeAdvancementAsync(
+                    optionRequest, cancellationToken);
+                if (Text(optionEligibility, "rulesetId") != rulesetId ||
+                    Text(optionEligibility, "fingerprint") != fingerprint ||
+                    Text(optionEligibility, "candidateId") != selectedOption ||
+                    ReadInt(optionEligibility, "contractVersion") != 1)
+                    throw new RulesCoreGatewayException(
+                        "Native option eligibility result is inconsistent.");
+                if (Text(optionEligibility, "status") != "eligible" ||
+                    optionEligibility["eligible"]?.GetValue<bool>() != true)
+                    blockers.Add(new RulesCoreCharacterProjectionConflictView(
+                        selectedOption, "native-option",
+                        "Native option prerequisites are unresolved or not satisfied.",
+                        [], [selectedOption]));
             }
         }
 

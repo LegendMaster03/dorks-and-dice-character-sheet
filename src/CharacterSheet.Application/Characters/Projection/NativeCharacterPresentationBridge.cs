@@ -90,6 +90,7 @@ public static class NativeCharacterPresentationBridge
                 group => group.OrderByDescending(entry => entry.UpdatedAt).First().Score,
                 StringComparer.Ordinal);
 
+        var nativeChoices = NativeCharacterOptionSelections.FromState(state);
         var unmodeledSelections = build.FoundationalSelections.Count != 0 ||
             state?.Conditions.Count > 0 ||
             state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true ||
@@ -120,7 +121,8 @@ public static class NativeCharacterPresentationBridge
                 level = entry.Level!.Value,
                 occurrenceId = entry.Id.ToString("D")
             }).ToArray(),
-            hitPointGains = hitPointGains.Count == 0 ? null : hitPointGains
+            hitPointGains = hitPointGains.Count == 0 ? null : hitPointGains,
+            selectedOptions = nativeChoices.Ids
         }, JsonOptions);
         var projection = await gateway.ProjectNativeCharacterAsync(request, cancellationToken);
         if (ReadText(projection, "rulesetId") != rulesetId ||
@@ -185,7 +187,8 @@ public static class NativeCharacterPresentationBridge
             SavingThrows: savingThrows.Count == 0 ? null : savingThrows,
             CombatFundamentals: combat,
             HealthTracks: health);
-        var partial = unmodeledSelections || invalidHitPointHistory ||
+        var partial = unmodeledSelections || nativeChoices.HasUnmappedChoices ||
+            invalidHitPointHistory ||
             ReadText(projection, "status") != "resolved" ||
             (projection["issues"] is JsonArray issues && issues.Count != 0) ||
             (projection["requiredChoices"] is JsonArray choices && choices.Count != 0);

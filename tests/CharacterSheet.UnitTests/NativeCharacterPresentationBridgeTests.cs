@@ -129,6 +129,51 @@ public sealed class NativeCharacterPresentationBridgeTests
     }
 
     [Fact]
+    public async Task NativeChoicesAreForwardedToProjectionAndUnknownChoicesRemainPartial()
+    {
+        var gateway = new FixtureGateway();
+        var occurrence = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var build = Build(occurrence);
+        var state = new CharacterStateView(
+            Guid.NewGuid(), false, null, new CharacterDeathSavesView(0, 0), [], [], [],
+            RulesInputs: [
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "native-option.class.warlock.patron", null, null,
+                    "patron.warlock.fiend", Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "native-option.class.warlock.pact", null, null,
+                    "pact.warlock.blade", Now, Now)
+            ]);
+
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, state, CancellationToken.None);
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(["patron.warlock.fiend", "pact.warlock.blade"],
+            gateway.LastSelectedOptions);
+    }
+
+    [Fact]
+    public void DuplicateOrUnmappedNativeRuleChoicesAreNotAcceptedAsValidSelections()
+    {
+        var state = new CharacterStateView(Guid.NewGuid(), false, null,
+            new CharacterDeathSavesView(0, 0), [], [], [],
+            RulesInputs: [
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "native-option.class.warlock.patron", null, null,
+                    "patron.warlock.fiend", Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "native-option.class.warlock.other", null, null,
+                    "patron.warlock.fiend", Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "legacy.choice", null, null, "source:unmapped", Now, Now)
+            ]);
+        var selected = NativeCharacterOptionSelections.FromState(state);
+        Assert.True(selected.HasUnmappedChoices);
+        Assert.Equal(["patron.warlock.fiend"], selected.Ids);
+    }
+
+    [Fact]
     public async Task CatalogWithoutExactNativeIdentityDoesNotProject()
     {
         var gateway = new FixtureGateway { ReturnClass = false };
@@ -152,6 +197,7 @@ public sealed class NativeCharacterPresentationBridgeTests
         public bool ReturnClass { get; init; } = true;
         public string? LastAdvancementClassId { get; private set; }
         public int? LastAdvancementLevel { get; private set; }
+        public string[] LastSelectedOptions { get; private set; } = [];
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken token)
         {
@@ -181,6 +227,8 @@ public sealed class NativeCharacterPresentationBridgeTests
             var item = request.GetProperty("advancements").EnumerateArray().Single();
             LastAdvancementClassId = item.GetProperty("classId").GetString();
             LastAdvancementLevel = item.GetProperty("level").GetInt32();
+            LastSelectedOptions = request.GetProperty("selectedOptions")
+                .EnumerateArray().Select(value => value.GetString()!).ToArray();
             return Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new {
                 contractVersion = 1, rulesetId = "first-party-001", fingerprint = Fingerprint,
                 status = "partial",
