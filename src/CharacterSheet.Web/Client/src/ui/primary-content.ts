@@ -37,9 +37,21 @@ export function renderPrimaryContent(
     nav.setAttribute("role", "tablist");
     nav.setAttribute("aria-orientation", "horizontal");
     const tabs: Array<{ section: SheetSection; button: HTMLButtonElement }> = [];
+    // Only hide casting controls when the native projection expressly reports
+    // no casting profiles and the Character has no recorded spells. An absent
+    // projection means unknown, not an affirmative noncaster determination.
+    const hasRecordedSpells = routine.state?.rulesInputs
+        ?.some(input => input.kind === "knownSpell") === true;
+    const castingExplicitlyAbsent =
+        mechanics?.spellcastingProfiles !== undefined &&
+        mechanics.spellcastingProfiles.length === 0 && !hasRecordedSpells;
+    const visibleSections = SHEET_SECTIONS.filter(section =>
+        section.id !== "spells" || !castingExplicitlyAbsent);
+    const displayedSection = visibleSections.some(section =>
+        section.id === activeSection) ? activeSection : visibleSections[0].id;
 
-    for (const section of SHEET_SECTIONS) {
-        const active = section.id === activeSection;
+    for (const section of visibleSections) {
+        const active = section.id === displayedSection;
         const button = createButton(
             section.label,
             active
@@ -82,8 +94,8 @@ export function renderPrimaryContent(
         handlers.selectSection(tabs[nextIndex].section);
     });
 
-    const definition = SHEET_SECTIONS.find(value => value.id === activeSection)
-        ?? SHEET_SECTIONS[0];
+    const definition = visibleSections.find(value => value.id === displayedSection)
+        ?? visibleSections[0];
     const panel = createElement("div", "dd-primary-content__panel");
     panel.id = `dd-sheet-panel-${definition.id}`;
     panel.setAttribute("role", "tabpanel");

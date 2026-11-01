@@ -188,6 +188,29 @@ test("primary sheet sections expose tab and tabpanel semantics", () => {
     assert.equal(panel.getAttribute("aria-labelledby"), "dd-sheet-tab-actions");
 });
 
+test("spellcasting tab is absent only for a confirmed noncaster", () => {
+    const noCasting = render("spells", { spellcastingProfiles: [] });
+    const tabs = byClass(noCasting, "dd-primary-nav__button");
+    assert.equal(tabs.length, 5);
+    assert.equal(tabs.some(tab =>
+        tab.getAttribute("data-sheet-section-tab") === "spells"), false);
+    // A previously selected Spells tab falls back to the first available tab.
+    assert.equal(byAttribute(noCasting, "data-sheet-section", "actions").length, 1);
+    assert.equal(tabs.filter(tab => tab.getAttribute("aria-selected") === "true").length, 1);
+
+    const caster = render("spells", { spellcastingProfiles: [{
+        key: "native.pact-magic", label: "Pact Magic",
+        resources: [{ key: "resource.pact-magic", label: "Pact Magic",
+            state: "resolved", current: 1, maximum: 1 }]
+    }] });
+    assert.equal(byAttribute(caster, "data-sheet-section-tab", "spells").length, 1);
+    assert.equal(byAttribute(caster, "data-sheet-section", "spells").length, 1);
+
+    // Missing mechanics is not equivalent to proof that casting is impossible.
+    const unavailable = render("spells", null);
+    assert.equal(byAttribute(unavailable, "data-sheet-section-tab", "spells").length, 1);
+});
+
 test("primary sheet tabs use roving tabindex and horizontal arrow-key selection", () => {
     let selectedSection = null;
     const keyboardHandlers = {
