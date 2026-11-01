@@ -3,6 +3,7 @@ import test from "node:test";
 import {
     addCharacterNote,
     addInventoryItemOccurrence,
+    addCustomInventoryItemOccurrence,
     buildCharacterStateBackendUrl,
     loadCharacterState,
     removeCharacterCurrencyBalance,
@@ -204,6 +205,8 @@ test("routine-state mutations send only Character-owned state inputs and return 
         3,
         fetcher);
     await addInventoryItemOccurrence(environment, characterId, "item:rope", fetcher);
+    await addCustomInventoryItemOccurrence(
+        environment, characterId, "Unreconciled Chitin", 3, fetcher);
     await updateInventoryItemOccurrence(
         environment,
         characterId,
@@ -278,3 +281,18 @@ test("native resource actions send only the action to Character Sheet's authenti
     assert.equal("maximum" in calls[0].body, false);
 });
 
+
+test("custom items use ordinary inventory persistence with requested quantities", async () => {
+    const calls = [];
+    await addCustomInventoryItemOccurrence(
+        environment, characterId, "  Provisional Hide  ", 5,
+        async (url, init) => {
+            calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
+            return Response.json(state);
+        });
+    assert.deepEqual(calls, [{
+        url: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/inventory`,
+        method: "POST",
+        body: { customName: "  Provisional Hide  ", quantity: 5 }
+    }]);
+});

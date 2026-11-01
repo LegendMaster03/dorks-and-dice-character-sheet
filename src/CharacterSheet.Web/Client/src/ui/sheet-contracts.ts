@@ -54,6 +54,7 @@ export interface RoutineCharacterHandlers {
     closeInventoryChooser(): void;
     searchInventory(query: string): void;
     addInventoryItem(conceptKey: string): void;
+    addCustomInventoryItem(name: string, quantity: number): void;
     updateInventoryItem(
         occurrenceId: string,
         input: CharacterInventoryItemOccurrenceStateInput

@@ -169,6 +169,35 @@ function render(section, mechanics, currentRoutine = routine()) {
     );
 }
 
+test("custom inventory additions use the existing inventory and validate quantity", () => {
+    const submitted = [];
+    const customHandlers = {
+        ...handlers,
+        routine: {
+            ...handlers.routine,
+            addCustomInventoryItem(name, quantity) { submitted.push({ name, quantity }); }
+        }
+    };
+    const display = renderCharacterWorkspace(
+        character, builder, routine([], {}, false),
+        "inventory", false, "view", guidedBuilder, null, null, customHandlers
+    );
+    const form = byAttribute(display, "data-custom-inventory-form", "true")[0];
+    assert.ok(form, "Custom item form belongs to ordinary Inventory.");
+    const itemName = byAttribute(form, "aria-label", "Custom item name")[0];
+    const quantity = byAttribute(form, "aria-label", "Custom item quantity")[0];
+    assert.ok(itemName && quantity);
+    itemName.value = "  Chitin Plate  ";
+    quantity.value = "4";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.deepEqual(submitted, [{ name: "Chitin Plate", quantity: 4 }]);
+    quantity.value = "0";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    quantity.value = "1.5";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.equal(submitted.length, 1);
+});
+
 test("primary sheet sections expose tab and tabpanel semantics", () => {
     const rendered = render("actions", null);
     const nav = byClass(rendered, "dd-primary-nav")[0];

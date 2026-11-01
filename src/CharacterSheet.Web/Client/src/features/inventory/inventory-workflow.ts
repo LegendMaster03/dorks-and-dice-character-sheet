@@ -1,5 +1,6 @@
 import {
     addInventoryItemOccurrence,
+    addCustomInventoryItemOccurrence,
     removeCharacterCurrencyBalance,
     removeInventoryItemOccurrence,
     setCharacterCurrencyBalance,
@@ -19,6 +20,7 @@ export interface InventoryWorkflow {
     closeChooser(): void;
     search(query: string): Promise<void>;
     add(characterId: string, conceptKey: string): Promise<void>;
+    addCustom(characterId: string, name: string, quantity: number): Promise<void>;
     update(
         characterId: string,
         occurrenceId: string,
@@ -106,6 +108,14 @@ export function createInventoryWorkflow(
                     environment,
                     characterId,
                     conceptKey));
+            if (changed) await presentation.load(characterId);
+        },
+
+        async addCustom(characterId: string, name: string, quantity: number): Promise<void> {
+            const changed = await routine.mutate(
+                "inventory-add",
+                () => addCustomInventoryItemOccurrence(
+                    environment, characterId, name, quantity));
             if (changed) await presentation.load(characterId);
         },
 

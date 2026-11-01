@@ -300,6 +300,8 @@ function renderWorkspace(
                 closeInventoryChooser: () => inventoryWorkflow.closeChooser(),
                 searchInventory: query => void inventoryWorkflow.search(query),
                 addInventoryItem: conceptKey => void inventoryWorkflow.add(character.characterId, conceptKey),
+                addCustomInventoryItem: (name, quantity) =>
+                    void inventoryWorkflow.addCustom(character.characterId, name, quantity),
                 updateInventoryItem: (occurrenceId, input) =>
                     void inventoryWorkflow.update(character.characterId, occurrenceId, input),
                 removeInventoryItem: occurrenceId => void inventoryWorkflow.remove(character.characterId, occurrenceId),
