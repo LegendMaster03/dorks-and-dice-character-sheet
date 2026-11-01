@@ -262,6 +262,60 @@ public sealed class CharacterAdvancementWorkflowTests
         Assert.Equal(0, factory.Native.ResourceActionCalls);
     }
 
+    [Fact]
+    public async Task NativeStartingEquipmentPersistsValidatedGrantsAndDoesNotDuplicateOnReplay()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Equipment Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+
+        // An unresolved Core response is never mistaken for zero starting items.
+        factory.Native.EquipmentStatus = "needs-choices";
+        using (var incomplete = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment"))
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, incomplete.StatusCode);
+        Assert.Equal(1, factory.Native.EquipmentCalls);
+
+        factory.Native.EquipmentStatus = "resolved";
+        using (var materialize = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment"))
+            Assert.Equal(HttpStatusCode.OK, materialize.StatusCode);
+        using (var repeat = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment"))
+            Assert.Equal(HttpStatusCode.OK, repeat.StatusCode);
+
+        using var read = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/state");
+        var state = await read.Content.ReadFromJsonAsync<CharacterStateView>();
+        Assert.NotNull(state);
+        var item = Assert.Single(state.InventoryItemOccurrences);
+        Assert.Equal("item.demo.knife", item.RuleConceptKey);
+        Assert.Equal(2, item.Quantity);
+        Assert.Contains(factory.Native.LastEquipmentRequest.GetProperty("advancements")
+            .EnumerateArray().ToArray(), row =>
+                row.GetProperty("occurrenceId").GetString() == entry.Id.ToString("D"));
+        Assert.Equal(3, factory.Native.EquipmentCalls);
+    }
+
+    [Fact]
+    public async Task NativeStartingEquipmentRejectsInvalidGrantBatchWithoutPersistence()
+    {
+        using var factory = new Factory { Native = new FakeNativeGateway {
+            EquipmentStatus = "resolved", InjectInvalidEquipmentGrant = true
+        } };
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Equipment Tester", "Active", null, []));
+        await InitializeClassAsync(factory, id);
+        using var response = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        using var read = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/state");
+        var state = await read.Content.ReadFromJsonAsync<CharacterStateView>();
+        Assert.Empty(state!.InventoryItemOccurrences);
+    }
+
     private static async Task<CharacterAdvancementEntryView> InitializeClassAsync(
         Factory factory, Guid id)
     {
@@ -334,6 +388,10 @@ public sealed class CharacterAdvancementWorkflowTests
         public IReadOnlyList<string> RequiredChoices { get; init; } = [];
         public int EligibilityCalls { get; private set; }
         public int ResourceActionCalls { get; private set; }
+        public int EquipmentCalls { get; private set; }
+        public string EquipmentStatus { get; set; } = "unavailable";
+        public bool InjectInvalidEquipmentGrant { get; init; }
+        public JsonElement LastEquipmentRequest { get; private set; }
         public List<int> RequestedLevels { get; } = [];
         public List<string> RequestedOptionCandidateIds { get; } = [];
         public string[] LastProjectedOptions { get; private set; } = [];
@@ -342,7 +400,8 @@ public sealed class CharacterAdvancementWorkflowTests
             Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
                 fingerprint = Fingerprint,
-                capabilities = new { advancementEligibility = "supported-subset", resourceResolution = true }
+                capabilities = new { advancementEligibility = "supported-subset",
+                    resourceResolution = true, startingEquipmentResolution = "authored-grants-only" }
             })!);
 
         public Task<JsonNode> SearchNativeOptionsAsync(
@@ -420,6 +479,23 @@ public sealed class CharacterAdvancementWorkflowTests
                 issues = new[] { new { code = "defense-input-required" } }
             })!);
         }
+        public Task<JsonNode> ResolveNativeStartingEquipmentAsync(
+            JsonElement request, CancellationToken token)
+        {
+            EquipmentCalls++;
+            LastEquipmentRequest = request.Clone();
+            var grants = EquipmentStatus == "resolved" ? new[] {
+                new { grantKey = "native.grant.test-item",
+                    kind = InjectInvalidEquipmentGrant ? "unsupported" : "item",
+                    targetKey = "item.demo.knife", displayName = "Demo Knife", quantity = 2 }
+            } : [];
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                contractVersion = 1, rulesetId = "first-party-001",
+                fingerprint = Fingerprint, status = EquipmentStatus,
+                grants, choices = Array.Empty<object>(), issues = Array.Empty<object>()
+            })!);
+        }
+
         public Task<JsonNode> ResolveNativeResourceAsync(
             JsonElement request, CancellationToken cancellationToken)
         {
