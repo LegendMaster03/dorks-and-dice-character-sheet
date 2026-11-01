@@ -132,7 +132,8 @@ export function getGuidedBuilderOwnedChoiceSourceKeys(
 export function getGuidedBuilderSectionStates(
     builder: CharacterBuilderUiState,
     mechanics: CharacterMechanicsView | null = null,
-    nativeEquipment: NativeStartingEquipmentPreview | null = null
+    nativeEquipment: NativeStartingEquipmentPreview | null = null,
+    equipmentReceived = false
 ): readonly GuidedBuilderSectionState[] {
     if (builder.status !== "ready" || builder.build === null) {
         return GUIDED_BUILDER_SECTIONS.map(section => ({
@@ -242,17 +243,19 @@ export function getGuidedBuilderSectionStates(
         roll.required && roll.state !== "resolved") ?? [];
     const equipmentConflicts = projectionConflicts.filter(conflict =>
         conflict.conflictKey.includes("starting-equipment"));
-    const equipmentAvailable = nativeEquipment !== null
+    const equipmentAvailable = equipmentReceived || nativeEquipment !== null
         || startingEquipment !== null || startingClassSelected;
-    const equipmentResolved = nativeEquipment !== null
+    const equipmentResolved = equipmentReceived || (nativeEquipment !== null
         ? nativeEquipment.status === "resolved" && nativeEquipment.issues.length === 0
         : startingEquipment !== null
             && pendingEquipmentChoices.length === 0
             && pendingEquipmentRolls.length === 0
-            && equipmentConflicts.length === 0;
+            && equipmentConflicts.length === 0);
 
     let equipmentDetail: string;
-    if (nativeEquipment?.status === "unavailable") {
+    if (equipmentReceived) {
+        equipmentDetail = "Starting equipment has been added to ordinary Inventory. Any later changes are managed there.";
+    } else if (nativeEquipment?.status === "unavailable") {
         equipmentDetail = "The current native starting-equipment rules are not yet executable.";
     } else if (nativeEquipment?.status === "needs-choices") {
         equipmentDetail = "Choose a native starting-equipment package before applying grants.";

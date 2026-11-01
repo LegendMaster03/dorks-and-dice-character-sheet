@@ -208,3 +208,11 @@ test("native package choices stay selectable after a saved selection", () => {
     assert.deepEqual(unavailable.grants, []);
     assert.match(unavailable.conflicts[0].message, /Item identity/);
 });
+
+test("starting equipment is acquired once and subsequently belongs to ordinary inventory", async () => {
+    const source = await readFile(new URL("../src/ui/guided-equipment.ts", import.meta.url), "utf8");
+    const sheet = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    assert.match(source, /Add the resolved starting items to ordinary Inventory/);
+    assert.match(sheet, /input\.key === "starting-equipment\.received"/);
+    assert.match(sheet, /later rule changes do not replace them/);
+});

@@ -342,7 +342,7 @@ export function renderGuidedStartingEquipment(
     materialization.append(createElement(
         "p",
         "dd-guided-builder__section-copy",
-        "Apply the resolved starting equipment to this Character. Item and special-equipment grants become normal Inventory entries, and starting currency is added to the Character's Currency balances. Reapplying adjusts only state previously acquired from starting equipment; later manual changes are preserved."));
+        "Add the resolved starting items to ordinary Inventory and starting currency to ordinary Currency balances once. After receiving them, manage these possessions in Inventory; later ruleset changes do not replace or remove them."));
     if (equipment.grants.some(grant => grant.detail === "Starting currency")) {
         materialization.append(createInlineState(
             "Starting currency is applied to the Character's Currency balances rather than represented as an Inventory item.",

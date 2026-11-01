@@ -410,10 +410,15 @@ function renderGuidedBuilder(
             "dd-guided-builder__intro",
             "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
 
+    const equipmentReceived = routine.state?.rulesInputs?.some(input =>
+        input.kind === "booleanFact" &&
+        input.key === "starting-equipment.received" &&
+        input.booleanValue === true) === true;
     const startingEquipment = nativeEquipment !== null
         ? projectNativeStartingEquipment(nativeEquipment, routine.state?.rulesInputs ?? [])
         : projectGuidedStartingEquipment(mechanics, routine.state?.rulesInputs ?? []);
-    const sectionStates = getGuidedBuilderSectionStates(builder, mechanics, nativeEquipment);
+    const sectionStates = getGuidedBuilderSectionStates(
+        builder, mechanics, nativeEquipment, equipmentReceived);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const [index, section] of sectionStates.entries()) {
@@ -549,7 +554,13 @@ function renderGuidedBuilder(
             break;
         }
         case "equipment": {
-            if (startingEquipment !== null) {
+            if (equipmentReceived) {
+                const equipment = createSectionCard("Starting Equipment", "dd-guided-builder__equipment");
+                equipment.append(createInlineState(
+                    "Starting equipment has already been added to Inventory. These items and currency are now ordinary Character possessions. Manage, equip, craft with, or remove them in Inventory; later rule changes do not replace them.",
+                    "neutral"));
+                panel.append(equipment);
+            } else if (startingEquipment !== null) {
                 const pending = routine.mutation?.kind === "rules-input-update"
                     || routine.mutation?.kind === "rules-input-delete"
                     || routine.mutation?.kind === "inventory-transaction";
