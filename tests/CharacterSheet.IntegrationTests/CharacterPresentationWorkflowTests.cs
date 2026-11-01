@@ -60,7 +60,7 @@ public sealed class CharacterPresentationWorkflowTests
             .GetProperty("abilityValues").EnumerateArray());
         Assert.Equal("strength", strength.GetProperty("key").GetString());
         Assert.Equal(15, strength.GetProperty("effectiveValue").GetInt32());
-        Assert.Equal(2, factory.Native.Calls);
+        Assert.Equal(4, factory.Native.Calls); // Ruleset, Skill, Competency, projection.
         Assert.Equal(15, factory.Native.LastAbilityScore);
         Assert.Null(factory.Native.LastClassId);
     }
