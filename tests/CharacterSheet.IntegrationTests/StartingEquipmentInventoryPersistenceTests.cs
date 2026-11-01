@@ -7,7 +7,7 @@ namespace CharacterSheet.IntegrationTests;
 public sealed class StartingEquipmentInventoryPersistenceTests
 {
     [Fact]
-    public async Task SynchronizationIsIdempotentAndDoesNotTouchIdenticalManualInventory()
+    public async Task StartingEquipmentIsAwardedOnceAsOrdinaryInventory()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var options = database.CreateOptions();
@@ -44,7 +44,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
         await using (var first = new CharacterSheetDbContext(options))
         {
             var materializer = new PostgresCharacterStartingEquipmentInventoryStore(first);
-            var root = await materializer.SynchronizeAsync(
+            var root = await materializer.ApplyOnceAsync(
                 characterId,
                 firstProjection,
                 [],
@@ -73,7 +73,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
         await using (var repeat = new CharacterSheetDbContext(options))
         {
             var materializer = new PostgresCharacterStartingEquipmentInventoryStore(repeat);
-            await materializer.SynchronizeAsync(
+            await materializer.ApplyOnceAsync(
                 characterId,
                 firstProjection,
                 [],
@@ -99,7 +99,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
         await using (var changed = new CharacterSheetDbContext(options))
         {
             var materializer = new PostgresCharacterStartingEquipmentInventoryStore(changed);
-            await materializer.SynchronizeAsync(
+            await materializer.ApplyOnceAsync(
                 characterId,
                 changedProjection,
                 [],
@@ -110,21 +110,24 @@ public sealed class StartingEquipmentInventoryPersistenceTests
         {
             var state = await new PostgresCharacterStateStore(verifyChanged).GetAsync(characterId);
             Assert.NotNull(state);
-            Assert.Equal(2, state.InventoryItemOccurrences.Count);
+            Assert.Equal(3, state.InventoryItemOccurrences.Count);
             Assert.Contains(state.InventoryItemOccurrences, value =>
                 value.Id == manualDaggerId
                 && value.RuleConceptKey == "item:dagger"
                 && value.Quantity == 1);
-            Assert.Contains(state.InventoryItemOccurrences, value =>
-                value.RuleConceptKey == "item:longsword"
-                && value.Quantity == 1);
             Assert.DoesNotContain(state.InventoryItemOccurrences, value =>
-                value.CustomName == "A letter of rank");
+                value.RuleConceptKey == "item:longsword");
+            Assert.Contains(state.InventoryItemOccurrences, value =>
+                value.CustomName == "A letter of rank"
+                && value.Quantity == 1);
+            Assert.Contains(state.RulesInputs, value =>
+                value.Key == CharacterStartingEquipmentReceipt.Key &&
+                value.BooleanValue == true);
         }
     }
 
     [Fact]
-    public async Task ManualRemovalDeletesOnlyItsProvenanceSoExplicitReapplyCanAcquireAgain()
+    public async Task RemovingStartingItemDoesNotCauseRegrant()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var options = database.CreateOptions();
@@ -144,7 +147,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
             await setup.Database.MigrateAsync();
             await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(characterId);
             var materializer = new PostgresCharacterStartingEquipmentInventoryStore(setup);
-            var root = await materializer.SynchronizeAsync(
+            var root = await materializer.ApplyOnceAsync(
                 characterId,
                 projection,
                 [],
@@ -163,19 +166,20 @@ public sealed class StartingEquipmentInventoryPersistenceTests
         await using (var reapply = new CharacterSheetDbContext(options))
         {
             var root = await new PostgresCharacterStartingEquipmentInventoryStore(reapply)
-                .SynchronizeAsync(
+                .ApplyOnceAsync(
                     characterId,
                     projection,
                     [],
                     DateTimeOffset.UtcNow.AddMinutes(2));
-            var reacquired = Assert.Single(root!.InventoryItemOccurrences);
-            Assert.NotEqual(generatedId, reacquired.Id);
-            Assert.Equal("item:holy-symbol", reacquired.RuleConceptKey);
+            Assert.Empty(root!.InventoryItemOccurrences);
+            Assert.Contains(root.RulesInputs, value =>
+                value.Key == CharacterStartingEquipmentReceipt.Key &&
+                value.BooleanValue == true);
         }
     }
 
     [Fact]
-    public async Task CurrencySynchronizationUsesProvenanceDeltasAndPreservesLaterBalanceChanges()
+    public async Task StartingCurrencyIsAwardedOnceAndBecomesAnOrdinaryBalance()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var options = database.CreateOptions();
@@ -195,7 +199,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
                 25,
                 DateTimeOffset.UtcNow);
 
-            await new PostgresCharacterStartingEquipmentInventoryStore(setup).SynchronizeAsync(
+            await new PostgresCharacterStartingEquipmentInventoryStore(setup).ApplyOnceAsync(
                 characterId,
                 [],
                 initialGrant,
@@ -211,7 +215,7 @@ public sealed class StartingEquipmentInventoryPersistenceTests
 
         await using (var repeat = new CharacterSheetDbContext(options))
         {
-            await new PostgresCharacterStartingEquipmentInventoryStore(repeat).SynchronizeAsync(
+            await new PostgresCharacterStartingEquipmentInventoryStore(repeat).ApplyOnceAsync(
                 characterId,
                 [],
                 initialGrant,
@@ -235,24 +239,24 @@ public sealed class StartingEquipmentInventoryPersistenceTests
         };
         await using (var changed = new CharacterSheetDbContext(options))
         {
-            await new PostgresCharacterStartingEquipmentInventoryStore(changed).SynchronizeAsync(
+            await new PostgresCharacterStartingEquipmentInventoryStore(changed).ApplyOnceAsync(
                 characterId,
                 [],
                 changedGrant,
                 DateTimeOffset.UtcNow.AddMinutes(4));
             var state = await new PostgresCharacterStateStore(changed).GetAsync(characterId);
-            Assert.Equal(125, Assert.Single(state!.CurrencyBalances).Amount);
+            Assert.Equal(105, Assert.Single(state!.CurrencyBalances).Amount);
         }
 
         await using (var removeGrant = new CharacterSheetDbContext(options))
         {
-            await new PostgresCharacterStartingEquipmentInventoryStore(removeGrant).SynchronizeAsync(
+            await new PostgresCharacterStartingEquipmentInventoryStore(removeGrant).ApplyOnceAsync(
                 characterId,
                 [],
                 [],
                 DateTimeOffset.UtcNow.AddMinutes(5));
             var state = await new PostgresCharacterStateStore(removeGrant).GetAsync(characterId);
-            Assert.Equal(5, Assert.Single(state!.CurrencyBalances).Amount);
+            Assert.Equal(105, Assert.Single(state!.CurrencyBalances).Amount);
         }
     }
 }

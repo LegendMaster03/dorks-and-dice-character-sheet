@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using CharacterSheet.Application.RulesCore;
+using CharacterSheet.Application.Persistence;
 
 namespace CharacterSheet.Application.Characters;
 
@@ -127,7 +128,9 @@ public static class NativeCharacterPresentationBridge
                 CharacterRulesInputKinds.CompetencyRank or
                 CharacterRulesInputKinds.Training or
                 CharacterRulesInputKinds.KnownSpell or
-                CharacterRulesInputKinds.Choice)) == true ||
+                CharacterRulesInputKinds.Choice) &&
+                !(input.Kind == CharacterRulesInputKinds.BooleanFact &&
+                    input.Key == CharacterStartingEquipmentReceipt.Key)) == true ||
             nativeChoices.HasUnmappedChoices ||
             unknownTraining ||
             build.BaseAbilityScoreInputs.Count != abilities.Count;

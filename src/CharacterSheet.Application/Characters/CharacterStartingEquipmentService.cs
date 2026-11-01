@@ -12,7 +12,7 @@ public sealed record NativeStartingEquipmentPreviewResult(
 /// Materializes resolved Rules Core starting-equipment grants into ordinary Character-owned
 /// inventory and currency state. This is an acquisition boundary, not a live mirror: materialized
 /// state remains ordinary mutable Character state. Stable Core grant provenance makes explicit
-/// re-application idempotent and isolates generated state from identical manual acquisitions.
+/// repeated requests idempotent. Awarded equipment is subsequently ordinary inventory.
 /// </summary>
 public sealed class CharacterStartingEquipmentService(
     CharacterBuildService buildService,
@@ -21,8 +21,6 @@ public sealed class CharacterStartingEquipmentService(
     ICharacterStartingEquipmentInventoryStore inventoryStore,
     TimeProvider timeProvider)
 {
-    private const string ChoiceKind = "starting-equipment";
-    private const string MechanicKind = "starting-equipment";
     private const string ItemGrantKind = "starting-equipment-item";
     private const string CustomGrantKind = "starting-equipment-custom";
     private const string CurrencyGrantKind = "starting-equipment-currency";
@@ -79,7 +77,7 @@ public sealed class CharacterStartingEquipmentService(
                         return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
                 }
             }
-            var root = await inventoryStore.SynchronizeAsync(
+            var root = await inventoryStore.ApplyOnceAsync(
                 characterId, items, currencies, timeProvider.GetUtcNow(), cancellationToken);
             return root is null
                 ? new CharacterStateResult(CharacterStateAccessStatus.SheetNotInitialized)
