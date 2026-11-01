@@ -15,6 +15,46 @@ export function buildStartingEquipmentMaterializationUrl(
         `/api/characters/${encodeURIComponent(characterId)}/state/inventory/starting-equipment`);
 }
 
+export interface NativeStartingEquipmentPreview {
+    contractVersion: number;
+    rulesetId: string;
+    fingerprint: string;
+    status: "resolved" | "needs-choices" | "unavailable";
+    grants: readonly {
+        grantKey: string;
+        kind: "item" | "currency" | "custom";
+        targetKey: string;
+        displayName: string;
+        quantity: number;
+    }[];
+    choices: readonly {
+        choiceKey: string;
+        options: readonly { id: string; name: string }[];
+    }[];
+    issues: readonly {
+        code: string;
+        path: string;
+        detail: string;
+    }[];
+}
+
+export async function loadNativeStartingEquipmentPreview(
+    environment: HostEnvironment,
+    characterId: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<NativeStartingEquipmentPreview> {
+    const response = await fetcher(
+        buildStartingEquipmentMaterializationUrl(environment, characterId) + "/preview",
+        { headers: { Accept: "application/json" } });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response,
+                "Native starting-equipment preview is unavailable."),
+            response.status);
+    }
+    return await response.json() as NativeStartingEquipmentPreview;
+}
+
 export async function materializeStartingEquipmentInventory(
     environment: HostEnvironment,
     characterId: string,
