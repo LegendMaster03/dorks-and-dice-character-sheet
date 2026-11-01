@@ -583,6 +583,15 @@ function renderGuidedBuilder(
                         "warning"));
                 panel.append(equipment);
             }
+            // Incomplete native equipment rules never block manual playtest
+            // inventory entry. Guided Setup is not a separate item store.
+            panel.append(createButton(
+                "Open Inventory",
+                "dd-button dd-button--secondary",
+                () => {
+                    handlers.closeGuidedBuilder();
+                    handlers.selectSection("inventory");
+                }));
             break;
         }
         case "review": {

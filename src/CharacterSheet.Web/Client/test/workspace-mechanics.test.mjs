@@ -198,6 +198,27 @@ test("custom inventory additions use the existing inventory and validate quantit
     assert.equal(submitted.length, 1);
 });
 
+test("guided starting equipment navigates to ordinary inventory", () => {
+    const calls = [];
+    const guidedHandlers = {
+        ...handlers,
+        closeGuidedBuilder() { calls.push("close"); },
+        selectSection(value) { calls.push(value); }
+    };
+    const displayed = renderCharacterWorkspace(
+        character, builder,
+        routine([], {}, false),
+        "inventory", false, "view",
+        { ...guidedBuilder, open: true, activeSection: "equipment" },
+        null, null, guidedHandlers
+    );
+    const action = byTag(displayed, "button").find(button =>
+        button.textContent === "Open Inventory");
+    assert.ok(action, "Manual inventory remains reachable when native grants are missing.");
+    action.dispatchEvent({ type: "click" });
+    assert.deepEqual(calls, ["close", "inventory"]);
+});
+
 test("primary sheet sections expose tab and tabpanel semantics", () => {
     const rendered = render("actions", null);
     const nav = byClass(rendered, "dd-primary-nav")[0];
