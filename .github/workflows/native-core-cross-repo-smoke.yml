@@ -1,0 +1,38 @@
+name: Real Native Core / Character Sheet Contract Smoke
+
+on:
+  push:
+    branches:
+      - feature/native-character-presentation
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  native-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out Character Sheet
+        uses: actions/checkout@v4
+      - name: Check out current native Rules Core implementation
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-rules-core
+          ref: feature/native-hit-die-eligibility
+          path: rules-core
+          persist-credentials: false
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Exercise real native mechanics and catalog through Character Sheet consumer
+        run: >-
+          dotnet run
+          --project tests/NativeCoreContractProbe/NativeCoreContractProbe.csproj
+          -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          --
+          "$GITHUB_WORKSPACE/rules-core/data/rulesets"
