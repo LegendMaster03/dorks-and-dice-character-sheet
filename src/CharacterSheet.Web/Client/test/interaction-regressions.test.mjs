@@ -280,7 +280,7 @@ test("Guided Abilities remains incomplete while Rules Core requires Ability Scor
     assert.equal(resolvedAbilities.status, "resolved");
 
     const sheet = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
-    assert.match(sheet, /getGuidedBuilderSectionStates\(builder, mechanics\)/);
+    assert.match(sheet, /getGuidedBuilderSectionStates\(builder, mechanics, nativeEquipment\)/);
     assert.match(sheet, /heading:\s*"Required Ability Choices"/);
     assert.match(sheet, /choiceKinds:\s*\["ability-score", "ability-score-set"\]/);
 });

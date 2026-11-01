@@ -141,8 +141,8 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(states.find(section => section.id === "background").status, "incomplete");
     assert.equal(states.find(section => section.id === "species").status, "incomplete");
     assert.equal(states.find(section => section.id === "abilities").status, "incomplete");
-    assert.equal(states.find(section => section.id === "equipment").status, "unavailable");
-    assert.match(states.find(section => section.id === "equipment").detail, /current Rules Core projection/);
+    assert.equal(states.find(section => section.id === "equipment").status, "incomplete");
+    assert.match(states.find(section => section.id === "equipment").detail, /not yet been resolved/);
     assert.match(states.find(section => section.id === "background").detail, /2 required Background choices remain/);
     assert.match(states.find(section => section.id === "species").detail, /1 required Species choice remains/);
     assert.match(states.find(section => section.id === "abilities").detail, /1 required Ability Score choice remains/);
@@ -156,7 +156,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(sourceResolvedStates.find(section => section.id === "background").status, "resolved");
     assert.equal(sourceResolvedStates.find(section => section.id === "species").status, "resolved");
     assert.equal(sourceResolvedStates.find(section => section.id === "abilities").status, "incomplete");
-    assert.equal(sourceResolvedStates.find(section => section.id === "equipment").status, "unavailable");
+    assert.equal(sourceResolvedStates.find(section => section.id === "equipment").status, "incomplete");
 });
 
 test("starting-equipment choices and conflicts belong to Equipment rather than Class or Background status", () => {
@@ -279,7 +279,8 @@ test("guided builder uses numbered steps, sequential navigation, a Rules Core-ba
     assert.match(source, /handlers\.rules\.setChoice/);
     assert.match(source, /handlers\.routine\.materializeStartingEquipment/);
     assert.match(source, /"Starting Equipment"/);
-    assert.match(source, /not available in Guided Setup yet/);
+    assert.match(source, /not yet available from the native Rules Core contract/);
+    assert.match(source, /projectNativeStartingEquipment\(nativeEquipment/);
     assert.match(source, /`Previous: \$\{previousSection\.label\}`/);
     assert.match(source, /`Next: \$\{nextSection\.label\}`/);
     assert.match(source, /"Review Character"/);
