@@ -148,9 +148,30 @@ Ensure(withOptions.Status != "unavailable", "Character Sheet rejected native cho
 Ensure(gateway.LastSelectedOptions.SequenceEqual(knownOptions),
     "Character Sheet omitted native options from the real Core request.");
 
+// The real native catalog must reach the existing family/composite renderer
+// as structure, even when individual numerical totals remain unresolved.
+var training = withOptions.Mechanics!.Competencies!;
+foreach (var familyId in new[] { "skill.perform", "skill.profession" })
+{
+    var family = training.Entries.Single(item => item.Key == familyId);
+    Ensure(family.IsFamily && family.PresentationCategory == "skill" &&
+        family.ChildCompetencyKeys?.Count > 0 && family.RankInputKey is null,
+        "Native skill family was flattened or made independently rankable: " + familyId);
+    Ensure(training.Entries.Where(item => item.Family == familyId && !item.IsFamily)
+        .Select(item => item.Key).Order().SequenceEqual(family.ChildCompetencyKeys!.Order()),
+        "Native family membership did not survive the Sheet projection: " + familyId);
+}
+var perception = training.Relationships!.Single(item => item.ParentKey == "skill.perception");
+Ensure(perception.ComponentKeys.SequenceEqual(new[] { "skill.listen", "skill.spot" }) &&
+    perception.Composition == "arithmetic-mean",
+    "Native Perception lost its independently ranked children.");
+Ensure(training.Entries.Single(item => item.Key == "skill.listen").SupportsRanks == true &&
+    training.Entries.Single(item => item.Key == "skill.perception").SupportsRanks == false,
+    "Native child and composite rank controls were not preserved.");
+
 Console.WriteLine(
     $"Cross-repository mechanics contract passed: {catalog.RulesetId}, fingerprint {catalog.Fingerprint}, " +
-    "Warlock projection, class eligibility, options, and Sheet presentation.");
+    "Warlock projection, class eligibility, options, skill families/composites, and Sheet presentation.");
 return;
 
 static void Ensure(bool condition, string message)
