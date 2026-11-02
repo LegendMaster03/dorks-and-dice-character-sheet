@@ -18,12 +18,13 @@ const sourceAttribution = {
 
 function createWorkflowHarness() {
     let renders = 0;
+    let mutations = 0;
     const application = createApplication(
         createInitialState({ kind: "new" }),
         () => { renders += 1; });
     const routine = {
         current: () => application.getState().routine,
-        mutate: async () => false
+        mutate: async () => { mutations += 1; return false; }
     };
     const presentation = { load: async () => {} };
     const environment = {
@@ -43,6 +44,7 @@ function createWorkflowHarness() {
         application,
         workflow,
         renderCount: () => renders,
+        mutationCount: () => mutations,
         resetRenderCount: () => { renders = 0; }
     };
 }
@@ -149,6 +151,20 @@ test("Harvesting draft edits do not replace the action target before Calculate H
         assert.equal(result.outcome.components[0].quantity, 1);
         assert.equal(result.tableRequest.manualEdits.upsertComponents[0].quantity, 1);
         assert.ok(harness.renderCount() >= 2);
+
+        // A visible award action can outlive its outcome while quantity drafts
+        // update without rendering. It must refresh the preview, not silently
+        // return or award an unseen recomputation.
+        await workflow.editHarvestComponent("hide", 10, 2);
+        assert.equal(application.getState().harvestingCrafting.outcome, null);
+        await workflow.awardHarvest("character");
+        assert.equal(requests.length, 2);
+        assert.equal(harness.mutationCount(), 0);
+        const reviewed = application.getState().harvestingCrafting;
+        assert.equal(reviewed.outcome.components[0].quantity, 2);
+        assert.match(reviewed.message, /Review the updated result/);
+        await workflow.awardHarvest("character");
+        assert.equal(harness.mutationCount(), 1);
     } finally {
         globalThis.fetch = previousFetch;
     }

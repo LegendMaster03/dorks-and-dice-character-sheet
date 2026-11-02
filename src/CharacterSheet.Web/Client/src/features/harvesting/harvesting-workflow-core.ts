@@ -128,7 +128,19 @@ export function createHarvestingCraftingWorkflow(
 
     async function awardHarvest(characterId: string): Promise<void> {
         const state = application.getState().harvestingCrafting;
-        if (state.outcome === null || state.harvestInventoryAwarded) return;
+        if (state.harvestInventoryAwarded || state.outcomeStatus === "loading") return;
+        if (state.outcome === null) {
+            // Draft edits deliberately preserve the clicked DOM control. Its
+            // previous award button may still be visible after inputs invalidate
+            // the outcome. Recalculate, then require review before any mutation.
+            await evaluate();
+            if (application.getState().harvestingCrafting.outcome !== null)
+                update(current => ({
+                    ...current,
+                    message: "Harvest inputs changed. Review the updated result before adding components to Inventory."
+                }));
+            return;
+        }
 
         const awarded = state.outcome.components.filter(component => component.awarded);
         if (awarded.length === 0) {
