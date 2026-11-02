@@ -1,6 +1,6 @@
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
 import type { HostEnvironment } from "../../host-environment.js";
-import { searchResolvedRules } from "../../rules-core-api.js";
+import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import type { RulesInputWorkflow } from "../../core/application/rules-input-workflow.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
 
@@ -24,10 +24,8 @@ export function createKnownSpellWorkflow(
             query: normalizedQuery
         });
         try {
-            const catalog = await searchResolvedRules(
-                environment,
-                "spell",
-                normalizedQuery);
+            const metadata = await loadNativeRuleset(environment);
+            const catalog = await searchNativeOptions(environment, metadata, "spell", normalizedQuery, 100);
             const known = new Set(
                 (application.getState().routine.state?.rulesInputs ?? [])
                     .filter(input => input.kind === "knownSpell")
@@ -35,9 +33,7 @@ export function createKnownSpellWorkflow(
             application.dispatch({
                 type: "spell-chooser-loaded",
                 query: normalizedQuery,
-                results: catalog.rules.filter(rule =>
-                    rule.entityType === "spell"
-                    && !known.has(rule.conceptKey))
+                results: catalog.options.filter(rule => !known.has(rule.id))
             });
         } catch (error) {
             application.dispatch({

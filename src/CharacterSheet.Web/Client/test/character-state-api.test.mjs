@@ -3,12 +3,14 @@ import test from "node:test";
 import {
     addCharacterNote,
     addInventoryItemOccurrence,
+    addCustomInventoryItemOccurrence,
     buildCharacterStateBackendUrl,
     loadCharacterState,
     removeCharacterCurrencyBalance,
     removeCharacterHitPointGain,
     removeCharacterNote,
     removeCharacterRulesInput,
+    resolveNativeCharacterResource,
     removeInventoryItemOccurrence,
     setCharacterAdvancementProgress,
     setCharacterCurrencyBalance,
@@ -253,4 +255,42 @@ test("routine-state mutations send only Character-owned state inputs and return 
     assert.deepEqual(JSON.parse(calls[10].body), { content: "Updated note" });
     assert.equal(calls[11].method, "DELETE");
     assert.equal(calls.some(call => String(call.body).includes("displayName")), false);
+});
+
+test("native resource actions send only the action to Character Sheet's authenticated endpoint", async () => {
+    const calls = [];
+    const response = await resolveNativeCharacterResource(
+        environment, characterId,
+        { resourceId: "resource.pact-magic", spend: 1 },
+        async (url, init) => {
+            calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
+            return Response.json({
+                resolution: { status: "resolved", resourceId: "resource.pact-magic", current: 1, maximum: 2 },
+                state
+            });
+        });
+    assert.equal(response.resolution.current, 1);
+    assert.deepEqual(calls, [{
+        url: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/resources/resolve`,
+        method: "POST",
+        body: { resourceId: "resource.pact-magic", spend: 1 }
+    }]);
+    assert.equal("current" in calls[0].body, false);
+    assert.equal("maximum" in calls[0].body, false);
+});
+
+
+test("custom items use ordinary inventory persistence with requested quantities", async () => {
+    const calls = [];
+    await addCustomInventoryItemOccurrence(
+        environment, characterId, "  Provisional Hide  ", 5,
+        async (url, init) => {
+            calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
+            return Response.json(state);
+        });
+    assert.deepEqual(calls, [{
+        url: `/tool-host/character-sheet/api/upstream/api/characters/${characterId}/state/inventory`,
+        method: "POST",
+        body: { customName: "  Provisional Hide  ", quantity: 5 }
+    }]);
 });

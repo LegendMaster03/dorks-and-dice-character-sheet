@@ -140,16 +140,13 @@ function renderSpellChooser(
     for (const rule of chooser.results) {
         const result = createElement("article", "dd-rule-chooser__result");
         result.append(
-            createElement("strong", "dd-rule-chooser__result-name", rule.displayName),
-            createElement(
-                "span",
-                "dd-rule-chooser__result-meta",
-                [rule.editionDisplayName, rule.sourceCode].filter(Boolean).join(" • ")),
-            createElement("span", "dd-rule-chooser__result-key", rule.conceptKey),
+            createElement("strong", "dd-rule-chooser__result-name", rule.name),
+
+            createElement("span", "dd-rule-chooser__result-key", rule.id),
             createButton(
                 "Add",
                 "dd-button dd-button--primary",
-                () => handlers.add(rule.conceptKey),
+                () => handlers.add(rule.id),
                 routine.mutation !== null));
         results.append(result);
     }

@@ -4,11 +4,12 @@ import type {
 } from "../../app-state.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
+import { CharacterSheetApiError } from "../../character-api.js";
+import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import {
     loadCharacterState,
     type CharacterStateResponse
 } from "../../character-state-api.js";
-import { resolveRuleConcept } from "../../rules-core-api.js";
 import { requestErrorMessage } from "./request-error.js";
 
 export interface RoutineMutationOptions {
@@ -32,127 +33,81 @@ export function createRoutineStateWorkflow(
     environment: HostEnvironment
 ): RoutineStateWorkflow {
     async function resolveReferences(state: CharacterStateResponse): Promise<void> {
-        const inventoryReferences = state.inventoryItemOccurrences
-            .filter(occurrence => occurrence.ruleConceptKey !== null)
-            .map(async occurrence => {
-            const conceptKey = occurrence.ruleConceptKey!;
-            try {
-                const rule = await resolveRuleConcept(
-                    environment,
-                    conceptKey);
-                const reference = rule !== null
-                    && rule.entityType === "item"
-                    && rule.conceptKey === conceptKey
-                    ? {
-                        status: "resolved" as const,
-                        conceptKey,
-                        rule
-                    }
-                    : {
-                        status: "unavailable" as const,
-                        conceptKey
-                    };
+        const entries = [
+            ...state.inventoryItemOccurrences
+                .filter(entry => entry.ruleConceptKey !== null)
+                .map(entry => ({ id: entry.id, key: entry.ruleConceptKey!, category: "item" as const })),
+            ...(state.rulesInputs ?? [])
+                .filter(entry => entry.kind === "knownSpell")
+                .map(entry => ({ id: entry.id, key: entry.key, category: "spell" as const })),
+            ...(state.conditions ?? [])
+                .filter(entry => entry.ruleConceptKey !== null)
+                .map(entry => ({ id: entry.id, key: entry.ruleConceptKey!, category: "condition" as const }))
+        ];
+        if (entries.length === 0) return;
+
+        // Old saved source-specific IDs are never silently rewritten into native
+        // IDs. Unsupported identities remain visible with unavailable status.
+        const nativeEntries = entries.filter(entry =>
+            entry.key.startsWith(entry.category + "."));
+        for (const entry of entries.filter(entry =>
+            !entry.key.startsWith(entry.category + "."))) {
+            application.dispatch({
+                type: "routine-reference-resolved",
+                occurrenceId: entry.id,
+                conceptKey: entry.key,
+                reference: { status: "unavailable", conceptKey: entry.key }
+            });
+        }
+        if (nativeEntries.length === 0) return;
+
+        let metadata: Awaited<ReturnType<typeof loadNativeRuleset>>;
+        try {
+            metadata = await loadNativeRuleset(environment);
+        } catch (error) {
+            for (const entry of nativeEntries) {
                 application.dispatch({
                     type: "routine-reference-resolved",
-                    occurrenceId: occurrence.id,
-                    conceptKey,
-                    reference
-                });
-            } catch (error) {
-                application.dispatch({
-                    type: "routine-reference-resolved",
-                    occurrenceId: occurrence.id,
-                    conceptKey,
+                    occurrenceId: entry.id,
+                    conceptKey: entry.key,
                     reference: {
-                        status: "error",
-                        conceptKey,
+                        status: "error", conceptKey: entry.key,
                         message: requestErrorMessage(error)
                     }
                 });
             }
-        });
-
-        const knownSpellReferences = (state.rulesInputs ?? [])
-            .filter(input => input.kind === "knownSpell")
-            .map(async input => {
-                const conceptKey = input.key;
-                try {
-                    const rule = await resolveRuleConcept(environment, conceptKey);
-                    const reference = rule !== null
-                        && rule.entityType === "spell"
-                        && rule.conceptKey === conceptKey
-                        ? {
-                            status: "resolved" as const,
-                            conceptKey,
-                            rule
-                        }
-                        : {
-                            status: "unavailable" as const,
-                            conceptKey
-                        };
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: input.id,
-                        conceptKey,
-                        reference
-                    });
-                } catch (error) {
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: input.id,
-                        conceptKey,
-                        reference: {
-                            status: "error",
-                            conceptKey,
-                            message: requestErrorMessage(error)
-                        }
-                    });
-                }
-            });
-
-        const conditionReferences = (state.conditions ?? [])
-            .filter(condition => condition.ruleConceptKey !== null)
-            .map(async condition => {
-                const conceptKey = condition.ruleConceptKey!;
-                try {
-                    const rule = await resolveRuleConcept(environment, conceptKey);
-                    const reference = rule !== null
-                        && rule.entityType === "condition"
-                        && rule.conceptKey === conceptKey
-                        ? {
-                            status: "resolved" as const,
-                            conceptKey,
-                            rule
-                        }
-                        : {
-                            status: "unavailable" as const,
-                            conceptKey
-                        };
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: condition.id,
-                        conceptKey,
-                        reference
-                    });
-                } catch (error) {
-                    application.dispatch({
-                        type: "routine-reference-resolved",
-                        occurrenceId: condition.id,
-                        conceptKey,
-                        reference: {
-                            status: "error",
-                            conceptKey,
-                            message: requestErrorMessage(error)
-                        }
-                    });
-                }
-            });
-
-        await Promise.all([
-            ...inventoryReferences,
-            ...knownSpellReferences,
-            ...conditionReferences
-        ]);
+            return;
+        }
+        await Promise.all(nativeEntries.map(async entry => {
+            try {
+                const regular = await searchNativeOptions(
+                    environment, metadata, entry.category, entry.key, 100);
+                const leveled = entry.category === "condition"
+                    ? await searchNativeOptions(
+                        environment, metadata, "leveled-condition", entry.key, 100)
+                    : null;
+                const rule = [...regular.options, ...(leveled?.options ?? [])]
+                    .find(option => option.id === entry.key);
+                application.dispatch({
+                    type: "routine-reference-resolved",
+                    occurrenceId: entry.id,
+                    conceptKey: entry.key,
+                    reference: rule === undefined
+                        ? { status: "unavailable", conceptKey: entry.key }
+                        : { status: "resolved", conceptKey: entry.key, rule }
+                });
+            } catch (error) {
+                application.dispatch({
+                    type: "routine-reference-resolved",
+                    occurrenceId: entry.id,
+                    conceptKey: entry.key,
+                    reference: {
+                        status: "error", conceptKey: entry.key,
+                        message: requestErrorMessage(error)
+                    }
+                });
+            }
+        }));
     }
 
     return {
@@ -200,6 +155,22 @@ export function createRoutineStateWorkflow(
                 }
                 return true;
             } catch (error) {
+                if (kind === "native-resource-action" &&
+                    error instanceof CharacterSheetApiError &&
+                    error.status === 409) {
+                    // The conflict indicates that a previous resource value is
+                    // stale. Reload without automatically replaying expenditure.
+                    try {
+                        const fresh = await loadCharacterState(
+                            environment, routine.state.characterId);
+                        application.dispatch({
+                            type: "routine-loaded", state: fresh
+                        }, { render: options.render });
+                        await resolveReferences(fresh);
+                    } catch {
+                        // Keep the original conflict visible if reloading fails.
+                    }
+                }
                 application.dispatch({
                     type: "routine-mutation-failed",
                     message: requestErrorMessage(error)

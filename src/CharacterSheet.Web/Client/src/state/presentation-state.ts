@@ -14,7 +14,10 @@ export function reducePresentationState(
                 ...presentation,
                 status: "loading",
                 requestId: action.requestId,
-                message: undefined
+                message: undefined,
+                equipmentPreviewStatus: action.withEquipment ? "loading" : undefined,
+                equipmentPreview: null,
+                equipmentPreviewMessage: undefined
             };
             break;
         case "presentation-loaded":
@@ -23,9 +26,28 @@ export function reducePresentationState(
                     status: "ready",
                     requestId: action.requestId,
                     advancement: action.presentation.advancement,
-                    mechanics: action.presentation.mechanics
+                    mechanics: action.presentation.mechanics,
+                    mechanicsStatus: action.presentation.mechanicsStatus,
+                    mechanicsMessage: action.presentation.mechanicsMessage,
+                    equipmentPreviewStatus: presentation.equipmentPreviewStatus,
+                    equipmentPreview: presentation.equipmentPreview,
+                    equipmentPreviewMessage: presentation.equipmentPreviewMessage
                 };
             }
+            break;
+        case "starting-equipment-preview-loaded":
+            if (presentation.requestId === action.requestId)
+                presentation = { ...presentation,
+                    equipmentPreviewStatus: "ready",
+                    equipmentPreview: action.preview,
+                    equipmentPreviewMessage: undefined };
+            break;
+        case "starting-equipment-preview-failed":
+            if (presentation.requestId === action.requestId)
+                presentation = { ...presentation,
+                    equipmentPreviewStatus: "error",
+                    equipmentPreview: null,
+                    equipmentPreviewMessage: action.message };
             break;
         case "presentation-load-failed":
             if (presentation.requestId === action.requestId) {
@@ -34,7 +56,12 @@ export function reducePresentationState(
                     requestId: action.requestId,
                     advancement: null,
                     mechanics: null,
-                    message: action.message
+                    mechanicsStatus: "unavailable",
+                    mechanicsMessage: action.message,
+                    message: action.message,
+                    equipmentPreviewStatus: presentation.equipmentPreviewStatus,
+                    equipmentPreview: presentation.equipmentPreview,
+                    equipmentPreviewMessage: presentation.equipmentPreviewMessage
                 };
             }
             break;

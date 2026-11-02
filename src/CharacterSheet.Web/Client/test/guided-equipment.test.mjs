@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { attachRulesCoreContext } from "../.test-dist/rules-core-context.js";
-import { projectGuidedStartingEquipment } from "../.test-dist/ui/guided-equipment.js";
+import { projectGuidedStartingEquipment, projectNativeStartingEquipment } from "../.test-dist/ui/guided-equipment.js";
 
 const source = await readFile(new URL("../src/ui/guided-equipment.ts", import.meta.url), "utf8");
 const css = await readFile(new URL("../src/styles/guided-equipment.css", import.meta.url), "utf8");
@@ -159,4 +159,60 @@ test("guided Equipment styling uses selectable bundle cards and a visibly disabl
     assert.match(css, /\.dd-guided-builder__nav-button:disabled/);
     assert.match(css, /cursor:\s*not-allowed/);
     assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b|rgba?\s*\(|hsla?\s*\(/i);
+});
+
+test("native package choices stay selectable after a saved selection", () => {
+    const choiceKey = "starting-equipment.00000000-0000-0000-0000-000000000001";
+    const preview = {
+        contractVersion: 1, rulesetId: "first-party-001",
+        fingerprint: "a".repeat(64), status: "resolved",
+        grants: [
+            { grantKey: "native.grant.one", kind: "item", targetKey: "item.demo.knife",
+                displayName: "Demo Knife", quantity: 2 },
+            { grantKey: "native.grant.two", kind: "currency", targetKey: "gp",
+                displayName: "Gold Pieces", quantity: 30 }
+        ],
+        choices: [{ choiceKey, options: [
+            { id: "kit", name: "Adventurer Kit" },
+            { id: "gold", name: "Starting Gold" }
+        ] }],
+        issues: []
+    };
+    const stored = [{
+        id: "00000000-0000-0000-0000-000000000099",
+        kind: "choice", key: choiceKey, textValue: "kit"
+    }];
+    const projected = projectNativeStartingEquipment(preview, stored);
+    assert.equal(projected.choices.length, 1);
+    assert.equal(projected.choices[0].state, "resolved");
+    assert.equal(projected.choices[0].selectedValue, "kit");
+    assert.equal(projected.choices[0].options.length, 2);
+    assert.equal(projected.grants.length, 2);
+    assert.deepEqual(projected.grants[0], {
+        conceptKey: "item.demo.knife", displayName: "Demo Knife",
+        quantity: 2, detail: undefined
+    });
+    assert.equal(projected.grants[1].detail, "Starting currency");
+
+    const pending = projectNativeStartingEquipment({
+        ...preview, status: "needs-choices", grants: []
+    }, []);
+    assert.equal(pending.choices[0].state, "choice-required");
+    assert.deepEqual(pending.grants, []);
+
+    const unavailable = projectNativeStartingEquipment({
+        ...preview, status: "unavailable", grants: [],
+        issues: [{ code: "native-item-unavailable",
+            path: "item.missing", detail: "Item identity is not available." }]
+    }, []);
+    assert.deepEqual(unavailable.grants, []);
+    assert.match(unavailable.conflicts[0].message, /Item identity/);
+});
+
+test("starting equipment is acquired once and subsequently belongs to ordinary inventory", async () => {
+    const source = await readFile(new URL("../src/ui/guided-equipment.ts", import.meta.url), "utf8");
+    const sheet = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    assert.match(source, /Add the resolved starting items to ordinary Inventory/);
+    assert.match(sheet, /input\.key === "starting-equipment\.received"/);
+    assert.match(sheet, /later rule changes do not replace them/);
 });

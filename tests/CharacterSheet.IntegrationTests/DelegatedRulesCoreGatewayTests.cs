@@ -61,59 +61,29 @@ public sealed class DelegatedRulesCoreGatewayTests
     }
 
     [Fact]
-    public async Task UsesStableConceptResolutionAndServerIssuedDelegationWithoutForwardingToolHeaders()
+    public async Task RetiredRulesContractsDoNotDispatchAnyRequests()
     {
         var handler = new RecordingHandler(request =>
-        {
-            var path = Uri.UnescapeDataString(request.RequestUri!.AbsolutePath);
-            if (path.EndsWith("/api/rules/feat:alert", StringComparison.Ordinal))
-            {
-                return Ok(Rule("feat:alert", "feat", "Alert"));
-            }
-
-            if (path.EndsWith("/api/rules/position.acquisitions-documancer", StringComparison.Ordinal))
-            {
-                return Ok(Rule(
-                    "position.acquisitions-documancer",
-                    "charoption",
-                    "Documancer"));
-            }
-
-            if (path.EndsWith("/api/rules/missing:rule", StringComparison.Ordinal))
-            {
-                return new HttpResponseMessage(HttpStatusCode.NotFound);
-            }
-
-            throw new InvalidOperationException($"Unexpected delegated request: {request.Method} {path}");
-        });
-        var httpContext = await AuthenticatedContextAsync(withDelegation: true);
+            throw new InvalidOperationException(
+                "Retired Rules Core operation unexpectedly requested " + request.RequestUri));
+        var context = await AuthenticatedContextAsync(withDelegation: true);
         var gateway = new DelegatedRulesCoreGateway(
             new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
-            new HttpContextAccessor { HttpContext = httpContext },
+            new HttpContextAccessor { HttpContext = context },
             NullLogger<DelegatedRulesCoreGateway>.Instance);
 
-        var resolved = await gateway.ResolveGlobalRulesAsync(
-            ["feat:alert", "position.acquisitions-documancer", "missing:rule"]);
-        Assert.Equal(2, resolved.Count);
-        Assert.Equal("feat", resolved["feat:alert"].EntityType);
-        Assert.Equal("charoption", resolved["position.acquisitions-documancer"].EntityType);
-        Assert.False(resolved.ContainsKey("missing:rule"));
-        Assert.Equal(3, handler.Requests.Count);
-        Assert.All(handler.Requests, request =>
-        {
-            Assert.Equal(
-                new AuthenticationHeaderValue("Bearer", "ddtd_v1_test-capability"),
-                request.Authorization);
-            Assert.False(request.HasToolTicket);
-            Assert.False(request.HasToolIntrospectionPath);
-            Assert.False(request.HasDelegationHeader);
-            Assert.True(
-                request.Uri.AbsolutePath.StartsWith(
-                    "/tool-host/character-sheet/api/delegate/rules-core/upstream/api/",
-                    StringComparison.Ordinal));
-        });
-        Assert.DoesNotContain(handler.Requests, request =>
-            request.Uri.Query.Contains("entityType=", StringComparison.Ordinal));
+        var resolved = await gateway.ResolveGlobalRulesAsync(["species.demo", "subspecies.demo"]);
+        Assert.Empty(resolved);
+        await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+            gateway.ResolveGlobalCharacterMechanicsAsync(
+                new RulesCoreCharacterRulesProjectionRequest()));
+        await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+            gateway.ResolveGlobalCharacterRecoveryAsync(
+                "short-rest", new RulesCoreCharacterRecoveryResolutionRequest()));
+        await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+            gateway.ProjectGlobalCharacterSupportAsync(
+                new RulesCoreCharacterSupportProjectionRequest()));
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]
@@ -159,7 +129,10 @@ public sealed class DelegatedRulesCoreGatewayTests
     {
         var handler = new RecordingHandler(_ =>
         {
-            var response = Ok(Rule("feat:alert", "feat", "Alert"));
+            var response = Ok(new {
+                contractVersion = 1, rulesetId = "first-party-001",
+                fingerprint = new string('a', 64)
+            });
             response.Headers.TryAddWithoutValidation(
                 CharacterSheetServerTiming.HeaderName,
                 "rules-core-auth;dur=1.2, platform-site;dur=9.9, rules-core;dur=2.4");
@@ -171,8 +144,8 @@ public sealed class DelegatedRulesCoreGatewayTests
             new HttpContextAccessor { HttpContext = httpContext },
             NullLogger<DelegatedRulesCoreGateway>.Instance);
 
-        var resolved = await gateway.ResolveGlobalRulesAsync(["feat:alert"]);
-        Assert.Single(resolved);
+        var metadata = await gateway.GetNativeRulesetAsync(CancellationToken.None);
+        Assert.Equal("first-party-001", metadata["rulesetId"]!.GetValue<string>());
 
         var timing = string.Join(
             ", ",
@@ -180,7 +153,7 @@ public sealed class DelegatedRulesCoreGatewayTests
 
         Assert.Contains("character-sheet-auth;dur=", timing, StringComparison.Ordinal);
         Assert.Contains(
-            "character-sheet-rules-core;desc=\"rule-resolution:ok\";dur=",
+            "character-sheet-rules-core;desc=\"native-ruleset:ok\";dur=",
             timing,
             StringComparison.Ordinal);
         Assert.Contains("rules-core-auth;dur=1.2", timing, StringComparison.Ordinal);
@@ -200,14 +173,13 @@ public sealed class DelegatedRulesCoreGatewayTests
             NullLogger<DelegatedRulesCoreGateway>.Instance);
 
         await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
-            gateway.ResolveGlobalCharacterMechanicsAsync(
-                new RulesCoreCharacterRulesProjectionRequest()));
+            gateway.GetNativeRulesetAsync(CancellationToken.None));
 
         var timing = string.Join(
             ", ",
             httpContext.Response.Headers[CharacterSheetServerTiming.HeaderName].ToArray());
         Assert.Contains(
-            "character-sheet-rules-core;desc=\"character-mechanics:http-403\";dur=",
+            "character-sheet-rules-core;desc=\"native-ruleset:http-403\";dur=",
             timing,
             StringComparison.Ordinal);
     }
@@ -224,15 +196,14 @@ public sealed class DelegatedRulesCoreGatewayTests
             NullLogger<DelegatedRulesCoreGateway>.Instance);
 
         await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
-            gateway.ResolveGlobalCharacterMechanicsAsync(
-                new RulesCoreCharacterRulesProjectionRequest()));
+            gateway.GetNativeRulesetAsync(CancellationToken.None));
 
         Assert.Empty(handler.Requests);
         var timing = string.Join(
             ", ",
             httpContext.Response.Headers[CharacterSheetServerTiming.HeaderName].ToArray());
         Assert.Contains(
-            "character-sheet-rules-core;desc=\"character-mechanics:delegation-unavailable\";dur=",
+            "character-sheet-rules-core;desc=\"native-ruleset:delegation-unavailable\";dur=",
             timing,
             StringComparison.Ordinal);
     }

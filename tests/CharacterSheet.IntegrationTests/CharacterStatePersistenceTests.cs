@@ -398,6 +398,90 @@ public sealed class CharacterStatePersistenceTests
     }
 
     [Fact]
+    public async Task NativeResourceConditionalUpdateRejectsSecondConcurrentSpend()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await using (var setup = new CharacterSheetDbContext(options))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(characterId);
+            await new PostgresCharacterStateStore(setup).SetRulesInputAsync(
+                characterId, CharacterRulesInputKind.Resource,
+                "resource.pact-magic", 2, null, null, now);
+        }
+
+        var update = new CharacterIntegerStateMutation(
+            CharacterIntegerStateMutationTarget.Resource,
+            CharacterIntegerStateMutationOperation.Set, 1,
+            "resource.pact-magic", ExpectedValue: 2);
+        async Task<bool> SpendAsync()
+        {
+            await using var context = new CharacterSheetDbContext(options);
+            try
+            {
+                var state = await new PostgresCharacterStateStore(context)
+                    .ApplyIntegerStateMutationsAsync(characterId,
+                        [update], now.AddSeconds(1));
+                Assert.Equal(1, Assert.Single(state!.RulesInputs, input =>
+                    input.Kind == CharacterRulesInputKind.Resource &&
+                    input.Key == "resource.pact-magic").IntegerValue);
+                return true;
+            }
+            catch (InvalidOperationException exception) when (
+                exception.Message.Contains("changed since", StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        var results = await Task.WhenAll(SpendAsync(), SpendAsync());
+        Assert.Equal(1, results.Count(value => value));
+        Assert.Equal(1, results.Count(value => !value));
+
+        await using var verify = new CharacterSheetDbContext(options);
+        var saved = await new PostgresCharacterStateStore(verify).GetAsync(characterId);
+        Assert.Equal(1, Assert.Single(saved!.RulesInputs, input =>
+            input.Kind == CharacterRulesInputKind.Resource &&
+            input.Key == "resource.pact-magic").IntegerValue);
+    }
+
+    [Fact]
+    public async Task NativeResourceConditionalUpdatePreservesOtherStateOnConflict()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var options = database.CreateOptions();
+        var characterId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await using (var setup = new CharacterSheetDbContext(options))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(characterId);
+            var state = new PostgresCharacterStateStore(setup);
+            await state.SetCurrentHitPointsAsync(characterId, 17, now);
+            await state.SetRulesInputAsync(characterId, CharacterRulesInputKind.Resource,
+                "resource.sorcery-points", 3, null, null, now);
+        }
+
+        await using var context = new CharacterSheetDbContext(options);
+        var store = new PostgresCharacterStateStore(context);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.ApplyIntegerStateMutationsAsync(characterId,
+                [new CharacterIntegerStateMutation(
+                    CharacterIntegerStateMutationTarget.Resource,
+                    CharacterIntegerStateMutationOperation.Set, 1,
+                    "resource.sorcery-points", ExpectedValue: 2)],
+                now.AddSeconds(1)));
+        var after = await store.GetAsync(characterId);
+        Assert.NotNull(after);
+        Assert.Equal(17, after.CurrentHitPoints);
+        Assert.Equal(3, Assert.Single(after.RulesInputs, value =>
+            value.Kind == CharacterRulesInputKind.Resource &&
+            value.Key == "resource.sorcery-points").IntegerValue);
+    }
+
+    [Fact]
     public async Task CharacterDeletionCascadesRoutineStateWhileCampaignDeletionDoesNot()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();

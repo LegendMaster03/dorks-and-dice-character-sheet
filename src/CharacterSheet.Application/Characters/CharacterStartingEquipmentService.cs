@@ -1,198 +1,181 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+public sealed record NativeStartingEquipmentPreviewResult(
+    CharacterStateAccessStatus Status, JsonNode? Projection = null);
+
 /// <summary>
 /// Materializes resolved Rules Core starting-equipment grants into ordinary Character-owned
 /// inventory and currency state. This is an acquisition boundary, not a live mirror: materialized
-/// state remains ordinary mutable Character state. Stable Core grant provenance makes explicit
-/// re-application idempotent and isolates generated state from identical manual acquisitions.
+/// state remains ordinary mutable Character state. A server-owned receipt makes
+/// repeat requests idempotent even when the active ruleset is later revised.
 /// </summary>
 public sealed class CharacterStartingEquipmentService(
     CharacterBuildService buildService,
     CharacterStateService stateService,
-    IRulesCoreGateway rulesCoreGateway,
+    INativeRulesCoreGateway nativeCore,
     ICharacterStartingEquipmentInventoryStore inventoryStore,
     TimeProvider timeProvider)
 {
-    private const string ChoiceKind = "starting-equipment";
-    private const string MechanicKind = "starting-equipment";
-    private const string ItemGrantKind = "starting-equipment-item";
-    private const string CustomGrantKind = "starting-equipment-custom";
-    private const string CurrencyGrantKind = "starting-equipment-currency";
-
     public async Task<CharacterStateResult> MaterializeInventoryAsync(
         Guid characterId,
         CancellationToken cancellationToken = default)
     {
-        var buildResult = await buildService.GetAsync(characterId, cancellationToken);
-        if (buildResult.Status != CharacterBuildAccessStatus.Ready || buildResult.View is null)
-        {
-            return new CharacterStateResult(MapBuildStatus(buildResult.Status));
-        }
-
-        var stateResult = await stateService.GetAsync(characterId, cancellationToken);
-        if (stateResult.Status != CharacterStateAccessStatus.Ready || stateResult.View is null)
-        {
-            return stateResult;
-        }
-        if (stateResult.View.ReadOnly || buildResult.View.ReadOnly)
-        {
+        // Starting equipment is an initial acquisition, not a live inventory
+        // projection. A repeated call must not require the original ruleset
+        // definition to remain available or unchanged after the first award.
+        var snapshot = await stateService.GetAsync(characterId, cancellationToken);
+        if (snapshot.Status != CharacterStateAccessStatus.Ready ||
+            snapshot.View is null)
+            return snapshot;
+        if (snapshot.View.ReadOnly)
             return new CharacterStateResult(CharacterStateAccessStatus.ArchivedReadOnly);
-        }
-
-        RulesCoreCharacterRulesProjectionView projection;
+        if (snapshot.View.RulesInputs?.Any(input =>
+            input.Kind == CharacterRulesInputKinds.BooleanFact &&
+            input.Key == CharacterStartingEquipmentReceipt.Key &&
+            input.BooleanValue == true) == true)
+            return snapshot;
+        var preview = await PreviewAsync(characterId, cancellationToken);
+        if (preview.Status != CharacterStateAccessStatus.Ready ||
+            preview.Projection is null)
+            return new CharacterStateResult(preview.Status);
+        var projection = preview.Projection;
+        if (projection["status"]?.GetValue<string>() != "resolved" ||
+            projection["grants"] is not JsonArray grants ||
+            projection["issues"] is not JsonArray issues || issues.Count != 0)
+            return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
         try
         {
-            projection = await rulesCoreGateway.ResolveGlobalCharacterMechanicsAsync(
-                CharacterRulesProjectionRequestBuilder.Build(
-                    buildResult.View,
-                    stateResult.View),
-                cancellationToken);
+            var items = new List<CharacterStartingEquipmentInventoryItem>();
+            var currencies = new List<CharacterStartingEquipmentCurrencyGrant>();
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var grant in grants)
+            {
+                if (grant is not JsonObject)
+                    return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
+                var key = grant["grantKey"]?.GetValue<string>();
+                var kind = grant["kind"]?.GetValue<string>();
+                var target = grant["targetKey"]?.GetValue<string>();
+                var name = grant["displayName"]?.GetValue<string>();
+                var quantity = grant["quantity"]?.GetValue<int>();
+                if (string.IsNullOrWhiteSpace(key) ||
+                    string.IsNullOrWhiteSpace(target) ||
+                    quantity is not > 0 || !keys.Add(key))
+                    return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
+                switch (kind)
+                {
+                    case "item" when target.StartsWith("item.", StringComparison.Ordinal):
+                        items.Add(new(key, target, null, quantity.Value));
+                        break;
+                    case "custom" when !string.IsNullOrWhiteSpace(name):
+                        items.Add(new(key, null, name, quantity.Value));
+                        break;
+                    case "currency":
+                        currencies.Add(new(key, target, quantity.Value));
+                        break;
+                    default:
+                        return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
+                }
+            }
+            var root = await inventoryStore.ApplyOnceAsync(
+                characterId, items, currencies, timeProvider.GetUtcNow(), cancellationToken);
+            return root is null
+                ? new CharacterStateResult(CharacterStateAccessStatus.SheetNotInitialized)
+                : await stateService.GetAsync(characterId, cancellationToken);
         }
         catch (RulesCoreGatewayException)
         {
             return new CharacterStateResult(CharacterStateAccessStatus.ProjectionUnavailable);
         }
-
-        var unresolvedChoices = projection.Choices
-            .Where(value => string.Equals(
-                value.Kind,
-                ChoiceKind,
-                StringComparison.OrdinalIgnoreCase))
-            .Where(value => !string.Equals(
-                value.State,
-                "resolved",
-                StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (unresolvedChoices.Length > 0)
-        {
-            throw new InvalidOperationException(
-                unresolvedChoices.Length == 1
-                    ? "Resolve the remaining starting-equipment choice before applying starting equipment."
-                    : $"Resolve the {unresolvedChoices.Length} remaining starting-equipment choices before applying starting equipment.");
-        }
-
-        var unresolvedRolls = projection.Mechanics
-            .Where(value => string.Equals(
-                value.Kind,
-                MechanicKind,
-                StringComparison.OrdinalIgnoreCase))
-            .SelectMany(value => value.RequiredRolls)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (unresolvedRolls.Length > 0)
-        {
-            throw new InvalidOperationException(
-                unresolvedRolls.Length == 1
-                    ? "Resolve the remaining starting-equipment roll before applying starting equipment."
-                    : $"Resolve the {unresolvedRolls.Length} remaining starting-equipment rolls before applying starting equipment.");
-        }
-
-        var equipmentConflicts = projection.Conflicts
-            .Where(value => value.ConflictKey.Contains(
-                "starting-equipment",
-                StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (equipmentConflicts.Length > 0)
-        {
-            throw new InvalidOperationException(
-                equipmentConflicts.Length == 1
-                    ? "Resolve the starting-equipment rules conflict before applying starting equipment."
-                    : $"Resolve the {equipmentConflicts.Length} starting-equipment rules conflicts before applying starting equipment.");
-        }
-
-        var desiredItems = ProjectInventoryItems(projection.Grants);
-        var desiredCurrencies = ProjectCurrencyGrants(projection.Grants);
-        var root = await inventoryStore.SynchronizeAsync(
-            characterId,
-            desiredItems,
-            desiredCurrencies,
-            timeProvider.GetUtcNow(),
-            cancellationToken);
-        if (root is null)
-        {
-            return new CharacterStateResult(CharacterStateAccessStatus.SheetNotInitialized);
-        }
-
-        return await stateService.GetAsync(characterId, cancellationToken);
     }
 
-    internal static IReadOnlyList<CharacterStartingEquipmentInventoryItem> ProjectInventoryItems(
-        IReadOnlyList<RulesCoreCharacterGrantView> grants)
+    /// <summary>
+    /// Returns non-mutating, native-only package choices and grant status.
+    /// Unavailable content is a valid preview result but never an award.
+    /// </summary>
+    public async Task<NativeStartingEquipmentPreviewResult> PreviewAsync(
+        Guid characterId, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(grants);
+        var buildResult = await buildService.GetAsync(characterId, cancellationToken);
+        if (buildResult.Status != CharacterBuildAccessStatus.Ready ||
+            buildResult.View is null)
+            return new(MapBuildStatus(buildResult.Status));
 
-        return grants
-            .Where(value =>
-                string.Equals(value.Kind, ItemGrantKind, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value.Kind, CustomGrantKind, StringComparison.OrdinalIgnoreCase))
-            .GroupBy(value => new
-            {
-                SourceGrantKey = GrantFamilyKey(value.GrantKey),
-                Kind = value.Kind.ToLowerInvariant(),
-                TargetKey = value.TargetKey,
-                DisplayName = value.DisplayName
-            })
-            .Select(group =>
-            {
-                var first = group.First();
-                return string.Equals(first.Kind, ItemGrantKind, StringComparison.OrdinalIgnoreCase)
-                    ? new CharacterStartingEquipmentInventoryItem(
-                        group.Key.SourceGrantKey,
-                        first.TargetKey,
-                        CustomName: null,
-                        group.Count())
-                    : new CharacterStartingEquipmentInventoryItem(
-                        group.Key.SourceGrantKey,
-                        RuleConceptKey: null,
-                        first.DisplayName,
-                        group.Count());
-            })
-            .OrderBy(value => value.SourceGrantKey, StringComparer.Ordinal)
-            .ToArray();
-    }
+        var stateResult = await stateService.GetAsync(characterId, cancellationToken);
+        if (stateResult.Status != CharacterStateAccessStatus.Ready ||
+            stateResult.View is null)
+            return new(stateResult.Status);
 
-    internal static IReadOnlyList<CharacterStartingEquipmentCurrencyGrant> ProjectCurrencyGrants(
-        IReadOnlyList<RulesCoreCharacterGrantView> grants)
-    {
-        ArgumentNullException.ThrowIfNull(grants);
-
-        return grants
-            .Where(value => string.Equals(
-                value.Kind,
-                CurrencyGrantKind,
-                StringComparison.OrdinalIgnoreCase))
-            .GroupBy(value => new
-            {
-                SourceGrantKey = GrantFamilyKey(value.GrantKey),
-                CurrencyKey = value.TargetKey
-            })
-            .Select(group => new CharacterStartingEquipmentCurrencyGrant(
-                group.Key.SourceGrantKey,
-                group.Key.CurrencyKey,
-                group.LongCount()))
-            .OrderBy(value => value.SourceGrantKey, StringComparer.Ordinal)
-            .ToArray();
-    }
-
-    private static string GrantFamilyKey(string grantKey)
-    {
-        if (string.IsNullOrWhiteSpace(grantKey))
+        try
         {
-            throw new ArgumentException("Rules Core starting-equipment grant key can not be blank.");
-        }
+            var metadata = await nativeCore.GetNativeRulesetAsync(cancellationToken);
+            if (metadata["contractVersion"]?.GetValue<int>() != 1 ||
+                metadata["capabilities"]?["startingEquipmentResolution"]?.GetValue<string>()
+                    != "authored-grants-only")
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
+            var rulesetId = metadata["rulesetId"]?.GetValue<string>();
+            var fingerprint = metadata["fingerprint"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(rulesetId) ||
+                string.IsNullOrWhiteSpace(fingerprint))
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
 
-        var normalized = grantKey.Trim();
-        var finalSeparator = normalized.LastIndexOf('.');
-        if (finalSeparator > 0
-            && int.TryParse(normalized[(finalSeparator + 1)..], out _))
-        {
-            return normalized[..finalSeparator];
+            // Feats, subclasses, prestige tracks, and future advancement kinds
+            // coexist in a Character history; only Class occurrences supply
+            // the initial equipment selection and must be sent to Core.
+            var classHistory = buildResult.View.ProgressionEntries
+                .Where(entry => entry.Kind == CharacterBuildAdvancementKinds.Class)
+                .OrderBy(entry => entry.Ordinal ?? int.MaxValue)
+                .ThenBy(entry => entry.Id)
+                .ToArray();
+            if (classHistory.Length == 0 || classHistory.Any(entry =>
+                entry.Kind != CharacterBuildAdvancementKinds.Class ||
+                entry.Level is not > 0 ||
+                !entry.RuleConceptKey.StartsWith("class.", StringComparison.Ordinal)))
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
+
+            // A class can be changed while its rules remain under development.
+            // Old package selections for replaced class occurrences are not
+            // selections for the current initial class and cannot block it.
+            var activeChoiceKey = "starting-equipment." + classHistory[0].Id.ToString("D");
+            var selected = (stateResult.View.RulesInputs ?? [])
+                .Where(entry => entry.Kind == CharacterRulesInputKinds.Choice &&
+                    entry.Key == activeChoiceKey &&
+                    entry.TextValue is not null)
+                .ToDictionary(entry => entry.Key, entry => entry.TextValue!,
+                    StringComparer.Ordinal);
+            var request = JsonSerializer.SerializeToElement(new
+            {
+                rulesetId, fingerprint,
+                advancements = classHistory.Select(entry => new
+                {
+                    classId = entry.RuleConceptKey,
+                    level = entry.Level!.Value,
+                    occurrenceId = entry.Id.ToString("D")
+                }).ToArray(),
+                selectedPackages = selected
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var projection = await nativeCore.ResolveNativeStartingEquipmentAsync(
+                request, cancellationToken);
+            if (projection["contractVersion"]?.GetValue<int>() != 1 ||
+                projection["rulesetId"]?.GetValue<string>() != rulesetId ||
+                projection["fingerprint"]?.GetValue<string>() != fingerprint ||
+                projection["status"]?.GetValue<string>() is not
+                    ("resolved" or "needs-choices" or "unavailable") ||
+                projection["grants"] is not JsonArray ||
+                projection["choices"] is not JsonArray ||
+                projection["issues"] is not JsonArray)
+                return new(CharacterStateAccessStatus.ProjectionUnavailable);
+
+            return new(CharacterStateAccessStatus.Ready, projection);
         }
-        return normalized;
+        catch (RulesCoreGatewayException)
+        {
+            return new(CharacterStateAccessStatus.ProjectionUnavailable);
+        }
     }
 
     private static CharacterStateAccessStatus MapBuildStatus(

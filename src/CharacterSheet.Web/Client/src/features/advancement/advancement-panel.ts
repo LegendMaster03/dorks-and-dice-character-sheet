@@ -476,19 +476,14 @@ function renderCandidateChooser(
         for (const rule of chooser.results) {
             const item = createElement("li", "dd-character-advancement__candidate");
             const text = createElement("div", "dd-character-advancement__candidate-copy");
-            text.append(createElement("strong", "dd-character-advancement__candidate-name", rule.displayName));
-            const metadata = [rule.editionDisplayName, rule.sourceCode, rule.packageDisplayName]
-                .map(value => value.trim())
-                .filter(value => value.length > 0);
-            if (metadata.length > 0) {
-                text.append(createElement("span", "dd-rule-result__meta", metadata.join(" • ")));
-            }
+            text.append(createElement("strong", "dd-character-advancement__candidate-name", rule.name));
+            text.append(createElement("span", "dd-rule-result__meta", rule.id));
             item.append(
                 text,
                 createButton(
                     chooser.target === "prestigeClass" ? "Check Requirements" : "Choose",
                     "dd-button dd-button--secondary",
-                    () => handlers.selectCandidate(chooser.target, rule.conceptKey)));
+                    () => handlers.selectCandidate(chooser.target, rule.id)));
             list.append(item);
         }
         container.append(list);

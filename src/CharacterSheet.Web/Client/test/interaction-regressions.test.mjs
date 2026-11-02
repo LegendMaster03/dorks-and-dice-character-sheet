@@ -136,11 +136,13 @@ test("Harvesting draft edits do not replace the action target before Calculate H
 
     await workflow.evaluate();
 
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].assessmentResult, 20);
-    assert.equal(requests[0].carvingResult, 20);
-    assert.equal(requests[0].table.manualEdits.upsertComponents[0].quantity, 1);
-    assert.ok(application.getState().harvestingCrafting.outcome);
+    // Native harvesting evaluation is not available. Drafts must survive, but
+    // a retired endpoint must not be called or produce an invented award.
+    assert.equal(requests.length, 0);
+    const result = application.getState().harvestingCrafting;
+    assert.equal(result.outcome, null);
+    assert.match(result.message ?? "", /native harvesting contract/);
+    assert.equal(result.tableRequest.manualEdits.upsertComponents[0].quantity, 1);
     assert.ok(harness.renderCount() >= 2);
 });
 
@@ -278,7 +280,7 @@ test("Guided Abilities remains incomplete while Rules Core requires Ability Scor
     assert.equal(resolvedAbilities.status, "resolved");
 
     const sheet = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
-    assert.match(sheet, /getGuidedBuilderSectionStates\(builder, mechanics\)/);
+    assert.match(sheet, /getGuidedBuilderSectionStates\(\s*builder,\s*mechanics,\s*nativeEquipment,\s*equipmentReceived\)/);
     assert.match(sheet, /heading:\s*"Required Ability Choices"/);
     assert.match(sheet, /choiceKinds:\s*\["ability-score", "ability-score-set"\]/);
 });
@@ -311,7 +313,9 @@ test("Prestige Class advancement remains inspectable when eligibility is unresol
 
     assert.match(workflow, /"class" \| "prestigeClass" \| "subclass"/);
     assert.match(workflow, /prestigeClassConceptKey/);
-    assert.match(workflow, /searchResolvedRules\(environment, entityType, normalizedQuery\)/);
+    assert.match(workflow, /searchNativeOptions/);
+    assert.doesNotMatch(workflow, /searchResolvedRules\(environment, entityType, normalizedQuery\)/);
+    assert.match(workflow, /Native eligibility for this advancement category is not implemented yet/);
     assert.doesNotMatch(workflow, /eligible[^\n]*filter/i);
 
     assert.match(panel, /Eligibility unresolved/);

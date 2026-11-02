@@ -16,7 +16,6 @@ public sealed class DelegatedRulesCoreGateway(
     : IRulesCoreAdvancementGateway, INativeRulesCoreGateway
 {
     private const string TargetSlug = "rules-core";
-    private const int MaximumRuleResolutionCalls = 28;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public Task<JsonNode> GetNativeRulesetAsync(CancellationToken cancellationToken = default) =>
@@ -45,205 +44,84 @@ public sealed class DelegatedRulesCoreGateway(
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/project",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
-    public async Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
-        IReadOnlyCollection<string> conceptKeys,
-        CancellationToken cancellationToken = default)
+    public Task<JsonNode> ResolveNativeManufacturingAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/crafting/manufacturing/resolve",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
+    public Task<JsonNode> ResolveNativeStartingEquipmentAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/starting-equipment",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
+    public Task<JsonNode> ResolveNativeResourceAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/resources/resolve",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
+    // These contract members are retained for callers awaiting a native
+    // equivalent. Do not send requests to the removed application API.
+    public Task<IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView>> ResolveGlobalRulesAsync(
+        IReadOnlyCollection<string> conceptKeys, CancellationToken cancellationToken = default)
     {
-        var requested = conceptKeys
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(value => value, StringComparer.Ordinal)
-            .ToArray();
-        var resolved = new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal);
-
-        foreach (var conceptKey in requested.Take(MaximumRuleResolutionCalls))
-        {
-            var rule = await SendOptionalRuleJsonAsync<RulesCoreResolvedRuleSummaryView>(
-                HttpMethod.Get,
-                $"/api/rules/{Uri.EscapeDataString(conceptKey)}",
-                cancellationToken);
-            if (rule is null)
-            {
-                continue;
-            }
-
-            if (!string.Equals(rule.ConceptKey, conceptKey, StringComparison.Ordinal))
-            {
-                logger.LogWarning(
-                    "Rules Core resolved concept {RequestedConceptKey} as a different stable concept key; the advancement reference remains unavailable.",
-                    conceptKey);
-                continue;
-            }
-
-            resolved[conceptKey] = rule;
-        }
-
-        if (requested.Length > MaximumRuleResolutionCalls)
-        {
-            logger.LogWarning(
-                "Rules Core advancement resolution reached the delegated request budget; additional references remain unavailable.");
-        }
-
-        return resolved;
+        ArgumentNullException.ThrowIfNull(conceptKeys);
+        // A missing native Species/Subspecies relationship is not proof of
+        // compatibility. Return no identities, so dependent choices fail closed.
+        IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView> empty =
+            new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal);
+        return Task.FromResult(empty);
     }
 
     public Task<RulesCoreCharacterSupportProjectionView> ProjectGlobalCharacterSupportAsync(
-        RulesCoreCharacterSupportProjectionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCharacterSupportProjectionView>(
-            HttpMethod.Post,
-            "/api/rules/mechanics/support",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
+        RulesCoreCharacterSupportProjectionRequest request, CancellationToken cancellationToken = default) =>
+        UnsupportedAsync<RulesCoreCharacterSupportProjectionView>("recovery procedure catalog");
 
     public Task<RulesCoreCharacterRecoveryResolutionView> ResolveGlobalCharacterRecoveryAsync(
-        string procedureKey,
-        RulesCoreCharacterRecoveryResolutionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(procedureKey))
-        {
-            throw new ArgumentException("Recovery procedure key can not be blank.", nameof(procedureKey));
-        }
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCharacterRecoveryResolutionView>(
-            HttpMethod.Post,
-            $"/api/rules/mechanics/recovery/{Uri.EscapeDataString(procedureKey.Trim())}/resolve",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
+        string procedureKey, RulesCoreCharacterRecoveryResolutionRequest request,
+        CancellationToken cancellationToken = default) =>
+        UnsupportedAsync<RulesCoreCharacterRecoveryResolutionView>("recovery procedures");
 
     public Task<RulesCoreCharacterRulesProjectionView> ResolveGlobalCharacterMechanicsAsync(
-        RulesCoreCharacterRulesProjectionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCharacterRulesProjectionView>(
-            HttpMethod.Post,
-            "/api/rules/character-mechanics/resolve",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
+        RulesCoreCharacterRulesProjectionRequest request, CancellationToken cancellationToken = default) =>
+        UnsupportedAsync<RulesCoreCharacterRulesProjectionView>("retired character mechanics projection");
 
     public Task<RulesCoreCharacterRulesProjectionView> ResolveCampaignCharacterMechanicsAsync(
-        Guid campaignId,
-        RulesCoreCharacterRulesProjectionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (campaignId == Guid.Empty)
-        {
-            throw new ArgumentException("Campaign ID can not be empty.", nameof(campaignId));
-        }
-
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCharacterRulesProjectionView>(
-            HttpMethod.Post,
-            $"/api/campaigns/{campaignId:D}/rules/character-mechanics/resolve",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
+        Guid campaignId, RulesCoreCharacterRulesProjectionRequest request,
+        CancellationToken cancellationToken = default) =>
+        UnsupportedAsync<RulesCoreCharacterRulesProjectionView>("campaign mechanics projection");
 
     public Task<RulesCoreCharacterAdvancementEligibilityView> ResolveGlobalCharacterAdvancementEligibilityAsync(
         RulesCoreCharacterAdvancementEligibilityRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCharacterAdvancementEligibilityView>(
-            HttpMethod.Post,
-            "/api/rules/character-advancement/eligibility",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
+        CancellationToken cancellationToken = default) =>
+        UnsupportedAsync<RulesCoreCharacterAdvancementEligibilityView>("retired advancement eligibility");
 
     public Task<RulesCoreCharacterAdvancementEligibilityView> ResolveCampaignCharacterAdvancementEligibilityAsync(
-        Guid campaignId,
-        RulesCoreCharacterAdvancementEligibilityRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (campaignId == Guid.Empty)
-        {
-            throw new ArgumentException("Campaign ID can not be empty.", nameof(campaignId));
-        }
-
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCharacterAdvancementEligibilityView>(
-            HttpMethod.Post,
-            $"/api/campaigns/{campaignId:D}/rules/character-advancement/eligibility",
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
+        Guid campaignId, RulesCoreCharacterAdvancementEligibilityRequest request,
+        CancellationToken cancellationToken = default) =>
+        UnsupportedAsync<RulesCoreCharacterAdvancementEligibilityView>("campaign advancement eligibility");
 
     public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalManufacturingAsync(
         RulesCoreManufacturingResolutionRequest request,
         CancellationToken cancellationToken = default) =>
-        SendCraftingAsync(
-            "/api/rules/crafting/manufacturing/resolve",
-            request,
-            cancellationToken);
+        UnsupportedAsync<RulesCoreCraftingCheckResolutionView>("manufacturing");
 
     public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignManufacturingAsync(
-        Guid campaignId,
-        RulesCoreManufacturingResolutionRequest request,
+        Guid campaignId, RulesCoreManufacturingResolutionRequest request,
         CancellationToken cancellationToken = default) =>
-        SendCampaignCraftingAsync(
-            campaignId,
-            "manufacturing",
-            request,
-            cancellationToken);
+        UnsupportedAsync<RulesCoreCraftingCheckResolutionView>("campaign manufacturing");
 
     public Task<RulesCoreCraftingCheckResolutionView> ResolveGlobalEnchantingAsync(
-        RulesCoreEnchantingResolutionRequest request,
-        CancellationToken cancellationToken = default) =>
-        SendCraftingAsync(
-            "/api/rules/crafting/enchanting/resolve",
-            request,
-            cancellationToken);
+        RulesCoreEnchantingResolutionRequest request, CancellationToken cancellationToken = default) =>
+        UnsupportedAsync<RulesCoreCraftingCheckResolutionView>("enchanting");
 
     public Task<RulesCoreCraftingCheckResolutionView> ResolveCampaignEnchantingAsync(
-        Guid campaignId,
-        RulesCoreEnchantingResolutionRequest request,
+        Guid campaignId, RulesCoreEnchantingResolutionRequest request,
         CancellationToken cancellationToken = default) =>
-        SendCampaignCraftingAsync(
-            campaignId,
-            "enchanting",
-            request,
-            cancellationToken);
+        UnsupportedAsync<RulesCoreCraftingCheckResolutionView>("campaign enchanting");
 
-    private Task<RulesCoreCraftingCheckResolutionView> SendCraftingAsync<TRequest>(
-        string path,
-        TRequest request,
-        CancellationToken cancellationToken)
-        where TRequest : class
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return SendJsonAsync<RulesCoreCraftingCheckResolutionView>(
-            HttpMethod.Post,
-            path,
-            JsonContent.Create(request, options: JsonOptions),
-            cancellationToken);
-    }
-
-    private Task<RulesCoreCraftingCheckResolutionView> SendCampaignCraftingAsync<TRequest>(
-        Guid campaignId,
-        string procedure,
-        TRequest request,
-        CancellationToken cancellationToken)
-        where TRequest : class
-    {
-        if (campaignId == Guid.Empty)
-        {
-            throw new ArgumentException("Campaign ID can not be empty.", nameof(campaignId));
-        }
-
-        return SendCraftingAsync(
-            $"/api/campaigns/{campaignId:D}/rules/crafting/{procedure}/resolve",
-            request,
-            cancellationToken);
-    }
+    private static Task<T> UnsupportedAsync<T>(string operation) =>
+        Task.FromException<T>(new RulesCoreGatewayException(
+            $"Rules Core has no native {operation} contract. The retired API is not a fallback."));
 
     private async Task<T> SendJsonAsync<T>(
         HttpMethod method,
@@ -256,28 +134,14 @@ public sealed class DelegatedRulesCoreGateway(
             method,
             targetPath,
             content,
-            allowUnavailableRule: false,
             cancellationToken);
         return value ?? throw new RulesCoreGatewayException("Rules Core returned an empty response.");
     }
-
-    private Task<T?> SendOptionalRuleJsonAsync<T>(
-        HttpMethod method,
-        string targetPath,
-        CancellationToken cancellationToken)
-        where T : class =>
-        SendJsonCoreAsync<T>(
-            method,
-            targetPath,
-            content: null,
-            allowUnavailableRule: true,
-            cancellationToken);
 
     private async Task<T?> SendJsonCoreAsync<T>(
         HttpMethod method,
         string targetPath,
         HttpContent? content,
-        bool allowUnavailableRule,
         CancellationToken cancellationToken)
         where T : class
     {
@@ -337,13 +201,6 @@ public sealed class DelegatedRulesCoreGateway(
             {
                 CharacterSheetServerTiming.AppendDownstreamRulesCoreMetrics(timingContext, response);
 
-                if (allowUnavailableRule
-                    && response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
-                {
-                    timingOutcome = $"unavailable-{(int)response.StatusCode}";
-                    return null;
-                }
-
                 if (!response.IsSuccessStatusCode)
                 {
                     timingOutcome = $"http-{(int)response.StatusCode}";
@@ -399,37 +256,19 @@ public sealed class DelegatedRulesCoreGateway(
 
     private static string TimingOperationFor(string targetPath)
     {
-        if (targetPath.Contains("/character-mechanics/resolve", StringComparison.Ordinal))
-        {
-            return "character-mechanics";
-        }
-
-        if (targetPath.Contains("/character-advancement/eligibility", StringComparison.Ordinal))
-        {
-            return "advancement-eligibility";
-        }
-
-        if (targetPath.Contains("/mechanics/support", StringComparison.Ordinal))
-        {
-            return "support";
-        }
-
-        if (targetPath.Contains("/mechanics/recovery/", StringComparison.Ordinal))
-        {
-            return "recovery";
-        }
-
-        if (targetPath.Contains("/rules/crafting/", StringComparison.Ordinal))
-        {
-            return "crafting";
-        }
-
-        if (targetPath.StartsWith("/api/rules/", StringComparison.Ordinal))
-        {
-            return "rule-resolution";
-        }
-
-        return "rules-core";
+        if (targetPath.EndsWith("/characters/project", StringComparison.Ordinal))
+            return "native-character-projection";
+        if (targetPath.EndsWith("/resources/resolve", StringComparison.Ordinal))
+            return "native-resource-resolution";
+        if (targetPath.EndsWith("/characters/starting-equipment", StringComparison.Ordinal))
+            return "native-starting-equipment";
+        if (targetPath.EndsWith("/crafting/manufacturing/resolve", StringComparison.Ordinal))
+            return "native-manufacturing";
+        if (targetPath.EndsWith("/advancements/eligibility", StringComparison.Ordinal))
+            return "native-advancement-eligibility";
+        if (targetPath.Contains("/catalog/options", StringComparison.Ordinal))
+            return "native-option-search";
+        return "native-ruleset";
     }
 
     private (string Capability, string DelegationPrefix) GetDelegation()

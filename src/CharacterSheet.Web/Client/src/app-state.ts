@@ -12,13 +12,13 @@ import type {
     CharacterStateResponse
 } from "./character-state-api.js";
 import type { RuleReferenceState } from "./builder-rules.js";
+import type { NativeOptionSummary } from "./rules-core-native-api.js";
 import type {
     HarvestingHelperInput,
     HarvestingOutcomeResponse,
     HarvestingResolvedTableResponse,
     HarvestingRulesCatalogResponse,
-    HarvestingTableResolutionInput,
-    ResolvedRuleCatalogItem
+    HarvestingTableResolutionInput
 } from "./rules-core-api.js";
 import type { CharacterSheetRoute } from "./routes.js";
 import type { GuidedBuilderSection, SheetSection } from "./ui/sheet-model.js";
@@ -53,7 +53,7 @@ export type RuleChooserState =
         target: CharacterBuilderChoice;
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -63,7 +63,7 @@ export type FeatChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -116,6 +116,7 @@ export type RoutineMutationKind =
     | "inventory-update"
     | "inventory-delete"
     | "rules-input-update"
+    | "native-resource-action"
     | "rules-input-delete"
     | "hit-point-gain-update"
     | "hit-point-gain-delete"
@@ -129,7 +130,7 @@ export type InventoryChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -139,7 +140,7 @@ export type SpellChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -149,7 +150,7 @@ export type ConditionChooserState =
         kind: "open";
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -187,10 +188,15 @@ export interface CharacterRoutineUiState {
 }
 
 export interface CharacterPresentationUiState {
+    equipmentPreviewStatus?: "loading" | "ready" | "error";
+    equipmentPreview?: import("./features/inventory/starting-equipment-api.js").NativeStartingEquipmentPreview | null;
+    equipmentPreviewMessage?: string;
     status: "idle" | "loading" | "ready" | "error";
     requestId: number;
     advancement: CharacterPresentationResponse["advancement"] | null;
     mechanics: CharacterPresentationResponse["mechanics"];
+    mechanicsStatus?: CharacterPresentationResponse["mechanicsStatus"];
+    mechanicsMessage?: CharacterPresentationResponse["mechanicsMessage"];
     message?: string;
 }
 
@@ -216,7 +222,7 @@ export interface HarvestingCraftingUiState {
     catalog: HarvestingRulesCatalogResponse | null;
     monsterQuery: string;
     monsterStatus: "idle" | "loading" | "ready" | "error";
-    monsterResults: ResolvedRuleCatalogItem[];
+    monsterResults: NativeOptionSummary[];
     sourceKind: "creature-type" | "monster";
     creatureType: string;
     creatureConceptKey: string;
@@ -300,7 +306,7 @@ export type CharacterSheetAction =
     | { type: "chooser-opened"; target: CharacterBuilderChoice }
     | { type: "chooser-query-changed"; query: string }
     | { type: "chooser-load-started"; target: CharacterBuilderChoice; query: string }
-    | { type: "chooser-loaded"; target: CharacterBuilderChoice; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "chooser-loaded"; target: CharacterBuilderChoice; query: string; results: NativeOptionSummary[] }
     | { type: "chooser-load-failed"; target: CharacterBuilderChoice; query: string; message: string }
     | { type: "chooser-closed" }
     | { type: "selection-save-started"; target: CharacterBuilderChoice }
@@ -316,7 +322,7 @@ export type CharacterSheetAction =
     | { type: "feat-chooser-opened" }
     | { type: "feat-chooser-query-changed"; query: string }
     | { type: "feat-chooser-load-started"; query: string }
-    | { type: "feat-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "feat-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "feat-chooser-load-failed"; query: string; message: string }
     | { type: "feat-chooser-closed" }
     | { type: "feat-save-started"; occurrenceId?: string }
@@ -329,19 +335,19 @@ export type CharacterSheetAction =
     | { type: "inventory-chooser-opened" }
     | { type: "inventory-chooser-query-changed"; query: string }
     | { type: "inventory-chooser-load-started"; query: string }
-    | { type: "inventory-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "inventory-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "inventory-chooser-load-failed"; query: string; message: string }
     | { type: "inventory-chooser-closed" }
     | { type: "spell-chooser-opened" }
     | { type: "spell-chooser-query-changed"; query: string }
     | { type: "spell-chooser-load-started"; query: string }
-    | { type: "spell-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "spell-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "spell-chooser-load-failed"; query: string; message: string }
     | { type: "spell-chooser-closed" }
     | { type: "condition-chooser-opened" }
     | { type: "condition-chooser-query-changed"; query: string }
     | { type: "condition-chooser-load-started"; query: string }
-    | { type: "condition-chooser-loaded"; query: string; results: ResolvedRuleCatalogItem[] }
+    | { type: "condition-chooser-loaded"; query: string; results: NativeOptionSummary[] }
     | { type: "condition-chooser-load-failed"; query: string; message: string }
     | { type: "condition-chooser-closed" }
     | { type: "recovery-started"; procedureKey: string; request: CharacterRecoveryRequestInput }
@@ -352,9 +358,11 @@ export type CharacterSheetAction =
     | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
     | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
     | { type: "routine-mutation-failed"; message: string }
-    | { type: "presentation-load-started"; requestId: number }
+    | { type: "presentation-load-started"; requestId: number; withEquipment: boolean }
     | { type: "presentation-loaded"; requestId: number; presentation: CharacterPresentationResponse }
     | { type: "presentation-load-failed"; requestId: number; message: string }
+    | { type: "starting-equipment-preview-loaded"; requestId: number; preview: import("./features/inventory/starting-equipment-api.js").NativeStartingEquipmentPreview }
+    | { type: "starting-equipment-preview-failed"; requestId: number; message: string }
     | { type: "sheet-edit-entered" }
     | { type: "sheet-edit-exited" }
     | { type: "guided-builder-opened" }

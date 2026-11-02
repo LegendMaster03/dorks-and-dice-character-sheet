@@ -5,16 +5,13 @@ import type {
 } from "./builder-api.js";
 import type { FetchLike } from "./character-api.js";
 import type { HostEnvironment } from "./host-environment.js";
-import {
-    resolveRuleConcept,
-    type ResolvedRuleCatalogItem,
-    type ResolvedRuleDetail
-} from "./rules-core-api.js";
+import { loadNativeRuleset, searchNativeOptions, type NativeOptionSummary } from "./rules-core-native-api.js";
+import type { ResolvedRuleCatalogItem } from "./rules-core-api.js";
 
 export type RuleReferenceState =
     | { status: "none" }
     | { status: "loading"; conceptKey: string }
-    | { status: "resolved"; conceptKey: string; rule: ResolvedRuleDetail }
+    | { status: "resolved"; conceptKey: string; rule: NativeOptionSummary }
     | { status: "unavailable"; conceptKey: string }
     | { status: "error"; conceptKey: string; message: string };
 
@@ -104,34 +101,32 @@ export async function resolveStoredChoice(
     environment: HostEnvironment,
     build: CharacterBuildResponse,
     choice: CharacterBuilderChoice,
-    fetcher: FetchLike = window.fetch.bind(window)
+    fetcher: FetchLike = globalThis.fetch.bind(globalThis)
 ): Promise<RuleReferenceState> {
     const conceptKey = getStoredChoiceConceptKey(build, choice);
-    if (conceptKey === null) {
-        return { status: "none" };
+    if (conceptKey === null) return { status: "none" };
+
+    // The current native catalog exposes standalone class and subclass
+    // summaries. Ancestry/background/deity records are not available here.
+    const category = choice === "startingClass" ? "class"
+        : choice === "subclass" ? "subclass" : null;
+    if (category === null || !conceptKey.startsWith(category + ".")) {
+        return { status: "unavailable", conceptKey };
     }
-
     try {
-        const rule = await resolveRuleConcept(environment, conceptKey, fetcher);
-        const expectedEntityType = choice === "species"
-            ? "species"
-            : choice === "subspecies"
-                ? "subspecies"
-                : choice === "background"
-                    ? "background"
-                    : choice === "deity"
-                        ? "deity"
-                        : choice === "startingClass" ? "class" : "subclass";
-        if (rule === null || rule.entityType !== expectedEntityType || rule.conceptKey !== conceptKey) {
-            return { status: "unavailable", conceptKey };
-        }
-
-        return { status: "resolved", conceptKey, rule };
+        const metadata = await loadNativeRuleset(environment, fetcher);
+        const found = await searchNativeOptions(
+            environment, metadata, category, conceptKey, 100, 0, fetcher);
+        const rule = found.options.find(option =>
+            option.id === conceptKey && option.kind === category);
+        return rule === undefined
+            ? { status: "unavailable", conceptKey }
+            : { status: "resolved", conceptKey, rule };
     } catch (error) {
         return {
-            status: "error",
-            conceptKey,
-            message: error instanceof Error ? error.message : "Rules Core rule resolution failed."
+            status: "error", conceptKey,
+            message: error instanceof Error ? error.message
+                : "Native Rules Core option lookup failed."
         };
     }
 }

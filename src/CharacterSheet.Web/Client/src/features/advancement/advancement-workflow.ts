@@ -5,8 +5,6 @@ import {
     type CharacterBuilderChoice
 } from "../../builder-api.js";
 import {
-    filterSubclassesForClass,
-    filterSubspeciesForSpecies,
     getStartingClassEntry,
     getStoredChoiceConceptKey
 } from "../../builder-rules.js";
@@ -17,11 +15,7 @@ import {
 } from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
-import {
-    resolveRuleConcept,
-    searchResolvedRules,
-    type ResolvedRuleCatalogItem
-} from "../../rules-core-api.js";
+import { loadNativeRuleset, searchNativeOptions, type NativeOptionSummary } from "../../rules-core-native-api.js";
 import type { BuildStateWorkflow } from "../../core/application/build-state-workflow.js";
 import type { PresentationWorkflow } from "../../core/application/presentation-workflow.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
@@ -41,7 +35,7 @@ export type AdvancementCandidateChooserState =
         target: AdvancementCandidateTarget;
         query: string;
         status: "idle" | "loading" | "ready" | "error";
-        results: ResolvedRuleCatalogItem[];
+        results: NativeOptionSummary[];
         message?: string;
     };
 
@@ -115,45 +109,14 @@ export function createAdvancementWorkflow(
             query: normalizedQuery
         });
         try {
-            const entityType = target === "species"
-                ? "species"
-                : target === "subspecies"
-                    ? "subspecies"
-                    : target === "background"
-                        ? "background"
-                        : target === "deity"
-                            ? "deity"
-                            : target === "startingClass"
-                                ? "class"
-                                : "subclass";
-            const catalog = await searchResolvedRules(
-                environment,
-                entityType,
-                normalizedQuery);
-            let results = catalog.rules.filter(
-                rule => rule.entityType === entityType);
-            if (target === "subspecies") {
-                const build = buildState.current().build;
-                const speciesConceptKey = build === null
-                    ? null
-                    : getStoredChoiceConceptKey(build, "species");
-                if (speciesConceptKey === null) {
-                    throw new Error("Choose a Species before selecting a Subspecies.");
-                }
-                results = filterSubspeciesForSpecies(results, speciesConceptKey);
-            } else if (target === "subclass") {
-                const build = buildState.current().build;
-                const startingClass = build === null
-                    ? null
-                    : getStartingClassEntry(build);
-                if (startingClass === null) {
-                    throw new Error(
-                        "Choose a Class before selecting a Subclass.");
-                }
-                results = filterSubclassesForClass(
-                    results,
-                    startingClass.ruleConceptKey);
+            if (target !== "startingClass") {
+                throw new Error(
+                    "This selection is not available through the native Rules Core catalog yet.");
             }
+            const metadata = await loadNativeRuleset(environment);
+            const catalog = await searchNativeOptions(
+                environment, metadata, "class", normalizedQuery, 100);
+            const results = catalog.options;
             application.dispatch({
                 type: "chooser-loaded",
                 target,
@@ -260,22 +223,18 @@ export function createAdvancementWorkflow(
             message: undefined
         });
         try {
-            const entityType = target;
-            const catalog = await searchResolvedRules(environment, entityType, normalizedQuery);
-            let results = catalog.rules.filter(rule => rule.entityType === entityType);
-            if (target === "class" || target === "prestigeClass") {
-                const owned = new Set(
-                    (buildState.current().build?.progressionEntries ?? [])
-                        .filter(value => value.kind === target)
-                        .map(value => value.ruleConceptKey));
-                results = results.filter(rule => !owned.has(rule.conceptKey));
-            } else {
-                const classConceptKey = classConceptKeyForCurrentRequest();
-                if (classConceptKey === null) {
-                    throw new Error("Preview a Class advancement before choosing a Subclass.");
-                }
-                results = filterSubclassesForClass(results, classConceptKey);
+            if (target !== "class") {
+                throw new Error(
+                    "Native eligibility for this advancement category is not implemented yet.");
             }
+            const metadata = await loadNativeRuleset(environment);
+            const catalog = await searchNativeOptions(
+                environment, metadata, "class", normalizedQuery, 100);
+            const owned = new Set(
+                (buildState.current().build?.progressionEntries ?? [])
+                    .filter(value => value.kind === "class")
+                    .map(value => value.ruleConceptKey));
+            const results = catalog.options.filter(rule => !owned.has(rule.id));
             setWorkflowState({
                 ...workflowState,
                 chooser: {
@@ -314,30 +273,16 @@ export function createAdvancementWorkflow(
                 .map(value => ({ id: value.id, conceptKey: value.ruleConceptKey! }))
         ];
 
-        await Promise.all(targets.map(async target => {
-            try {
-                const rule = await resolveRuleConcept(environment, target.conceptKey);
-                application.dispatch({
-                    type: "routine-reference-resolved",
-                    occurrenceId: target.id,
-                    conceptKey: target.conceptKey,
-                    reference: rule === null
-                        ? { status: "unavailable", conceptKey: target.conceptKey }
-                        : { status: "resolved", conceptKey: target.conceptKey, rule }
-                });
-            } catch (error) {
-                application.dispatch({
-                    type: "routine-reference-resolved",
-                    occurrenceId: target.id,
-                    conceptKey: target.conceptKey,
-                    reference: {
-                        status: "error",
-                        conceptKey: target.conceptKey,
-                        message: requestErrorMessage(error)
-                    }
-                });
-            }
-        }));
+        // Routine option identities are not yet in the native summary catalog.
+        // Do not resurrect the removed concept-detail API as a display fallback.
+        for (const target of targets) {
+            application.dispatch({
+                type: "routine-reference-resolved",
+                occurrenceId: target.id,
+                conceptKey: target.conceptKey,
+                reference: { status: "unavailable", conceptKey: target.conceptKey }
+            });
+        }
     }
 
     async function refreshRoutine(characterId: string): Promise<void> {

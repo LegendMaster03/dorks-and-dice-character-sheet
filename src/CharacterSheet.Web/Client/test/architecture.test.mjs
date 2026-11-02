@@ -36,6 +36,18 @@ async function tsFiles(relativeDir) {
     return files.sort();
 }
 
+test("retired Rules Core HTTP routes are absent from active Character Sheet clients", async () => {
+    const files = await tsFiles(".");
+    for (const file of files) {
+        const content = await source(file);
+        assert.equal(content.includes("/api/rules/"), false,
+            `Legacy Rules Core route found in ${file}`);
+        assert.equal(content.includes('"/api/rules"'), false,
+            `Legacy Rules Core catalog found in ${file}`);
+    }
+    // Server-side non-delegation is exercised by DelegatedRulesCoreGatewayTests.
+});
+
 test("mechanics compatibility surface re-exports feature owners instead of implementing them", async () => {
     const compatibility = await source("ui/mechanics-components.ts");
     assert.match(compatibility, /Compatibility exports/);
@@ -200,7 +212,8 @@ test("Harvesting UI does not expose Rules Core resolution controls", async () =>
 
     assert.match(workflow, /function typeTable\(/);
     assert.match(workflow, /void resolveTable\(\)/);
-    assert.match(rulesApi, /input\.creatureConceptKey/);
+    assert.match(rulesApi, /nativeHarvestingUnavailable/);
+    assert.doesNotMatch(rulesApi, /fetch\(.*harvesting/);
 });
 
 test("Crafting UI is organized around project and crafting steps", async () => {

@@ -43,18 +43,7 @@ const build = {
 const resolved = (conceptKey, entityType, displayName) => ({
     status: "resolved",
     conceptKey,
-    rule: {
-        ruleConceptId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-        conceptKey,
-        entityType,
-        displayName,
-        sourceEntityName: displayName,
-        sourceCode: "SRD",
-        packageKey: "fixture",
-        packageDisplayName: "Fixture",
-        editionKey: "5e",
-        editionDisplayName: "5e"
-    }
+    rule: { id: conceptKey, kind: entityType, name: displayName }
 });
 
 function builder(overrides = {}) {
@@ -653,9 +642,9 @@ test("Notes are rendered from routine Character state and remain routine View-mo
 test("Inventory keeps distinct occurrence identity without exposing raw UUIDs to players", () => {
     assert.match(inventorySource, /data-inventory-occurrence-id/);
     assert.doesNotMatch(inventorySource, /\`Occurrence \${occurrence\.id}\`/);
-    assert.match(inventorySource, /handlers\.addInventoryItem\(rule\.conceptKey\)/);
+    assert.match(inventorySource, /handlers\.addInventoryItem\(rule\.id\)/);
     assert.match(inventorySource, /handlers\.removeInventoryItem\(occurrence\.id\)/);
-    assert.match(inventoryWorkflowSource, /searchResolvedRules\([\s\S]*"item"[\s\S]*normalizedQuery/);
+    assert.match(inventoryWorkflowSource, /searchNativeOptions\(environment, metadata, "item", normalizedQuery, 100\)/);
     assert.doesNotMatch(sheetModelSource, /Equipment, carried items, currency/);
 });
 
@@ -666,7 +655,7 @@ test("Features and Traits keeps Feat occurrence identity internal while mutation
     assert.doesNotMatch(featuresSource, /\`Occurrence \${occurrence\.id}\`/);
     assert.match(featuresSource, /if \(editable\) \{[\s\S]*"Add Feat"/);
     assert.match(featuresSource, /handlers\.remove\(occurrence\.id\)/);
-    assert.match(featWorkflowSource, /searchResolvedRules\([\s\S]*"feat"[\s\S]*normalizedQuery/);
+    assert.match(featWorkflowSource, /searchNativeOptions\(environment, metadata, "feat", normalizedQuery, 100\)/);
     assert.match(featuresSource, /Other Features & Traits/);
     assert.doesNotMatch(sheetModelSource, /Features and traits are not available yet/);
 });

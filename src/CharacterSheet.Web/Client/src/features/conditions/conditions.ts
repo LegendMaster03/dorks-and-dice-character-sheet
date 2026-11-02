@@ -244,12 +244,12 @@ function renderConditionChooser(
         for (const rule of chooser.results) {
             const result = createElement("div", "dd-condition-chooser__result");
             result.append(
-                createElement("strong", "dd-condition-chooser__result-name", rule.displayName),
+                createElement("strong", "dd-condition-chooser__result-name", rule.name),
                 createButton(
                     "Add",
                     "dd-button dd-button--secondary",
                     () => handlers.addRuleCondition(
-                        rule.conceptKey,
+                        rule.id,
                         readConditionOptions(options)),
                     routine.mutation !== null));
             results.append(result);
@@ -332,8 +332,8 @@ function conditionDisplayName(
     if (condition.customName !== null) return condition.customName;
     if (condition.ruleConceptKey === null) return "Condition";
     const reference = routine.references[condition.id];
-    if (reference?.status === "resolved" && reference.rule.entityType === "condition") {
-        return reference.rule.displayName;
+    if (reference?.status === "resolved" && (reference.rule.kind === "condition" || reference.rule.kind === "leveled-condition")) {
+        return reference.rule.name;
     }
     return condition.ruleConceptKey;
 }
