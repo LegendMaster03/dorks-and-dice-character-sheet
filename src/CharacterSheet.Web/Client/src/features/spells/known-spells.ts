@@ -31,7 +31,9 @@ export function renderKnownSpellsSection(
     const known = (routine.state.rulesInputs ?? [])
         .filter(input => input.kind === "knownSpell");
 
-    if (routine.mutationError !== undefined) {
+    if (routine.mutationError !== undefined &&
+        (routine.mutationErrorKind === "rules-input-update" ||
+            routine.mutationErrorKind === "rules-input-delete")) {
         section.append(createInlineState(routine.mutationError, "error"));
     }
 
@@ -132,7 +134,9 @@ function renderSpellChooser(
         return section;
     }
     if (chooser.results.length === 0) {
-        section.append(createElement("p", "dd-routine-empty", "No matching spells."));
+        section.append(createElement("p", "dd-routine-empty", chooser.query.trim().length === 0
+            ? "No additional native spells are available to select. Spell details must be present in the active rules catalog."
+            : "No matching native spells. This search only includes the active rules catalog."));
         return section;
     }
 

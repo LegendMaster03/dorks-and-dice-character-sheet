@@ -224,7 +224,7 @@ function renderDeathSaveEditor(
     reset.type = "button";
     reset.disabled = saving || (state.successes === 0 && state.failures === 0);
     reset.setAttribute("data-death-save-action", "reset");
-    reset.onclick = () => onSetDeathSaves(0, 0);
+    reset.addEventListener("click", () => onSetDeathSaves(0, 0));
 
     editor.append(controls, reset);
     return editor;
@@ -248,7 +248,7 @@ function renderDeathSaveCounter(
     decrement.setAttribute(
         "data-death-save-action",
         label === "Successes" ? "success-decrement" : "failure-decrement");
-    decrement.onclick = () => onChange(Math.max(0, value - 1));
+    decrement.addEventListener("click", () => onChange(Math.max(0, value - 1)));
 
     const count = createElement(
         "strong",
@@ -264,7 +264,7 @@ function renderDeathSaveCounter(
     increment.setAttribute(
         "data-death-save-action",
         label === "Successes" ? "success-increment" : "failure-increment");
-    increment.onclick = () => onChange(Math.min(3, value + 1));
+    increment.addEventListener("click", () => onChange(Math.min(3, value + 1)));
 
     counter.append(decrement, count, increment);
     return counter;
@@ -730,7 +730,7 @@ export function renderRecoveryControls(
                         ? "This recovery procedure is not currently applicable to the Character."
                         : "Recovery execution is not available yet.";
         } else {
-            button.onclick = () => onRecovery(procedure.procedureKey);
+            button.addEventListener("click", () => onRecovery(procedure.procedureKey));
         }
         controls.append(button);
     }
@@ -783,8 +783,8 @@ function renderQuickHitPointAdjustment(
         const next = adjustCurrentHitPoints(current, maximum, parsed.value, direction);
         if (next !== null) onSetCurrentHitPoints(next);
     };
-    damage.onclick = () => apply(-1);
-    heal.onclick = () => apply(1);
+    damage.addEventListener("click", () => apply(-1));
+    heal.addEventListener("click", () => apply(1));
 
     controls.append(damage, amount, heal);
     return controls;
@@ -823,10 +823,10 @@ function renderDirectHitPointSetter(
     set.type = "button";
     set.disabled = saving;
     set.setAttribute("data-health-action", "set-current");
-    set.onclick = () => {
+    set.addEventListener("click", () => {
         const value = parseOptionalInteger(currentInput.value);
         if (value.valid) onSetCurrentHitPoints(value.value);
-    };
+    });
 
     direct.append(currentField, maximumField, set);
     return direct;
@@ -877,10 +877,10 @@ function renderHitPointEditor(
     set.type = "button";
     set.disabled = saving;
     set.setAttribute("data-health-action", "set");
-    set.onclick = () => {
+    set.addEventListener("click", () => {
         const value = parseOptionalInteger(currentInput.value);
         if (value.valid) onSetCurrentHitPoints(value.value);
-    };
+    });
     direct.append(currentField, maximumField, set);
 
     const adjust = createElement("div", "dd-health-editor__adjust");
@@ -923,8 +923,8 @@ function renderHitPointEditor(
             direction);
         if (next !== null) onSetCurrentHitPoints(next);
     };
-    subtract.onclick = () => apply(-1);
-    add.onclick = () => apply(1);
+    subtract.addEventListener("click", () => apply(-1));
+    add.addEventListener("click", () => apply(1));
 
     adjust.append(amountField, subtract, add);
     body.append(direct, adjust);

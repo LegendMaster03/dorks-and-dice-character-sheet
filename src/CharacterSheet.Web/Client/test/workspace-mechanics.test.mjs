@@ -531,8 +531,8 @@ test("Rules Core recovery actions live in the top control bar rather than the Hi
     assert.ok(shortRest);
     assert.ok(longRest);
     assert.equal(byAttribute(healthCard, "data-recovery-procedure", "recovery.short.fixture").length, 0);
-    shortRest.onclick();
-    longRest.onclick();
+    shortRest.dispatchEvent({ type: "click" });
+    longRest.dispatchEvent({ type: "click" });
     assert.deepEqual(recoveryCalls, ["recovery.short.fixture", "recovery.long.fixture"]);
 });
 
@@ -764,11 +764,11 @@ test("top-row Hit Points tracker exposes D&D Beyond-style Heal and Damage contro
     assert.ok(directSetter);
 
     input.value = "5";
-    damage.onclick();
+    damage.dispatchEvent({ type: "click" });
     assert.equal(saved.at(-1), 13);
 
     input.value = "20";
-    heal.onclick();
+    heal.dispatchEvent({ type: "click" });
     assert.equal(saved.at(-1), 30);
 
     assert.match(visibleText(card), /Temporary HP\s+4/);
@@ -806,13 +806,13 @@ test("Death Saves remain visible and editable through persisted runtime handlers
     assert.match(visibleText(card), /Death Saves\s+S 1 • F 2/);
     assert.equal(byAttribute(card, "data-death-saves-editor", "true").length, 1);
 
-    byAttribute(card, "data-death-save-action", "success-increment")[0].onclick();
+    byAttribute(card, "data-death-save-action", "success-increment")[0].dispatchEvent({ type: "click" });
     assert.deepEqual(saved.at(-1), [2, 2]);
 
-    byAttribute(card, "data-death-save-action", "failure-decrement")[0].onclick();
+    byAttribute(card, "data-death-save-action", "failure-decrement")[0].dispatchEvent({ type: "click" });
     assert.deepEqual(saved.at(-1), [1, 1]);
 
-    byAttribute(card, "data-death-save-action", "reset")[0].onclick();
+    byAttribute(card, "data-death-save-action", "reset")[0].dispatchEvent({ type: "click" });
     assert.deepEqual(saved.at(-1), [0, 0]);
 });
 
@@ -2030,4 +2030,43 @@ test("Inventory currency stays denomination-agnostic and rejects unsafe browser 
     const readonlySection = byClass(readonly, "dd-inventory-currency")[0];
     assert.match(visibleText(readonlySection), /campaign-scrip\s+-7/);
     assert.equal(byTag(readonlySection, "form").length, 0);
+});
+
+test("current HP can be initialized from an unset value using an actual click event", () => {
+    const saved = [];
+    const rendered = renderCharacterWorkspace(character, builder, routine([], {}, false, null),
+        "actions", false, "view", guidedBuilder, null, { healthTracks: [{ key: "hp", label: "Hit Points", role: "hit-points", maximum: 15 }] },
+        { ...handlers, routine: { setCurrentHitPoints(value) { saved.push(value); } } });
+    const setter = byAttribute(rendered, "data-health-direct-setter", "true")[0];
+    const input = byTag(setter, "input")[0];
+    input.value = "15";
+    byAttribute(setter, "data-health-action", "set-current")[0].dispatchEvent({ type: "click" });
+    assert.deepEqual(saved, [15]);
+});
+
+test("Harvesting totals reach the workflow on input before another control rerenders", async () => {
+    const { createInitialHarvestingCraftingState } = await import("../.test-dist/app-state.js");
+    const { renderHarvestingCraftingWorkspace } = await import("../.test-dist/features/harvesting/harvesting-workspace.js");
+    let state = { ...createInitialHarvestingCraftingState(), catalogStatus: "ready",
+        catalog: { procedure: { helpers: { maximumByCreatureSize: { Medium: 2 } } }, source: { workDisplayName: "Fixture" }, creatureTypes: [{ key: "beast", displayName: "Beast" }] },
+        tableStatus: "ready", table: { source: {}, creatureSize: null, components: [], competencyDisplayName: "Survival" },
+        creatureType: "beast", tableRequest: { creatureType: "beast" } };
+    const workflow = { close() {}, setMode() {}, setSourceKind() {}, setCreatureSize(value) { state.creatureSize = value; },
+        setAssessmentResult(value) { state.assessmentResult = value; },
+        setCarvingResult(value) { state.carvingResult = value; } };
+    const rendered = renderHarvestingCraftingWorkspace(character, state, workflow, false);
+    const labels = byTag(rendered, "label");
+    for (const name of ["Assessment result", "Carving result"]) {
+        const label = labels.find(node => node.children.some(child => child.textContent === name));
+        const input = byTag(label, "input")[0];
+        input.value = "10";
+        input.dispatchEvent({ type: "input" });
+    }
+    workflow.setCreatureSize("Medium");
+    assert.equal(state.assessmentResult, 10);
+    assert.equal(state.carvingResult, 10);
+    const refreshed = renderHarvestingCraftingWorkspace(character, state, workflow, false);
+    const totals = byTag(refreshed, "label").filter(node => node.children.some(child =>
+        child.textContent === "Assessment result" || child.textContent === "Carving result"));
+    assert.deepEqual(totals.map(label => byTag(label, "input")[0].value), ["10", "10"]);
 });

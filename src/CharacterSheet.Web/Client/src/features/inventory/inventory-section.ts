@@ -41,7 +41,9 @@ export function renderInventorySection(
 
     const pending = routine.mutation !== null;
     const editable = !readOnly && !routine.state.readOnly;
-    if (routine.mutationError !== undefined) {
+    if (routine.mutationError !== undefined &&
+        (routine.mutationErrorKind?.startsWith("inventory-") === true ||
+            routine.mutationErrorKind?.startsWith("currency-") === true)) {
         content.append(createInlineState(routine.mutationError, "error"));
     }
 

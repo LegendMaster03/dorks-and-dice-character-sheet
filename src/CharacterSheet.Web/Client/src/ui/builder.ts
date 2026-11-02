@@ -1,3 +1,4 @@
+import { getActiveAdvancementWorkflow } from "../features/advancement/advancement-workflow.js";
 import type { CharacterBuilderUiState } from "../app-state.js";
 import type { CharacterBuilderChoice } from "../builder-api.js";
 import { getStartingClassEntry, getStoredChoiceConceptKey } from "../builder-rules.js";
@@ -94,7 +95,14 @@ export function renderCharacterBuilder(
     if (choices.includes("startingClass")) {
         grid.append(renderChoice("startingClass", "Starting Class", builder, readOnly, true, undefined, handlers));
     }
-    if (choices.includes("subclass")) {
+    if (choices.includes("startingClass") && startingClass?.ruleConceptKey === "class.warlock") {
+        const workflow = getActiveAdvancementWorkflow();
+        if (workflow !== null) grid.append(createButton(
+            "Configure Patron, Pact, and Invocations", "dd-button dd-button--secondary",
+            () => void workflow.configureCurrent(characterId, startingClass.id),
+            readOnly || mutationPending));
+    }
+    if (choices.includes("subclass") && startingClass?.ruleConceptKey !== "class.warlock") {
         grid.append(renderChoice(
             "subclass",
             "Subclass",

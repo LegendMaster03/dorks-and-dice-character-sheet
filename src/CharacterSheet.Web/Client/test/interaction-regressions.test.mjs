@@ -331,3 +331,32 @@ test("Prestige Class advancement remains inspectable when eligibility is unresol
     assert.match(panel, /Check Requirements/);
     assert.match(panel, /Rules Core does not yet have enough normalized prerequisite data/);
 });
+
+test("advancement choices use preview-only drafts and cancel discards them", async () => {
+    const { createAdvancementWorkflow } = await import("../.test-dist/features/advancement/advancement-workflow.js");
+    const requests = [];
+    const application = createApplication(createInitialState({ kind: "new" }), () => {});
+    const build = { progressionEntries: [{ id: "warlock-occurrence", kind: "class", ruleConceptKey: "class.warlock", level: 1 }] };
+    const buildState = { current: () => ({ build }), resolveReferences: async () => {} };
+    const environment = { embedded: false, toolBasePath: "", toolRoute: "/", contextUrl: null, standaloneDevelopment: true };
+    const previousWindow = globalThis.window;
+    globalThis.window = { fetch: async (url, init) => {
+        requests.push({ url, body: JSON.parse(init.body) });
+        return Response.json({ canApply: false, requiredChoices: [], blockingConflicts: [] });
+    } };
+    try {
+        const workflow = createAdvancementWorkflow(application, buildState, { load: async () => {} }, environment);
+        await workflow.previewExisting("character", "warlock-occurrence");
+        await workflow.resolveChoice("character", "native-option.class.warlock.invocation.2", "invocation.armor-of-shadows");
+        assert.equal(requests.length, 2);
+        assert.ok(requests.every(request => request.url.endsWith("/advancement/preview")));
+        assert.equal(requests[1].body.selectedOptions["native-option.class.warlock.invocation.2"], "invocation.armor-of-shadows");
+        assert.equal(requests[1].body.expectedClassLevel, 1);
+        workflow.closeAdvancement();
+        assert.equal(workflow.current().request, null);
+        await workflow.configureCurrent("character", "warlock-occurrence");
+        assert.equal(requests.at(-1).body.configureCurrentLevel, true);
+        assert.equal(requests.at(-1).body.selectedOptions, undefined);
+        assert.equal(build.progressionEntries[0].level, 1);
+    } finally { globalThis.window = previousWindow; }
+});

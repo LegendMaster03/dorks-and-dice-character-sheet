@@ -156,7 +156,10 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         int? hitDieValue,
         string? subclassConceptKey,
         DateTimeOffset changedAt,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? selectedOptions = null,
+        bool configureCurrentLevel = false,
+        int? expectedClassLevel = null)
     {
         if (kind is not CharacterAdvancementKind.Class and not CharacterAdvancementKind.PrestigeClass)
         {
@@ -190,12 +193,15 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
             }
             var currentLevel = progressionEntry.Level
                 ?? throw new InvalidOperationException("Progression advancement does not have a level.");
-            var targetLevel = checked(currentLevel + 1);
-            CharacterNormalProgressionPolicy.EnsureLevelChangeAllowed(
-                root.AdvancementEntries,
-                progressionEntry,
-                targetLevel);
-            root.SetAdvancementLevel(progressionEntry.Id, targetLevel, changedAt);
+            if (expectedClassLevel is int expected && currentLevel != expected)
+                throw new InvalidOperationException("The Class level changed since review.");
+            var targetLevel = configureCurrentLevel ? currentLevel : checked(currentLevel + 1);
+            if (!configureCurrentLevel)
+            {
+                CharacterNormalProgressionPolicy.EnsureLevelChangeAllowed(
+                    root.AdvancementEntries, progressionEntry, targetLevel);
+                root.SetAdvancementLevel(progressionEntry.Id, targetLevel, changedAt);
+            }
         }
         else
         {
@@ -224,6 +230,10 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
                 null,
                 changedAt);
         }
+
+        foreach (var pair in selectedOptions ?? new Dictionary<string, string>())
+            root.SetRulesInput(CharacterRulesInputKind.Choice, pair.Key,
+                null, null, pair.Value, changedAt);
 
         var appliedLevel = progressionEntry.Level
             ?? throw new InvalidOperationException("Applied progression advancement does not have a level.");

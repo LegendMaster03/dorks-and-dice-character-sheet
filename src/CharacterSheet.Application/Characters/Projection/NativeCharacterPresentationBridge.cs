@@ -121,7 +121,8 @@ public static class NativeCharacterPresentationBridge
                 proficient = trained.Contains(id), miscModifier = 0 },
             StringComparer.Ordinal);
         var unmodeledSelections = build.FoundationalSelections.Count != 0 ||
-            state?.Conditions.Count > 0 ||
+            state?.Conditions.Any(condition => condition.RuleConceptKey is null ||
+                !condition.RuleConceptKey.StartsWith("condition.", StringComparison.Ordinal)) == true ||
             state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true ||
             state?.RulesInputs?.Any(input => input.Kind is not (
                 CharacterRulesInputKinds.Resource or
@@ -166,6 +167,8 @@ public static class NativeCharacterPresentationBridge
                 occurrenceId = entry.Id.ToString("D")
             }).ToArray(),
             hitPointGains = hitPointGains.Count == 0 ? null : hitPointGains,
+            conditionIds = (state?.Conditions ?? []).Select(condition => condition.RuleConceptKey)
+                .Where(id => id is not null && id.StartsWith("condition.", StringComparison.Ordinal)).Distinct().ToArray(),
             selectedOptions = nativeChoices.Ids,
             currentResources,
             skills,

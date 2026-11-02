@@ -39,6 +39,13 @@ class FakeElement {
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) ?? null; }
     append(...children) { this.children.push(...children); }
+    listeners = new Map();
+    addEventListener(type, callback) {
+        this.listeners.set(type, [...(this.listeners.get(type) ?? []), callback]);
+    }
+    dispatchEvent(event) {
+        for (const callback of this.listeners.get(event.type) ?? []) callback(event);
+    }
 }
 
 globalThis.document = { createElement: tagName => new FakeElement(tagName) };
@@ -268,15 +275,15 @@ test("editable Hit Points card exposes direct and modifier controls while keepin
     const inputs = byClass(rendered, "dd-health-editor__input");
     const buttons = action => byAttribute(rendered, "data-health-action", action);
     inputs[1].value = "15";
-    buttons("subtract")[0].onclick();
+    buttons("subtract")[0].dispatchEvent({ type: "click" });
     assert.equal(saved.at(-1), -3);
 
     inputs[1].value = "50";
-    buttons("add")[0].onclick();
+    buttons("add")[0].dispatchEvent({ type: "click" });
     assert.equal(saved.at(-1), 30);
 
     inputs[0].value = "-8";
-    buttons("set")[0].onclick();
+    buttons("set")[0].dispatchEvent({ type: "click" });
     assert.equal(saved.at(-1), -8);
 });
 
@@ -324,7 +331,7 @@ test("recovery controls use Rules Core procedure identity, labels, roles, and ap
     assert.equal(shortRest.disabled, false);
     assert.equal(longRest.disabled, true);
 
-    shortRest.onclick();
+    shortRest.dispatchEvent({ type: "click" });
     assert.deepEqual(calls, ["recovery.short.fixture"]);
 });
 

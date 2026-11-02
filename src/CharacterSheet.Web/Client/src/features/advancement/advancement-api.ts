@@ -8,6 +8,9 @@ import type { CharacterBuildResponse } from "../../builder-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
 
 export interface CharacterClassAdvancementRequest {
+    selectedOptions?: Record<string, string>;
+    configureCurrentLevel?: boolean;
+    expectedClassLevel?: number;
     classAdvancementEntryId?: string | null;
     classConceptKey?: string | null;
     hitDieValue?: number | null;

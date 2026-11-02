@@ -77,7 +77,10 @@ public interface ICharacterBuildStore
         int? hitDieValue,
         string? subclassConceptKey,
         DateTimeOffset changedAt,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? selectedOptions = null,
+        bool configureCurrentLevel = false,
+        int? expectedClassLevel = null);
 
     Task<CharacterSheetRoot?> ApplyClassAdvancementAsync(
         Guid characterId,

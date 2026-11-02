@@ -24,7 +24,10 @@ public sealed record CharacterClassAdvancementRequest(
     int? HitDieValue = null,
     string? SubclassConceptKey = null,
     Guid? PrestigeClassAdvancementEntryId = null,
-    string? PrestigeClassConceptKey = null);
+    string? PrestigeClassConceptKey = null,
+    IReadOnlyDictionary<string, string>? SelectedOptions = null,
+    bool ConfigureCurrentLevel = false,
+    int? ExpectedClassLevel = null);
 
 public sealed record CharacterAdvancementChangeView(
     string Kind,
@@ -134,7 +137,10 @@ public sealed class CharacterAdvancementService(
                 request.HitDieValue,
                 null,
                 timeProvider.GetUtcNow(),
-                cancellationToken);
+                cancellationToken,
+                request.SelectedOptions,
+                request.ConfigureCurrentLevel,
+                preview.Plan.CurrentClassLevel);
             if (root is null)
                 return new(CharacterAdvancementAccessStatus.SheetNotInitialized, preview.Plan);
             var refreshed = await buildService.GetAsync(characterId, cancellationToken);
@@ -195,6 +201,21 @@ public sealed class CharacterAdvancementService(
         // state are not class-level advancements. Do not block advancement
         // merely because this routine state exists. Unknown rule choices must
         // still fail closed until they have native option identities.
+        if (request.SelectedOptions is { Count: > 64 } ||
+            request.SelectedOptions?.Any(pair =>
+                !IsSupportedOptionSlot(pair.Key, pair.Value) || string.IsNullOrWhiteSpace(pair.Value) ||
+                pair.Value.Length > 160 || pair.Value != pair.Value.Trim()) == true)
+            throw new ArgumentException("Invalid native option selections.");
+        if (request.SelectedOptions is { Count: > 0 })
+        {
+            var inputs = (state?.RulesInputs ?? []).Where(input =>
+                input.Kind != CharacterRulesInputKinds.Choice ||
+                !request.SelectedOptions.ContainsKey(input.Key)).ToList();
+            inputs.AddRange(request.SelectedOptions.Select(pair => new CharacterRulesInputStateView(
+                Guid.Empty, CharacterRulesInputKinds.Choice, pair.Key,
+                null, null, pair.Value, default, default)));
+            state = (state ?? throw new ArgumentException("Character state is unavailable.")) with { RulesInputs = inputs };
+        }
         var nativeChoices = NativeCharacterOptionSelections.FromState(state);
         if (nativeChoices.HasUnmappedChoices)
             throw new ArgumentException(
@@ -223,8 +244,16 @@ public sealed class CharacterAdvancementService(
         if (string.IsNullOrWhiteSpace(className))
             throw new ArgumentException("Class has no authoritative native identity.");
 
+        if (request.SelectedOptions is { Count: > 0 } && classId != "class.warlock")
+            throw new ArgumentException("This Class does not expose native option slots yet.");
         var currentLevel = selected?.Level ?? 0;
-        var targetLevel = checked(currentLevel + 1);
+        if (request.ExpectedClassLevel is int expected && expected != currentLevel)
+            throw new ArgumentException("The Class level changed. Reopen the advancement review.");
+        if (request.ConfigureCurrentLevel && selected is null)
+            throw new ArgumentException("Choose an existing Class to configure its current choices.");
+        if (request.ConfigureCurrentLevel && request.HitDieValue is not null)
+            throw new ArgumentException("Current Class choices do not change hit point gains.");
+        var targetLevel = request.ConfigureCurrentLevel ? currentLevel : checked(currentLevel + 1);
         var characterLevel = classes.Sum(entry => entry.Level!.Value);
         var scores = build.BaseAbilityScoreInputs
             .GroupBy(entry => entry.AbilityKey, StringComparer.Ordinal)
@@ -261,7 +290,7 @@ public sealed class CharacterAdvancementService(
         var displayChoices = new List<RulesCoreCharacterChoiceView>();
         if (eligibility["requirements"] is not JsonArray requirements)
             throw new RulesCoreGatewayException("Native eligibility requirements are missing.");
-        foreach (var requirement in requirements)
+        foreach (var requirement in request.ConfigureCurrentLevel ? new JsonArray() : requirements)
         {
             if (Text(requirement, "status") == "satisfied") continue;
             blockers.Add(new RulesCoreCharacterProjectionConflictView(
@@ -272,7 +301,10 @@ public sealed class CharacterAdvancementService(
         // A class progression row alone does not settle Patron, Pact,
         // invocation or other mandatory option choices. Project the proposed
         // class state and block apply when Rules Core reports required choices.
-        if (eligibilityStatus == "eligible")
+        // Editing existing class choices is not a request for the next class
+        // level. Its authorization comes from the current-level projection and
+        // each selected option's eligibility below, not a next-level gate.
+        if (request.ConfigureCurrentLevel || eligibilityStatus == "eligible")
         {
             var proposedAdvancements = classes.Select(entry => new {
                 classId = entry.RuleConceptKey,
@@ -361,21 +393,21 @@ public sealed class CharacterAdvancementService(
             }
         }
 
-        if (request.HitDieValue is null)
+        if (!request.ConfigureCurrentLevel && request.HitDieValue is null)
             blockers.Add(new RulesCoreCharacterProjectionConflictView(
                 "hit-point-gain", "character-input",
                 "Select the hit point gain for the next Class level.", [], [classId]));
-        if (eligibilityStatus != "eligible" &&
+        if (!request.ConfigureCurrentLevel && eligibilityStatus != "eligible" &&
             blockers.Count == 0)
             blockers.Add(new RulesCoreCharacterProjectionConflictView(
                 "class-eligibility", "native-eligibility",
                 "Native Rules Core did not authorize this advancement.", [], [classId]));
 
-        var canApply = eligibilityStatus == "eligible" &&
-            eligibility["eligible"]?.GetValue<bool>() == true &&
-            request.HitDieValue is > 0 && blockers.Count == 0;
+        var canApply = (request.ConfigureCurrentLevel ||
+            (eligibilityStatus == "eligible" && eligibility["eligible"]?.GetValue<bool>() == true)) &&
+            (request.ConfigureCurrentLevel || request.HitDieValue is > 0) && blockers.Count == 0;
         return new CharacterAdvancementPlanView(
-            Operation: selected is null ? "add-class" : "advance-class",
+            Operation: request.ConfigureCurrentLevel ? "configure-class" : selected is null ? "add-class" : "advance-class",
             ClassAdvancementEntryId: selected?.Id ?? Guid.Empty,
             ClassConceptKey: classId,
             ClassDisplayName: className,
@@ -383,8 +415,8 @@ public sealed class CharacterAdvancementService(
             CurrentClassLevel: currentLevel,
             TargetClassLevel: targetLevel,
             CurrentCharacterLevel: characterLevel,
-            TargetCharacterLevel: checked(characterLevel + 1),
-            HitPointGainRequired: true,
+            TargetCharacterLevel: request.ConfigureCurrentLevel ? characterLevel : checked(characterLevel + 1),
+            HitPointGainRequired: !request.ConfigureCurrentLevel,
             HitDieValue: request.HitDieValue,
             Status: canApply ? "ready" : eligibilityStatus == "eligible"
                 ? "choice-required" : eligibilityStatus,
@@ -467,6 +499,19 @@ public sealed class CharacterAdvancementService(
             saved.GetValueOrDefault(slot.Key) is null ? "required" : "resolved",
             options[slot.Kind], saved.GetValueOrDefault(slot.Key), "class.warlock",
             unverifiedProvenance)).ToArray();
+    }
+
+    private static bool IsSupportedOptionSlot(string key, string? value)
+    {
+        const string prefix = "native-option.class.warlock.";
+        if (!key.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var slot = key[prefix.Length..];
+        if (slot is "patron" or "pact")
+            return value?.StartsWith(slot + ".", StringComparison.Ordinal) == true;
+        return value?.StartsWith("invocation.", StringComparison.Ordinal) == true &&
+            slot.StartsWith("invocation.", StringComparison.Ordinal) &&
+            int.TryParse(slot["invocation.".Length..], out var number) &&
+            number is >= 1 and <= 64 && slot == "invocation." + number;
     }
 
     private static string? Text(JsonNode? value, string key)

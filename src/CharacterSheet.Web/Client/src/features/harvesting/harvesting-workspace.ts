@@ -1582,7 +1582,7 @@ function numberField(
     if (minimum !== undefined) input.min = String(minimum);
     input.value = value === null ? "" : String(value);
     input.disabled = readOnly;
-    input.addEventListener("change", () => {
+    const commit = (): void => {
         const normalized = input.value.trim();
         if (normalized.length === 0) {
             onChange(null);
@@ -1590,7 +1590,9 @@ function numberField(
         }
         const parsed = Number.parseInt(normalized, 10);
         onChange(Number.isFinite(parsed) ? parsed : null);
-    });
+    };
+    input.addEventListener("input", commit);
+    input.addEventListener("change", commit);
     label.append(input);
     return label;
 }

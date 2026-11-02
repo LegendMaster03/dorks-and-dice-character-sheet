@@ -359,6 +359,25 @@ public sealed class NativeCharacterPresentationBridgeTests
             item => item.Key == "skill.perception").RankInputKey);
     }
 
+    [Fact]
+    public async Task NativeWetIsForwardedWithoutErasingIndependentCoreValues()
+    {
+        var gateway = new FixtureGateway();
+        var occurrence = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 2);
+        var build = Build(occurrence) with { BaseAbilityScoreInputs = [
+            new BaseAbilityScoreInputView(Guid.NewGuid(), "strength", 14, Now, Now)] };
+        var state = new CharacterStateView(build.CharacterId, false, 15,
+            new CharacterDeathSavesView(0, 0), [], [], [new CharacterConditionOccurrenceView(
+                Guid.NewGuid(), "condition.wet", null, null, null, null, null, null, Now, Now)]);
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, state, CancellationToken.None);
+        Assert.Equal(new[] { "condition.wet" }, gateway.LastConditionIds);
+        Assert.Equal(14, Assert.Single(result.Mechanics!.AbilityValues!).EffectiveValue);
+        Assert.Equal(15, Assert.Single(result.Mechanics.HealthTracks!).Current);
+        Assert.Equal("partial", result.Status);
+    }
+
     private sealed class FixtureGateway : INativeRulesCoreGateway
     {
         public int Calls { get; private set; }
@@ -369,6 +388,7 @@ public sealed class NativeCharacterPresentationBridgeTests
         public string? LastAdvancementClassId { get; private set; }
         public int? LastAdvancementLevel { get; private set; }
         public string[] LastSelectedOptions { get; private set; } = [];
+        public string[] LastConditionIds { get; private set; } = [];
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken token)
         {
@@ -408,6 +428,8 @@ public sealed class NativeCharacterPresentationBridgeTests
             CancellationToken token)
         {
             Calls++;
+            LastConditionIds = request.GetProperty("conditionIds").EnumerateArray()
+                .Select(value => value.GetString()!).ToArray();
             var item = request.GetProperty("advancements").EnumerateArray().Single();
             LastAdvancementClassId = item.GetProperty("classId").GetString();
             LastAdvancementLevel = item.GetProperty("level").GetInt32();
