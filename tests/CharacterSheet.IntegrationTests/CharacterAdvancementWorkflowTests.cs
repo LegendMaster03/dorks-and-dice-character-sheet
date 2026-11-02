@@ -391,6 +391,50 @@ public sealed class CharacterAdvancementWorkflowTests
         Assert.Empty(state!.InventoryItemOccurrences);
     }
 
+    [Fact]
+    public async Task NativeManualManufacturingUsesExistingAuthorizedCharacterEndpoint()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Maker", "Active", null, []));
+        await InitializeClassAsync(factory, id);
+        using (var result = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/crafting/manufacturing/resolve", new {
+                competency = new { manual = new { displayName = "Smithing",
+                    contribution = 3, isQualified = true } },
+                manualAbilityModifier = 2, d20Roll = 15, otherModifier = 0, targetDc = 20
+            }))
+        {
+            Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+            using var payload = JsonDocument.Parse(await result.Content.ReadAsStringAsync());
+            Assert.Equal("completed", payload.RootElement.GetProperty("outcome").GetString());
+            Assert.Equal(20, payload.RootElement.GetProperty("total").GetInt32());
+        }
+        Assert.Equal(1, factory.Native.ManufacturingCalls);
+        Assert.Equal(2, factory.Native.LastManufacturingRequest
+            .GetProperty("manualAbilityModifier").GetInt32());
+        Assert.Equal("first-party-001", factory.Native.LastManufacturingRequest
+            .GetProperty("rulesetId").GetString());
+
+        using (var unsupported = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/crafting/manufacturing/resolve", new {
+                competency = new { competencyKey = "competency.smithing" },
+                abilityKey = "strength", d20Roll = 15, targetDc = 20
+            }))
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, unsupported.StatusCode);
+        Assert.Equal(1, factory.Native.ManufacturingCalls);
+
+        using (var unsupportedCampaign = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/crafting/manufacturing/resolve", new {
+                campaignId = Guid.NewGuid(),
+                competency = new { manual = new { displayName = "Smithing",
+                    contribution = 3, isQualified = true } },
+                manualAbilityModifier = 2
+            }))
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, unsupportedCampaign.StatusCode);
+        Assert.Equal(1, factory.Native.ManufacturingCalls);
+    }
+
     private static async Task<CharacterAdvancementEntryView> InitializeClassAsync(
         Factory factory, Guid id)
     {
@@ -464,6 +508,8 @@ public sealed class CharacterAdvancementWorkflowTests
         public int EligibilityCalls { get; private set; }
         public int ResourceActionCalls { get; private set; }
         public int EquipmentCalls { get; private set; }
+        public int ManufacturingCalls { get; private set; }
+        public JsonElement LastManufacturingRequest { get; private set; }
         public string EquipmentStatus { get; set; } = "unavailable";
         public bool InjectInvalidEquipmentGrant { get; init; }
         public JsonElement LastEquipmentRequest { get; private set; }
@@ -476,7 +522,8 @@ public sealed class CharacterAdvancementWorkflowTests
                 contractVersion = 1, rulesetId = "first-party-001",
                 fingerprint = Fingerprint,
                 capabilities = new { advancementEligibility = "supported-subset",
-                    resourceResolution = true, startingEquipmentResolution = "authored-grants-only" }
+                    resourceResolution = true, startingEquipmentResolution = "authored-grants-only",
+                    manufacturingResolution = "manual-competency-subset" }
             })!);
 
         public Task<JsonNode> SearchNativeOptionsAsync(
@@ -576,6 +623,25 @@ public sealed class CharacterAdvancementWorkflowTests
                         new { id = "kit", name = "Adventurer Kit" } }
                 } },
                 issues = Array.Empty<object>()
+            })!);
+        }
+
+        public Task<JsonNode> ResolveNativeManufacturingAsync(
+            JsonElement request, CancellationToken token)
+        {
+            ManufacturingCalls++;
+            LastManufacturingRequest = request.Clone();
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                contractVersion = 1, rulesetId = "first-party-001", fingerprint = Fingerprint,
+                status = "resolved", procedureKey = "manufacturing",
+                displayName = "Manufacturing Check", competencyKey = "manual",
+                competencyDisplayName = "Smithing", manualCompetency = true,
+                isQualified = true, rollMode = "normal",
+                competencyContribution = 3, abilityContribution = 2,
+                otherModifier = 0, d20Roll = 15, total = 20, targetDc = 20,
+                meetsTarget = true, outcome = "completed", margin = 0,
+                flawCount = (int?)null, inputsConsumed = true,
+                producesFunctionalOutput = true
             })!);
         }
 
