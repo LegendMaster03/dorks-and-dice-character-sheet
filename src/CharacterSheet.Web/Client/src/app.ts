@@ -221,6 +221,10 @@ function renderWorkspace(
                     void rulesInputWorkflow.clearChoice(character.characterId, choiceKey),
                 setResource: (resourceKey, currentValue) =>
                     void rulesInputWorkflow.setResource(character.characterId, resourceKey, currentValue),
+                spendResource: (resourceKey, amount) =>
+                    void rulesInputWorkflow.spendResource(character.characterId, resourceKey, amount),
+                recoverResource: (resourceKey, rest) =>
+                    void rulesInputWorkflow.recoverResource(character.characterId, resourceKey, rest),
                 setCompetencyRank: (competencyKey, ranks) =>
                     void rulesInputWorkflow.set(character.characterId, {
                         kind: "competencyRank",
@@ -296,6 +300,8 @@ function renderWorkspace(
                 closeInventoryChooser: () => inventoryWorkflow.closeChooser(),
                 searchInventory: query => void inventoryWorkflow.search(query),
                 addInventoryItem: conceptKey => void inventoryWorkflow.add(character.characterId, conceptKey),
+                addCustomInventoryItem: (name, quantity) =>
+                    void inventoryWorkflow.addCustom(character.characterId, name, quantity),
                 updateInventoryItem: (occurrenceId, input) =>
                     void inventoryWorkflow.update(character.characterId, occurrenceId, input),
                 removeInventoryItem: occurrenceId => void inventoryWorkflow.remove(character.characterId, occurrenceId),
@@ -323,9 +329,12 @@ function renderWorkspace(
             leaveEditMode: () => dispatchAndFocus(
                 { type: "sheet-edit-exited" },
                 '[data-sheet-mode-control="edit"]'),
-            openGuidedBuilder: () => dispatchAndFocus(
-                { type: "guided-builder-opened" },
-                '[data-sheet-mode-control="guided-close"]'),
+            openGuidedBuilder: () => {
+                dispatchAndFocus(
+                    { type: "guided-builder-opened" },
+                    '[data-sheet-mode-control="guided-close"]');
+                void presentationWorkflow.load(character.characterId);
+            },
             closeGuidedBuilder: () => dispatchAndFocus(
                 { type: "guided-builder-closed" },
                 "[data-sheet-mode-control]"),
@@ -333,7 +342,19 @@ function renderWorkspace(
                 { type: "guided-builder-section-selected", section },
                 `[data-guided-builder-section="${section}"]`)
         },
-        state.harvestingCrafting);
+        state.harvestingCrafting,
+        state.presentation.status === "ready"
+            ? {
+                status: state.presentation.mechanicsStatus ?? (
+                    state.presentation.mechanics === null ? "unavailable" : "resolved"),
+                message: state.presentation.mechanicsMessage
+              }
+            : state.presentation.status === "error"
+                ? { status: "unavailable", message: state.presentation.message }
+                : { status: "loading" },
+        state.presentation.equipmentPreview ?? null,
+        state.presentation.equipmentPreviewMessage,
+        state.presentation.equipmentPreviewStatus);
     return workspace;
 }
 

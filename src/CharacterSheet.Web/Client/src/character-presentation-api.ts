@@ -12,9 +12,13 @@ import {
     type RulesCoreCharacterProjectionContextView
 } from "./rules-core-context.js";
 
+export type MechanicsProjectionStatus = "resolved" | "partial" | "unconfigured" | "unavailable";
+
 export interface CharacterPresentationResponse {
     advancement: CharacterAdvancementView;
     mechanics: CharacterMechanicsView | null;
+    mechanicsStatus?: MechanicsProjectionStatus;
+    mechanicsMessage?: string | null;
 }
 
 interface CharacterPresentationPayload extends CharacterPresentationResponse {
@@ -50,6 +54,8 @@ export async function loadCharacterPresentation(
         advancement: presentation.advancement,
         mechanics: attachRulesCoreContext(
             presentation.mechanics,
-            presentation.ruleProjection)
+            presentation.ruleProjection),
+        mechanicsStatus: presentation.mechanicsStatus,
+        mechanicsMessage: presentation.mechanicsMessage
     };
 }

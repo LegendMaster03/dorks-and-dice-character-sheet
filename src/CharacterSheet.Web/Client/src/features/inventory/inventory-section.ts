@@ -52,6 +52,7 @@ export function renderInventorySection(
             "dd-button dd-button--primary",
             handlers.openInventoryChooser,
             pending));
+        actions.append(renderCustomInventoryForm(handlers, pending));
         content.append(actions);
     }
 
@@ -126,6 +127,58 @@ export function renderInventorySection(
     if (list.children.length > 0) content.append(list);
     appendInventoryMechanicsPresentation(content, mechanics);
     return content;
+}
+
+
+function renderCustomInventoryForm(
+    handlers: RoutineCharacterHandlers,
+    pending: boolean
+): HTMLElement {
+    const details = createElement("details", "dd-inventory-custom");
+    const summary = createElement("summary", "dd-inventory-custom__toggle", "Add Custom Item");
+    const form = createElement("form", "dd-inventory-custom__form");
+    form.setAttribute("data-custom-inventory-form", "true");
+
+    const nameLabel = createElement("label", "dd-sheet-screen__label", "Item name");
+    const name = createElement("input", "dd-sheet-screen__input") as HTMLInputElement;
+    name.type = "text";
+    name.maxLength = 200;
+    name.required = true;
+    name.placeholder = "Item or material name";
+    name.setAttribute("aria-label", "Custom item name");
+    nameLabel.append(name);
+
+    const quantityLabel = createElement("label", "dd-sheet-screen__label", "Quantity");
+    const quantity = createElement("input", "dd-sheet-screen__input") as HTMLInputElement;
+    quantity.type = "number";
+    quantity.min = "1";
+    quantity.step = "1";
+    quantity.value = "1";
+    quantity.required = true;
+    quantity.setAttribute("aria-label", "Custom item quantity");
+    quantityLabel.append(quantity);
+
+    const submit = createElement("button", "dd-button dd-button--secondary", "Add to Inventory") as HTMLButtonElement;
+    submit.type = "submit";
+    submit.disabled = pending;
+    form.append(nameLabel, quantityLabel, submit);
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        const title = name.value.trim();
+        const count = Number(quantity.value);
+        name.setCustomValidity(title.length === 0 || title.length > 200
+            ? "Enter an item name of at most 200 characters." : "");
+        quantity.setCustomValidity(!Number.isSafeInteger(count) ||
+            count < 1 || count > 2147483647
+            ? "Enter a quantity from 1 to 2147483647." : "");
+        if (pending || !name.reportValidity() || !quantity.reportValidity() ||
+            title.length === 0 || !Number.isSafeInteger(count) ||
+            count < 1 || count > 2147483647)
+            return;
+        handlers.addCustomInventoryItem(title, count);
+    });
+    details.append(summary, form);
+    return details;
 }
 
 function renderCurrencyBalances(
@@ -432,16 +485,13 @@ function renderInventoryChooser(
     for (const rule of chooser.results) {
         const result = createElement("article", "dd-rule-chooser__result");
         result.append(
-            createElement("strong", "dd-rule-chooser__result-name", rule.displayName),
-            createElement(
-                "span",
-                "dd-rule-chooser__result-meta",
-                [rule.editionDisplayName, rule.sourceCode].filter(Boolean).join(" • ")),
-            createElement("span", "dd-rule-chooser__result-key", rule.conceptKey),
+            createElement("strong", "dd-rule-chooser__result-name", rule.name),
+
+            createElement("span", "dd-rule-chooser__result-key", rule.id),
             createButton(
                 "Add",
                 "dd-button dd-button--primary",
-                () => handlers.addInventoryItem(rule.conceptKey),
+                () => handlers.addInventoryItem(rule.id),
                 routine.mutation !== null)
         );
         results.append(result);

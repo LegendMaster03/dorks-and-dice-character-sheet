@@ -84,3 +84,18 @@ test("presentation client returns advancement and mechanics without calling Rule
     assert.equal(context.actions[0].attackResolution.targetDefenseKey, "defense.ac.touch");
     assert.equal(context.actions[0].attackResolution.rollMode, "normal");
 });
+
+test("native availability status remains distinct from an unconfigured character", async () => {
+    const payload = {
+        advancement: { occurrences: [] },
+        mechanics: null,
+        mechanicsStatus: "unavailable",
+        mechanicsMessage: "Native Rules Core mechanics are unavailable. Saved character data is unchanged."
+    };
+    const response = await loadCharacterPresentation(embedded, characterId,
+        async () => new Response(JSON.stringify(payload), { status: 200 }));
+    assert.equal(response.mechanicsStatus, "unavailable");
+    assert.equal(response.mechanics, null);
+    assert.match(response.mechanicsMessage, /Saved character data is unchanged/);
+});
+

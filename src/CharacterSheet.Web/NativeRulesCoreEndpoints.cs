@@ -1,24 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.RulesCore;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CharacterSheet.Web;
-
-/// <summary>
-/// Server-only, explicitly named native mechanics operations. A browser never
-/// receives Site delegation credentials or calls the Rules Core target directly.
-/// </summary>
-public interface INativeRulesCoreGateway
-{
-    Task<JsonNode> GetNativeRulesetAsync(CancellationToken cancellationToken);
-    Task<JsonNode> SearchNativeOptionsAsync(
-        string fingerprint, string category, string? query, int limit, int offset,
-        CancellationToken cancellationToken);
-    Task<JsonNode> EvaluateNativeAdvancementAsync(
-        JsonElement request, CancellationToken cancellationToken);
-    Task<JsonNode> ProjectNativeCharacterAsync(
-        JsonElement request, CancellationToken cancellationToken);
-}
 
 public static class NativeRulesCoreEndpoints
 {
@@ -36,22 +21,35 @@ public static class NativeRulesCoreEndpoints
             return await next(invocation);
         });
 
-        group.MapGet("/ruleset", (INativeRulesCoreGateway gateway,
+        group.MapGet("/ruleset", ([FromServices] INativeRulesCoreGateway gateway,
             CancellationToken cancellationToken) =>
             Forward(() => gateway.GetNativeRulesetAsync(cancellationToken)));
 
         group.MapGet("/options", (string fingerprint, string category, string? q,
-            int? limit, int? offset, INativeRulesCoreGateway gateway,
+            int? limit, int? offset, [FromServices] INativeRulesCoreGateway gateway,
             CancellationToken cancellationToken) =>
             Forward(() => gateway.SearchNativeOptionsAsync(
                 fingerprint, category, q, limit ?? 50, offset ?? 0, cancellationToken)));
 
+        group.MapGet("/harvesting", (string fingerprint,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.GetNativeHarvestingCatalogAsync(
+                fingerprint, cancellationToken)));
+
+        group.MapPost("/harvesting/resolve", (JsonElement request,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.ResolveNativeHarvestingTableAsync(request, cancellationToken)));
+
+        group.MapPost("/harvesting/outcome", (JsonElement request,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.EvaluateNativeHarvestingOutcomeAsync(request, cancellationToken)));
+
         group.MapPost("/advancements/eligibility", (JsonElement request,
-            INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
             Forward(() => gateway.EvaluateNativeAdvancementAsync(request, cancellationToken)));
 
         group.MapPost("/characters/project", (JsonElement request,
-            INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
             Forward(() => gateway.ProjectNativeCharacterAsync(request, cancellationToken)));
     }
 
@@ -63,13 +61,14 @@ public static class NativeRulesCoreEndpoints
         }
         catch (RulesCoreGatewayException error)
         {
-            var status = error.StatusCode is 400 or 401 or 403 or 409
+            var status = error.StatusCode is 400 or 401 or 403 or 409 or 422
                 ? error.StatusCode.Value : StatusCodes.Status503ServiceUnavailable;
             // Do not leak target paths, Site credentials or private diagnostics.
             return Results.Json(new { error = status == 409
                 ? "ruleset_version_mismatch"
                 : status == 400 ? "invalid_native_request"
                 : status is 401 or 403 ? "native_mechanics_access_denied"
+                : status == 422 ? "native_mechanics_unresolved"
                 : "native_mechanics_unavailable" }, statusCode: status);
         }
     }

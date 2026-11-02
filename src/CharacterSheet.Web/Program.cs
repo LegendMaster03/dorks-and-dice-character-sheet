@@ -24,23 +24,6 @@ if (!string.IsNullOrWhiteSpace(toolHostBaseUrl))
     }
 }
 
-string? rulesCoreDevelopmentBaseUrl = null;
-if (builder.Environment.IsDevelopment())
-{
-    var configuredRulesCoreDevelopmentBaseUrl = builder.Configuration["RulesCore:DevelopmentBaseUrl"];
-    if (!string.IsNullOrWhiteSpace(configuredRulesCoreDevelopmentBaseUrl))
-    {
-        if (!Uri.TryCreate(configuredRulesCoreDevelopmentBaseUrl, UriKind.Absolute, out var rulesCoreDevelopmentBaseUri)
-            || (rulesCoreDevelopmentBaseUri.Scheme != Uri.UriSchemeHttp
-                && rulesCoreDevelopmentBaseUri.Scheme != Uri.UriSchemeHttps))
-        {
-            throw new InvalidOperationException(
-                "RulesCore:DevelopmentBaseUrl must be an absolute HTTP or HTTPS URL when configured.");
-        }
-        rulesCoreDevelopmentBaseUrl = rulesCoreDevelopmentBaseUri.ToString().TrimEnd('/');
-    }
-}
-
 builder.Services
     .AddHttpClient<IToolHostAuthenticationClient, DorksAndDiceToolHostAuthenticationClient>(client =>
     {
@@ -118,6 +101,7 @@ builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
+builder.Services.AddScoped<NativeCharacterResourceService>();
 builder.Services.AddScoped<CharacterCraftingService>();
 builder.Services.AddScoped<CharacterPresentationService>();
 builder.Services.AddHealthChecks();
@@ -181,6 +165,7 @@ app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
 app.MapCharacterCraftingEndpoints();
 app.MapNativeRulesCoreEndpoints();
+app.MapNativeCharacterResourceEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
     Guid characterId,
@@ -445,9 +430,6 @@ app.MapDelete("/api/characters/{characterId:guid}/build/feats/{featAdvancementEn
 
 var standaloneDevelopmentAttributes = app.Environment.IsDevelopment()
     ? " data-standalone-development=\"true\""
-        + (rulesCoreDevelopmentBaseUrl is null
-            ? string.Empty
-            : $" data-rules-core-development-base-url=\"{System.Net.WebUtility.HtmlEncode(rulesCoreDevelopmentBaseUrl)}\"")
     : string.Empty;
 var standaloneShell = $$"""
 <!doctype html>

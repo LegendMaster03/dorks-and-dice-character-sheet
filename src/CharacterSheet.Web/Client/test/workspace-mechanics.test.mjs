@@ -169,6 +169,65 @@ function render(section, mechanics, currentRoutine = routine()) {
     );
 }
 
+test("custom inventory additions use the existing inventory and validate quantity", () => {
+    const submitted = [];
+    const customHandlers = {
+        ...handlers,
+        routine: {
+            ...handlers.routine,
+            addCustomInventoryItem(name, quantity) { submitted.push({ name, quantity }); }
+        }
+    };
+    const display = renderCharacterWorkspace(
+        character, builder, routine([], {}, false),
+        "inventory", false, "view", guidedBuilder, null, null, customHandlers
+    );
+    const form = byAttribute(display, "data-custom-inventory-form", "true")[0];
+    assert.ok(form, "Custom item form belongs to ordinary Inventory.");
+    const itemName = byAttribute(form, "aria-label", "Custom item name")[0];
+    const quantity = byAttribute(form, "aria-label", "Custom item quantity")[0];
+    assert.ok(itemName && quantity);
+    itemName.value = "  Chitin Plate  ";
+    quantity.value = "4";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.deepEqual(submitted, [{ name: "Chitin Plate", quantity: 4 }]);
+    quantity.value = "0";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    quantity.value = "1.5";
+    form.dispatchEvent({ type: "submit", preventDefault() {} });
+    assert.equal(submitted.length, 1);
+});
+
+test("guided starting equipment navigates to ordinary inventory", () => {
+    const calls = [];
+    const guidedHandlers = {
+        ...handlers,
+        closeGuidedBuilder() { calls.push("close"); },
+        selectSection(value) { calls.push(value); }
+    };
+    const editableBuilder = {
+        ...builder,
+        status: "ready",
+        build: {
+            characterId, builderStatus: "BuildInProgress", readOnly: false,
+            foundationalSelections: [], baseAbilityScoreInputs: [],
+            progressionEntries: []
+        }
+    };
+    const displayed = renderCharacterWorkspace(
+        character, editableBuilder,
+        routine([], {}, false),
+        "inventory", false, "view",
+        { ...guidedBuilder, open: true, activeSection: "equipment" },
+        null, null, guidedHandlers
+    );
+    const action = byTag(displayed, "button").find(button =>
+        button.textContent === "Open Inventory");
+    assert.ok(action, "Manual inventory remains reachable when native grants are missing.");
+    action.dispatchEvent({ type: "click" });
+    assert.deepEqual(calls, ["close", "inventory"]);
+});
+
 test("primary sheet sections expose tab and tabpanel semantics", () => {
     const rendered = render("actions", null);
     const nav = byClass(rendered, "dd-primary-nav")[0];
@@ -186,6 +245,31 @@ test("primary sheet sections expose tab and tabpanel semantics", () => {
     assert.ok(panel);
     assert.equal(panel.getAttribute("role"), "tabpanel");
     assert.equal(panel.getAttribute("aria-labelledby"), "dd-sheet-tab-actions");
+});
+
+test("spellcasting tab is absent only for a confirmed noncaster", () => {
+    const noCasting = render("spells", { spellcastingProfiles: [] });
+    const tabs = byClass(noCasting, "dd-primary-nav__button");
+    assert.equal(tabs.length, 5);
+    assert.equal(tabs.some(tab =>
+        tab.getAttribute("data-sheet-section-tab") === "spells"), false);
+    // A previously selected Spells tab falls back to the first available tab.
+    assert.equal(byAttribute(noCasting, "data-sheet-section", "actions").length, 1);
+    assert.equal(tabs.filter(tab => tab.getAttribute("aria-selected") === "true").length, 1);
+
+    const caster = render("spells", { spellcastingProfiles: [{
+        key: "native.pact-magic", label: "Pact Magic",
+        resources: [{ key: "resource.pact-magic", label: "Pact Magic",
+            state: "resolved", current: 1, maximum: 1 }]
+    }] });
+    assert.equal(byAttribute(caster, "data-sheet-section-tab", "spells").length, 1);
+    assert.equal(byAttribute(caster, "data-sheet-section", "spells").length, 1);
+
+    // Missing mechanics is not equivalent to proof that casting is impossible.
+    const unavailable = render("spells", null);
+    assert.equal(byAttribute(unavailable, "data-sheet-section-tab", "spells").length, 1);
+    const unresolved = render("spells", { spellcastingProfiles: null });
+    assert.equal(byAttribute(unresolved, "data-sheet-section-tab", "spells").length, 1);
 });
 
 test("primary sheet tabs use roving tabindex and horizontal arrow-key selection", () => {
@@ -1195,8 +1279,9 @@ test("Known Spells renders Character-owned spell concepts and delegates add/remo
         status: "resolved",
         conceptKey: "spell.magic-missile",
         rule: {
-            ...resolvedItem("spell.magic-missile", "Magic Missile").rule,
-            entityType: "spell"
+            id: "spell.magic-missile",
+            name: "Magic Missile",
+            kind: "spell"
         }
     };
     const spellHandlers = {
@@ -1313,6 +1398,43 @@ test("spellcasting resource editor persists the backend resource key and current
     assert.ok(save);
     save.dispatchEvent({ type: "click" });
     assert.deepEqual(saved, ["resource.spell-points", 6]);
+});
+
+test("native resource actions expose spend and supported recovery without claiming a full rest", () => {
+    const actions = [];
+    const resourceHandlers = {
+        ...handlers,
+        rules: {
+            ...handlers.rules,
+            spendResource(key, amount) { actions.push(["spend", key, amount]); },
+            recoverResource(key, rest) { actions.push(["recover", key, rest]); }
+        }
+    };
+    const rendered = renderCharacterWorkspace(
+        character, builder, routine([], {}, false), "spells", false,
+        "view", guidedBuilder, null, {
+            spellcastingProfiles: [{
+                key: "warlock", label: "Pact Magic",
+                resources: [{
+                    key: "resource.pact-magic", label: "Pact Magic",
+                    state: "resolved", current: 1, maximum: 2,
+                    recoveryProcedureKey: "short-or-long-rest"
+                }]
+            }]
+        }, resourceHandlers);
+    const resource = byAttribute(rendered, "data-spellcasting-resource-key", "resource.pact-magic")[0];
+    assert.ok(resource);
+    const buttons = byTag(resource, "button");
+    const spend = buttons.find(button => button.textContent === "Spend 1");
+    const recover = buttons.find(button => button.textContent === "Recover Resource (Short Rest)");
+    assert.ok(spend);
+    assert.ok(recover);
+    spend.dispatchEvent({ type: "click" });
+    recover.dispatchEvent({ type: "click" });
+    assert.deepEqual(actions, [
+        ["spend", "resource.pact-magic", 1],
+        ["recover", "resource.pact-magic", "short-rest"]
+    ]);
 });
 
 test("guided advancement exposes one raw hit-die outcome per owned Class level", () => {

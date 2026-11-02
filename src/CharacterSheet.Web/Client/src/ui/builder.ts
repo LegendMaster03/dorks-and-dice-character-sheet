@@ -1,7 +1,7 @@
 import type { CharacterBuilderUiState } from "../app-state.js";
 import type { CharacterBuilderChoice } from "../builder-api.js";
 import { getStartingClassEntry, getStoredChoiceConceptKey } from "../builder-rules.js";
-import type { ResolvedRuleCatalogItem } from "../rules-core-api.js";
+import type { NativeOptionSummary } from "../rules-core-native-api.js";
 import { createButton, createElement, createInlineState, createSectionCard } from "./components.js";
 import {
     getChoiceActionPolicy,
@@ -243,23 +243,18 @@ function renderRuleChooser(
 
 function renderRuleChooserResult(
     target: CharacterBuilderChoice,
-    rule: ResolvedRuleCatalogItem,
+    rule: NativeOptionSummary,
     disabled: boolean,
     handlers: CharacterBuilderHandlers
 ): HTMLLIElement {
     const item = createElement("li", "dd-rule-result");
     const button = createButton(
-        rule.displayName,
+        rule.name,
         "dd-rule-result__button",
-        () => handlers.saveChoice(target, rule.conceptKey),
+        () => handlers.saveChoice(target, rule.id),
         disabled);
     item.append(button);
 
-    const metadata = [rule.editionDisplayName, rule.sourceCode, rule.packageDisplayName]
-        .map(value => value.trim())
-        .filter(value => value.length > 0);
-    if (metadata.length > 0) {
-        item.append(createElement("span", "dd-rule-result__meta", metadata.join(" • ")));
-    }
+    item.append(createElement("span", "dd-rule-result__meta", rule.id));
     return item;
 }

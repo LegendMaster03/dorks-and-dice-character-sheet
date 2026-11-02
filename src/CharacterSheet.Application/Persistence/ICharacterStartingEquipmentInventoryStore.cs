@@ -14,14 +14,17 @@ public sealed record CharacterStartingEquipmentCurrencyGrant(
     long Amount);
 
 /// <summary>
-/// Persists the acquisition boundary between Rules Core starting-equipment grants and ordinary
-/// Character-owned inventory/currency. Provenance exists only so re-applying a changed starting
-/// equipment selection can update generated state without touching identical manually acquired
-/// items or losing later currency changes.
+/// Issues starting equipment once into ordinary Character inventory and currency.
+/// The receipt prevents duplicate awards; it does not track or synchronize acquired items.
 /// </summary>
+public static class CharacterStartingEquipmentReceipt
+{
+    public const string Key = "starting-equipment.received";
+}
+
 public interface ICharacterStartingEquipmentInventoryStore
 {
-    Task<CharacterSheetRoot?> SynchronizeAsync(
+    Task<CharacterSheetRoot?> ApplyOnceAsync(
         Guid characterId,
         IReadOnlyList<CharacterStartingEquipmentInventoryItem> items,
         IReadOnlyList<CharacterStartingEquipmentCurrencyGrant> currencies,

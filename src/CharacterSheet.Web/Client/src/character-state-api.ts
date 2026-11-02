@@ -415,6 +415,46 @@ export async function removeCharacterHitPointGain(
         "Unable to clear Character hit point gain.");
 }
 
+export interface NativeCharacterResourceActionInput {
+    resourceId: string;
+    spend?: number;
+    rest?: "short-rest" | "long-rest";
+}
+
+export interface NativeCharacterResourceActionResponse {
+    resolution: {
+        status: string;
+        resourceId: string;
+        current: number;
+        maximum: number;
+    };
+    state: CharacterStateResponse;
+}
+
+export async function resolveNativeCharacterResource(
+    environment: HostEnvironment,
+    characterId: string,
+    action: NativeCharacterResourceActionInput,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<NativeCharacterResourceActionResponse> {
+    const response = await fetcher(
+        buildCharacterSheetApiUrl(environment,
+            `/api/characters/${encodeURIComponent(characterId)}/state/resources/resolve`), {
+            method: "POST",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(action)
+        });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Unable to resolve native Character resource action."),
+            response.status);
+    }
+    return await response.json() as NativeCharacterResourceActionResponse;
+}
+
 export async function resolveCharacterRecovery(
     environment: HostEnvironment,
     characterId: string,

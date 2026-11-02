@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
@@ -47,7 +49,8 @@ public sealed record CharacterCraftingResult(
 public sealed class CharacterCraftingService(
     CharacterBuildService buildService,
     CharacterStateService stateService,
-    IRulesCoreGateway rulesCoreGateway)
+    IRulesCoreGateway rulesCoreGateway,
+    INativeRulesCoreGateway nativeCore)
 {
     public async Task<CharacterCraftingResult> ResolveManufacturingAsync(
         Guid characterId,
@@ -57,42 +60,72 @@ public sealed class CharacterCraftingService(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Competency);
 
-        var context = await BuildCharacterContextAsync(characterId, cancellationToken);
-        if (context.Result is not null)
-        {
-            return context.Result;
-        }
+        var access = await ValidateCharacterAccessAsync(characterId, cancellationToken);
+        if (access is not null)
+            return access;
 
-        var competency = MapCompetency(request.Competency);
-        var rulesRequest = new RulesCoreManufacturingResolutionRequest(
-            context.Projection!,
-            competency,
-            request.HasQualifiedGuidance,
-            request.D20Roll,
-            request.OtherModifier,
-            request.TargetDc,
-            request.AbilityKey,
-            request.ManualAbilityModifier);
+        // The approved manufacturing outcome is available in native Core with
+        // explicit manual inputs. Full automatic native competency and
+        // effective Ability contribution resolution are still incomplete.
+        // Do not pass the retired rules projection or silently infer a value.
+        if (request.CampaignId is not null)
+            return Unsupported("Campaign-effective manufacturing is not available in native Rules Core.");
+        if (request.Competency.Manual is null ||
+            !string.IsNullOrWhiteSpace(request.Competency.CompetencyKey))
+            return Unsupported("Select a manual competency until native competency-backed manufacturing is available.");
+        if (request.ManualAbilityModifier is null ||
+            !string.IsNullOrWhiteSpace(request.AbilityKey))
+            return Unsupported("Enter a manual Ability modifier until native Character Ability contributions are supported.");
 
         try
         {
-            var resolution = request.CampaignId is Guid campaignId
-                ? await rulesCoreGateway.ResolveCampaignManufacturingAsync(
-                    campaignId,
-                    rulesRequest,
-                    cancellationToken)
-                : await rulesCoreGateway.ResolveGlobalManufacturingAsync(
-                    rulesRequest,
-                    cancellationToken);
-            return new CharacterCraftingResult(
-                CharacterCraftingAccessStatus.Ready,
-                resolution);
+            var metadata = await nativeCore.GetNativeRulesetAsync(cancellationToken);
+            var rulesetId = metadata["rulesetId"]?.GetValue<string>();
+            var fingerprint = metadata["fingerprint"]?.GetValue<string>();
+            if (metadata["contractVersion"]?.GetValue<int>() != 1 ||
+                string.IsNullOrWhiteSpace(rulesetId) ||
+                string.IsNullOrWhiteSpace(fingerprint) ||
+                metadata["capabilities"]?["manufacturingResolution"]?.GetValue<string>()
+                    != "manual-competency-subset")
+                return Unsupported("Rules Core does not currently advertise native manufacturing.");
+
+            var nativeRequest = JsonSerializer.SerializeToElement(new {
+                rulesetId,
+                fingerprint,
+                competency = new {
+                    displayName = request.Competency.Manual.DisplayName,
+                    contribution = request.Competency.Manual.Contribution,
+                    isQualified = request.Competency.Manual.IsQualified
+                },
+                request.HasQualifiedGuidance,
+                request.D20Roll,
+                request.OtherModifier,
+                request.TargetDc,
+                request.ManualAbilityModifier
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+            var result = await nativeCore.ResolveNativeManufacturingAsync(
+                nativeRequest, cancellationToken);
+            if (result["contractVersion"]?.GetValue<int>() != 1 ||
+                result["rulesetId"]?.GetValue<string>() != rulesetId ||
+                result["fingerprint"]?.GetValue<string>() != fingerprint ||
+                result["status"]?.GetValue<string>() != "resolved" ||
+                result["procedureKey"]?.GetValue<string>() != "manufacturing")
+                return Unsupported("Rules Core did not return a valid native manufacturing result.");
+
+            var resolved = JsonSerializer.Deserialize<RulesCoreCraftingCheckResolutionView>(
+                result.ToJsonString(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return resolved is null
+                ? Unsupported("Native manufacturing returned no check result.")
+                : new CharacterCraftingResult(CharacterCraftingAccessStatus.Ready, resolved);
         }
         catch (RulesCoreGatewayException exception)
         {
-            return new CharacterCraftingResult(
-                CharacterCraftingAccessStatus.ProjectionUnavailable,
-                Message: exception.Message);
+            return Unsupported(exception.Message);
+        }
+        catch (JsonException)
+        {
+            return Unsupported("Rules Core manufacturing returned an invalid response.");
         }
     }
 
@@ -140,6 +173,18 @@ public sealed class CharacterCraftingService(
         }
     }
 
+    private async Task<CharacterCraftingResult?> ValidateCharacterAccessAsync(
+        Guid characterId, CancellationToken cancellationToken)
+    {
+        var build = await buildService.GetAsync(characterId, cancellationToken);
+        if (build.Status != CharacterBuildAccessStatus.Ready || build.View is null)
+            return new(MapBuildStatus(build.Status));
+        var state = await stateService.GetAsync(characterId, cancellationToken);
+        if (state.Status != CharacterStateAccessStatus.Ready || state.View is null)
+            return new(MapStateStatus(state.Status));
+        return null;
+    }
+
     private async Task<(
         RulesCoreCharacterRulesProjectionRequest? Projection,
         CharacterCraftingResult? Result)> BuildCharacterContextAsync(
@@ -164,6 +209,9 @@ public sealed class CharacterCraftingService(
                 stateResult.View),
             null);
     }
+
+    private static CharacterCraftingResult Unsupported(string message) =>
+        new(CharacterCraftingAccessStatus.ProjectionUnavailable, Message: message);
 
     private static RulesCoreCraftingCompetencyInput MapCompetency(
         CharacterCraftingCompetencyRequest request) =>

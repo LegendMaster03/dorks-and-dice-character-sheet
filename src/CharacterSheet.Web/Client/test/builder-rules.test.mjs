@@ -170,99 +170,76 @@ test("subclass chooser retains only explicit Subclasses related to the selected 
     assert.deepEqual(filterSubclassesForClass([wizardSubclass], "   "), []);
 });
 
-test("canonical persisted Species reference resolves through Rules Core rather than being falsely unavailable", async () => {
-    const fetcher = async () => Response.json({
-        ruleConceptId: "11111111-1111-1111-1111-111111111111",
-        conceptKey: "species:elf",
-        entityType: "species",
-        displayName: "Elf",
-        sourceEntityName: "Elf",
-        sourceCode: "SRD",
-        packageKey: "fixture",
-        packageDisplayName: "Fixture",
-        editionKey: "5e",
-        editionDisplayName: "5e"
-    });
+const fingerprint = "a".repeat(64);
+const nativeClassBuild = {
+    ...build,
+    progressionEntries: build.progressionEntries.map(entry =>
+        entry.ordinal === 0
+            ? { ...entry, ruleConceptKey: "class.warlock" }
+            : entry)
+};
+function nativeFetch(available = true, category = "class") {
+    const requests = [];
+    const fetcher = async (url) => {
+        requests.push(String(url));
+        if (url.includes("/api/native-rules/ruleset"))
+            return Response.json({
+                contractVersion: 1, rulesetId: "first-party-001",
+                schemaVersion: 1, fingerprint,
+                capabilities: { nativeOptionSearch: true }
+            });
+        if (url.includes("/api/native-rules/options")) {
+            return Response.json({
+                contractVersion: 1, rulesetId: "first-party-001",
+                fingerprint, category, total: available ? 1 : 0,
+                options: available ? [{
+                    id: "class.warlock", name: "Warlock", kind: category
+                }] : []
+            });
+        }
+        throw new Error("Retired API was called: " + url);
+    };
+    return { fetcher, requests };
+}
 
-    const resolved = await resolveStoredChoice(environment, build, "species", fetcher);
-
+test("native class reference resolves by exact ID without legacy concept detail requests", async () => {
+    const { fetcher, requests } = nativeFetch();
+    const resolved = await resolveStoredChoice(
+        environment, nativeClassBuild, "startingClass", fetcher);
     assert.equal(resolved.status, "resolved");
-    assert.equal(resolved.conceptKey, "species:elf");
-    assert.equal(resolved.rule.displayName, "Elf");
+    assert.equal(resolved.rule.id, "class.warlock");
+    assert.equal(resolved.rule.name, "Warlock");
+    assert.deepEqual(requests.map(url => new URL(url, "https://example.test").pathname), [
+        "/tool-host/character-sheet/api/upstream/api/native-rules/ruleset",
+        "/tool-host/character-sheet/api/upstream/api/native-rules/options"
+    ]);
 });
 
-test("canonical persisted Subspecies reference resolves only as an explicit Subspecies concept", async () => {
-    const fetcher = async () => Response.json({
-        ruleConceptId: "33333333-3333-3333-3333-333333333333",
-        conceptKey: "subspecies:high-elf",
-        entityType: "subspecies",
-        displayName: "High Elf",
-        sourceEntityName: "High Elf",
-        sourceCode: "SRD",
-        packageKey: "fixture",
-        packageDisplayName: "Fixture",
-        editionKey: "5e",
-        editionDisplayName: "5e"
-    });
-
-    const resolved = await resolveStoredChoice(environment, build, "subspecies", fetcher);
-    assert.equal(resolved.status, "resolved");
-    assert.equal(resolved.rule.entityType, "subspecies");
+test("unknown class is unavailable without inventing a replacement", async () => {
+    const { fetcher, requests } = nativeFetch(false);
+    const result = await resolveStoredChoice(
+        environment, nativeClassBuild, "startingClass", fetcher);
+    assert.deepEqual(result, { status: "unavailable", conceptKey: "class.warlock" });
+    assert.equal(requests.length, 2);
+    assert.equal(nativeClassBuild.progressionEntries[0].ruleConceptKey, "class.warlock");
 });
 
-test("subclass reference resolves only as an explicit subclass concept", async () => {
-    const fetcher = async () => Response.json({
-        ruleConceptId: "22222222-2222-2222-2222-222222222222",
-        conceptKey: "subclass.wizard.evocation",
-        entityType: "subclass",
-        displayName: "School of Evocation",
-        sourceEntityName: "School of Evocation",
-        sourceCode: "SRD",
-        packageKey: "fixture",
-        packageDisplayName: "Fixture",
-        editionKey: "5e",
-        editionDisplayName: "5e"
-    });
-
-    const resolved = await resolveStoredChoice(environment, build, "subclass", fetcher);
-    assert.equal(resolved.status, "resolved");
-    assert.equal(resolved.rule.entityType, "subclass");
-});
-
-test("unavailable stored reference remains retained and is not substituted", async () => {
-    const fetcher = async () => new Response(null, { status: 404 });
-
-    const result = await resolveStoredChoice(environment, build, "startingClass", fetcher);
-
-    assert.deepEqual(result, { status: "unavailable", conceptKey: "class:wizard" });
-    assert.equal(build.progressionEntries[0].ruleConceptKey, "class:wizard");
-});
-
-test("a concept that resolves as the wrong entity type is unavailable rather than accepted by display name", async () => {
-    const fetcher = async () => Response.json({
-        ruleConceptId: "11111111-1111-1111-1111-111111111111",
-        conceptKey: "class:wizard",
-        entityType: "prestigeClass",
-        displayName: "Wizard",
-        sourceEntityName: "Wizard",
-        sourceCode: "SRD",
-        packageKey: "fixture",
-        packageDisplayName: "Fixture",
-        editionKey: "3.5e",
-        editionDisplayName: "3.5e"
-    });
-
-    assert.deepEqual(
-        await resolveStoredChoice(environment, build, "startingClass", fetcher),
+test("retired and unsupported identities do not trigger network calls", async () => {
+    const { fetcher, requests } = nativeFetch();
+    assert.deepEqual(await resolveStoredChoice(
+        environment, build, "startingClass", fetcher),
         { status: "unavailable", conceptKey: "class:wizard" });
+    assert.deepEqual(await resolveStoredChoice(
+        environment, nativeClassBuild, "species", fetcher),
+        { status: "unavailable", conceptKey: "species:elf" });
+    assert.equal(requests.length, 0);
 });
 
-test("Rules Core technical failures produce an explicit Species reference error without clearing the key", async () => {
-    const fetcher = async () => Response.json({ detail: "offline" }, { status: 503 });
-
-    const result = await resolveStoredChoice(environment, build, "species", fetcher);
-
+test("Rules Core technical failure remains explicit rather than pretending an empty catalog", async () => {
+    const result = await resolveStoredChoice(
+        environment, nativeClassBuild, "startingClass",
+        async () => Response.json({ error: "offline" }, { status: 503 }));
     assert.equal(result.status, "error");
-    assert.equal(result.conceptKey, "species:elf");
-    assert.match(result.message, /offline/);
+    assert.equal(result.conceptKey, "class.warlock");
+    assert.match(result.message, /HTTP 503/);
 });

@@ -6,7 +6,7 @@ import {
 } from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
-import { searchResolvedRules } from "../../rules-core-api.js";
+import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import type { RoutineStateWorkflow } from "../../core/application/routine-state-workflow.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
 
@@ -29,11 +29,17 @@ export function createConditionsWorkflow(
         const normalizedQuery = query.trim();
         application.dispatch({ type: "condition-chooser-load-started", query: normalizedQuery });
         try {
-            const catalog = await searchResolvedRules(environment, "condition", normalizedQuery);
+            const metadata = await loadNativeRuleset(environment);
+            const [ordinary, leveled] = await Promise.all([
+                searchNativeOptions(environment, metadata, "condition", normalizedQuery, 100),
+                searchNativeOptions(environment, metadata, "leveled-condition", normalizedQuery, 100)
+            ]);
+            const results = [...ordinary.options, ...leveled.options]
+                .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
             application.dispatch({
                 type: "condition-chooser-loaded",
                 query: normalizedQuery,
-                results: catalog.rules.filter(rule => rule.entityType === "condition")
+                results
             });
         } catch (error) {
             application.dispatch({

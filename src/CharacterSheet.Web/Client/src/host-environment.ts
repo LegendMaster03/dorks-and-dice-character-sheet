@@ -4,7 +4,6 @@ export interface HostEnvironment {
     toolRoute: string;
     contextUrl: string | null;
     standaloneDevelopment: boolean;
-    rulesCoreDevelopmentBaseUrl: string | null;
 }
 
 export function resolveHostEnvironment(root: HTMLElement, locationPathname: string): HostEnvironment {
@@ -18,21 +17,16 @@ export function resolveHostEnvironment(root: HTMLElement, locationPathname: stri
             toolBasePath: hostedBasePath,
             toolRoute: hostedRoute,
             contextUrl,
-            standaloneDevelopment: false,
-            rulesCoreDevelopmentBaseUrl: null
+            standaloneDevelopment: false
         };
     }
 
     const standaloneDevelopment = root.dataset.standaloneDevelopment === "true";
-    const configuredRulesCoreBase = root.dataset.rulesCoreDevelopmentBaseUrl?.trim();
     return {
         embedded: false,
         toolBasePath: "",
         toolRoute: locationPathname,
         contextUrl: null,
-        standaloneDevelopment,
-        rulesCoreDevelopmentBaseUrl: standaloneDevelopment && configuredRulesCoreBase
-            ? configuredRulesCoreBase.replace(/\/+$/, "")
-            : null
+        standaloneDevelopment
     };
 }

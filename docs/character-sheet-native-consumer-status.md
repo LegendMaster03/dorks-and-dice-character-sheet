@@ -1,59 +1,71 @@
-# Character Sheet native mechanics consumer — implementation increment
+# Character Sheet — native Rules Core integration status
 
-Upstream reference: `LegendMaster03/dorks-and-dice-character-sheet` main
-`3ef460315fda49d3c71335fd7cb5b6b6056b2cef` (2026-10-30).
+Character Sheet is in development and has not entered human testing. There is
+**no released legacy character dataset to migrate**, and compatibility with the
+retired Rules Core concepts or /api/rules endpoints is not a requirement.
+Development-only records may be reset as necessary. Do not introduce an identity
+crosswalk or write a dual-path mechanics adapter.
 
-The new `rules-core-native-api.ts` calls **named Character Sheet backend endpoints**
-through Character Sheet’s existing Tool Host upstream route. The Character Sheet
-backend uses its server-side Site delegation gateway to call Rules Core. The
-browser does not possess delegated Rules Core credentials. Requests communicate exclusively in native `rulesetId`, catalog fingerprint and native
-entity IDs. It does **not** claim that a persisted legacy `RuleConceptKey` is the
-same entity as a native ID. The old builder workflows are **not yet migrated**.
+## Native API
 
-## Implemented native consumer operations
+The browser calls named Character Sheet backend routes; the backend uses
+Site-issued server-side delegation for Rules Core.
 
-| Operation | Character Sheet backend endpoint | Delegated Rules Core target |
-| --- | --- | --- |
-| Load native catalog identity and capabilities | `GET /api/native-rules/ruleset` | `GET /api/mechanics/v1/ruleset` |
-| Search class / subclass / patron / pact / invocation / condition summaries | `GET /api/native-rules/options` | `GET /api/mechanics/v1/catalog/options` |
-| Evaluate a prospective native advancement selection | `POST /api/native-rules/advancements/eligibility` | `POST /api/mechanics/v1/advancements/eligibility` |
-| Project a version-pinned native character | `POST /api/native-rules/characters/project` | `POST /api/mechanics/v1/characters/project` |
+| Character Sheet backend | Rules Core target |
+| --- | --- |
+| GET /api/native-rules/ruleset | GET /api/mechanics/v1/ruleset |
+| GET /api/native-rules/options | GET /api/mechanics/v1/catalog/options |
+| POST /api/native-rules/advancements/eligibility | POST /api/mechanics/v1/advancements/eligibility |
+| POST /api/native-rules/characters/project | POST /api/mechanics/v1/characters/project |
 
-Each response is checked against the exact ruleset and fingerprint supplied by
-Rules Core. `409` means the caller must reload the ruleset and re-evaluate the
-current character; it must not silently change the snapshot mid-operation.
-Options are reduced to ID/name/kind even if an accidental server response
-contains more fields. Access denied and unsupported results remain explicit.
-The client does not fetch raw native rule bodies, present Site delegation tickets to Rules Core, or use the Wiki private tunnel. The backend routes require a redeemed Character Sheet Site session and forward only four named operations.
+Native rule IDs and the catalog fingerprint are mandatory. Character Sheet
+does not infer old concept aliases or bypass the Site delegation boundary.
 
-## Tests and limitations
+## Character presentation
 
-`Client/package.json` includes the new module and its tests in the existing
-client test runner. An isolated TypeScript 5.8.3 compilation and five Node 22
-mock-transport tests passed, using local type/transport stubs for the surrounding
-repository. GitHub Actions subsequently validated the full Character Sheet build and tests for the initial client branch; the revised backend transport still requires its own CI and live Site/Rules Core acceptance.
+CharacterPresentationService now uses the native gateway exclusively.
+The previous character projection, rule-summary lookup, and recovery-support
+fallback routes are not used by this service.
 
-This module is an **implemented API client**, not a completed Character Sheet
-migration. Remaining priorities:
+The read-only native presenter verifies selected class IDs and maps only
+resolved calculations to the existing sheet widgets. Unrepresented effects and
+prerequisites are explicitly partial or unavailable. No synthetic bonuses or
+AC, equipment grants, hit points, or rules are invented.
 
-1. Replace legacy `searchResolvedRules`/`resolveRuleConcept` callers in builder,
-   conditions, inventory, spells and advancement workflows with native ID-based
-   requests, preserving current user-facing semantics where supported.
-2. Implement explicit migration/identity crosswalk for existing saved
-   `RuleConceptKey` selections; preserve unknown entries and rollback capability.
-3. Convert the persisted per-occurrence advancement history to the native
-   cumulative class-level input without losing acquisition order, subclass
-   relationships, hit-point rolls, or option targets. The native kernel currently
-   rejects repeated class entries, so a direct DTO rename would be incorrect.
-4. Map native projection statuses/resources/features into Character Sheet's
-   presentation and save/reload flows. Do not interpret `partial` or `unsupported`
-   calculations as resolved zeros.
-5. Implement campaign-effective rules separately; the current native endpoint
-   advertises `campaignEffectiveRules=false` and is not a substitute for
-   the old campaign-specific mechanics routes.
-6. Verify Site-issued delegation, real responses, state persistence and
-   end-to-end user workflows on the development deployment before calling
-   Character Sheet functionality restored.
+The UI distinguishes resolved, partial, unconfigured and unavailable
+calculations. A network failure is no longer rendered as an ordinary blank character.
 
-External-rule import and converted monster content are not prerequisites to
-this Character Sheet consumer migration.
+## Implemented builder and advancement slice
+
+- The starting Class chooser searches native Class IDs and stores the chosen ID.
+- Saved native Class and Subclass names resolve through the authenticated native
+  catalog; an unknown identity remains explicitly unavailable.
+- Condition searching and selected-condition display use native regular and
+  leveled-condition summaries.
+- The normal Class advancement preview/apply service calls native eligibility
+  and reevaluates it before mutating the Character. Class hit-point gains are
+  validated against the **native class hit die** by the companion Rules Core
+  feature branch `feature/native-hit-die-eligibility`; this contract must be
+  available in deployed Rules Core before applying those advancements.
+- The proposed Class projection is also evaluated for mandatory Patron, Pact,
+  invocation and other outstanding native choices. Missing choices block apply.
+- Subclass, Prestige Class, and unsupported categories do not fall back to the
+  retired API or receive invented eligibility decisions.
+
+## Still required for full tool restoration
+
+1. Expose approved native Species, Subspecies, Background, Deity, Feat, Spell,
+   and Item summaries. The current native options endpoint does not serve
+   these categories; the chooser reports the missing capability.
+2. Complete native parent-child option selection, especially Warlock Patron,
+   Pact, and Invocation choices, and supply those native selections in the
+   projection and eligibility requests.
+3. Remove retired catalog requests still used by feat, spell and inventory
+   workflows, and retire unused legacy helper DTOs.
+4. Extend recovery, equipment, spellcasting, and campaign-effective mechanics
+   only when the native rules support their behavior.
+5. Verify end-to-end Site delegation and the actual Rules Core API after both
+   branches are deployed. Mocked tests do not prove live compatibility.
+
+**There is no legacy character data to migrate, no identity crosswalk is
+required, and no old Rules Core API shim should be introduced.**

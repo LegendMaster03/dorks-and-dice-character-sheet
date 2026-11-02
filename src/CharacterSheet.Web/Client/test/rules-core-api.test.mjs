@@ -1,116 +1,116 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-    buildRulesCoreUrl,
-    resolveRuleConcept,
-    RulesCoreApiError,
-    searchResolvedRules
+    RulesCoreApiError, loadHarvestingRules, resolveHarvestingTable, resolveHarvestingOutcome
 } from "../.test-dist/rules-core-api.js";
 
-const embedded = {
-    embedded: true,
-    toolBasePath: "/tools/character-sheet",
-    toolRoute: "/characters/example",
-    contextUrl: "/tool-host/character-sheet/context?ticket=character-sheet-only",
-    standaloneDevelopment: false,
-    rulesCoreDevelopmentBaseUrl: null
+const fingerprint = "a".repeat(64);
+const environment = {
+    embedded: true, contextUrl: "/tool-host/registrations/character-sheet/context"
+};
+const metadata = {
+    contractVersion: 1, rulesetId: "first-party-001", fingerprint,
+    capabilities: { harvestingResolution: "type-monster-manual-edits" }
+};
+const source = {
+    workKey: "loot-tavern.harvesting-crafting-lite",
+    workDisplayName: "Harvesting & Crafting Lite",
+    provider: "Loot Tavern", gameEdition: "5e",
+    releaseKind: "public-release", publicationDate: "2024-07-03",
+    referenceUri: "https://example.test/loot-tavern"
+};
+const procedure = { assessment: {}, carving: {}, helpers: {} };
+const catalog = {
+    contractVersion: 1, rulesetId: "first-party-001", fingerprint,
+    source, procedure, creatureTypes: [
+        { key: "dragon", displayName: "Dragon", competencyKey: "competency.survival",
+          competencyDisplayName: "Survival", defaultComponents: [] }
+    ]
+};
+const table = {
+    source, creatureType: "dragon", creatureTypeDisplayName: "Dragon",
+    competencyKey: "competency.survival", competencyDisplayName: "Survival",
+    components: [{ key: "scale", displayName: "Scale", componentDc: 5,
+        quantity: null, origin: "base" }],
+    creatureConceptKey: null, creatureDisplayName: null, creatureSize: null,
+    creatureOverridesApplied: false, manualEditsApplied: false
 };
 
-const rule = {
-    ruleConceptId: "11111111-1111-1111-1111-111111111111",
-    conceptKey: "class:arcane-archer",
-    entityType: "class",
-    displayName: "Arcane Archer",
-    effectiveDecisionKind: "select",
-    hasCampaignOverride: false,
-    sourceEntityId: "22222222-2222-2222-2222-222222222222",
-    sourceEntityRevisionId: "33333333-3333-3333-3333-333333333333",
-    sourceRevisionNumber: 1,
-    sourceEntityName: "Arcane Archer",
-    sourceCode: "SRD",
-    packageKey: "fixture",
-    packageDisplayName: "Fixture",
-    editionKey: "3.5e",
-    editionDisplayName: "3.5e"
-};
+function simulated(fetches, capability = metadata.capabilities.harvestingResolution) {
+    return async (url, options) => {
+        const path = String(url);
+        fetches.push({ path, options });
+        if (path.endsWith("/api/native-rules/ruleset"))
+            return Response.json({
+                ...metadata, capabilities: { harvestingResolution: capability }
+            });
+        if (path.includes("/api/native-rules/harvesting?"))
+            return Response.json(catalog);
+        if (path.endsWith("/api/native-rules/harvesting/resolve"))
+            return Response.json(table);
+        if (path.endsWith("/api/native-rules/harvesting/outcome"))
+            return Response.json({
+                table, assessmentRollMode: "normal", carvingRollMode: "normal",
+                creatureSize: "Large", assessmentResult: 12, carvingResult: 15,
+                helperCount: 0, helperContribution: 0, harvestingResult: 27,
+                components: [{ ...table.components[0], harvestDc: 5, awarded: true }]
+            });
+        throw Error("Unexpected route: " + path);
+    };
+}
 
-test("embedded Rules Core URLs use the stable headless service route rather than Character Sheet context", () => {
-    assert.equal(
-        buildRulesCoreUrl(embedded, "/api/rules"),
-        "/tool-host/registrations/rules-core/api/upstream/api/rules");
-    assert.equal(buildRulesCoreUrl(embedded, "/api/rules").includes("character-sheet"), false);
-});
-
-test("class catalog requests use Rules Core and encode search", async () => {
+test("native Harvesting catalog uses the authenticated Sheet gateway and pinned content", async () => {
     const calls = [];
-    const fetcher = async (input, init) => {
-        calls.push({ input: String(input), method: init?.method ?? "GET" });
-        return Response.json({ scope: "global", campaignId: null, revisionNumber: 1, publishedAt: "now", rules: [rule] });
-    };
-
-    const result = await searchResolvedRules(embedded, "class", "Arcane Archer & Mage", fetcher);
-
-    assert.equal(result.rules[0].conceptKey, rule.conceptKey);
-    assert.deepEqual(calls, [{
-        input: "/tool-host/registrations/rules-core/api/upstream/api/rules?entityType=class&q=Arcane+Archer+%26+Mage&limit=200",
-        method: "GET"
-    }]);
+    const response = await loadHarvestingRules(environment, simulated(calls));
+    assert.equal(response.creatureTypes[0].key, "dragon");
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every(c => c.path.includes("/api/upstream/api/native-rules/")));
+    assert.match(calls[1].path, /fingerprint=a{64}/);
+    assert.equal(calls[0].options.credentials, "same-origin");
 });
 
-test("race catalog requests use the race entity type", async () => {
-    let requested = "";
-    const fetcher = async input => {
-        requested = String(input);
-        return Response.json({ scope: "global", campaignId: null, revisionNumber: 1, publishedAt: "now", rules: [] });
-    };
-
-    await searchResolvedRules(embedded, "race", "elf", fetcher);
-
-    assert.equal(requested.includes("entityType=race"), true);
-    assert.equal(requested.includes("q=elf"), true);
+test("native Harvesting table and outcome preserve edits, helpers, and ordered components", async () => {
+    const calls = [];
+    const fetcher = simulated(calls);
+    const edits = { upsertComponents: [
+        { key: "scale", componentDc: 10, quantity: 2 }
+    ] };
+    const resolved = await resolveHarvestingTable(environment,
+        { creatureType: "dragon", manualEdits: edits }, null, fetcher);
+    assert.equal(resolved.components[0].key, "scale");
+    const outcome = await resolveHarvestingOutcome(environment, {
+        table: { creatureType: "dragon", manualEdits: edits },
+        assessmentResult: 12, carvingResult: 15, sameActor: false,
+        harvestOrderComponentKeys: ["scale"], creatureSize: "Large",
+        helpers: [{ proficiencyBonus: 3, isProficient: true }]
+    }, null, fetcher);
+    assert.equal(outcome.harvestingResult, 27);
+    assert.equal(outcome.components[0].awarded, true);
+    const tableRequest = JSON.parse(calls[1].options.body);
+    const outcomeRequest = JSON.parse(calls[3].options.body);
+    assert.equal(tableRequest.fingerprint, fingerprint);
+    assert.deepEqual(tableRequest.manualEdits, edits);
+    assert.equal(outcomeRequest.table.rulesetId, "first-party-001");
+    assert.deepEqual(outcomeRequest.table.manualEdits, edits);
+    assert.equal(outcomeRequest.helpers[0].proficiencyBonus, 3);
 });
 
-test("Rules Core failures are explicit", async () => {
-    const fetcher = async () => Response.json({ detail: "catalog offline" }, { status: 503 });
-
+test("unavailable native contract and campaign-specific rules do not silently fall back", async () => {
+    const calls = [];
     await assert.rejects(
-        () => searchResolvedRules(embedded, "class", "", fetcher),
-        error => error instanceof RulesCoreApiError
-            && error.status === 503
-            && error.message === "catalog offline");
+        () => loadHarvestingRules(environment, simulated(calls, "unavailable")),
+        error => error instanceof RulesCoreApiError && error.status === 503);
+    const fetcher = simulated(calls);
+    const before = calls.length;
+    await assert.rejects(() => resolveHarvestingTable(environment,
+        { creatureType: "dragon" }, "00000000-0000-0000-0000-000000000001", fetcher),
+        error => error instanceof RulesCoreApiError && error.status === 501);
+    assert.equal(calls.length, before);
 });
 
-test("stable concept resolution encodes the concept key and treats 404 as unavailable", async () => {
+test("retired Harvesting endpoints are never requested", async () => {
     const calls = [];
-    const fetcher = async input => {
-        calls.push(String(input));
-        return new Response(null, { status: 404 });
-    };
-
-    const result = await resolveRuleConcept(embedded, "class:key/with slash", fetcher);
-
-    assert.equal(result, null);
-    assert.equal(
-        calls[0],
-        "/tool-host/registrations/rules-core/api/upstream/api/rules/class%3Akey%2Fwith%20slash");
-});
-
-test("standalone Rules Core adapter is development-only", () => {
-    const productionStandalone = {
-        ...embedded,
-        embedded: false,
-        contextUrl: null,
-        rulesCoreDevelopmentBaseUrl: "http://localhost:5188"
-    };
-    assert.throws(
-        () => buildRulesCoreUrl(productionStandalone, "/api/rules"),
-        /development-only/);
-
-    const developmentStandalone = {
-        ...productionStandalone,
-        standaloneDevelopment: true
-    };
-    assert.equal(
-        buildRulesCoreUrl(developmentStandalone, "/api/rules"),
-        "http://localhost:5188/api/rules");
+    await resolveHarvestingTable(environment, { creatureType: "dragon" },
+        null, simulated(calls));
+    assert.ok(calls.every(x => !x.path.includes("/api/rules/")));
 });

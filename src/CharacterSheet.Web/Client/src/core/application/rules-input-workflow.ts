@@ -1,6 +1,7 @@
 import {
     removeCharacterHitPointGain,
     removeCharacterRulesInput,
+    resolveNativeCharacterResource,
     setCharacterHitPointGain,
     setCharacterRulesInput,
     type CharacterRulesInputKind,
@@ -33,6 +34,8 @@ export interface RulesInputWorkflow {
     setChoice(characterId: string, choiceKey: string, value: string): Promise<boolean>;
     clearChoice(characterId: string, choiceKey: string): Promise<boolean>;
     setResource(characterId: string, resourceKey: string, currentValue: number): Promise<boolean>;
+    spendResource(characterId: string, resourceKey: string, amount: number): Promise<boolean>;
+    recoverResource(characterId: string, resourceKey: string, rest: "short-rest" | "long-rest"): Promise<boolean>;
     setRuntimeRoll(characterId: string, rollKey: string, value: number): Promise<boolean>;
     setBooleanFact(
         characterId: string,
@@ -162,6 +165,26 @@ export function createRulesInputWorkflow(
                 key: resourceKey,
                 integerValue: currentValue
             });
+        },
+
+        async spendResource(characterId, resourceKey, amount): Promise<boolean> {
+            return await refresh(characterId,
+                await routine.mutate("native-resource-action",
+                    async () => (await resolveNativeCharacterResource(
+                        environment, characterId, {
+                            resourceId: resourceKey, spend: amount
+                        })).state,
+                    `resource:${resourceKey}`));
+        },
+
+        async recoverResource(characterId, resourceKey, rest): Promise<boolean> {
+            return await refresh(characterId,
+                await routine.mutate("native-resource-action",
+                    async () => (await resolveNativeCharacterResource(
+                        environment, characterId, {
+                            resourceId: resourceKey, rest
+                        })).state,
+                    `resource:${resourceKey}`));
         },
 
         setRuntimeRoll,

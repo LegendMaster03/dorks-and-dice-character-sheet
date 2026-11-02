@@ -54,6 +54,7 @@ export interface RoutineCharacterHandlers {
     closeInventoryChooser(): void;
     searchInventory(query: string): void;
     addInventoryItem(conceptKey: string): void;
+    addCustomInventoryItem(name: string, quantity: number): void;
     updateInventoryItem(
         occurrenceId: string,
         input: CharacterInventoryItemOccurrenceStateInput
@@ -76,6 +77,8 @@ export interface RulesInputCharacterHandlers {
     setChoice(choiceKey: string, value: string): void;
     clearChoice(choiceKey: string): void;
     setResource(resourceKey: string, currentValue: number): void;
+    spendResource(resourceKey: string, amount: number): void;
+    recoverResource(resourceKey: string, rest: "short-rest" | "long-rest"): void;
     setCompetencyRank(competencyKey: string, ranks: number): void;
     clearCompetencyRank(competencyKey: string): void;
     setHitPointGain(

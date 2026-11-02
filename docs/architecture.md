@@ -40,7 +40,7 @@ GET /api/rules/{conceptKey}
 
 The builder intentionally uses global rules only. A Site Character can belong to multiple Campaigns, so Character Sheet does not arbitrarily select one Campaign's resolved rules. Campaign-specific resolution is deferred until the Character Sheet has an explicit Campaign-context selector/overlay.
 
-For standalone ASP.NET development only, `RulesCore:DevelopmentBaseUrl` may expose an explicit direct Rules Core base URL to the frontend. The standalone shell emits that adapter only when the ASP.NET environment is `Development`; embedded mode ignores standalone adapter attributes and always uses the Site Tool Host path. Production authentication is not weakened for standalone convenience.
+The retired direct-browser Rules Core development adapter has been removed. Character Sheet's native rule discovery and mechanics requests use its own authenticated `/api/native-rules/*` routes, which forward Site-issued delegation to Rules Core `/api/mechanics/v1/*`. Standalone development does not advertise a direct Rules Core URL to the browser. Native contracts not yet implemented (including harvesting, crafting, full recovery procedures, and starting-equipment grants) fail closed rather than contacting removed `/api/rules` endpoints.
 
 ## Character presentation projection
 

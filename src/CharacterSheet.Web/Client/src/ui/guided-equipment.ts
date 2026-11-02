@@ -17,6 +17,8 @@ import type {
 } from "./character-mechanics.js";
 import { renderSourceAttributions } from "./source-attribution.js";
 
+import type { NativeStartingEquipmentPreview } from "../features/inventory/starting-equipment-api.js";
+
 const STARTING_EQUIPMENT_GRANT_KINDS = new Set([
     "starting-equipment-item",
     "starting-equipment-custom",
@@ -224,6 +226,55 @@ export function projectGuidedStartingEquipment(
     };
 }
 
+export function projectNativeStartingEquipment(
+    preview: NativeStartingEquipmentPreview,
+    rulesInputs: readonly CharacterRulesInputStateResponse[] = []
+): GuidedStartingEquipmentView {
+    const saved = new Map(rulesInputs
+        .filter(input => input.kind === "choice" && input.textValue !== null)
+        .map(input => [input.key, input.textValue!]));
+    const choices = preview.choices.map(choice => {
+        const selectedValue = saved.get(choice.choiceKey);
+        const accepted = choice.options.some(option => option.id === selectedValue);
+        return {
+            choiceKey: choice.choiceKey,
+            displayName: "Starting Equipment Package",
+            state: accepted ? "resolved" : "choice-required",
+            required: true,
+            options: choice.options.map(option => ({
+                value: option.id,
+                displayName: option.name,
+                items: []
+            })),
+            selectedValue: accepted ? selectedValue : undefined
+        };
+    });
+    const grants: GuidedEquipmentItemView[] = preview.status === "resolved"
+        ? preview.grants.map(grant => ({
+            conceptKey: grant.kind === "item" ? grant.targetKey : undefined,
+            displayName: grant.displayName,
+            quantity: grant.quantity,
+            detail: grant.kind === "currency" ? "Starting currency" : undefined
+        }))
+        : [];
+    const conflicts = preview.issues.map(issue => ({
+        conflictKey: issue.code + ":" + issue.path,
+        message: issue.detail
+    }));
+    if (preview.status === "unavailable" && conflicts.length === 0)
+        conflicts.push({
+            conflictKey: "native-equipment-unavailable",
+            message: "Native starting-equipment grants are not yet reconciled."
+        });
+    if (preview.status === "needs-choices" &&
+        choices.every(choice => choice.state === "resolved"))
+        conflicts.push({
+            conflictKey: "native-equipment-incomplete",
+            message: "The selected starting equipment is not yet resolved."
+        });
+    return { grants, choices, rolls: [], conflicts };
+}
+
 export function renderGuidedStartingEquipment(
     equipment: GuidedStartingEquipmentView,
     handlers: GuidedEquipmentHandlers,
@@ -291,7 +342,7 @@ export function renderGuidedStartingEquipment(
     materialization.append(createElement(
         "p",
         "dd-guided-builder__section-copy",
-        "Apply the resolved starting equipment to this Character. Item and special-equipment grants become normal Inventory entries, and starting currency is added to the Character's Currency balances. Reapplying adjusts only state previously acquired from starting equipment; later manual changes are preserved."));
+        "Add the resolved starting items to ordinary Inventory and starting currency to ordinary Currency balances once. After receiving them, manage these possessions in Inventory; later ruleset changes do not replace or remove them."));
     if (equipment.grants.some(grant => grant.detail === "Starting currency")) {
         materialization.append(createInlineState(
             "Starting currency is applied to the Character's Currency balances rather than represented as an Inventory item.",

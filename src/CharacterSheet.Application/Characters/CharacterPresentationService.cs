@@ -1,15 +1,16 @@
+using System.Text.Json;
 using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
 /// <summary>
-/// Coordinates Character-owned build state with Rules Core presentation projections.
-/// Projection details live in focused projectors under Characters/Presentation.
+/// Projects Character-owned development state through the current native Rules Core.
+/// The retired concept-resolution and character-mechanics API is not a fallback.
 /// </summary>
 public sealed class CharacterPresentationService(
     CharacterBuildService buildService,
     CharacterStateService stateService,
-    IRulesCoreGateway rulesCoreGateway)
+    INativeRulesCoreGateway nativeRulesCoreGateway)
 {
     public async Task<CharacterPresentationResult> GetAsync(
         Guid characterId,
@@ -17,139 +18,88 @@ public sealed class CharacterPresentationService(
     {
         var buildResult = await buildService.GetAsync(characterId, cancellationToken);
         if (buildResult.Status != CharacterBuildAccessStatus.Ready || buildResult.View is null)
-        {
             return new CharacterPresentationResult(MapStatus(buildResult.Status));
-        }
 
         var build = buildResult.View;
         var diagnostics = new List<string>();
-
         CharacterStateView? state = null;
         var stateResult = await stateService.GetAsync(characterId, cancellationToken);
         if (stateResult.Status == CharacterStateAccessStatus.Ready)
-        {
             state = stateResult.View;
-        }
         else
-        {
             diagnostics.Add($"character-state:{stateResult.Status}");
-        }
 
-        var advancement = await ProjectAdvancementAsync(build, diagnostics, cancellationToken);
-        var ruleProjection = await ProjectCharacterRulesAsync(
-            build,
-            state,
-            diagnostics,
-            cancellationToken);
-        var mechanics = ruleProjection is null
-            ? null
-            : RulesCoreCharacterProjectionProjector.Apply(
-                fallback: null,
-                ruleProjection,
-                state);
-
-        var recoveryProcedures = await ProjectRecoveryProceduresAsync(
-            ruleProjection,
-            diagnostics,
-            cancellationToken);
-        if (recoveryProcedures is not null)
+        NativeCharacterPresentationBridge.Outcome projection;
+        try
         {
-            mechanics = (mechanics ?? new CharacterMechanicsPresentationView()) with
-            {
-                RecoveryProcedures = recoveryProcedures
-            };
+            projection = await NativeCharacterPresentationBridge.ProjectAsync(
+                nativeRulesCoreGateway, build, state, cancellationToken);
+        }
+        catch (Exception exception) when (exception is RulesCoreGatewayException
+            or JsonException or InvalidOperationException or FormatException)
+        {
+            diagnostics.Add($"native-rules-projection:{exception.Message}");
+            projection = new NativeCharacterPresentationBridge.Outcome(
+                "unavailable", null,
+                "Native Rules Core is unavailable or returned an invalid response.");
         }
 
+        var advancement = ProjectAdvancement(build, projection.NativeClassNames);
         return new CharacterPresentationResult(
             CharacterPresentationAccessStatus.Ready,
-            new CharacterPresentationView(advancement, mechanics, ruleProjection),
+            new CharacterPresentationView(
+                advancement,
+                projection.Mechanics,
+                MechanicsStatus: projection.Status,
+                MechanicsMessage: projection.Message),
             diagnostics);
     }
 
-    private async Task<CharacterAdvancementPresentationView> ProjectAdvancementAsync(
-        CharacterBuildView build,
-        ICollection<string> diagnostics,
-        CancellationToken cancellationToken)
+    private static CharacterAdvancementPresentationView ProjectAdvancement(
+        CharacterBuildView build, IReadOnlyDictionary<string, string>? classNames)
     {
-        IReadOnlyDictionary<string, RulesCoreResolvedRuleSummaryView> resolvedRules =
-            new Dictionary<string, RulesCoreResolvedRuleSummaryView>(StringComparer.Ordinal);
-
-        try
+        var byId = build.ProgressionEntries.ToDictionary(entry => entry.Id);
+        var occurrences = build.ProgressionEntries.Select(entry =>
         {
-            var references = build.ProgressionEntries
-                .Select(value => value.RuleConceptKey)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-            resolvedRules = await rulesCoreGateway.ResolveGlobalRulesAsync(references, cancellationToken);
-        }
-        catch (RulesCoreGatewayException exception)
-        {
-            diagnostics.Add($"advancement:{exception.Message}");
-        }
-
-        return CharacterPresentationProjector.ProjectAdvancement(build, resolvedRules);
+            int? level = entry.Kind switch
+            {
+                CharacterBuildAdvancementKinds.Class or CharacterBuildAdvancementKinds.PrestigeClass => entry.Level,
+                CharacterBuildAdvancementKinds.Subclass
+                    when entry.ParentAdvancementEntryId is Guid parentId
+                        && byId.TryGetValue(parentId, out var parent) => parent.Level,
+                _ => null
+            };
+            var label = classNames is not null &&
+                classNames.TryGetValue(entry.RuleConceptKey, out var nativeName)
+                ? nativeName : entry.RuleConceptKey;
+            return new AdvancementOccurrencePresentationView(
+                entry.Id,
+                entry.RuleConceptKey,
+                entry.Kind,
+                label,
+                Progression: level is > 0
+                    ? new AdvancementProgressionPresentationView(
+                        entry.Kind == CharacterBuildAdvancementKinds.Subclass ? "Parent Level" : "Level",
+                        level.Value,
+                        entry.Kind == CharacterBuildAdvancementKinds.Subclass
+                            ? $"Parent Level {level.Value}" : $"Level {level.Value}")
+                    : null,
+                ParentOccurrenceId: entry.ParentAdvancementEntryId);
+        }).ToArray();
+        return new CharacterAdvancementPresentationView(occurrences);
     }
 
-    private async Task<IReadOnlyList<CharacterRecoveryProcedurePresentationView>?> ProjectRecoveryProceduresAsync(
-        RulesCoreCharacterRulesProjectionView? ruleProjection,
-        ICollection<string> diagnostics,
-        CancellationToken cancellationToken)
-    {
-        if (ruleProjection is null)
+    private static CharacterPresentationAccessStatus MapStatus(CharacterBuildAccessStatus status) =>
+        status switch
         {
-            return null;
-        }
-
-        try
-        {
-            var capabilities = ruleProjection.Capabilities
-                .Select(value => value.CapabilityKey)
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(value => value, StringComparer.Ordinal)
-                .ToArray();
-            var support = await rulesCoreGateway.ProjectGlobalCharacterSupportAsync(
-                new RulesCoreCharacterSupportProjectionRequest(capabilities),
-                cancellationToken);
-            return CharacterRecoveryProjector.Project(support);
-        }
-        catch (RulesCoreGatewayException exception)
-        {
-            diagnostics.Add($"recovery-support:{exception.Message}");
-            return null;
-        }
-    }
-
-    private async Task<RulesCoreCharacterRulesProjectionView?> ProjectCharacterRulesAsync(
-        CharacterBuildView build,
-        CharacterStateView? state,
-        ICollection<string> diagnostics,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var request = CharacterRulesProjectionRequestBuilder.Build(build, state);
-
-            // Character-to-Campaign membership is not an active rules-scope selector. Until the
-            // host supplies an explicit Campaign context, preserve the existing global projection
-            // contract rather than silently choosing one Campaign's effective rules.
-            return await rulesCoreGateway.ResolveGlobalCharacterMechanicsAsync(
-                request,
-                cancellationToken);
-        }
-        catch (RulesCoreGatewayException exception)
-        {
-            diagnostics.Add($"rules-projection:{exception.Message}");
-            return null;
-        }
-    }
-
-    private static CharacterPresentationAccessStatus MapStatus(CharacterBuildAccessStatus status) => status switch
-    {
-        CharacterBuildAccessStatus.NotFoundOrNotOwned => CharacterPresentationAccessStatus.NotFoundOrNotOwned,
-        CharacterBuildAccessStatus.ProjectionUnavailable => CharacterPresentationAccessStatus.ProjectionUnavailable,
-        CharacterBuildAccessStatus.Unauthenticated => CharacterPresentationAccessStatus.Unauthenticated,
-        CharacterBuildAccessStatus.SheetNotInitialized => CharacterPresentationAccessStatus.SheetNotInitialized,
-        _ => CharacterPresentationAccessStatus.ProjectionUnavailable
-    };
+            CharacterBuildAccessStatus.NotFoundOrNotOwned =>
+                CharacterPresentationAccessStatus.NotFoundOrNotOwned,
+            CharacterBuildAccessStatus.ProjectionUnavailable =>
+                CharacterPresentationAccessStatus.ProjectionUnavailable,
+            CharacterBuildAccessStatus.Unauthenticated =>
+                CharacterPresentationAccessStatus.Unauthenticated,
+            CharacterBuildAccessStatus.SheetNotInitialized =>
+                CharacterPresentationAccessStatus.SheetNotInitialized,
+            _ => CharacterPresentationAccessStatus.ProjectionUnavailable
+        };
 }

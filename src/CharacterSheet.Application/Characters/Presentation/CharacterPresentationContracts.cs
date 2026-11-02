@@ -21,7 +21,9 @@ public sealed record CharacterPresentationView(
     CharacterAdvancementPresentationView Advancement,
     CharacterMechanicsPresentationView? Mechanics,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    RulesCoreCharacterRulesProjectionView? RuleProjection = null);
+    RulesCoreCharacterRulesProjectionView? RuleProjection = null,
+    string MechanicsStatus = "unavailable",
+    string? MechanicsMessage = null);
 
 public sealed record CharacterAdvancementPresentationView(
     IReadOnlyList<AdvancementOccurrencePresentationView> Occurrences);

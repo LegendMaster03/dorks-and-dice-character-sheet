@@ -700,6 +700,10 @@ public sealed class CharacterSheetRoot
                                 nameof(mutations)));
                     resourceValues.TryGetValue(resourceKey, out var currentResourceValue);
                     var hasResource = resourceValues.ContainsKey(resourceKey);
+                    if (mutation.ExpectedValue is int expected &&
+                        (!hasResource || currentResourceValue != expected))
+                        throw new InvalidOperationException(
+                            $"Resource '{resourceKey}' changed since the operation was evaluated.");
                     int? nextResourceValue = ApplyMutation(
                         hasResource ? currentResourceValue : null,
                         mutation,

@@ -286,8 +286,8 @@ function renderCreatureSelection(
             select.append(placeholder);
             for (const monster of state.monsterResults) {
                 const option = createElement("option");
-                option.value = monster.conceptKey;
-                option.textContent = monster.displayName;
+                option.value = monster.id;
+                option.textContent = monster.name;
                 select.append(option);
             }
             select.value = state.creatureConceptKey;
@@ -899,6 +899,9 @@ function renderCraftingStage(
             : "Enchant the finished item. Choose the component's creature type and the spellcasting source used for the check."));
 
     if (manufacturing) {
+        card.append(createInlineState(
+            "Native Manufacturing currently supports manual Competency and manual Ability modifiers. The resolved Character-based inputs and campaign-specific rules require further native integration.",
+            "neutral"));
         card.append(renderManufacturingInputs(state, handlers, readOnly, mechanics));
         card.append(
             decimalField(

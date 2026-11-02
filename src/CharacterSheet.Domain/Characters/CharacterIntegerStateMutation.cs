@@ -19,4 +19,5 @@ public sealed record CharacterIntegerStateMutation(
     CharacterIntegerStateMutationTarget Target,
     CharacterIntegerStateMutationOperation Operation,
     int Amount,
-    string? ResourceKey = null);
+    string? ResourceKey = null,
+    int? ExpectedValue = null);

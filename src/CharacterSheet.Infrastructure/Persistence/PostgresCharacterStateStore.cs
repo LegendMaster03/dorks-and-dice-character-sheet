@@ -137,6 +137,59 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(mutations);
+        // Resource transitions already evaluated by Rules Core must compare
+        // against persisted PostgreSQL state, not merely an EF-tracked snapshot.
+        // ExecuteUpdate compiles to a conditional UPDATE and obtains the row lock
+        // before testing the expected current value. Concurrent requests using
+        // the same expected value can therefore never both commit.
+        if (mutations.Count == 1 &&
+            mutations[0] is {
+                Target: CharacterIntegerStateMutationTarget.Resource,
+                Operation: CharacterIntegerStateMutationOperation.Set,
+                ExpectedValue: int expected
+            } guarded)
+        {
+            var key = CharacterRulesInputKey.Normalize(guarded.ResourceKey
+                ?? throw new ArgumentException(
+                    "An expected-current resource mutation requires a resource key.",
+                    nameof(mutations)));
+            if (guarded.Amount < 0)
+                throw new ArgumentOutOfRangeException(nameof(mutations),
+                    "A native resource current value can not be negative.");
+
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            var changed = await dbContext.CharacterRulesInputs
+                .Where(value => value.CharacterId == characterId &&
+                    value.Kind == CharacterRulesInputKind.Resource &&
+                    value.Key == key &&
+                    value.IntegerValue == expected)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(value => value.IntegerValue, (int?)guarded.Amount)
+                    .SetProperty(value => value.UpdatedAt, changedAt),
+                    cancellationToken);
+            if (changed != 1)
+            {
+                var exists = await dbContext.CharacterSheets.AsNoTracking()
+                    .AnyAsync(value => value.CharacterId == characterId, cancellationToken);
+                throw new InvalidOperationException(exists
+                    ? $"Resource '{key}' changed since the operation was evaluated."
+                    : "Character Sheet does not exist for this resource mutation.");
+            }
+
+            await dbContext.CharacterSheets
+                .Where(value => value.CharacterId == characterId &&
+                    value.UpdatedAt < changedAt)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(value => value.UpdatedAt, changedAt), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            // Do not return the tracked root from before the conditional UPDATE.
+            return await GetAsync(characterId, cancellationToken);
+        }
+        if (mutations.Any(value => value.ExpectedValue is not null))
+            throw new InvalidOperationException(
+                "Expected-current mutations must be one native resource Set operation.");
+
         var root = await GetTrackedAsync(characterId, cancellationToken);
         if (root is null) return null;
         root.ApplyIntegerStateMutations(mutations, changedAt);

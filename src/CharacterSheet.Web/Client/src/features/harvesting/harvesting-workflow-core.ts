@@ -9,13 +9,13 @@ import {
     loadHarvestingRules,
     resolveHarvestingOutcome,
     resolveHarvestingTable,
-    searchResolvedRules,
     type HarvestingComponentEditInput,
     type HarvestingResolvedTableResponse,
     type HarvestingRulesCatalogResponse,
     type HarvestingTableResolutionInput
 } from "../../rules-core-api.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
+import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";
 import {
     resolveCharacterEnchanting,
     resolveCharacterManufacturing,
@@ -651,14 +651,12 @@ export function createHarvestingCraftingWorkflow(
             message: undefined
         }));
         try {
-            const catalog = await searchResolvedRules(
-                environment,
-                "monster",
-                normalized);
+            const metadata = await loadNativeRuleset(environment);
+            const catalog = await searchNativeOptions(environment, metadata, "monster", normalized, 100);
             update(state => ({
                 ...state,
                 monsterStatus: "ready",
-                monsterResults: catalog.rules.filter(rule => rule.entityType === "monster"),
+                monsterResults: catalog.options,
                 message: undefined
             }));
         } catch (error) {

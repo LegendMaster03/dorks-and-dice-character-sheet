@@ -6,6 +6,27 @@ public static class CharacterStartingEquipmentEndpointExtensions
 {
     public static void MapCharacterStartingEquipmentEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/characters/{characterId:guid}/state/inventory/starting-equipment/preview", async (
+            Guid characterId,
+            CharacterStartingEquipmentService service,
+            CancellationToken cancellationToken) =>
+        {
+            var preview = await service.PreviewAsync(characterId, cancellationToken);
+            return preview.Status switch
+            {
+                CharacterStateAccessStatus.Ready when preview.Projection is not null =>
+                    Results.Ok(preview.Projection),
+                CharacterStateAccessStatus.NotFoundOrNotOwned =>
+                    Results.NotFound(new { error = "Character unavailable." }),
+                CharacterStateAccessStatus.Unauthenticated => Results.Unauthorized(),
+                CharacterStateAccessStatus.SheetNotInitialized =>
+                    Results.NotFound(new { error = "Digital Character Sheet is not initialized." }),
+                _ => Results.Json(new {
+                    error = "Native starting-equipment definitions are not available."
+                }, statusCode: StatusCodes.Status503ServiceUnavailable)
+            };
+        });
+
         app.MapPost("/api/characters/{characterId:guid}/state/inventory/starting-equipment", async (
             Guid characterId,
             CharacterStartingEquipmentService service,
