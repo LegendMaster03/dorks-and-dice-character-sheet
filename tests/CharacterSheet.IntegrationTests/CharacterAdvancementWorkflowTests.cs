@@ -203,6 +203,85 @@ public sealed class CharacterAdvancementWorkflowTests
     }
 
     [Fact]
+    public async Task StartingEquipmentChoiceCoexistsWithWarlockAdvancementAndPactMagic()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            id, "Warlock Equipment Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+        var choices = new (string Key, string Value)[] {
+            ("native-option.class.warlock.patron", "patron.warlock.fiend"),
+            ("native-option.class.warlock.pact", "pact.warlock.blade"),
+            ("native-option.class.warlock.invocation.1", "invocation.eldritch-sight"),
+            ("starting-equipment." + entry.Id.ToString("D"), "gold")
+        };
+        foreach (var (key, value) in choices)
+        {
+            using var save = await factory.SendHostedAsync(HttpMethod.Put,
+                $"/api/characters/{id:D}/state/rules-inputs",
+                new { kind = "choice", key, textValue = value });
+            Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        }
+        using (var ability = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/build/ability-scores/strength",
+            new { score = 14 }))
+            Assert.Equal(HttpStatusCode.OK, ability.StatusCode);
+        using (var resource = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "resource", key = "resource.pact-magic", integerValue = 2 }))
+            Assert.Equal(HttpStatusCode.OK, resource.StatusCode);
+
+        factory.Native.EquipmentStatus = "resolved";
+        using (var award = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment"))
+            Assert.Equal(HttpStatusCode.OK, award.StatusCode);
+
+        using (var preview = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/advancement/preview",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 }))
+        {
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+            var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+            Assert.True(plan!.CanApply);
+        }
+        Assert.Equal(["patron.warlock.fiend", "pact.warlock.blade",
+            "invocation.eldritch-sight"], factory.Native.LastProjectedOptions);
+        Assert.DoesNotContain("gold", factory.Native.LastProjectedOptions);
+
+        using (var spend = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/resources/resolve",
+            new { resourceId = "resource.pact-magic", spend = 1 }))
+            Assert.Equal(HttpStatusCode.OK, spend.StatusCode);
+        using (var recover = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/resources/resolve",
+            new { resourceId = "resource.pact-magic", rest = "short-rest" }))
+            Assert.Equal(HttpStatusCode.OK, recover.StatusCode);
+        using (var apply = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/advancement/apply",
+            new { classAdvancementEntryId = entry.Id, hitDieValue = 5 }))
+            Assert.Equal(HttpStatusCode.OK, apply.StatusCode);
+        using (var replay = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/inventory/starting-equipment"))
+            Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+
+        using var read = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/state");
+        var state = await read.Content.ReadFromJsonAsync<CharacterStateView>();
+        Assert.NotNull(state);
+        Assert.Single(state.InventoryItemOccurrences);
+        Assert.All(choices, choice => Assert.Contains(state.RulesInputs!, input =>
+            input.Kind == CharacterRulesInputKinds.Choice && input.Key == choice.Key &&
+            input.TextValue == choice.Value));
+        Assert.Equal(2, Assert.Single(state.RulesInputs!, input =>
+            input.Key == "resource.pact-magic").IntegerValue);
+        using var readBuild = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/build");
+        var build = await readBuild.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.Equal(2, Assert.Single(build!.ProgressionEntries).Level);
+    }
+
+    [Fact]
     public async Task NativeResourceSpendAndRestUsePersistedCharacterState()
     {
         using var factory = new Factory();

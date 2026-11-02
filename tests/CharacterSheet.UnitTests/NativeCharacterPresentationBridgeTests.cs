@@ -158,7 +158,55 @@ public sealed class NativeCharacterPresentationBridgeTests
     }
 
     [Fact]
-    public async Task UnmappedChoiceWithholdsIndependentNativeCalculations()
+    public async Task StartingEquipmentChoiceDoesNotInvalidateNativeClassOptions()
+    {
+        var gateway = new FixtureGateway();
+        var entry = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var state = new CharacterStateView(Guid.NewGuid(), false, null,
+            new CharacterDeathSavesView(0, 0), [], [], [],
+            RulesInputs: [
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "native-option.class.warlock.patron", null, null,
+                    "patron.warlock.fiend", Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "starting-equipment." + entry.Id.ToString("D"), null, null,
+                    "gold", Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "native-option.class.warlock.pact", null, null,
+                    "pact.warlock.blade", Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(), "choice",
+                    "another-sheet-choice", null, null, "value", Now, Now)
+            ]);
+        var selected = NativeCharacterOptionSelections.FromState(state);
+        Assert.False(selected.HasUnmappedChoices);
+        Assert.Equal(["patron.warlock.fiend", "pact.warlock.blade"], selected.Ids);
+
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(entry), state, CancellationToken.None);
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(14, Assert.Single(result.Mechanics!.AbilityValues!).EffectiveValue);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        Assert.Equal(selected.Ids, gateway.LastSelectedOptions);
+    }
+
+    [Theory]
+    [InlineData("native-option", "patron.warlock.fiend")]
+    [InlineData("native-option.", "patron.warlock.fiend")]
+    [InlineData("native-option.class.warlock.patron", "  ")]
+    public void MalformedNativeChoicesRemainUnmapped(string key, string value)
+    {
+        var state = new CharacterStateView(Guid.NewGuid(), false, null,
+            new CharacterDeathSavesView(0, 0), [], [], [],
+            RulesInputs: [new CharacterRulesInputStateView(
+                Guid.NewGuid(), "choice", key, null, null, value, Now, Now)]);
+        var selected = NativeCharacterOptionSelections.FromState(state);
+        Assert.True(selected.HasUnmappedChoices);
+        Assert.Empty(selected.Ids);
+    }
+
+    [Fact]
+    public async Task MalformedNativeChoiceWithholdsIndependentNativeCalculations()
     {
         var gateway = new FixtureGateway();
         var entry = new CharacterAdvancementEntryView(
@@ -166,7 +214,7 @@ public sealed class NativeCharacterPresentationBridgeTests
         var state = new CharacterStateView(Guid.NewGuid(), false, null,
             new CharacterDeathSavesView(0, 0), [], [], [],
             RulesInputs: [new CharacterRulesInputStateView(
-                Guid.NewGuid(), "choice", "legacy.selection", null, null,
+                Guid.NewGuid(), "choice", "native-option.", null, null,
                 "source:unknown", Now, Now)]);
         var result = await NativeCharacterPresentationBridge.ProjectAsync(
             gateway, Build(entry), state, CancellationToken.None);

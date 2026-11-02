@@ -1,9 +1,9 @@
 namespace CharacterSheet.Application.Characters;
 
 /// <summary>
-/// Native options occupy ordinary Character-owned choice slots. Unknown choices
-/// are preserved in state but cannot silently authorize a native advancement.
-/// Slot keys distinguish multiple Invocations without duplicating rule IDs.
+/// Only choices in the native-option namespace participate in native eligibility.
+/// Other Character-owned choices (such as starting equipment) retain their own
+/// validation and do not become class features. Malformed native slots fail closed.
 /// </summary>
 public static class NativeCharacterOptionSelections
 {
@@ -21,9 +21,15 @@ public static class NativeCharacterOptionSelections
         foreach (var choice in state?.RulesInputs ?? [])
         {
             if (choice.Kind != CharacterRulesInputKinds.Choice) continue;
+            // Sheet-owned choices must not invalidate native class mechanics.
+            // The bare namespace name remains an invalid native-option slot.
+            if (!choice.Key.StartsWith(SlotPrefix, StringComparison.Ordinal))
+            {
+                if (choice.Key == "native-option") unmapped = true;
+                continue;
+            }
             var value = choice.TextValue;
-            if (!choice.Key.StartsWith(SlotPrefix, StringComparison.Ordinal) ||
-                choice.Key.Length <= SlotPrefix.Length ||
+            if (choice.Key.Length <= SlotPrefix.Length ||
                 choice.Key.Length > 160 ||
                 string.IsNullOrWhiteSpace(value) ||
                 value.Length > 160 || value != value.Trim() ||
