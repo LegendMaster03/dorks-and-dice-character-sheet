@@ -9,7 +9,6 @@ import { getStartingClassEntry, getStoredChoiceConceptKey } from "../builder-rul
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import type { CharacterMechanicsView } from "./character-mechanics.js";
-import { projectGuidedStartingEquipment } from "./guided-equipment.js";
 import type { NativeStartingEquipmentPreview } from "../features/inventory/starting-equipment-api.js";
 
 export type SheetSection = "actions" | "spells" | "inventory" | "features" | "details" | "notes";
@@ -236,49 +235,25 @@ export function getGuidedBuilderSectionStates(
         abilityDetail = "All base Ability Scores and required Ability Score choices are configured.";
     }
 
-    const startingEquipment = projectGuidedStartingEquipment(mechanics);
-    const pendingEquipmentChoices = startingEquipment?.choices.filter(choice =>
-        choice.state !== "resolved") ?? [];
-    const pendingEquipmentRolls = startingEquipment?.rolls.filter(roll =>
-        roll.required && roll.state !== "resolved") ?? [];
-    const equipmentConflicts = projectionConflicts.filter(conflict =>
-        conflict.conflictKey.includes("starting-equipment"));
     const equipmentAvailable = equipmentReceived || nativeEquipment !== null
-        || startingEquipment !== null || startingClassSelected;
-    const equipmentResolved = equipmentReceived || (nativeEquipment !== null
-        ? nativeEquipment.status === "resolved" && nativeEquipment.issues.length === 0
-        : startingEquipment !== null
-            && pendingEquipmentChoices.length === 0
-            && pendingEquipmentRolls.length === 0
-            && equipmentConflicts.length === 0);
+        || startingClassSelected;
+    const equipmentResolved = equipmentReceived ||
+        (nativeEquipment?.status === "resolved" &&
+            nativeEquipment.issues.length === 0);
 
     let equipmentDetail: string;
     if (equipmentReceived) {
         equipmentDetail = "Starting equipment has been added to ordinary Inventory. Any later changes are managed there.";
     } else if (nativeEquipment?.status === "unavailable") {
-        equipmentDetail = "The current native starting-equipment rules are not yet executable.";
+        equipmentDetail = "The current native starting-equipment rules are not yet executable. Inventory remains editable.";
     } else if (nativeEquipment?.status === "needs-choices") {
         equipmentDetail = "Choose a native starting-equipment package before applying grants.";
     } else if (nativeEquipment?.status === "resolved") {
         equipmentDetail = "Native starting-equipment package and grants are resolved.";
-    } else if (!equipmentAvailable || startingEquipment === null) {
-        equipmentDetail = "Starting-equipment options have not yet been resolved by Rules Core.";
-    } else if (equipmentConflicts.length > 0) {
-        equipmentDetail = equipmentConflicts.length === 1
-            ? "Resolve the starting-equipment Rules Core conflict before this section is complete."
-            : `Resolve ${equipmentConflicts.length} starting-equipment Rules Core conflicts before this section is complete.`;
-    } else if (pendingEquipmentChoices.length > 0) {
-        equipmentDetail = pendingEquipmentChoices.length === 1
-            ? "1 required starting-equipment choice remains."
-            : `${pendingEquipmentChoices.length} required starting-equipment choices remain.`;
-    } else if (pendingEquipmentRolls.length > 0) {
-        equipmentDetail = pendingEquipmentRolls.length === 1
-            ? "1 required starting-equipment roll remains."
-            : `${pendingEquipmentRolls.length} required starting-equipment rolls remain.`;
-    } else if (startingEquipment.choices.length === 0 && startingEquipment.rolls.length === 0) {
-        equipmentDetail = "Starting equipment grants are resolved; no player choices or rolls are required.";
+    } else if (!equipmentAvailable) {
+        equipmentDetail = "Select a starting class to inspect available equipment.";
     } else {
-        equipmentDetail = "Starting equipment grants, choices, and rolls are resolved.";
+        equipmentDetail = "Native starting-equipment options have not yet been resolved. Inventory remains editable.";
     }
 
     return [

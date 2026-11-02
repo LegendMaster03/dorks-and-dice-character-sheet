@@ -329,9 +329,12 @@ function renderWorkspace(
             leaveEditMode: () => dispatchAndFocus(
                 { type: "sheet-edit-exited" },
                 '[data-sheet-mode-control="edit"]'),
-            openGuidedBuilder: () => dispatchAndFocus(
-                { type: "guided-builder-opened" },
-                '[data-sheet-mode-control="guided-close"]'),
+            openGuidedBuilder: () => {
+                dispatchAndFocus(
+                    { type: "guided-builder-opened" },
+                    '[data-sheet-mode-control="guided-close"]');
+                void presentationWorkflow.load(character.characterId);
+            },
             closeGuidedBuilder: () => dispatchAndFocus(
                 { type: "guided-builder-closed" },
                 "[data-sheet-mode-control]"),
@@ -350,7 +353,8 @@ function renderWorkspace(
                 ? { status: "unavailable", message: state.presentation.message }
                 : { status: "loading" },
         state.presentation.equipmentPreview ?? null,
-        state.presentation.equipmentPreviewMessage);
+        state.presentation.equipmentPreviewMessage,
+        state.presentation.equipmentPreviewStatus);
     return workspace;
 }
 

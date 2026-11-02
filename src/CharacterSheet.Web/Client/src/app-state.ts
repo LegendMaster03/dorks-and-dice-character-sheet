@@ -358,7 +358,7 @@ export type CharacterSheetAction =
     | { type: "routine-mutation-started"; kind: RoutineMutationKind; entryId?: string }
     | { type: "routine-mutation-succeeded"; state: CharacterStateResponse }
     | { type: "routine-mutation-failed"; message: string }
-    | { type: "presentation-load-started"; requestId: number }
+    | { type: "presentation-load-started"; requestId: number; withEquipment: boolean }
     | { type: "presentation-loaded"; requestId: number; presentation: CharacterPresentationResponse }
     | { type: "presentation-load-failed"; requestId: number; message: string }
     | { type: "starting-equipment-preview-loaded"; requestId: number; preview: import("./features/inventory/starting-equipment-api.js").NativeStartingEquipmentPreview }

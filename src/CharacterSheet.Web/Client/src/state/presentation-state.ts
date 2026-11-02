@@ -15,7 +15,7 @@ export function reducePresentationState(
                 status: "loading",
                 requestId: action.requestId,
                 message: undefined,
-                equipmentPreviewStatus: "loading",
+                equipmentPreviewStatus: action.withEquipment ? "loading" : undefined,
                 equipmentPreview: null,
                 equipmentPreviewMessage: undefined
             };
