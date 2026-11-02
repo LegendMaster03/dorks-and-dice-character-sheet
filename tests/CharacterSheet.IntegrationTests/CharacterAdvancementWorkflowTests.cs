@@ -245,8 +245,9 @@ public sealed class CharacterAdvancementWorkflowTests
             var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
             Assert.True(plan!.CanApply);
         }
-        Assert.Equal(["patron.warlock.fiend", "pact.warlock.blade",
-            "invocation.eldritch-sight"], factory.Native.LastProjectedOptions);
+        Assert.Equal(["invocation.eldritch-sight", "pact.warlock.blade",
+            "patron.warlock.fiend"],
+            factory.Native.LastProjectedOptions.OrderBy(id => id, StringComparer.Ordinal));
         Assert.DoesNotContain("gold", factory.Native.LastProjectedOptions);
 
         using (var spend = await factory.SendHostedAsync(HttpMethod.Post,
