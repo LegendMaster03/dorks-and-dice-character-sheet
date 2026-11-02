@@ -55,6 +55,26 @@ var unsupportedRecovery = NativeResourceResolution.Recover(
 Ensure(unsupportedRecovery.Status == "unsupported",
     "Unsupported spell-slot recovery must remain unavailable.");
 
+// Recover the previously approved Loot Tavern manufacturing outcome using
+// actual native Core code and the active immutable ruleset snapshot.
+var manufacturing = new NativeCraftingResolver(catalog).ResolveManufacturing(
+    new NativeManufacturingRequest(catalog.RulesetId, catalog.Fingerprint,
+        new NativeCraftingManualCompetency("Blacksmithing", 3, true),
+        D20Roll: 15, TargetDc: 20, ManualAbilityModifier: 2));
+Ensure(manufacturing.Status == "resolved" &&
+    manufacturing.Outcome == "completed" && manufacturing.Total == 20 &&
+    manufacturing.Margin == 0 && manufacturing.InputsConsumed,
+    "Real Core manufacturing failed to preserve the existing success formula.");
+var manufacturingFailure = new NativeCraftingResolver(catalog).ResolveManufacturing(
+    new NativeManufacturingRequest(catalog.RulesetId, catalog.Fingerprint,
+        new NativeCraftingManualCompetency("Blacksmithing", 3, false),
+        D20Roll: 5, TargetDc: 20, ManualAbilityModifier: 2));
+Ensure(manufacturingFailure.Outcome == "failed" &&
+    manufacturingFailure.RollMode == "disadvantage" &&
+    manufacturingFailure.Total == 10 &&
+    !manufacturingFailure.ProducesFunctionalOutput,
+    "Real Core manufacturing lost failure or disadvantage behavior.");
+
 
 var eligibility = new NativeAdvancementEligibility(catalog).Evaluate(
     new NativeEligibilityRequest(catalog.RulesetId, catalog.Fingerprint,
