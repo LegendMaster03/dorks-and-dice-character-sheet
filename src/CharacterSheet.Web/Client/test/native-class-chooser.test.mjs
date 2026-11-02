@@ -95,3 +95,79 @@ test("Class advancement candidate search returns native IDs", async () => {
         globalThis.fetch = old;
     }
 });
+
+test("stale candidate searches do not replace newer search results", async () => {
+    const oldFetch = globalThis.fetch;
+    const h = setup();
+    let completeSlow;
+    let slowStarted;
+    const started = new Promise(resolve => { slowStarted = resolve; });
+    globalThis.fetch = async input => {
+        const url = new URL(String(input), "https://example.test");
+        if (url.pathname.endsWith("/ruleset")) return h.fetcher(input);
+        if (url.searchParams.get("q") === "slow") {
+            slowStarted();
+            return new Promise(resolve => { completeSlow = resolve; });
+        }
+        return Response.json({
+            contractVersion: 1, rulesetId: "first-party-001", fingerprint,
+            category: "class", total: 1, offset: 0, limit: 100,
+            options: [{ id: "class.fighter", name: "Fighter", kind: "class" }]
+        });
+    };
+    try {
+        const slow = h.workflow.searchCandidates("class", "slow");
+        await started;
+        await h.workflow.searchCandidates("class", "fast");
+        completeSlow(Response.json({
+            contractVersion: 1, rulesetId: "first-party-001", fingerprint,
+            category: "class", total: 1, offset: 0, limit: 100,
+            options: [{ id: "class.warlock", name: "Warlock", kind: "class" }]
+        }));
+        await slow;
+        const chooser = h.workflow.current().chooser;
+        assert.equal(chooser.kind, "open");
+        assert.equal(chooser.query, "fast");
+        assert.deepEqual(chooser.results.map(option => option.id), ["class.fighter"]);
+    } finally {
+        globalThis.fetch = oldFetch;
+    }
+});
+
+test("stale advancement previews do not override newer choices or reopen closed workspace", async () => {
+    const oldWindow = globalThis.window;
+    const h = setup();
+    const pending = [];
+    globalThis.window = {
+        fetch: async (_input, options) => new Promise(resolve => {
+            pending.push({ request: JSON.parse(options.body), resolve });
+        })
+    };
+    try {
+        const slow = h.workflow.selectCandidate("character", "class", "class.warlock");
+        const fast = h.workflow.selectCandidate("character", "class", "class.fighter");
+        assert.equal(pending.length, 2);
+        pending[1].resolve(Response.json({
+            classConceptKey: "class.fighter", canApply: false, status: "choice-required"
+        }));
+        await fast;
+        pending[0].resolve(Response.json({
+            classConceptKey: "class.warlock", canApply: true, status: "ready"
+        }));
+        await slow;
+        assert.equal(h.workflow.current().plan.classConceptKey, "class.fighter");
+
+        const late = h.workflow.selectCandidate("character", "class", "class.warlock");
+        assert.equal(pending.length, 3);
+        h.workflow.closeAdvancement();
+        pending[2].resolve(Response.json({
+            classConceptKey: "class.warlock", canApply: true, status: "ready"
+        }));
+        await late;
+        assert.equal(h.workflow.current().open, false);
+        assert.equal(h.workflow.current().plan, null);
+    } finally {
+        if (oldWindow === undefined) delete globalThis.window;
+        else globalThis.window = oldWindow;
+    }
+});

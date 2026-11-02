@@ -92,6 +92,8 @@ export function createAdvancementWorkflow(
     environment: HostEnvironment
 ): AdvancementWorkflow {
     let workflowState: AdvancementWorkflowState = createInitialWorkflowState();
+    let previewSequence = 0;
+    let candidateSearchSequence = 0;
 
     function setWorkflowState(next: AdvancementWorkflowState): void {
         workflowState = next;
@@ -156,6 +158,10 @@ export function createAdvancementWorkflow(
         characterId: string,
         request: CharacterClassAdvancementRequest
     ): Promise<void> {
+        const requestSequence = ++previewSequence;
+        // A candidate search started before this preview can no longer
+        // replace the selection currently being reviewed.
+        candidateSearchSequence++;
         setWorkflowState({
             ...workflowState,
             open: true,
@@ -169,6 +175,7 @@ export function createAdvancementWorkflow(
                 environment,
                 characterId,
                 request);
+            if (requestSequence !== previewSequence) return;
             setWorkflowState({
                 open: true,
                 status: "ready",
@@ -177,6 +184,7 @@ export function createAdvancementWorkflow(
                 chooser: { kind: "closed" }
             });
         } catch (error) {
+            if (requestSequence !== previewSequence) return;
             setWorkflowState({
                 ...workflowState,
                 open: true,
@@ -210,6 +218,7 @@ export function createAdvancementWorkflow(
         query: string
     ): Promise<void> {
         const normalizedQuery = query.trim();
+        const sequence = ++candidateSearchSequence;
         setWorkflowState({
             ...workflowState,
             open: true,
@@ -235,6 +244,10 @@ export function createAdvancementWorkflow(
                     .filter(value => value.kind === "class")
                     .map(value => value.ruleConceptKey));
             const results = catalog.options.filter(rule => !owned.has(rule.id));
+            if (sequence !== candidateSearchSequence ||
+                workflowState.chooser.kind !== "open" ||
+                workflowState.chooser.target !== target ||
+                workflowState.chooser.query !== normalizedQuery) return;
             setWorkflowState({
                 ...workflowState,
                 chooser: {
@@ -246,6 +259,10 @@ export function createAdvancementWorkflow(
                 }
             });
         } catch (error) {
+            if (sequence !== candidateSearchSequence ||
+                workflowState.chooser.kind !== "open" ||
+                workflowState.chooser.target !== target ||
+                workflowState.chooser.query !== normalizedQuery) return;
             setWorkflowState({
                 ...workflowState,
                 chooser: {
@@ -368,6 +385,8 @@ export function createAdvancementWorkflow(
         },
 
         openAdvancement(): void {
+            previewSequence++;
+            candidateSearchSequence++;
             setWorkflowState({
                 ...createInitialWorkflowState(),
                 open: true
@@ -375,10 +394,14 @@ export function createAdvancementWorkflow(
         },
 
         closeAdvancement(): void {
+            previewSequence++;
+            candidateSearchSequence++;
             setWorkflowState(createInitialWorkflowState());
         },
 
         backToSelection(): void {
+            previewSequence++;
+            candidateSearchSequence++;
             setWorkflowState({
                 ...createInitialWorkflowState(),
                 open: true
@@ -400,6 +423,8 @@ export function createAdvancementWorkflow(
         },
 
         openCandidateChooser(target): void {
+            previewSequence++;
+            candidateSearchSequence++;
             setWorkflowState({
                 ...workflowState,
                 open: true,
@@ -418,6 +443,7 @@ export function createAdvancementWorkflow(
         },
 
         closeCandidateChooser(): void {
+            candidateSearchSequence++;
             setWorkflowState({
                 ...workflowState,
                 chooser: { kind: "closed" }
@@ -494,6 +520,8 @@ export function createAdvancementWorkflow(
                 || !workflowState.plan.canApply) {
                 return;
             }
+            previewSequence++;
+            candidateSearchSequence++;
             const request = workflowState.request;
             setWorkflowState({
                 ...workflowState,
