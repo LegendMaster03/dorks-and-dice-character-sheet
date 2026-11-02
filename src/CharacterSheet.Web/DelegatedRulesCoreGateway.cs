@@ -44,6 +44,11 @@ public sealed class DelegatedRulesCoreGateway(
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/project",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    public Task<JsonNode> ResolveNativeManufacturingAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/crafting/manufacturing/resolve",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> ResolveNativeStartingEquipmentAsync(
         JsonElement request, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/starting-equipment",
@@ -257,6 +262,8 @@ public sealed class DelegatedRulesCoreGateway(
             return "native-resource-resolution";
         if (targetPath.EndsWith("/characters/starting-equipment", StringComparison.Ordinal))
             return "native-starting-equipment";
+        if (targetPath.EndsWith("/crafting/manufacturing/resolve", StringComparison.Ordinal))
+            return "native-manufacturing";
         if (targetPath.EndsWith("/advancements/eligibility", StringComparison.Ordinal))
             return "native-advancement-eligibility";
         if (targetPath.Contains("/catalog/options", StringComparison.Ordinal))

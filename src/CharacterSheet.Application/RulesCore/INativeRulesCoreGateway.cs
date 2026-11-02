@@ -17,6 +17,10 @@ public interface INativeRulesCoreGateway
         JsonElement request, CancellationToken cancellationToken);
     Task<JsonNode> ProjectNativeCharacterAsync(
         JsonElement request, CancellationToken cancellationToken);
+    Task<JsonNode> ResolveNativeManufacturingAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Native manufacturing is not supported by this Rules Core gateway."));
     Task<JsonNode> ResolveNativeStartingEquipmentAsync(
         JsonElement request, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
