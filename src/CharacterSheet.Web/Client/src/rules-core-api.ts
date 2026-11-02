@@ -1,3 +1,6 @@
+import { buildCharacterSheetApiUrl, readApiError, type FetchLike } from "./character-api.js";
+import type { HostEnvironment } from "./host-environment.js";
+
 // The old /api/rules application interface is no longer part of Rules Core.
 // Keep harvesting transport shapes while the native harvesting contract is built.
 // Unsupported operations fail locally, without attempting legacy HTTP routes.
@@ -174,30 +177,121 @@ export interface HarvestingOutcomeResponse {
 }
 
 
-const nativeHarvestingUnavailable =
-    "Harvesting is unavailable until Rules Core exposes a native harvesting contract.";
+// Harvesting tables and outcomes are served by the authenticated native
+// mechanics gateway. Each request pins only the snapshot used for that one
+// operation; a ruleset content revision never requires client redeployment.
+type HarvestFetcher = FetchLike;
+interface HarvestingSnapshot {
+    rulesetId: string;
+    fingerprint: string;
+}
+
+async function requestHarvestingJson(
+    environment: HostEnvironment,
+    path: string,
+    fetcher: HarvestFetcher,
+    body?: object
+): Promise<unknown> {
+    const response = await fetcher(buildCharacterSheetApiUrl(environment, path), {
+        method: body === undefined ? "GET" : "POST",
+        credentials: "same-origin",
+        headers: body === undefined
+            ? { Accept: "application/json" }
+            : { Accept: "application/json", "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (!response.ok) {
+        const fallback = response.status === 409
+            ? "The active ruleset changed. Retry the Harvesting operation."
+            : "Native Harvesting is unavailable for this request.";
+        throw new RulesCoreApiError(await readApiError(response, fallback), response.status);
+    }
+    return await response.json();
+}
+
+async function activeHarvestingSnapshot(
+    environment: HostEnvironment, fetcher: HarvestFetcher
+): Promise<HarvestingSnapshot> {
+    const raw = await requestHarvestingJson(
+        environment, "/api/native-rules/ruleset", fetcher);
+    const metadata = raw as {
+        contractVersion?: number;
+        rulesetId?: string;
+        fingerprint?: string;
+        capabilities?: { harvestingResolution?: string };
+    };
+    if (metadata.contractVersion !== 1 ||
+        !metadata.rulesetId ||
+        !/^[0-9a-f]{64}$/.test(metadata.fingerprint ?? "") ||
+        metadata.capabilities?.harvestingResolution !== "type-monster-manual-edits") {
+        throw new RulesCoreApiError(
+            "The active Rules Core does not advertise native Harvesting.", 503);
+    }
+    return {
+        rulesetId: metadata.rulesetId,
+        fingerprint: metadata.fingerprint!
+    };
+}
+
+function ensureGlobalHarvesting(campaignId: string | null): void {
+    if (campaignId !== null) {
+        throw new RulesCoreApiError(
+            "Campaign-specific Harvesting overrides are not available in the native rules contract.", 501);
+    }
+}
 
 export async function loadHarvestingRules(
-    _environment: unknown,
-    _fetcher?: unknown
+    environment: HostEnvironment,
+    fetcher: HarvestFetcher = globalThis.fetch.bind(globalThis)
 ): Promise<HarvestingRulesCatalogResponse> {
-    throw new RulesCoreApiError(nativeHarvestingUnavailable, 501);
+    const snapshot = await activeHarvestingSnapshot(environment, fetcher);
+    const data = await requestHarvestingJson(environment,
+        "/api/native-rules/harvesting?fingerprint=" +
+            encodeURIComponent(snapshot.fingerprint), fetcher);
+    const catalog = data as HarvestingRulesCatalogResponse & HarvestingSnapshot & {
+        contractVersion: number;
+    };
+    if (catalog.contractVersion !== 1 ||
+        catalog.rulesetId !== snapshot.rulesetId ||
+        catalog.fingerprint !== snapshot.fingerprint ||
+        !Array.isArray(catalog.creatureTypes) ||
+        catalog.source?.provider !== "Loot Tavern" ||
+        !catalog.procedure) {
+        throw new RulesCoreApiError("Native Harvesting catalog is invalid.", 502);
+    }
+    return catalog;
 }
 
 export async function resolveHarvestingTable(
-    _environment: unknown,
-    _input: HarvestingTableResolutionInput,
-    _campaignId: string | null = null,
-    _fetcher?: unknown
+    environment: HostEnvironment,
+    input: HarvestingTableResolutionInput,
+    campaignId: string | null = null,
+    fetcher: HarvestFetcher = globalThis.fetch.bind(globalThis)
 ): Promise<HarvestingResolvedTableResponse> {
-    throw new RulesCoreApiError(nativeHarvestingUnavailable, 501);
+    ensureGlobalHarvesting(campaignId);
+    const snapshot = await activeHarvestingSnapshot(environment, fetcher);
+    const table = await requestHarvestingJson(environment,
+        "/api/native-rules/harvesting/resolve", fetcher, { ...input, ...snapshot });
+    if (!Array.isArray((table as HarvestingResolvedTableResponse)?.components)) {
+        throw new RulesCoreApiError("Native Harvesting table is invalid.", 502);
+    }
+    return table as HarvestingResolvedTableResponse;
 }
 
 export async function resolveHarvestingOutcome(
-    _environment: unknown,
-    _input: HarvestingOutcomeInput,
-    _campaignId: string | null = null,
-    _fetcher?: unknown
+    environment: HostEnvironment,
+    input: HarvestingOutcomeInput,
+    campaignId: string | null = null,
+    fetcher: HarvestFetcher = globalThis.fetch.bind(globalThis)
 ): Promise<HarvestingOutcomeResponse> {
-    throw new RulesCoreApiError(nativeHarvestingUnavailable, 501);
+    ensureGlobalHarvesting(campaignId);
+    const snapshot = await activeHarvestingSnapshot(environment, fetcher);
+    const result = await requestHarvestingJson(environment,
+        "/api/native-rules/harvesting/outcome", fetcher,
+        { ...input, table: { ...input.table, ...snapshot } });
+    if (!Array.isArray((result as HarvestingOutcomeResponse)?.components) ||
+        !Number.isFinite((result as HarvestingOutcomeResponse)?.harvestingResult)) {
+        throw new RulesCoreApiError("Native Harvesting outcome is invalid.", 502);
+    }
+    return result as HarvestingOutcomeResponse;
 }
