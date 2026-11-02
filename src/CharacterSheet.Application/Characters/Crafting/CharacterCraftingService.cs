@@ -60,11 +60,9 @@ public sealed class CharacterCraftingService(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Competency);
 
-        var context = await BuildCharacterContextAsync(characterId, cancellationToken);
-        if (context.Result is not null)
-        {
-            return context.Result;
-        }
+        var access = await ValidateCharacterAccessAsync(characterId, cancellationToken);
+        if (access is not null)
+            return access;
 
         // The approved manufacturing outcome is available in native Core with
         // explicit manual inputs. Full automatic native competency and
@@ -173,6 +171,18 @@ public sealed class CharacterCraftingService(
                 CharacterCraftingAccessStatus.ProjectionUnavailable,
                 Message: exception.Message);
         }
+    }
+
+    private async Task<CharacterCraftingResult?> ValidateCharacterAccessAsync(
+        Guid characterId, CancellationToken cancellationToken)
+    {
+        var build = await buildService.GetAsync(characterId, cancellationToken);
+        if (build.Status != CharacterBuildAccessStatus.Ready || build.View is null)
+            return new(MapBuildStatus(build.Status));
+        var state = await stateService.GetAsync(characterId, cancellationToken);
+        if (state.Status != CharacterStateAccessStatus.Ready || state.View is null)
+            return new(MapStateStatus(state.Status));
+        return null;
     }
 
     private async Task<(
