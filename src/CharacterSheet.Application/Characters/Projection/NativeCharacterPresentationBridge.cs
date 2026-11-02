@@ -61,6 +61,11 @@ public static class NativeCharacterPresentationBridge
             metadata["capabilities"]?["characterProjection"]?.GetValue<bool>() != true)
             throw new RulesCoreGatewayException("Rules Core returned invalid native projection metadata.");
 
+        // A Sheet deploy may precede Core's manual release. Only expose native
+        // condition numbers when Core advertises per-value invalidation; older
+        // Core versions keep the previous conservative presentation behavior.
+        var isolatesConditionValues = metadata["capabilities"]?["conditionValueIsolation"]
+            is JsonValue isolation && isolation.TryGetValue<bool>(out var supported) && supported;
         var classEntries = build.ProgressionEntries
             .OrderBy(entry => entry.Ordinal ?? int.MaxValue)
             .ThenBy(entry => entry.Id)
@@ -121,7 +126,7 @@ public static class NativeCharacterPresentationBridge
                 proficient = trained.Contains(id), miscModifier = 0 },
             StringComparer.Ordinal);
         var unmodeledSelections = build.FoundationalSelections.Count != 0 ||
-            state?.Conditions.Any(condition => condition.RuleConceptKey is null ||
+            state?.Conditions.Any(condition => !isolatesConditionValues || condition.RuleConceptKey is null ||
                 !condition.RuleConceptKey.StartsWith("condition.", StringComparison.Ordinal)) == true ||
             state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true ||
             state?.RulesInputs?.Any(input => input.Kind is not (

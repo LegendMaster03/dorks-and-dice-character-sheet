@@ -359,10 +359,12 @@ public sealed class NativeCharacterPresentationBridgeTests
             item => item.Key == "skill.perception").RankInputKey);
     }
 
-    [Fact]
-    public async Task NativeWetIsForwardedWithoutErasingIndependentCoreValues()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task NativeWetRequiresPerValueSupportBeforePublishingNumbers(bool isolated)
     {
-        var gateway = new FixtureGateway();
+        var gateway = new FixtureGateway { IncludeConditionValueIsolation = isolated };
         var occurrence = new CharacterAdvancementEntryView(
             Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 2);
         var build = Build(occurrence) with { BaseAbilityScoreInputs = [
@@ -373,13 +375,15 @@ public sealed class NativeCharacterPresentationBridgeTests
         var result = await NativeCharacterPresentationBridge.ProjectAsync(
             gateway, build, state, CancellationToken.None);
         Assert.Equal(new[] { "condition.wet" }, gateway.LastConditionIds);
-        Assert.Equal(14, Assert.Single(result.Mechanics!.AbilityValues!).EffectiveValue);
+        if (isolated) Assert.Equal(14, Assert.Single(result.Mechanics!.AbilityValues!).EffectiveValue);
+        else Assert.Null(result.Mechanics!.AbilityValues);
         Assert.Equal(15, Assert.Single(result.Mechanics.HealthTracks!).Current);
         Assert.Equal("partial", result.Status);
     }
 
     private sealed class FixtureGateway : INativeRulesCoreGateway
     {
+        public bool IncludeConditionValueIsolation { get; init; } = true;
         public int Calls { get; private set; }
         public bool ReturnClass { get; init; } = true;
         public bool IncludeResources { get; init; }
@@ -395,7 +399,7 @@ public sealed class NativeCharacterPresentationBridgeTests
             Calls++;
             return Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new {
                 contractVersion = 1, rulesetId = "first-party-001", fingerprint = Fingerprint,
-                capabilities = new { characterProjection = true }
+                capabilities = new { characterProjection = true, conditionValueIsolation = IncludeConditionValueIsolation }
             }))!);
         }
 
