@@ -61,13 +61,14 @@ public static class NativeRulesCoreEndpoints
         }
         catch (RulesCoreGatewayException error)
         {
-            var status = error.StatusCode is 400 or 401 or 403 or 409
+            var status = error.StatusCode is 400 or 401 or 403 or 409 or 422
                 ? error.StatusCode.Value : StatusCodes.Status503ServiceUnavailable;
             // Do not leak target paths, Site credentials or private diagnostics.
             return Results.Json(new { error = status == 409
                 ? "ruleset_version_mismatch"
                 : status == 400 ? "invalid_native_request"
                 : status is 401 or 403 ? "native_mechanics_access_denied"
+                : status == 422 ? "native_mechanics_unresolved"
                 : "native_mechanics_unavailable" }, statusCode: status);
         }
     }
