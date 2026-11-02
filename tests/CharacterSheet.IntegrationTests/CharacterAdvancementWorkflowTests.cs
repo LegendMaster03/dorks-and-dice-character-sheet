@@ -348,6 +348,32 @@ public sealed class CharacterAdvancementWorkflowTests
     }
 
     [Fact]
+    public async Task NativeEquipmentIgnoresNonClassAdvancementEntries()
+    {
+        using var factory = new Factory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(
+            characterId, "Multiclass Test", "Active", null, []));
+        var startingClass = await InitializeClassAsync(factory, characterId);
+        using (var feat = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{characterId:D}/build/feats",
+            new { conceptKey = "feat.demo.alert" }))
+            Assert.Equal(HttpStatusCode.OK, feat.StatusCode);
+
+        factory.Native.EquipmentStatus = "needs-choices";
+        using (var preview = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{characterId:D}/state/inventory/starting-equipment/preview"))
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+
+        var history = factory.Native.LastEquipmentRequest.GetProperty("advancements")
+            .EnumerateArray().ToArray();
+        var selected = Assert.Single(history);
+        Assert.Equal("class.warlock", selected.GetProperty("classId").GetString());
+        Assert.Equal(startingClass.Id.ToString("D"),
+            selected.GetProperty("occurrenceId").GetString());
+    }
+
+    [Fact]
     public async Task NativeStartingEquipmentRejectsInvalidGrantBatchWithoutPersistence()
     {
         using var factory = new Factory { Native = new FakeNativeGateway {

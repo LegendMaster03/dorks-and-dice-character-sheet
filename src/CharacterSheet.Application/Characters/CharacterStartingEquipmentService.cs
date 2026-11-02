@@ -123,7 +123,11 @@ public sealed class CharacterStartingEquipmentService(
                 string.IsNullOrWhiteSpace(fingerprint))
                 return new(CharacterStateAccessStatus.ProjectionUnavailable);
 
+            // Feats, subclasses, prestige tracks, and future advancement kinds
+            // coexist in a Character history; only Class occurrences supply
+            // the initial equipment selection and must be sent to Core.
             var classHistory = buildResult.View.ProgressionEntries
+                .Where(entry => entry.Kind == CharacterBuildAdvancementKinds.Class)
                 .OrderBy(entry => entry.Ordinal ?? int.MaxValue)
                 .ThenBy(entry => entry.Id)
                 .ToArray();
