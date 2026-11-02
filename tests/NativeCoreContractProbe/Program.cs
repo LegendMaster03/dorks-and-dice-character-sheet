@@ -76,6 +76,36 @@ Ensure(manufacturingFailure.Outcome == "failed" &&
     "Real Core manufacturing lost failure or disadvantage behavior.");
 
 
+// Harvesting uses editable native content rather than a hard-coded parallel
+// table collection. Verify a real first-party type and a real bestiary monster.
+var harvesting = new NativeHarvestingResolver(catalog);
+var harvestingCatalog = harvesting.GetCatalog(catalog.Fingerprint);
+Ensure(harvestingCatalog.Source.Provider == "Loot Tavern",
+    "Native Loot Tavern attribution was not retained.");
+var beast = harvestingCatalog.CreatureTypes.Single(t => t.Key == "beast");
+Ensure(beast.DefaultComponents.Any(c => c.Key == "pelt"),
+    "The real native Harvesting table is incomplete.");
+var harvestTable = harvesting.Resolve(new NativeHarvestingTableRequest(
+    catalog.RulesetId, catalog.Fingerprint, CreatureType: "beast",
+    ManualEdits: new(UpsertComponents: [
+        new("pelt", Quantity: 2)
+    ])));
+Ensure(harvestTable.Components.Single(c => c.Key == "pelt").Quantity == 2,
+    "The real native Harvesting component edits were not applied.");
+var harvestOutcome = harvesting.Evaluate(new NativeHarvestingOutcomeRequest(
+    new NativeHarvestingTableRequest(
+        catalog.RulesetId, catalog.Fingerprint, CreatureType: "beast",
+        ManualEdits: new(UpsertComponents: [new("pelt", Quantity: 2)])),
+    12, 14, false, ["pelt"], "Medium"));
+Ensure(harvestOutcome.Components[0].Quantity == 2 &&
+    harvestOutcome.Components[0].HarvestDc > 0,
+    "Real native Harvesting outcome did not use authored component values.");
+var dragonHarvest = harvesting.Resolve(new NativeHarvestingTableRequest(
+    catalog.RulesetId, catalog.Fingerprint,
+    CreatureConceptKey: "monster.adult-red-dragon"));
+Ensure(dragonHarvest.CreatureType == "dragon" && dragonHarvest.CreatureSize == "Huge",
+    "Real native bestiary type and size were not resolved for Harvesting.");
+
 var eligibility = new NativeAdvancementEligibility(catalog).Evaluate(
     new NativeEligibilityRequest(catalog.RulesetId, catalog.Fingerprint,
         "class.warlock", request, HitDieValue: 5));
