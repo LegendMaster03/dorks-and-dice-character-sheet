@@ -185,6 +185,7 @@ export interface CharacterRoutineUiState {
     recovery: RecoveryUiState;
     mutation: { kind: RoutineMutationKind; entryId?: string } | null;
     mutationError?: string;
+    mutationErrorKind?: RoutineMutationKind;
 }
 
 export interface CharacterPresentationUiState {

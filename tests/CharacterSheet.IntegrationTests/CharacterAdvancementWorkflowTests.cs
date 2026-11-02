@@ -16,6 +16,64 @@ namespace CharacterSheet.IntegrationTests;
 
 public sealed class CharacterAdvancementWorkflowTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DraftOptionsPersistOnlyOnApplyWithTheirReviewedLevel(bool configureCurrent)
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Draft Tester", "Active", null, []));
+        var entry = await InitializeClassAsync(factory, id);
+        var request = new { classAdvancementEntryId = entry.Id,
+            configureCurrentLevel = configureCurrent, expectedClassLevel = 1,
+            hitDieValue = configureCurrent ? (int?)null : 5,
+            selectedOptions = new Dictionary<string, string> {
+                ["native-option.class.warlock.patron"] = "patron.warlock.fiend" } };
+        using (var preview = await factory.SendHostedAsync(HttpMethod.Post,
+                   $"/api/characters/{id:D}/advancement/preview", request))
+        {
+            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+            var plan = await preview.Content.ReadFromJsonAsync<CharacterAdvancementPlanView>();
+            Assert.True(plan!.CanApply);
+            Assert.Equal(configureCurrent ? 1 : 2, plan.TargetClassLevel);
+        }
+        using (var read = await factory.SendHostedAsync(HttpMethod.Get,
+                   $"/api/characters/{id:D}/state"))
+        {
+            var state = await read.Content.ReadFromJsonAsync<CharacterStateView>();
+            Assert.Empty(state!.RulesInputs!);
+        }
+        using var apply = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/advancement/apply", request);
+        Assert.Equal(HttpStatusCode.OK, apply.StatusCode);
+        var result = await apply.Content.ReadFromJsonAsync<ApplyView>();
+        Assert.Equal(configureCurrent ? 1 : 2, Assert.Single(result!.Build.ProgressionEntries).Level);
+        using var savedRead = await factory.SendHostedAsync(HttpMethod.Get, $"/api/characters/{id:D}/state");
+        var saved = await savedRead.Content.ReadFromJsonAsync<CharacterStateView>();
+        Assert.Equal("patron.warlock.fiend", Assert.Single(saved!.RulesInputs!).TextValue);
+        Assert.Equal(configureCurrent ? 0 : 1, saved.HitPointGains!.Count);
+        using (var replace = await factory.SendHostedAsync(HttpMethod.Post,
+                   $"/api/characters/{id:D}/advancement/apply", new {
+                       classAdvancementEntryId = entry.Id, configureCurrentLevel = true,
+                       expectedClassLevel = configureCurrent ? 1 : 2,
+                       selectedOptions = request.selectedOptions }))
+            Assert.Equal(HttpStatusCode.OK, replace.StatusCode);
+        using (var replacedRead = await factory.SendHostedAsync(HttpMethod.Get,
+                   $"/api/characters/{id:D}/state"))
+        {
+            var replaced = await replacedRead.Content.ReadFromJsonAsync<CharacterStateView>();
+            Assert.Equal(Assert.Single(saved.RulesInputs!).Id, Assert.Single(replaced!.RulesInputs!).Id);
+            Assert.Equal(configureCurrent ? 0 : 1, replaced.HitPointGains!.Count);
+        }
+        if (!configureCurrent)
+        {
+            using var repeated = await factory.SendHostedAsync(HttpMethod.Post,
+                $"/api/characters/{id:D}/advancement/apply", request);
+            Assert.Equal(HttpStatusCode.BadRequest, repeated.StatusCode);
+        }
+    }
+
     [Fact]
     public async Task NativeClassAdvancementRequiresHitPointGainAndPersistsApprovedLevel()
     {

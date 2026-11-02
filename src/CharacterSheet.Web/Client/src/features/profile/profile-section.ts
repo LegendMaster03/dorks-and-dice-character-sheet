@@ -72,7 +72,8 @@ export function renderProfileSection(
     const pending = routine.mutation !== null;
     const editable = !readOnly && !routine.state.readOnly;
 
-    if (routine.mutationError !== undefined) {
+    if (routine.mutationError !== undefined &&
+        routine.mutationErrorKind?.startsWith("profile-") === true) {
         content.append(createInlineState(routine.mutationError, "error"));
     }
 

@@ -189,14 +189,18 @@ function renderPlan(
         createElement(
             "p",
             "dd-character-advancement__summary",
-            newProgression
+            plan.operation === "configure-class"
+                ? `Configure current level ${plan.currentClassLevel} choices`
+                : newProgression
                 ? `Acquire level ${plan.targetClassLevel} · Character level ${plan.currentCharacterLevel} → ${plan.targetCharacterLevel}`
                 : `Level ${plan.currentClassLevel} → ${plan.targetClassLevel} · Character level ${plan.currentCharacterLevel} → ${plan.targetCharacterLevel}`));
     container.append(heading);
 
     if (plan.status === "applied") {
         container.append(createInlineState(
-            "The advancement was applied and the Character Sheet has been refreshed.",
+            plan.operation === "configure-class"
+                ? "Class choices were saved and the Character Sheet has been refreshed."
+                : "The advancement was applied and the Character Sheet has been refreshed.",
             "neutral"));
         const actions = createElement("div", "dd-character-advancement__actions");
         actions.append(createButton("Done", "dd-button dd-button--primary", handlers.close));
@@ -261,7 +265,7 @@ function renderPlan(
             handlers.backToSelection,
             state.status === "applying"),
         createButton(
-            state.status === "applying" ? "Applying…" : "Apply Advancement",
+            state.status === "applying" ? "Applying…" : plan.operation === "configure-class" ? "Save Class Choices" : "Apply Advancement",
             "dd-button dd-button--primary",
             handlers.apply,
             state.status === "applying" || !plan.canApply));

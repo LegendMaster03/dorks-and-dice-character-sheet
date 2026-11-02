@@ -43,7 +43,8 @@ export function renderConditionsCard(
             pending));
     }
 
-    if (routine.mutationError !== undefined) {
+    if (routine.mutationError !== undefined &&
+        routine.mutationErrorKind?.startsWith("condition-") === true) {
         card.append(createInlineState(routine.mutationError, "error"));
     }
 

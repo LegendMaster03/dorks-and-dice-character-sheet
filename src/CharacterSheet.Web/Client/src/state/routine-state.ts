@@ -60,6 +60,7 @@ export function reduceRoutineState(
                         status: "idle",
                         results: []
                     },
+                    mutationErrorKind: undefined,
                     mutationError: undefined
                 };
             }
@@ -130,6 +131,7 @@ export function reduceRoutineState(
                         status: "idle",
                         results: []
                     },
+                    mutationErrorKind: undefined,
                     mutationError: undefined
                 };
             }
@@ -200,6 +202,7 @@ export function reduceRoutineState(
                         status: "idle",
                         results: []
                     },
+                    mutationErrorKind: undefined,
                     mutationError: undefined
                 };
             }
@@ -308,6 +311,7 @@ export function reduceRoutineState(
                 routine = {
                     ...routine,
                     mutation: { kind: action.kind, entryId: action.entryId },
+                    mutationErrorKind: undefined,
                     mutationError: undefined
                 };
             }
@@ -318,6 +322,7 @@ export function reduceRoutineState(
         case "routine-mutation-failed":
             routine = {
                 ...routine,
+                mutationErrorKind: routine.mutation?.kind,
                 mutation: null,
                 mutationError: action.message
             };

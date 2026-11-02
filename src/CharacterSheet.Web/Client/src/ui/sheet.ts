@@ -179,6 +179,11 @@ export function renderCharacterWorkspace(
         ? null
         : buildCompetencyPresentation(competencyCollections.competencies);
 
+    if (routine.mutationError !== undefined &&
+        (routine.mutationErrorKind === "health-update" || routine.mutationErrorKind === "death-saves-update" ||
+            routine.mutationErrorKind === "native-resource-action"))
+        shell.append(createInlineState(routine.mutationError, "error"));
+
     const topRow = createElement("div", "dd-sheet__top-row");
     topRow.append(renderCoreStats(
         builder,

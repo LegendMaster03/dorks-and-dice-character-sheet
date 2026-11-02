@@ -65,6 +65,7 @@ export interface AdvancementWorkflow {
     closeAdvancement(): void;
     backToSelection(): void;
     previewExisting(characterId: string, occurrenceId: string): Promise<void>;
+    configureCurrent(characterId: string, occurrenceId: string): Promise<void>;
     openCandidateChooser(target: AdvancementCandidateTarget): void;
     closeCandidateChooser(): void;
     searchCandidates(target: AdvancementCandidateTarget, query: string): Promise<void>;
@@ -408,6 +409,13 @@ export function createAdvancementWorkflow(
             });
         },
 
+        async configureCurrent(characterId, occurrenceId): Promise<void> {
+            const entry = buildState.current().build?.progressionEntries.find(value => value.id === occurrenceId);
+            if (entry?.kind !== "class") return;
+            await preview(characterId, { classAdvancementEntryId: occurrenceId,
+                configureCurrentLevel: true, expectedClassLevel: entry.level ?? 0 });
+        },
+
         async previewExisting(characterId, occurrenceId): Promise<void> {
             const entry = buildState.current().build?.progressionEntries.find(
                 value => value.id === occurrenceId);
@@ -418,7 +426,8 @@ export function createAdvancementWorkflow(
                 return;
             }
             await preview(characterId, {
-                classAdvancementEntryId: occurrenceId
+                classAdvancementEntryId: occurrenceId,
+                expectedClassLevel: entry?.level ?? 0
             });
         },
 
@@ -486,32 +495,10 @@ export function createAdvancementWorkflow(
 
         async resolveChoice(characterId, choiceKey, value): Promise<void> {
             if (workflowState.request === null) return;
-            application.dispatch({
-                type: "routine-mutation-started",
-                kind: "rules-input-update",
-                entryId: `choice:${choiceKey}`
+            await preview(characterId, {
+                ...workflowState.request,
+                selectedOptions: { ...workflowState.request.selectedOptions, [choiceKey]: value }
             });
-            try {
-                const state = await setCharacterRulesInput(
-                    environment,
-                    characterId,
-                    {
-                        kind: "choice",
-                        key: choiceKey,
-                        textValue: value
-                    });
-                application.dispatch({ type: "routine-mutation-succeeded", state });
-                await resolveRoutineReferences(state);
-                await preview(characterId, workflowState.request);
-            } catch (error) {
-                const message = requestErrorMessage(error);
-                application.dispatch({ type: "routine-mutation-failed", message });
-                setWorkflowState({
-                    ...workflowState,
-                    status: "error",
-                    message
-                });
-            }
         },
 
         async apply(characterId): Promise<void> {
