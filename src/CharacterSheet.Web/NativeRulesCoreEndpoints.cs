@@ -31,6 +31,19 @@ public static class NativeRulesCoreEndpoints
             Forward(() => gateway.SearchNativeOptionsAsync(
                 fingerprint, category, q, limit ?? 50, offset ?? 0, cancellationToken)));
 
+        group.MapGet("/harvesting", (string fingerprint,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.GetNativeHarvestingCatalogAsync(
+                fingerprint, cancellationToken)));
+
+        group.MapPost("/harvesting/resolve", (JsonElement request,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.ResolveNativeHarvestingTableAsync(request, cancellationToken)));
+
+        group.MapPost("/harvesting/outcome", (JsonElement request,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.EvaluateNativeHarvestingOutcomeAsync(request, cancellationToken)));
+
         group.MapPost("/advancements/eligibility", (JsonElement request,
             [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
             Forward(() => gateway.EvaluateNativeAdvancementAsync(request, cancellationToken)));

@@ -44,6 +44,23 @@ public sealed class DelegatedRulesCoreGateway(
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/project",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    public Task<JsonNode> GetNativeHarvestingCatalogAsync(
+        string fingerprint, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Get,
+            "/api/mechanics/v1/harvesting?fingerprint=" +
+                Uri.EscapeDataString(fingerprint),
+            null, cancellationToken);
+
+    public Task<JsonNode> ResolveNativeHarvestingTableAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/harvesting/resolve",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
+    public Task<JsonNode> EvaluateNativeHarvestingOutcomeAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/harvesting/outcome",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> ResolveNativeManufacturingAsync(
         JsonElement request, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/crafting/manufacturing/resolve",

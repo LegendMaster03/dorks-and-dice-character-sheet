@@ -17,6 +17,18 @@ public interface INativeRulesCoreGateway
         JsonElement request, CancellationToken cancellationToken);
     Task<JsonNode> ProjectNativeCharacterAsync(
         JsonElement request, CancellationToken cancellationToken);
+    Task<JsonNode> GetNativeHarvestingCatalogAsync(
+        string fingerprint, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Native harvesting is not supported by this Rules Core gateway."));
+    Task<JsonNode> ResolveNativeHarvestingTableAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Native harvesting table resolution is unsupported."));
+    Task<JsonNode> EvaluateNativeHarvestingOutcomeAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Native harvesting outcome evaluation is unsupported."));
     Task<JsonNode> ResolveNativeManufacturingAsync(
         JsonElement request, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
