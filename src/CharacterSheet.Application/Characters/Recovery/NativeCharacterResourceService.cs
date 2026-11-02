@@ -134,6 +134,14 @@ public sealed class NativeCharacterResourceService(
                 projected["resources"] is not JsonArray list)
                 return new(NativeCharacterResourceActionStatus.Unsupported,
                     Message: "The native Character projection does not resolve this resource.");
+            // A partial projection may retain a numeric class resource even when
+            // selected Patron, Pact, or Invocation prerequisites are invalid.
+            // Do not authorize mutation from that inconsistent character state.
+            if (projected["issues"] is not JsonArray issues ||
+                issues.Any(issue => NativeCharacterOptionSelections.BlocksNativeOptionMechanics(
+                    Text(issue, "code"))))
+                return new(NativeCharacterResourceActionStatus.Unsupported,
+                    Message: "Selected native class options are invalid or unresolved.");
 
             var matchingResources = list.Where(resource =>
                 Text(resource, "id") == action.ResourceId).Take(2).ToArray();

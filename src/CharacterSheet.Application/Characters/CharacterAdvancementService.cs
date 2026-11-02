@@ -306,10 +306,7 @@ public sealed class CharacterAdvancementService(
                 foreach (var issue in projectedIssues)
                 {
                     var code = Text(issue, "code");
-                    if (code is "exclusive-selection-conflict" or "option-not-native"
-                        or "option-occurrence-unresolved" or "option-parent-unavailable"
-                        or "option-evaluation-unavailable" or "prerequisite-failed"
-                        or "invocation-cost-unresolved" or "invocation-budget-exceeded")
+                    if (NativeCharacterOptionSelections.BlocksNativeOptionMechanics(code))
                         blockers.Add(new RulesCoreCharacterProjectionConflictView(
                             code, "native-option",
                             Text(issue, "detail") ?? "A selected native option is not valid.",

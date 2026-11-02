@@ -329,6 +329,37 @@ public sealed class CharacterAdvancementWorkflowTests
     }
 
     [Fact]
+    public async Task NativeResourceActionsRejectInvalidSelectedOptionProjection()
+    {
+        using var factory = new Factory {
+            Native = new FakeNativeGateway { ProjectedOptionIssue = "option-not-native" }
+        };
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Invalid Pact Tester", "Active", null, []));
+        await InitializeClassAsync(factory, id);
+        using (var saved = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "choice", key = "native-option.class.warlock.pact",
+                textValue = "pact.warlock.invalid" }))
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        using (var resource = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/state/rules-inputs",
+            new { kind = "resource", key = "resource.pact-magic", integerValue = 2 }))
+            Assert.Equal(HttpStatusCode.OK, resource.StatusCode);
+
+        using var spend = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/state/resources/resolve",
+            new { resourceId = "resource.pact-magic", spend = 1 });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, spend.StatusCode);
+        Assert.Equal(0, factory.Native.ResourceActionCalls);
+        using var read = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/state");
+        var state = await read.Content.ReadFromJsonAsync<CharacterStateView>();
+        Assert.Equal(2, Assert.Single(state!.RulesInputs!,
+            input => input.Key == "resource.pact-magic").IntegerValue);
+    }
+
+    [Fact]
     public async Task NativeResourceActionsRejectMissingCurrentOrUnsupportedRest()
     {
         using var factory = new Factory();
@@ -635,6 +666,7 @@ public sealed class CharacterAdvancementWorkflowTests
         public IReadOnlyList<string> RequiredChoices { get; init; } = [];
         public int EligibilityCalls { get; private set; }
         public int ResourceActionCalls { get; private set; }
+        public string? ProjectedOptionIssue { get; init; }
         public int EquipmentCalls { get; private set; }
         public int ManufacturingCalls { get; private set; }
         public int HarvestingCatalogCalls { get; private set; }
@@ -732,7 +764,7 @@ public sealed class CharacterAdvancementWorkflowTests
                 featureIds = Array.Empty<string>(),
                 resources,
                 requiredChoices = RequiredChoices,
-                issues = new[] { new { code = "defense-input-required" } }
+                issues = new[] { new { code = ProjectedOptionIssue ?? "defense-input-required" } }
             })!);
         }
         public Task<JsonNode> ResolveNativeStartingEquipmentAsync(

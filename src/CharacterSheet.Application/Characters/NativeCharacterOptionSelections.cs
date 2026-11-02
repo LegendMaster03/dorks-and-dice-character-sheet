@@ -11,6 +11,18 @@ public static class NativeCharacterOptionSelections
 
     public sealed record Result(IReadOnlyList<string> Ids, bool HasUnmappedChoices);
 
+    /// <summary>
+    /// Core may return partial projections for unrelated rules (such as AC).
+    /// These issue codes specifically mean selected native options are invalid
+    /// or have unresolved prerequisites and must block option-dependent actions.
+    /// </summary>
+    public static bool BlocksNativeOptionMechanics(string? code) => code is
+        "exclusive-selection-conflict" or "option-not-native" or
+        "option-occurrence-unresolved" or "option-parent-unavailable" or
+        "option-evaluation-unavailable" or "option-advancement-unresolved" or
+        "prerequisite-failed" or "invocation-cost-unresolved" or
+        "invocation-budget-exceeded";
+
     public static Result FromState(CharacterStateView? state)
     {
         var ids = new List<string>();
