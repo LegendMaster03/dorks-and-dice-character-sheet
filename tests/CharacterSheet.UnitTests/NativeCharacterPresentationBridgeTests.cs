@@ -333,11 +333,38 @@ public sealed class NativeCharacterPresentationBridgeTests
     private static CharacterBuildView Build(params CharacterAdvancementEntryView[] entries) =>
         new(Guid.NewGuid(), "in-progress", false, [], [], entries);
 
+    [Fact]
+    public async Task NativeProjectionPreservesFamiliesAndCompositeChildrenWithUnresolvedTotals()
+    {
+        var gateway = new FixtureGateway { IncludeHierarchy = true };
+        var entry = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(entry), null, CancellationToken.None);
+        var collection = result.Mechanics!.Competencies!;
+        var family = Assert.Single(collection.Entries, item => item.Key == "skill.perform");
+        Assert.True(family.IsFamily);
+        Assert.Equal("skill", family.PresentationCategory);
+        Assert.Equal(new[] { "skill.perform-act" }, family.ChildCompetencyKeys);
+        Assert.Null(family.RankInputKey);
+        var member = Assert.Single(collection.Entries, item => item.Key == "skill.perform-act");
+        Assert.Equal(family.Key, member.Family);
+        Assert.True(member.SupportsRanks);
+        Assert.Equal("Unresolved", member.FormattedValue);
+        var relationship = Assert.Single(collection.Relationships!);
+        Assert.Equal("skill.perception", relationship.ParentKey);
+        Assert.Equal(new[] { "skill.listen", "skill.spot" }, relationship.ComponentKeys);
+        Assert.Equal("arithmetic-mean", relationship.Composition);
+        Assert.Null(Assert.Single(collection.Entries,
+            item => item.Key == "skill.perception").RankInputKey);
+    }
+
     private sealed class FixtureGateway : INativeRulesCoreGateway
     {
         public int Calls { get; private set; }
         public bool ReturnClass { get; init; } = true;
         public bool IncludeResources { get; init; }
+        public bool IncludeHierarchy { get; init; }
         public Dictionary<string, int> LastCurrentResources { get; private set; } = [];
         public string? LastAdvancementClassId { get; private set; }
         public int? LastAdvancementLevel { get; private set; }
@@ -365,9 +392,16 @@ public sealed class NativeCharacterPresentationBridgeTests
                 "competency" => new[] { new { id = "competency.alchemy", name = "Alchemy", kind = "competency" } },
                 _ => throw new InvalidOperationException("Unexpected native catalog category.")
             };
-            return Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new {
+            var page = JsonNode.Parse(JsonSerializer.Serialize(new {
                 rulesetId = "first-party-001", fingerprint = Fingerprint, options
-            }))!);
+            }))!;
+            if (IncludeHierarchy && category == "skill")
+                foreach (var (id, name) in new[] {
+                    ("skill.perform-act", "Perform (Act)"), ("skill.perception", "Perception"),
+                    ("skill.listen", "Listen"), ("skill.spot", "Spot") })
+                    page["options"]!.AsArray().Add(new JsonObject {
+                        ["id"] = id, ["name"] = name, ["kind"] = "skill" });
+            return Task.FromResult(page);
         }
 
         public Task<JsonNode> ProjectNativeCharacterAsync(JsonElement request,
@@ -382,7 +416,7 @@ public sealed class NativeCharacterPresentationBridgeTests
             LastCurrentResources = request.GetProperty("currentResources")
                 .EnumerateObject().ToDictionary(
                     entry => entry.Name, entry => entry.Value.GetInt32());
-            return Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new {
+            var projection = JsonNode.Parse(JsonSerializer.Serialize(new {
                 contractVersion = 1, rulesetId = "first-party-001", fingerprint = Fingerprint,
                 status = "partial",
                 values = new Dictionary<string, object> {
@@ -405,7 +439,18 @@ public sealed class NativeCharacterPresentationBridgeTests
                             spellLevel = (int?)1 }
                     }
                     : []
-            }))!);
+            }))!;
+            if (IncludeHierarchy)
+                projection["training"] = JsonNode.Parse("""
+                    [{"id":"skill.arcana","name":"Arcana","kind":"skill","governingAbility":"intelligence","supportsRanks":true},
+                     {"id":"competency.alchemy","name":"Alchemy","kind":"competency","supportsRanks":true},
+                     {"id":"skill.perform","name":"Perform","kind":"skill-family","isFamily":true,"supportsRanks":false},
+                     {"id":"skill.perform-act","name":"Perform (Act)","kind":"skill","familyId":"skill.perform","supportsRanks":true},
+                     {"id":"skill.perception","name":"Perception","kind":"skill","componentIds":["skill.listen","skill.spot"],"composition":"arithmetic-mean","supportsRanks":false},
+                     {"id":"skill.listen","name":"Listen","kind":"skill","supportsRanks":true},
+                     {"id":"skill.spot","name":"Spot","kind":"skill","supportsRanks":true}]
+                    """);
+            return Task.FromResult(projection);
         }
 
         public Task<JsonNode> EvaluateNativeAdvancementAsync(

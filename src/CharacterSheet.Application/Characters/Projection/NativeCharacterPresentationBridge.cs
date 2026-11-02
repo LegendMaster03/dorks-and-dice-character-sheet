@@ -230,8 +230,9 @@ public static class NativeCharacterPresentationBridge
             : null;
 
         var spellcasting = ProjectNativeResources(projection["resources"] as JsonArray);
+        var presentedTraining = ReadTrainingPresentation(projection, trainingCatalog);
         var calculatedTraining = new CompetencyCollectionPresentationView(
-            trainingCatalog.Select(item => {
+            presentedTraining.Select(item => {
                 // Unknown training identities can influence training totals, not
                 // the independently resolved class proficiency or base abilities.
                 var total = unmodeledSelections || unknownTraining
@@ -240,11 +241,22 @@ public static class NativeCharacterPresentationBridge
                     item.Id, item.Name, (object?)total ?? "—",
                     FormattedValue: total is null ? "Unresolved" : null,
                     Kind: item.Kind,
-                    Ranks: storedRanks.GetValueOrDefault(item.Id),
+                    Ranks: item.IsFamily ? null : storedRanks.GetValueOrDefault(item.Id),
+                    GoverningAbility: item.GoverningAbility,
                     Training: trained.Contains(item.Id) ? "proficient" : null,
-                    PresentationCategory: item.Kind == "skill" ? "skill" : "competency",
-                    RankInputKey: item.Id);
-            }).ToArray());
+                    Family: item.IsFamily ? item.Id : item.FamilyId,
+                    SupportsRanks: item.SupportsRanks,
+                    IsFamily: item.IsFamily,
+                    ChildCompetencyKeys: item.IsFamily
+                        ? presentedTraining.Where(child => child.FamilyId == item.Id)
+                            .Select(child => child.Id).ToArray()
+                        : item.ComponentIds,
+                    PresentationCategory: item.Kind is "skill" or "skill-family" ? "skill" : "competency",
+                    RankInputKey: item.SupportsRanks == false ? null : item.Id);
+            }).ToArray(),
+            presentedTraining.Where(item => item.ComponentIds?.Count > 0)
+                .Select(item => new CompetencyRelationshipPresentationView(
+                    item.Id, item.ComponentIds!, Composition: item.Composition)).ToArray());
         var mechanics = new CharacterMechanicsPresentationView(
             AbilityValues: abilityValues.Count == 0 ? null : abilityValues,
             Training: training,
@@ -265,7 +277,44 @@ public static class NativeCharacterPresentationBridge
             classNames);
     }
 
-    private sealed record NativeTrainingSummary(string Id, string Name, string Kind);
+    private sealed record NativeTrainingSummary(
+        string Id, string Name, string Kind, string? GoverningAbility = null,
+        string? FamilyId = null, IReadOnlyList<string>? ComponentIds = null,
+        string? Composition = null, bool IsFamily = false, bool? SupportsRanks = null);
+
+    private static IReadOnlyList<NativeTrainingSummary> ReadTrainingPresentation(
+        JsonNode projection, IReadOnlyList<NativeTrainingSummary> identities)
+    {
+        // Older native responses remain readable during coordinated deployment.
+        // Structure is supplied by Core, never reconstructed from display names.
+        if (projection["training"] is null) return identities;
+        if (projection["training"] is not JsonArray entries)
+            throw new RulesCoreGatewayException("Native training presentation is invalid.");
+        NativeTrainingSummary[] items;
+        try
+        {
+            items = entries.Select(entry => entry?.Deserialize<NativeTrainingSummary>(JsonOptions)
+                ?? throw new JsonException("Missing training entry.")).ToArray();
+        }
+        catch (JsonException)
+        {
+            throw new RulesCoreGatewayException("Native training presentation is invalid.");
+        }
+        var byId = items.Where(item => !string.IsNullOrWhiteSpace(item.Id))
+            .DistinctBy(item => item.Id).ToDictionary(item => item.Id, StringComparer.Ordinal);
+        var known = identities.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        if (byId.Count != items.Length ||
+            identities.Any(item => !byId.TryGetValue(item.Id, out var presented) ||
+                presented.Kind != item.Kind || presented.Name != item.Name) ||
+            items.Any(item => string.IsNullOrWhiteSpace(item.Name) ||
+                (item.IsFamily ? item.Kind != "skill-family" || !item.Id.StartsWith("skill.", StringComparison.Ordinal)
+                    : !known.ContainsKey(item.Id)) ||
+                (item.FamilyId is not null && (!byId.TryGetValue(item.FamilyId, out var family) || !family.IsFamily)) ||
+                item.ComponentIds?.Any(id => id == item.Id || !byId.TryGetValue(id, out var child) ||
+                    child.Kind != item.Kind || child.IsFamily) == true))
+            throw new RulesCoreGatewayException("Native training presentation does not match its catalog.");
+        return items;
+    }
 
     private static async Task<IReadOnlyList<NativeTrainingSummary>> LoadNativeTrainingCatalogAsync(
         INativeRulesCoreGateway gateway, string rulesetId, string fingerprint,
