@@ -95,9 +95,34 @@ public sealed class NativeCharacterPresentationBridgeTests
             gateway, build, null, CancellationToken.None);
 
         Assert.Equal("partial", result.Status);
-        Assert.Null(result.Mechanics!.Training);
+        Assert.Equal(2, Assert.Single(result.Mechanics!.Training!).EffectiveValue);
         Assert.Null(result.Mechanics.AbilityValues);
         Assert.Null(result.Mechanics.SavingThrows);
+    }
+
+    [Fact]
+    public async Task UnknownTrainingKeepsUnrelatedNativeCalculations()
+    {
+        var gateway = new FixtureGateway();
+        var entry = new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1);
+        var build = Build(entry) with {
+            BaseAbilityScoreInputs = [
+                new BaseAbilityScoreInputView(Guid.NewGuid(), "strength", 14, Now, Now)
+            ]
+        };
+        var state = new CharacterStateView(Guid.NewGuid(), false, null,
+            new CharacterDeathSavesView(0, 0), [], [], [],
+            RulesInputs: [new CharacterRulesInputStateView(
+                Guid.NewGuid(), CharacterRulesInputKinds.Training, "skill.unknown",
+                null, true, null, Now, Now)]);
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, state, CancellationToken.None);
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(14, Assert.Single(result.Mechanics!.AbilityValues!).EffectiveValue);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        Assert.All(result.Mechanics.Competencies!.Entries,
+            entry => Assert.Equal("Unresolved", entry.FormattedValue));
     }
 
     [Fact]

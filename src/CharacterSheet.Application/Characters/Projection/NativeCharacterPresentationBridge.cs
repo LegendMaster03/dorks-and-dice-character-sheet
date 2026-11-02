@@ -132,7 +132,6 @@ public static class NativeCharacterPresentationBridge
                 !(input.Kind == CharacterRulesInputKinds.BooleanFact &&
                     input.Key == CharacterStartingEquipmentReceipt.Key)) == true ||
             nativeChoices.HasUnmappedChoices ||
-            unknownTraining ||
             build.BaseAbilityScoreInputs.Count != abilities.Count;
 
         // A feat, subclass, or prestige class requires its own effective rule.
@@ -207,9 +206,10 @@ public static class NativeCharacterPresentationBridge
             }
         }
 
-        // Until ancestry, equipment and other selections are modeled, even a
-        // numeric proficiency bonus can be affected by an unrepresented rule.
-        var proficiency = unmodeledSelections ? null : Numeric(values, "proficiency.bonus");
+        // Core resolves proficiency from the accepted native Class progression.
+        // Unrepresented equipment, conditions, ancestry, or unrelated training
+        // do not erase that independently verified class-level value.
+        var proficiency = Numeric(values, "proficiency.bonus");
         var training = proficiency is int prof
             ? new[] { new CalculatedMechanicalValuePresentationView(
                 "proficiency.bonus", "Proficiency Bonus", prof) }
@@ -232,7 +232,10 @@ public static class NativeCharacterPresentationBridge
         var spellcasting = ProjectNativeResources(projection["resources"] as JsonArray);
         var calculatedTraining = new CompetencyCollectionPresentationView(
             trainingCatalog.Select(item => {
-                var total = unmodeledSelections ? null : Numeric(values, item.Id + ".total");
+                // Unknown training identities can influence training totals, not
+                // the independently resolved class proficiency or base abilities.
+                var total = unmodeledSelections || unknownTraining
+                    ? null : Numeric(values, item.Id + ".total");
                 return new CompetencyPresentationView(
                     item.Id, item.Name, (object?)total ?? "—",
                     FormattedValue: total is null ? "Unresolved" : null,
@@ -250,7 +253,7 @@ public static class NativeCharacterPresentationBridge
             HealthTracks: health,
             Competencies: calculatedTraining,
             SpellcastingProfiles: spellcasting);
-        var partial = unmodeledSelections || nativeChoices.HasUnmappedChoices ||
+        var partial = unmodeledSelections || unknownTraining ||
             invalidHitPointHistory ||
             ReadText(projection, "status") != "resolved" ||
             (projection["issues"] is JsonArray issues && issues.Count != 0) ||
