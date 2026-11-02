@@ -97,53 +97,61 @@ test("Harvesting draft edits do not replace the action target before Calculate H
     assert.equal(draft.tableRequest.manualEdits.upsertComponents[0].quantity, 1);
 
     const requests = [];
-    globalThis.window = {
-        fetch: async (_url, init) => {
-            const request = JSON.parse(init.body);
-            requests.push(request);
-            const edit = request.table.manualEdits.upsertComponents[0];
-            return {
-                ok: true,
-                json: async () => ({
-                    table: {
-                        ...table,
-                        components: [{
-                            ...table.components[0],
-                            componentDc: edit.componentDc,
-                            quantity: edit.quantity
-                        }],
-                        manualEditsApplied: true
-                    },
-                    assessmentRollMode: "normal",
-                    carvingRollMode: "normal",
-                    creatureSize: request.creatureSize,
-                    assessmentResult: request.assessmentResult,
-                    carvingResult: request.carvingResult,
-                    helperCount: 0,
-                    helperContribution: 0,
-                    harvestingResult: request.carvingResult,
-                    components: [{
-                        ...table.components[0],
-                        componentDc: edit.componentDc,
-                        harvestDc: edit.componentDc,
-                        quantity: edit.quantity,
-                        awarded: true
-                    }]
-                })
-            };
+    const previousFetch = globalThis.fetch;
+    const stub = async (_url, init) => {
+        if (String(_url).endsWith("/api/native-rules/ruleset")) {
+            return Response.json({
+                contractVersion: 1, rulesetId: "first-party-001",
+                fingerprint: "a".repeat(64),
+                capabilities: { harvestingResolution: "type-monster-manual-edits" }
+            });
         }
+        const request = JSON.parse(init.body);
+        requests.push(request);
+        const edit = request.table.manualEdits.upsertComponents[0];
+        return Response.json({
+            table: {
+                ...table,
+                components: [{
+                    ...table.components[0],
+                    componentDc: edit.componentDc,
+                    quantity: edit.quantity
+                }],
+                manualEditsApplied: true
+            },
+            assessmentRollMode: "normal",
+            carvingRollMode: "normal",
+            creatureSize: request.creatureSize,
+            assessmentResult: request.assessmentResult,
+            carvingResult: request.carvingResult,
+            helperCount: 0,
+            helperContribution: 0,
+            harvestingResult: request.carvingResult,
+            components: [{
+                ...table.components[0],
+                componentDc: edit.componentDc,
+                harvestDc: edit.componentDc,
+                quantity: edit.quantity,
+                awarded: true
+            }]
+        });
     };
-
-    await workflow.evaluate();
-
-    // Native harvesting evaluation is not available. Drafts must survive, but
-    // a retired endpoint must not be called or produce an invented award.
-    assert.equal(requests.length, 0);
-    const result = application.getState().harvestingCrafting;
-    assert.equal(result.outcome, null);
-    assert.match(result.message ?? "", /native harvesting contract/);
-    assert.equal(result.tableRequest.manualEdits.upsertComponents[0].quantity, 1);
-    assert.ok(harness.renderCount() >= 2);
+    globalThis.fetch = stub;
+    globalThis.window = { fetch: stub };
+    try {
+        await workflow.evaluate();
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].table.rulesetId, "first-party-001");
+        assert.equal(requests[0].table.fingerprint, "a".repeat(64));
+        assert.equal(requests[0].table.manualEdits.upsertComponents[0].quantity, 1);
+        const result = application.getState().harvestingCrafting;
+        assert.equal(result.outcomeStatus, "ready");
+        assert.equal(result.outcome.components[0].quantity, 1);
+        assert.equal(result.tableRequest.manualEdits.upsertComponents[0].quantity, 1);
+        assert.ok(harness.renderCount() >= 2);
+    } finally {
+        globalThis.fetch = previousFetch;
+    }
 });
 
 test("invalid Harvesting component drafts still surface validation immediately", async () => {

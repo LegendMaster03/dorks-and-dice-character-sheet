@@ -2,8 +2,8 @@ import { buildCharacterSheetApiUrl, readApiError, type FetchLike } from "./chara
 import type { HostEnvironment } from "./host-environment.js";
 
 // The old /api/rules application interface is no longer part of Rules Core.
-// Keep harvesting transport shapes while the native harvesting contract is built.
-// Unsupported operations fail locally, without attempting legacy HTTP routes.
+// Harvesting shapes are retained for the prior guided workflow while
+// transport now uses the native authenticated mechanics contract.
 // Data-only relationship shape retained for authored selection compatibility checks.
 // It no longer represents a callable Rules Core API.
 export interface ResolvedRuleRelationship {

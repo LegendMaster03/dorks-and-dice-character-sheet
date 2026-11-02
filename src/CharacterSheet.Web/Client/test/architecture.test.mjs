@@ -212,8 +212,9 @@ test("Harvesting UI does not expose Rules Core resolution controls", async () =>
 
     assert.match(workflow, /function typeTable\(/);
     assert.match(workflow, /void resolveTable\(\)/);
-    assert.match(rulesApi, /nativeHarvestingUnavailable/);
-    assert.doesNotMatch(rulesApi, /fetch\(.*harvesting/);
+    assert.match(rulesApi, /\/api\/native-rules\/harvesting/);
+    assert.match(rulesApi, /activeHarvestingSnapshot/);
+    assert.doesNotMatch(rulesApi, /buildCharacterSheetApiUrl\(environment, "\/api\/rules\//);
 });
 
 test("Crafting UI is organized around project and crafting steps", async () => {
