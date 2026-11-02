@@ -392,6 +392,54 @@ public sealed class CharacterAdvancementWorkflowTests
     }
 
     [Fact]
+    public async Task NativeHarvestingGatewayProxiesCurrentCatalogTablesAndOutcomes()
+    {
+        using var factory = new Factory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Harvester", "Active", null, []));
+        const string root = "/api/native-rules/harvesting";
+        using (var catalog = await factory.SendHostedAsync(HttpMethod.Get,
+            root + "?fingerprint=" + new string('a', 64)))
+        {
+            Assert.Equal(HttpStatusCode.OK, catalog.StatusCode);
+            using var payload = JsonDocument.Parse(await catalog.Content.ReadAsStringAsync());
+            Assert.Equal("Loot Tavern", payload.RootElement
+                .GetProperty("source").GetProperty("provider").GetString());
+        }
+
+        var typeRequest = new {
+            rulesetId = "first-party-001", fingerprint = new string('a', 64),
+            creatureType = "dragon", manualEdits = new {
+                upsertComponents = new[] {
+                    new { key = "eye", displayName = "Eye", componentDc = 7, quantity = 2 }
+                }
+            }
+        };
+        using (var table = await factory.SendHostedAsync(HttpMethod.Post,
+            root + "/resolve", typeRequest))
+            Assert.Equal(HttpStatusCode.OK, table.StatusCode);
+        using (var outcome = await factory.SendHostedAsync(HttpMethod.Post,
+            root + "/outcome", new {
+                table = typeRequest, assessmentResult = 10, carvingResult = 10,
+                sameActor = false, harvestOrderComponentKeys = new[] { "eye" },
+                creatureSize = "Medium"
+            }))
+            Assert.Equal(HttpStatusCode.OK, outcome.StatusCode);
+        Assert.Equal(1, factory.Native.HarvestingCatalogCalls);
+        Assert.Equal(1, factory.Native.HarvestingTableCalls);
+        Assert.Equal(1, factory.Native.HarvestingOutcomeCalls);
+        Assert.Equal("dragon", factory.Native.LastHarvestingTableRequest
+            .GetProperty("creatureType").GetString());
+        Assert.Equal(2, factory.Native.LastHarvestingOutcomeRequest
+            .GetProperty("table").GetProperty("manualEdits")
+            .GetProperty("upsertComponents")[0].GetProperty("quantity").GetInt32());
+
+        using var client = factory.CreateClient();
+        using var anonymous = await client.GetAsync(root + "?fingerprint=" + new string('a', 64));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    [Fact]
     public async Task NativeManualManufacturingUsesExistingAuthorizedCharacterEndpoint()
     {
         using var factory = new Factory();
@@ -509,6 +557,11 @@ public sealed class CharacterAdvancementWorkflowTests
         public int ResourceActionCalls { get; private set; }
         public int EquipmentCalls { get; private set; }
         public int ManufacturingCalls { get; private set; }
+        public int HarvestingCatalogCalls { get; private set; }
+        public int HarvestingTableCalls { get; private set; }
+        public int HarvestingOutcomeCalls { get; private set; }
+        public JsonElement LastHarvestingTableRequest { get; private set; }
+        public JsonElement LastHarvestingOutcomeRequest { get; private set; }
         public JsonElement LastManufacturingRequest { get; private set; }
         public string EquipmentStatus { get; set; } = "unavailable";
         public bool InjectInvalidEquipmentGrant { get; init; }
@@ -523,7 +576,8 @@ public sealed class CharacterAdvancementWorkflowTests
                 fingerprint = Fingerprint,
                 capabilities = new { advancementEligibility = "supported-subset",
                     resourceResolution = true, startingEquipmentResolution = "authored-grants-only",
-                    manufacturingResolution = "manual-competency-subset" }
+                    manufacturingResolution = "manual-competency-subset",
+                    harvestingResolution = "type-monster-manual-edits" }
             })!);
 
         public Task<JsonNode> SearchNativeOptionsAsync(
@@ -623,6 +677,47 @@ public sealed class CharacterAdvancementWorkflowTests
                         new { id = "kit", name = "Adventurer Kit" } }
                 } },
                 issues = Array.Empty<object>()
+            })!);
+        }
+
+        public Task<JsonNode> GetNativeHarvestingCatalogAsync(
+            string fingerprint, CancellationToken token)
+        {
+            HarvestingCatalogCalls++;
+            Assert.Equal(Fingerprint, fingerprint);
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                contractVersion = 1, rulesetId = "first-party-001", fingerprint = Fingerprint,
+                source = new { provider = "Loot Tavern" },
+                creatureTypes = new[] { new { key = "dragon" } },
+                procedure = new { }
+            })!);
+        }
+
+        public Task<JsonNode> ResolveNativeHarvestingTableAsync(
+            JsonElement request, CancellationToken token)
+        {
+            HarvestingTableCalls++;
+            LastHarvestingTableRequest = request.Clone();
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                creatureType = "dragon",
+                components = new[] {
+                    new { key = "eye", displayName = "Eye", componentDc = 7,
+                        quantity = 2, origin = "manual" }
+                }
+            })!);
+        }
+
+        public Task<JsonNode> EvaluateNativeHarvestingOutcomeAsync(
+            JsonElement request, CancellationToken token)
+        {
+            HarvestingOutcomeCalls++;
+            LastHarvestingOutcomeRequest = request.Clone();
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                harvestingResult = 20,
+                components = new[] {
+                    new { key = "eye", displayName = "Eye", componentDc = 7,
+                        harvestDc = 7, quantity = 2, origin = "manual", awarded = true }
+                }
             })!);
         }
 
