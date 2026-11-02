@@ -308,7 +308,7 @@ public sealed class CharacterAdvancementService(
                     var code = Text(issue, "code");
                     if (NativeCharacterOptionSelections.BlocksNativeOptionMechanics(code))
                         blockers.Add(new RulesCoreCharacterProjectionConflictView(
-                            code, "native-option",
+                            code ?? "native-option-issue", "native-option",
                             Text(issue, "detail") ?? "A selected native option is not valid.",
                             [], [Text(issue, "path") ?? classId]));
                 }

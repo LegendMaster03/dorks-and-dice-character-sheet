@@ -245,7 +245,8 @@ public sealed class NativeCharacterPresentationBridgeTests
             gateway, Build(entry), state, CancellationToken.None);
         Assert.Equal("partial", result.Status);
         Assert.Null(result.Mechanics!.AbilityValues);
-        Assert.Null(result.Mechanics.Training);
+        // Native class-level proficiency is independent of invalid class options.
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
     }
 
     [Fact]
