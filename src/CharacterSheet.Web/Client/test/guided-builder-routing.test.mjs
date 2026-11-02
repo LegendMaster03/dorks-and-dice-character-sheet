@@ -159,7 +159,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(sourceResolvedStates.find(section => section.id === "equipment").status, "incomplete");
 });
 
-test("starting-equipment choices and conflicts belong to Equipment rather than Class or Background status", () => {
+test("only the current native equipment preview can mark the Equipment step resolved", () => {
     const builder = readyBuilder();
     const pendingEquipment = {
         ruleChoices: [choice(
@@ -183,7 +183,7 @@ test("starting-equipment choices and conflicts belong to Equipment rather than C
     assert.equal(pendingStates.find(section => section.id === "equipment").status, "incomplete");
     assert.match(
         pendingStates.find(section => section.id === "equipment").detail,
-        /1 required starting-equipment choice remains/);
+        /Native starting-equipment options have not yet been resolved/);
 
     const resolvedEquipment = {
         ruleChoices: [{
@@ -203,7 +203,25 @@ test("starting-equipment choices and conflicts belong to Equipment rather than C
         }]
     });
     const resolvedStates = getGuidedBuilderSectionStates(builder, resolvedEquipment);
-    assert.equal(resolvedStates.find(section => section.id === "equipment").status, "resolved");
+    assert.equal(resolvedStates.find(section => section.id === "equipment").status, "incomplete");
+    const nativeResult = getGuidedBuilderSectionStates(builder, resolvedEquipment, {
+        contractVersion: 1, rulesetId: "first-party-001",
+        fingerprint: "a".repeat(64), status: "resolved",
+        grants: [{ grantKey: "native.initial", kind: "item",
+            targetKey: "item.demo.knife", displayName: "Demo Knife", quantity: 1 }],
+        choices: [], issues: []
+    });
+    assert.equal(nativeResult.find(section => section.id === "equipment").status, "resolved");
+    const unavailable = getGuidedBuilderSectionStates(builder, resolvedEquipment, {
+        contractVersion: 1, rulesetId: "first-party-001",
+        fingerprint: "a".repeat(64), status: "unavailable",
+        grants: [], choices: [],
+        issues: [{ code: "native-equipment-not-reconciled",
+            path: "class.demo", detail: "Still being developed." }]
+    });
+    assert.equal(unavailable.find(section => section.id === "equipment").status, "incomplete");
+    const received = getGuidedBuilderSectionStates(builder, resolvedEquipment, null, true);
+    assert.equal(received.find(section => section.id === "equipment").status, "resolved");
 
     const conflictOnly = {
         projectionConflicts: [{
@@ -220,7 +238,7 @@ test("starting-equipment choices and conflicts belong to Equipment rather than C
     assert.equal(conflictStates.find(section => section.id === "equipment").status, "incomplete");
     assert.match(
         conflictStates.find(section => section.id === "equipment").detail,
-        /starting-equipment Rules Core conflict/);
+        /Native starting-equipment options have not yet been resolved/);
 });
 
 test("guided feature summaries follow explicit owning sources without name parsing", () => {
@@ -274,7 +292,8 @@ test("guided builder uses numbered steps, sequential navigation, a Rules Core-ba
     assert.match(source, /createButton\([\s\S]*handlers\.selectGuidedBuilderSection\(section\.id\),\s*unavailable\)/);
     assert.match(source, /sectionStates\.slice\(activeIndex \+ 1\)\.find\(section => section\.status !== "unavailable"\)/);
     assert.match(source, /case "equipment":/);
-    assert.match(source, /projectGuidedStartingEquipment\(\s*mechanics,\s*routine\.state\?\.rulesInputs \?\? \[\]\s*\)/);
+    assert.match(source, /projectNativeStartingEquipment\(nativeEquipment/);
+    assert.doesNotMatch(source, /projectGuidedStartingEquipment\(/);
     assert.match(source, /renderGuidedStartingEquipment\(/);
     assert.match(source, /handlers\.rules\.setChoice/);
     assert.match(source, /handlers\.routine\.materializeStartingEquipment/);
