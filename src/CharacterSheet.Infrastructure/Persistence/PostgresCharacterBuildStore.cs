@@ -231,6 +231,12 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
                 changedAt);
         }
 
+        // Build reads do not load routine RulesInputs. Load existing slots before
+        // replacing options so a replacement updates rather than inserting a
+        // duplicate (kind, key) row in this same SaveChanges transaction.
+        if (selectedOptions is { Count: > 0 })
+            await dbContext.Entry(root).Collection(value => value.RulesInputs)
+                .LoadAsync(cancellationToken);
         foreach (var pair in selectedOptions ?? new Dictionary<string, string>())
             root.SetRulesInput(CharacterRulesInputKind.Choice, pair.Key,
                 null, null, pair.Value, changedAt);

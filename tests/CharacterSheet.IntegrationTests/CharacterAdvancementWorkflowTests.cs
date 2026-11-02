@@ -53,6 +53,19 @@ public sealed class CharacterAdvancementWorkflowTests
         var saved = await savedRead.Content.ReadFromJsonAsync<CharacterStateView>();
         Assert.Equal("patron.warlock.fiend", Assert.Single(saved!.RulesInputs!).TextValue);
         Assert.Equal(configureCurrent ? 0 : 1, saved.HitPointGains!.Count);
+        using (var replace = await factory.SendHostedAsync(HttpMethod.Post,
+                   $"/api/characters/{id:D}/advancement/apply", new {
+                       classAdvancementEntryId = entry.Id, configureCurrentLevel = true,
+                       expectedClassLevel = configureCurrent ? 1 : 2,
+                       selectedOptions = request.selectedOptions }))
+            Assert.Equal(HttpStatusCode.OK, replace.StatusCode);
+        using (var replacedRead = await factory.SendHostedAsync(HttpMethod.Get,
+                   $"/api/characters/{id:D}/state"))
+        {
+            var replaced = await replacedRead.Content.ReadFromJsonAsync<CharacterStateView>();
+            Assert.Equal(Assert.Single(saved.RulesInputs!).Id, Assert.Single(replaced!.RulesInputs!).Id);
+            Assert.Equal(configureCurrent ? 0 : 1, replaced.HitPointGains!.Count);
+        }
         if (!configureCurrent)
         {
             using var repeated = await factory.SendHostedAsync(HttpMethod.Post,
