@@ -109,6 +109,8 @@ export function createHarvestingCraftingWorkflow(
         });
     }
 
+    // Any change to table-defining inputs invalidates dependent harvest orders,
+    // outcomes, and the local marker that components have reached inventory.
     function clearResolution(
         state: HarvestingCraftingUiState
     ): HarvestingCraftingUiState {
@@ -258,6 +260,8 @@ export function createHarvestingCraftingWorkflow(
         return key.length === 0 ? null : { competencyKey: key };
     }
 
+    // Validate the selected procedure's input requirements, then delegate the
+    // mechanical result to the character-aware crafting service.
     async function resolveCrafting(
         characterId: string,
         d20Roll: number | null
@@ -908,6 +912,8 @@ export function createHarvestingCraftingWorkflow(
         await applyHarvestTableRequest(baseRequest, true);
     }
 
+    // Only validate UI completeness here: Rules Core decides component success
+    // using the submitted table, order, checks, creature size, and helpers.
     async function evaluate(): Promise<void> {
         const state = application.getState().harvestingCrafting;
         if (state.table === null || state.tableRequest === null) {
@@ -977,6 +983,8 @@ export function createHarvestingCraftingWorkflow(
         }
     }
 
+    // Completing a project requires its configured stages and time, not just a
+    // successful check. Validate the project before any inventory transaction.
     async function completeCrafting(characterId: string): Promise<void> {
         const state = application.getState().harvestingCrafting;
         const recipeName = state.craftingRecipeName.trim();
