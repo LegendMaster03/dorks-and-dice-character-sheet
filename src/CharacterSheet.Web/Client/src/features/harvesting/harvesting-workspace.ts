@@ -61,6 +61,8 @@ export function renderHarvestingCraftingOverlay(
     return overlay;
 }
 
+// This module presents Rules Core results and collects user input. The workflow
+// owns rule resolution and inventory mutations; rendering does not adjudicate them.
 export function renderHarvestingCraftingWorkspace(
     character: CharacterSheetBootstrapResponse,
     state: HarvestingCraftingUiState,
@@ -229,6 +231,8 @@ function renderHarvestingPanel(
     return panel;
 }
 
+// A type-based table and a selected native creature are separate source paths;
+// changing either selection is handled by the workflow, not this view.
 function renderCreatureSelection(
     state: HarvestingCraftingUiState,
     handlers: HarvestingCraftingWorkflow
@@ -643,6 +647,8 @@ function renderHarvestOrder(
     return card;
 }
 
+// Render the resolved component decisions without recomputing harvest rules.
+// Awarding is a separate workflow action, not an automatic side effect of a roll.
 function renderOutcome(
     character: CharacterSheetBootstrapResponse,
     state: HarvestingCraftingUiState,
