@@ -208,7 +208,9 @@ POST /api/characters/{characterId}/sheet
 
 An owned basic Site Character still uses `POST /sheet` to initialize rich state against the existing Site `CharacterId`; `/new` still creates the Site Character first and initializes exactly the returned canonical identity.
 
-## Current builder UI
+## Builder UI (historical resolved-catalog design)
+
+This section preserves the original resolved-catalog builder decisions for design history. Its `entityType` queries and legacy concept relationships are **not** instructions for the active native Rules Core API. Consult [native consumer status](character-sheet-native-consumer-status.md) for supported native options and explicit gaps.
 
 The rules-backed Character Builder exposes stable Character-owned identity and advancement choices:
 
@@ -236,7 +238,7 @@ The normal Character header keeps Character name, Species, optional Subspecies, 
 
 Build status remains `In progress`; the Guided Setup UI reports what it can verify without inventing an edition-specific completion state machine.
 
-## Species and Subspecies boundary
+## Species and Subspecies boundary (historical resolved-catalog contract)
 
 Rules Core owns source terminology, import provenance, normalized Species/Subspecies entity types, and the relationship from a Subspecies concept to its parent Species concept. Legacy source records named `race` or `subrace` remain importable in Rules Core and retain their native source evidence, but Rules Core exposes them to consumers through canonical `species` and `subspecies` entity types. For 5e.tools-shaped source material, source-native `raceName`/`raceSource` identity evidence is normalized into a persistent `parent-species` concept relationship.
 
@@ -244,7 +246,7 @@ Character Sheet consumes only that canonical contract. It stores Species and opt
 
 Legacy Character Sheet `RaceSpecies` persistence is handled separately: the database migration normalizes existing rows to `Species`, while the domain/read path can still recognize a pre-migration row long enough to expose it as canonical Species without data loss. No new Character Sheet write or public API uses `RaceSpecies`.
 
-## Subclass boundary
+## Subclass boundary (historical resolved-catalog contract)
 
 Rules Core owns Subclass definition and the normalized relationship from a Subclass concept to its parent Class concept. For 5e.tools-shaped source material, the source-native `className`/`classSource` identity evidence is normalized into a persistent Rules Core `parent-class` concept relationship. The resolved catalog exposes that relationship by stable Rules Core concept identity.
 
