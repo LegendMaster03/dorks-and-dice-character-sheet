@@ -1,5 +1,7 @@
 # Character Sheet architecture
 
+> **Documentation status:** This document records foundational ownership and persistence decisions as well as earlier resolved-concept API designs. Its legacy `RuleConcept` and `/api/rules` passages are retained as historical rationale, **not** supported API instructions. For the native runtime contract consult [Character Sheet native consumer status](character-sheet-native-consumer-status.md) and [mechanics presentation contract](character-mechanics-presentation-contract.md). Character Sheet has no released legacy dataset requiring an API or identity crosswalk.
+
 ## Ownership boundaries
 
 The Dorks & Dice Site remains authoritative for canonical Character identity and lifecycle. It owns `CharacterId`, account ownership, Character name, active/archive state, permanent deletion, Campaign identity and membership, and Character-to-Campaign associations.
@@ -16,31 +18,20 @@ The Site supplies Character Sheet an owner-only Character projection in the fres
 
 An active owned Character may be mutated. An archived owned Character may read preserved rich/build state but may not initialize or mutate it. A Character missing from the owner projection returns the same unavailable response whether or not orphaned local rows happen to exist. A missing required Site projection fails closed. Direct unauthenticated backend access remains rejected.
 
-## Rules Core read path
+## Rules Core native read and mechanics path
 
-In embedded production use, rule discovery and rule display are browser reads through the Site's authenticated Rules Core Tool Host route resolved by the stable Rules Core registration key:
-
-```text
-browser
-  -> Dorks & Dice Site
-  -> /tool-host/registrations/rules-core/api/upstream/api/...
-  -> Rules Core
-```
-
-Character Sheet never forwards or derives a Rules Core request from Character Sheet's own Tool Host ticket. Tool Host tickets are Tool-scoped. It does not introduce a static shared secret or a second Rules Core authentication system.
-
-This slice consumes the current global resolved Rules Core endpoints:
+The browser uses Character Sheet's authenticated `/api/native-rules/*` routes. The backend forwards these requests to Rules Core through Site-issued, server-side Tool-to-Tool delegation. The Site validates the requesting Tool and reconstructs Rules Core's target-specific authorization context; the browser never receives the delegation capability or calls a retired Rules Core endpoint.
 
 ```text
-GET /api/rules?entityType={type}&q={search}&limit=200
-GET /api/rules/{conceptKey}
+Character Sheet browser
+  -> Character Sheet /api/native-rules/*
+  -> Site Tool-to-Tool delegation (character-sheet -> rules-core)
+  -> Rules Core /api/mechanics/v1/*
 ```
 
-`GET /api/rules` is used for searchable resolved catalog choices. `GET /api/rules/{conceptKey}` resolves a persisted reference for display. Rules Core applies its existing current-user/source-access filtering to those reads. Resolved catalog items also carry stable concept-to-concept relationship metadata. Character Sheet consumes `parent-class` on Subclass concepts and `parent-species` on Subspecies concepts; it does not parse source-native class or ancestry fields itself.
+The named gateway supports native ruleset identity, catalog options, advancement eligibility, and character projection; additional harvesting, crafting, resource, and starting-equipment operations are exposed only where their native contracts are available. The current native IDs and catalog fingerprint are part of the versioned mechanic request, not a second authorization system. Unsupported operations fail explicitly rather than falling back to `/api/rules` or parsing source documents.
 
-The builder intentionally uses global rules only. A Site Character can belong to multiple Campaigns, so Character Sheet does not arbitrarily select one Campaign's resolved rules. Campaign-specific resolution is deferred until the Character Sheet has an explicit Campaign-context selector/overlay.
-
-The retired direct-browser Rules Core development adapter has been removed. Character Sheet's native rule discovery and mechanics requests use its own authenticated `/api/native-rules/*` routes, which forward Site-issued delegation to Rules Core `/api/mechanics/v1/*`. Standalone development does not advertise a direct Rules Core URL to the browser. Native contracts not yet implemented (including harvesting, crafting, full recovery procedures, and starting-equipment grants) fail closed rather than contacting removed `/api/rules` endpoints.
+Character-to-Campaign associations do not silently choose a campaign-specific rule scope. Until a particular workflow supports explicit campaign-effective evaluation, its supported operations use the global/native scope or report that campaign-specific resolution is unavailable.
 
 ## Character presentation projection
 
@@ -56,13 +47,19 @@ For production Rules Core access, Character Sheet consumes the Site-issued Tool-
 
 The projection uses global effective Rules Core mechanics only. Character-to-Campaign associations are not a mechanics-scope selector. Campaign mechanics remain deferred until the sheet exposes an explicit Campaign context.
 
-Advancement display resolution uses each persisted stable Rules Core concept key directly through `GET /api/rules/{conceptKey}`. Character Sheet does not reinterpret the Character-owned advancement `kind` as a Rules Core `entityType`; those are separate identity domains. This allows an open-ended advancement kind to reference a concept whose normalized Rules Core entity type is different without making the occurrence disappear.
+The native presenter resolves supported Class and Subclass identities through the authenticated native gateway. Character-owned advancement kinds remain distinct from native rule categories; an unresolved native ID stays visible as unavailable rather than being replaced with an inferred legacy concept.
 
-Rules Core owns evaluation arithmetic. Character Sheet supplies only inputs it can establish from authoritative Character state, batches only evaluations that require no Character/runtime/source inputs, and never substitutes a default or zero for missing state. Current persisted Character state does not yet establish effective Ability scores/modifiers, competency ranks/training/class-skill state, equipment state, spellcasting state, or rule capability grants derived from selected Classes/Species/Feats. Capability-gated 3.x mechanics therefore remain omitted until those contracts/state exist. Item-occurrence mechanics also remain absent because the current Rules Core consumer contract does not expose them.
+Rules Core owns evaluation arithmetic. Character Sheet submits available Character-owned inputs to native projection and eligibility operations, presents resolved values, and reports partial, unsupported, or unavailable results without substituting guessed modifiers, equipment effects, spell effects, or rule grants. Implemented presentation fields do not imply that every native mechanic is executable.
 
 The browser stores presentation loading state in the explicit application reducer. Each request has a monotonic request ID so stale/out-of-order responses are ignored. Successful mutations of base Ability input, Species, Subspecies, Starting Class, Subclass, Feats, and Inventory ownership refresh the projection. Notes do not trigger a mechanics refresh. Projection failure never replaces the separately loaded build/routine state.
 
-## Stable rule-reference semantics
+## Native rule-reference semantics
+
+The active native catalog supplies stable native rule IDs; selection identity is separate from display labels and from the catalog fingerprint, which identifies the version used for evaluation. Unrecognized native identities must not be translated into legacy aliases or replaced with similarly named concepts. Some Character-owned fields still use historical `RuleConceptKey` naming; this does not restore `/api/rules`.
+
+### Historical resolved-concept scheme (retired)
+
+The following resolved-concept behavior describes an earlier Rules Core integration and remains here to preserve design context. It does not define the current native API, authorize a legacy fallback, or require a migration of released Character data.
 
 Character Sheet persists Rules Core `RuleConcept.Key`, exposed as `ConceptKey` by the resolved catalog, as its stable rule reference. The resolved catalog also exposes `RuleConceptId`, display metadata, relationship metadata, source IDs, and source revision IDs, but Character Sheet does not use display name, source-native ID, `SourceEntityRevisionId`, package revision, source JSON, or resolved mechanical `Document` as Character decision identity.
 
