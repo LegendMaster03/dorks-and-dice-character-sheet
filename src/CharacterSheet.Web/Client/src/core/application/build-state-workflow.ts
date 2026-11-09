@@ -49,6 +49,8 @@ export function createBuildStateWorkflow(
         });
 
         const feats = build.progressionEntries.filter(value => value.kind === "feat");
+        // Legacy feat references remain saved but unresolved. Resolving a
+        // display name must not silently convert their stored identities.
         const nativeFeats = feats.filter(value =>
             value.ruleConceptKey.startsWith("feat."));
         for (const entry of feats.filter(value =>

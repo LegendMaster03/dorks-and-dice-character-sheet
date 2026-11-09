@@ -135,6 +135,8 @@ export function createRoutineStateWorkflow(
             entryId?: string,
             options: RoutineMutationOptions = {}
         ): Promise<boolean> {
+            // Permit only one in-flight mutation against a loaded, writable
+            // snapshot. A second operation must not race the first response.
             const routine = application.getState().routine;
             if (routine.status !== "ready"
                 || routine.state === null

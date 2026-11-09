@@ -390,6 +390,8 @@ export interface CompetencyCollectionPartition {
     competencies: CompetencyCollectionView;
 }
 
+// Presentation categories, rather than guesses from labels or rank support,
+// decide whether an entry belongs on the Skills or Competencies card.
 export function partitionCompetencyCollection(
     collection: CompetencyCollectionView
 ): CompetencyCollectionPartition {
@@ -418,6 +420,8 @@ function filterCompetencyCollection(
     keys: ReadonlySet<string>
 ): CompetencyCollectionView {
     const entries = collection.entries.filter(entry => keys.has(entry.key));
+    // Dropping an endpoint also drops its relationship; otherwise a card
+    // could render a composite referencing a hidden category.
     const relationships = (collection.relationships ?? []).filter(relationship =>
         keys.has(relationship.parentKey)
         && relationship.componentKeys.every(key => keys.has(key)));
@@ -427,6 +431,8 @@ function filterCompetencyCollection(
     };
 }
 
+// Group only relationships that the backend supplied. Grouping changes
+// presentation, not the stored rank or identity of any component.
 export function buildCompetencyPresentation(
     collection: CompetencyCollectionView
 ): readonly CompetencyPresentationItem[] {

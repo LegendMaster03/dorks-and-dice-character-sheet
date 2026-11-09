@@ -400,6 +400,8 @@ export function createHarvestingCraftingWorkflow(
         if (state.craftingResolution === null) return;
 
         const selection = rollD20(normalizeD20RollMode(state.craftingResolution.rollMode));
+        // Preserve all dice in a tie and request an explicit player choice;
+        // a numeric tie is not resolved by arbitrary die order.
         if (selection.tied) {
             update(current => ({
                 ...current,

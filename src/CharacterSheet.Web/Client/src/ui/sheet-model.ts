@@ -158,6 +158,8 @@ export function getGuidedBuilderSectionStates(
     const projectionConflicts = mechanics?.projectionConflicts ?? [];
     const nonEquipmentConflicts = projectionConflicts.filter(conflict =>
         !conflict.conflictKey.includes("starting-equipment"));
+    // Persisted choices alone do not establish a completed setup section:
+    // required Rules Core choices and projection conflicts must also resolve.
     const rulesVerificationAvailable = mechanics !== null;
 
     const pendingClassChoices = ruleChoices.filter(choice =>
@@ -242,6 +244,8 @@ export function getGuidedBuilderSectionStates(
 
     const equipmentAvailable = equipmentReceived || nativeEquipment !== null
         || startingClassSelected;
+    // Once granted, equipment remains ordinary inventory; it does not become
+    // incomplete merely because a later ruleset no longer resolves its grant.
     const equipmentResolved = equipmentReceived ||
         (nativeEquipment?.status === "resolved" &&
             nativeEquipment.issues.length === 0);

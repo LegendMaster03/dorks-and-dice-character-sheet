@@ -139,6 +139,8 @@ function renderPresentationItem(
         return disclosure;
     }
 
+    // Composite grouping is a view of projected relationships, not a new
+    // competency record or a locally calculated combined check.
     const disclosure = createElement(
         "details",
         "dd-competency-disclosure dd-competency-disclosure--composite");

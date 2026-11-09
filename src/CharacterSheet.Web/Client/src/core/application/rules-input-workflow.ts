@@ -140,6 +140,8 @@ export function createRulesInputWorkflow(
         set,
         remove,
 
+        // The runtime roll prefix is a transport convention: rolls are
+        // persisted as integer facts rather than as ordinary selected choices.
         setChoice(characterId, choiceKey, value): Promise<boolean> {
             if (choiceKey.startsWith(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX)) {
                 const rollKey = choiceKey.slice(RULES_CORE_RUNTIME_ROLL_INPUT_PREFIX.length);
@@ -171,6 +173,8 @@ export function createRulesInputWorkflow(
             });
         },
 
+        // Rules Core resolves expenditure on the server, with the expected
+        // current value checked during the ensuing character-state mutation.
         async spendResource(characterId, resourceKey, amount): Promise<boolean> {
             return await refresh(characterId,
                 await routine.mutate("native-resource-action",
