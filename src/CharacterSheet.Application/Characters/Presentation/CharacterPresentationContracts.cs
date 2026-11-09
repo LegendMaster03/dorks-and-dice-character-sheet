@@ -17,6 +17,11 @@ public sealed record CharacterPresentationResult(
     CharacterPresentationView? View = null,
     IReadOnlyList<string>? IntegrationDiagnostics = null);
 
+/// <summary>
+/// Combines always-available saved advancement with optional, separately
+/// resolved mechanics. An unavailable mechanics projection does not erase
+/// the Character's persisted advancement history.
+/// </summary>
 public sealed record CharacterPresentationView(
     CharacterAdvancementPresentationView Advancement,
     CharacterMechanicsPresentationView? Mechanics,
@@ -60,6 +65,10 @@ public sealed record SourceAttributionPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     bool PresentationRequired = false);
 
+/// <summary>
+/// Displays a value already calculated by Rules Core, together with optional
+/// breakdown and provenance. EffectiveValue is not calculated by the browser.
+/// </summary>
 public sealed record CalculatedMechanicalValuePresentationView(
     string Key,
     string Label,
@@ -167,6 +176,10 @@ public sealed record RelatedCompetencyPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     bool SharesTrainingState = false);
 
+/// <summary>
+/// Preserves a competency's semantic identity and distinct optional mechanics,
+/// including training, ranks, facets, family membership, and explicit rank-input keys.
+/// </summary>
 public sealed record CompetencyPresentationView(
     string Key,
     string Label,
@@ -409,6 +422,10 @@ public sealed record CharacterProjectionConflictPresentationView(
     IReadOnlyList<string> RelatedMechanicKeys,
     IReadOnlyList<string> RelatedConceptKeys);
 
+/// <summary>
+/// Frontend-facing collections of effective mechanics. Nullable collections
+/// represent unconfigured or unavailable features, not implicit zero values.
+/// </summary>
 public sealed record CharacterMechanicsPresentationView(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CalculatedMechanicalValuePresentationView>? AbilityValues = null,
