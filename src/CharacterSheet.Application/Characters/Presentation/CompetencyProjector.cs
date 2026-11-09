@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Projects universal competencies and their ranked, specialized, or related forms from Rules Core. The
+/// legacy projection is an explicit compatibility path, not a separate local competency rules engine.
+/// </summary>
 internal static class CompetencyProjector
 {
     internal static CompetencyCollectionPresentationView ProjectCollection(

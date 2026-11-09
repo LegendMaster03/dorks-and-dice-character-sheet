@@ -1,5 +1,7 @@
 namespace CharacterSheet.Application.Lifecycle;
 
+// Defines the Site-to-tool lifecycle messages for character initialization, archive, and deletion without transferring character identity ownership to the sheet.
+
 public static class ToolLifecycleHeaders
 {
     public const string Ticket = "X-Dorks-Tool-Lifecycle-Ticket";

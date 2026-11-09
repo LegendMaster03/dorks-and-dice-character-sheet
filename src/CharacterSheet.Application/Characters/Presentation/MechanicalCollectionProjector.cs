@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Groups evaluated mechanics for display while retaining mechanic identities, provenance, and
+/// unresolved states from the Rules Core projection.
+/// </summary>
 internal static class MechanicalCollectionProjector
 {
     internal static SavingThrowPresentationView[] ProjectSavingThrows(

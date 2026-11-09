@@ -1,5 +1,7 @@
 namespace CharacterSheet.Application.Hosting;
 
+// Describes the tool-host authentication data received from the Site. A Character Sheet ticket is scoped to this tool and is not a reusable Rules Core credential.
+
 public static class ToolHostAuthenticationHeaders
 {
     public const string Ticket = "X-Dorks-Tool-Auth-Ticket";

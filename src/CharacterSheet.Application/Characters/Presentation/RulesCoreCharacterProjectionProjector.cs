@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Translates the Rules Core character projection into the sheet's stable presentation contract. Rule
+/// meaning and effective calculations stay authoritative upstream.
+/// </summary>
 internal static class RulesCoreCharacterProjectionProjector
 {
     private static readonly string[] AbilityKeys =

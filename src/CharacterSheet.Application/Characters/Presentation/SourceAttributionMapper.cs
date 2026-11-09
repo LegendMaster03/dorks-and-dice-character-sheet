@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Preserves source attribution on projected mechanics so the browser can explain where a value came
+/// from without interpreting rules.
+/// </summary>
 internal static class SourceAttributionMapper
 {
     internal static SourceAttributionPresentationView MapResolvedRule(

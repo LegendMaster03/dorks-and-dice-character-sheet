@@ -22,6 +22,10 @@ public static class CharacterStartingEquipmentReceipt
     public const string Key = "starting-equipment.received";
 }
 
+/// <summary>
+/// Records one-time starting-equipment grants and receipts while acquired items become ordinary
+/// character-owned inventory.
+/// </summary>
 public interface ICharacterStartingEquipmentInventoryStore
 {
     Task<CharacterSheetRoot?> ApplyOnceAsync(

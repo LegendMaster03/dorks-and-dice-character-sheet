@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Builds Rules Core projection inputs from character-owned selections and mutable state. It sends
+/// decisions and recorded facts rather than performing rule calculations.
+/// </summary>
 public static class CharacterRulesProjectionRequestBuilder
 {
     private const string DeathSaveSuccessesResourceKey = "resource.death-save.successes";
