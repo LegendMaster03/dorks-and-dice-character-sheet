@@ -1,3 +1,7 @@
+/**
+ * Exposes the harvesting/crafting workflow to the rest of the client while isolating its state
+ * transitions from sheet rendering.
+ */
 import type {
     HarvestingCraftingUiState,
     HarvestingHelperUiState

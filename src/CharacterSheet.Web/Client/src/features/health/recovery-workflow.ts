@@ -1,3 +1,7 @@
+/**
+ * Submits rest and recovery actions for authoritative resolution before applying character-owned
+ * state changes.
+ */
 import type { CharacterRecoveryRequestInput } from "../../character-state-api.js";
 import { resolveCharacterRecovery } from "../../character-state-api.js";
 import type { HostEnvironment } from "../../host-environment.js";

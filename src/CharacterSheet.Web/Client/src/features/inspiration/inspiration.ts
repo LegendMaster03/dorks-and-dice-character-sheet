@@ -1,3 +1,7 @@
+/**
+ * Renders character-owned inspiration state with the same edit and read-only boundaries as the
+ * rest of the sheet.
+ */
 import { createElement } from "../../ui/components.js";
 
 export const CHARACTER_INSPIRATION_STATE_KEY = "inspiration";

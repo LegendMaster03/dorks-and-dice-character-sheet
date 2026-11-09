@@ -1,3 +1,7 @@
+/**
+ * Displays initiative supplied by the mechanics projection; turn tracking belongs to the separate
+ * initiative tool.
+ */
 import type { CalculatedMechanicalValueView } from "../../ui/character-mechanics.js";
 
 export function findInitiativeValue(

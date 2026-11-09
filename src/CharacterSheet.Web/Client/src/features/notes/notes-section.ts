@@ -1,3 +1,7 @@
+/**
+ * Displays editable character-authored notes, separate from canonical Site identity and Rules Core
+ * descriptions.
+ */
 import type { CharacterRoutineUiState } from "../../app-state.js";
 import {
     createButton,

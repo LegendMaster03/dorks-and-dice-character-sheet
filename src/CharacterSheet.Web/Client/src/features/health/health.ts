@@ -1,3 +1,7 @@
+/**
+ * Displays hit points, death saves, and recovery controls from state and projections rather than
+ * interpreting health rules in the view.
+ */
 import type { RecoveryUiState } from "../../app-state.js";
 import type { CharacterRecoveryRequestInput } from "../../character-state-api.js";
 import {

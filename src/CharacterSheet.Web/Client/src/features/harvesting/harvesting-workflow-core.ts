@@ -1,3 +1,7 @@
+/**
+ * Orchestrates the harvesting and crafting workspace. Rules Core resolves tables and checks; only
+ * explicitly accepted results are written to character inventory.
+ */
 import type {
     HarvestingCraftingMode,
     HarvestingCraftingUiState,
@@ -126,6 +130,8 @@ export function createHarvestingCraftingWorkflow(
         };
     }
 
+    // An outcome preview never changes inventory. Awarding requires a reviewed,
+    // current outcome and a successful character inventory transaction.
     async function awardHarvest(characterId: string): Promise<void> {
         const state = application.getState().harvestingCrafting;
         if (state.harvestInventoryAwarded || state.outcomeStatus === "loading") return;
@@ -211,6 +217,8 @@ export function createHarvestingCraftingWorkflow(
         };
     }
 
+    // Changing a stage's inputs invalidates its previous success without
+    // discarding the result of the other, independently completed stage.
     function invalidateCurrentCraftingStage(
         state: HarvestingCraftingUiState
     ): HarvestingCraftingUiState {
@@ -258,6 +266,8 @@ export function createHarvestingCraftingWorkflow(
         return key.length === 0 ? null : { competencyKey: key };
     }
 
+    // Request the authoritative check for the current crafting inputs rather
+    // than duplicating ability and competency calculations in the client.
     async function resolveCrafting(
         characterId: string,
         d20Roll: number | null

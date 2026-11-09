@@ -1,3 +1,7 @@
+/**
+ * Displays movement and speed mechanics from Rules Core projection values; missing modes are not
+ * inferred from one another.
+ */
 import {
     formatMechanicalValue,
     type CalculatedMechanicalValueView

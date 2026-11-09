@@ -1,3 +1,7 @@
+/**
+ * Coordinates character-owned health changes with the routine-state mutation pipeline and
+ * subsequent presentation refresh.
+ */
 import {
     setCharacterCurrentHitPoints,
     setCharacterDeathSaves

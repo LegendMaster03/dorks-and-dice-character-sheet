@@ -1,3 +1,7 @@
+/**
+ * Presents and edits advancement-specific hit-point gains while keeping recorded gains separate
+ * from projected maximum hit points.
+ */
 import type { CharacterRoutineUiState } from "../../app-state.js";
 import type { AdvancementOccurrenceView } from "../../ui/character-advancement.js";
 import { createButton, createElement, createInlineState, createSectionCard } from "../../ui/components.js";

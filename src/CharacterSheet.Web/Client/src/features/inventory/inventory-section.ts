@@ -1,3 +1,7 @@
+/**
+ * Renders persisted item occurrences, including materialized starting equipment and manually
+ * acquired items, as a single editable inventory.
+ */
 import type { CharacterRoutineUiState } from "../../app-state.js";
 import type {
     CharacterInventoryItemOccurrenceResponse,

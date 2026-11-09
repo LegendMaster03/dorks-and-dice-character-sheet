@@ -1,3 +1,7 @@
+/**
+ * Coordinates inventory transactions and state refreshes, preserving occurrence identity instead
+ * of rebuilding items from rule definitions.
+ */
 import {
     addInventoryItemOccurrence,
     addCustomInventoryItemOccurrence,

@@ -1,3 +1,7 @@
+/**
+ * Renders the harvesting and crafting interface from staged workflow state; a preview is not
+ * itself an inventory transaction.
+ */
 import type {
     CharacterRoutineUiState,
     HarvestingCraftingUiState

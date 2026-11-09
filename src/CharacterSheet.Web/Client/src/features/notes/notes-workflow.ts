@@ -1,3 +1,7 @@
+/**
+ * Coordinates note mutations through the character-owned routine-state workflow rather than
+ * storing browser-only copies.
+ */
 import {
     addCharacterNote,
     removeCharacterNote,
