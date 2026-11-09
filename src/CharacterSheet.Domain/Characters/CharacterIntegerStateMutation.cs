@@ -15,6 +15,10 @@ public enum CharacterIntegerStateMutationTarget
     Resource = 4
 }
 
+/// <summary>
+/// Models bounded integer mutations so a requested value can be validated before it modifies persisted
+/// character state.
+/// </summary>
 public sealed record CharacterIntegerStateMutation(
     CharacterIntegerStateMutationTarget Target,
     CharacterIntegerStateMutationOperation Operation,

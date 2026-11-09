@@ -1,5 +1,7 @@
 namespace CharacterSheet.Application.RulesCore;
 
+// Transport contracts for manufacturing and enchanting checks resolved by Rules Core, not by local crafting formulas.
+
 public sealed record RulesCoreCraftingManualCompetencyInput(
     string DisplayName,
     int Contribution,

@@ -1,5 +1,7 @@
 namespace CharacterSheet.Application.RulesCore;
 
+// Transport models for authoritative advancement eligibility and requirements. An absent requirement must not be replaced by locally inferred prerequisites.
+
 public sealed record RulesCoreCharacterAdvancementEligibilityRequest(
     string CandidateConceptKey,
     RulesCoreCharacterRulesProjectionRequest Character,

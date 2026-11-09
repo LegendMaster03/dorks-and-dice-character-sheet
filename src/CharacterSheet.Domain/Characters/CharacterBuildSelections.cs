@@ -1,5 +1,7 @@
 namespace CharacterSheet.Domain.Characters;
 
+// Represents a character's chosen rule references and progression structure; concept meaning and parent relationships remain authoritative in Rules Core.
+
 public enum CharacterFoundationalSelectionCategory
 {
     // Legacy persisted category retained only so pre-migration rows can still be read safely.

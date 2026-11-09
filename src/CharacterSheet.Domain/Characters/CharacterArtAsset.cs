@@ -1,5 +1,9 @@
 namespace CharacterSheet.Domain.Characters;
 
+/// <summary>
+/// Defines Character-owned art metadata and portrait references separately from uploaded image bytes
+/// and game mechanics.
+/// </summary>
 public sealed class CharacterArtAsset
 {
     public const int MaxOriginalFileNameLength = 260;

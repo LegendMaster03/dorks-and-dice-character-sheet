@@ -1,5 +1,7 @@
 namespace CharacterSheet.Application.RulesCore;
 
+// Transport contract for complete character mechanics projections. Stable keys and evaluation states are preserved for the presentation layer.
+
 public sealed record RulesCoreCharacterSelectedConceptInput(
     string ConceptKey,
     string? OccurrenceKey = null);

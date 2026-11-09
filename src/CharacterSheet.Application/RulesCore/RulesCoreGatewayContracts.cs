@@ -2,6 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace CharacterSheet.Application.RulesCore;
 
+// Models the rule-resolution gateway responses consumed by Character Sheet. Persisted character choices are deliberately separate from these transient rule definitions.
+
 public sealed class RulesCoreGatewayException(
     string message, Exception? innerException = null, int? statusCode = null)
     : Exception(message, innerException)
