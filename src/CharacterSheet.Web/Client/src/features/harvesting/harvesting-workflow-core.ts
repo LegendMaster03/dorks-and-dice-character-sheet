@@ -513,6 +513,8 @@ export function createHarvestingCraftingWorkflow(
         }
     }
 
+    // Helper identities come from the selected campaign context. Failure to
+    // fetch the roster leaves manual helper entry available.
     async function ensureCampaignContext(campaignId: string | null): Promise<void> {
         if (campaignId === null) {
             update(state => ({
@@ -557,6 +559,8 @@ export function createHarvestingCraftingWorkflow(
         return Number.parseInt(normalized, 10);
     }
 
+    // Resolve the helper's displayed training and proficiency from that
+    // character's presentation rather than assuming all helpers are alike.
     async function setHelperCharacter(
         index: number,
         characterId: string | null
@@ -752,6 +756,8 @@ export function createHarvestingCraftingWorkflow(
         }
     }
 
+    // Re-resolving edited tables preserves the order of surviving components
+    // and appends new components without resurrecting removed identities.
     async function applyHarvestTableRequest(
         request: HarvestingTableResolutionInput,
         clearDraft = false
@@ -920,6 +926,8 @@ export function createHarvestingCraftingWorkflow(
         await applyHarvestTableRequest(baseRequest, true);
     }
 
+    // Assessment, Carving, helper participation and order are sent to Rules
+    // Core together; the client displays the resolved harvesting outcome.
     async function evaluate(): Promise<void> {
         const state = application.getState().harvestingCrafting;
         if (state.table === null || state.tableRequest === null) {
@@ -989,6 +997,8 @@ export function createHarvestingCraftingWorkflow(
         }
     }
 
+    // Completion validates required stages and material quantities before
+    // submitting the inventory transaction. A failed stage yields no output.
     async function completeCrafting(characterId: string): Promise<void> {
         const state = application.getState().harvestingCrafting;
         const recipeName = state.craftingRecipeName.trim();

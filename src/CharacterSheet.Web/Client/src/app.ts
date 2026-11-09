@@ -383,6 +383,8 @@ function renderStateScreen(
     return screen;
 }
 
+// Load independent builder, routine, and presentation state concurrently;
+// failure in one projection must not be mistaken for a missing Site Character.
 async function bootstrapCharacter(): Promise<void> {
     if (route.kind !== "character") return;
     try {
@@ -400,6 +402,8 @@ async function bootstrapCharacter(): Promise<void> {
     }
 }
 
+// Preserve the Site Character ID when rich-sheet initialization fails so
+// the existing Character can be recovered instead of created twice.
 async function submitNewCharacter(name: string): Promise<void> {
     application.dispatch({ type: "new-submit-started" });
     try {
@@ -418,6 +422,8 @@ async function submitNewCharacter(name: string): Promise<void> {
     }
 }
 
+// A basic Site Character is upgraded in place rather than receiving a
+// second canonical identity when rich sheet state is initialized.
 async function initializeExistingCharacter(character: CharacterSheetBootstrapResponse): Promise<void> {
     application.dispatch({ type: "sheet-submit-started", character });
     try {

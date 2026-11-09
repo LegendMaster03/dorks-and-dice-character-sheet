@@ -125,10 +125,14 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .IsRequired();
         advancement.HasIndex(value => new { value.CharacterId, value.Ordinal });
         advancement.HasIndex(value => new { value.ParentAdvancementEntryId, value.CharacterId });
+        // Enforce at most one Subclass per parent Class, even if two requests
+        // race past application-layer validation.
         advancement.HasIndex(value => new { value.CharacterId, value.ParentAdvancementEntryId })
             .HasDatabaseName("UX_character_advancement_entries_SubclassPerClass")
             .IsUnique()
             .HasFilter("\"Kind\" = 'Subclass' AND \"ParentAdvancementEntryId\" IS NOT NULL");
+        // A Character has exactly one starting-Class slot (ordinal zero);
+        // later multiclass occurrences receive different ordinals.
         advancement.HasIndex(value => value.CharacterId)
             .HasDatabaseName("UX_character_advancement_entries_StartingClass")
             .IsUnique()
@@ -173,6 +177,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         inventoryItemOccurrence.Property(value => value.UpdatedAt)
             .IsRequired();
         inventoryItemOccurrence.HasIndex(value => new { value.CharacterId, value.RuleConceptKey });
+        // An inventory occurrence is either Rules Core-backed or custom,
+        // never both and never neither.
         inventoryItemOccurrence.ToTable(table => table.HasCheckConstraint(
             "CK_character_inventory_item_occurrences_Identity",
             "(\"RuleConceptKey\" IS NOT NULL) <> (\"CustomName\" IS NOT NULL)"));
@@ -251,6 +257,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .HasMaxLength(CharacterRulesInputKey.MaxTextValueLength);
         rulesInput.Property(value => value.CreatedAt).IsRequired();
         rulesInput.Property(value => value.UpdatedAt).IsRequired();
+        // Character-owned rules inputs are unique per kind and key, so
+        // changing a choice updates its slot instead of creating duplicates.
         rulesInput.HasIndex(value => new { value.CharacterId, value.Kind, value.Key }).IsUnique();
         root.HasMany(value => value.RulesInputs)
             .WithOne()
