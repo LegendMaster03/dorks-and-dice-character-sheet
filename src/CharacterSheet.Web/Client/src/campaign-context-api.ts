@@ -1,3 +1,7 @@
+/**
+ * Loads the Site-provided campaign context for a character instead of guessing a campaign from
+ * membership or screen state.
+ */
 import type { HostEnvironment } from "./host-environment.js";
 import type { FetchLike } from "./character-api.js";
 

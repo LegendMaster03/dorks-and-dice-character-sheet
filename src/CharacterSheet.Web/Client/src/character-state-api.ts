@@ -1,3 +1,7 @@
+/**
+ * Defines transport contracts for character-owned routine-state and inventory mutations. Request
+ * bodies record player actions, not rule definitions.
+ */
 import {
     buildCharacterSheetApiUrl,
     CharacterSheetApiError,

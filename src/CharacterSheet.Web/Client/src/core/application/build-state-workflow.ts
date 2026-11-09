@@ -1,3 +1,7 @@
+/**
+ * Coordinates builder reads and selection updates with state dispatch and reference resolution
+ * while keeping authorization on the server.
+ */
 import type { CharacterBuilderUiState } from "../../app-state.js";
 import type {
     CharacterBuildResponse,

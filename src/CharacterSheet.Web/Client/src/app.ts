@@ -1,3 +1,7 @@
+/**
+ * Wires routing, host lifecycle, application workflows, and rendering into the embedded
+ * Character Sheet. Character data is loaded through authenticated same-origin APIs.
+ */
 import "./styles.css";
 import { createInitialState } from "./app-state.js";
 import {

@@ -1,3 +1,7 @@
+/**
+ * Resolves and describes stable rule references for builder UI without assigning mechanical
+ * meaning to their identifiers.
+ */
 import type {
     CharacterAdvancementEntryResponse,
     CharacterBuildResponse,

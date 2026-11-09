@@ -1,3 +1,7 @@
+/**
+ * Loads the authorized Site Character/bootstrap projection and creates Character records through
+ * the host contract, not client-owned identity.
+ */
 import type { HostEnvironment } from "./host-environment.js";
 
 export interface CharacterSheetRootState {

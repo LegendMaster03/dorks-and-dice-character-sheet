@@ -1,3 +1,7 @@
+/**
+ * Defines the client-side state and reducer for sheet, builder, presentation, and modal
+ * workflows. UI state does not replace persisted Character state or Rules Core calculations.
+ */
 import type {
     CharacterAbilityKey,
     CharacterBuildResponse,
@@ -401,6 +405,7 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
     };
 }
 
+/** Keeps UI transitions deterministic; server-side writes are performed by workflows. */
 export function reduceAppState(
     state: CharacterSheetAppState,
     action: CharacterSheetAction

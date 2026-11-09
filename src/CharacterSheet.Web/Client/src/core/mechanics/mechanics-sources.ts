@@ -1,3 +1,7 @@
+/**
+ * Extracts source provenance for rule-backed display and disclosure without embedding rule
+ * interpretation.
+ */
 import type { CharacterMechanicsView } from "../../ui/character-mechanics.js";
 import { createElement } from "../../ui/components.js";
 import { renderSourceAttributionDisclosure } from "../../ui/source-attribution.js";

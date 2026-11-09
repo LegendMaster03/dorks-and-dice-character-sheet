@@ -1,3 +1,7 @@
+/**
+ * Serializes and refreshes character-owned routine-state mutations. Resource conflicts require a
+ * reload rather than replaying a potentially spent action.
+ */
 import type {
     CharacterRoutineUiState,
     RoutineMutationKind

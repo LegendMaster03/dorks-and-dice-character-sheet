@@ -1,3 +1,7 @@
+/**
+ * Formats already-resolved mechanic values, including missing or unresolved states. Display
+ * formatting must not invent numeric defaults.
+ */
 import {
     formatMechanicalValue,
     hasMechanicalDetails,

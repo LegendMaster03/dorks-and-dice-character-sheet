@@ -1,3 +1,7 @@
+/**
+ * Writes explicit character facts and runtime roll inputs and then refreshes the authoritative
+ * mechanics presentation.
+ */
 import {
     removeCharacterHitPointGain,
     removeCharacterRulesInput,

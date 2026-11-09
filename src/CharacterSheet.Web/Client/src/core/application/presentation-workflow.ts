@@ -1,3 +1,7 @@
+/**
+ * Refreshes mechanics and, only during unfinished guided setup, starting-equipment previews.
+ * Request sequencing allows stale results to be ignored.
+ */
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import { loadCharacterPresentation } from "../../character-presentation-api.js";
@@ -16,6 +20,8 @@ export function createPresentationWorkflow(
 
     return {
         async load(characterId: string): Promise<void> {
+            // Reducer request IDs distinguish overlapping refreshes so late completions
+            // cannot overwrite a newer character presentation.
             const requestId = ++requestSequence;
             const current = application.getState();
             const alreadyReceived = current.routine.state?.rulesInputs?.some(input =>

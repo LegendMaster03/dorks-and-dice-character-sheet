@@ -1,3 +1,7 @@
+/**
+ * Fetches the server-projected character presentation. A missing mechanics projection is
+ * represented as unavailable, not calculated in the browser.
+ */
 import type { HostEnvironment } from "./host-environment.js";
 import {
     buildCharacterSheetApiUrl,

@@ -1,3 +1,7 @@
+/**
+ * Calls the Character Sheet builder endpoints for character-owned selections and advancement
+ * records; resolved option descriptions remain Rules Core data.
+ */
 import {
     buildCharacterSheetApiUrl,
     CharacterSheetApiError,
