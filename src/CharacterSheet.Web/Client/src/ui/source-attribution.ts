@@ -1,3 +1,7 @@
+/**
+ * Builds disclosures for Rules Core provenance so displayed values can be traced to source
+ * concepts without parsing source text.
+ */
 import type { SourceAttributionView } from "./character-mechanics.js";
 import { createElement } from "./components.js";
 

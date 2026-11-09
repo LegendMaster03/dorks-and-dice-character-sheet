@@ -1,3 +1,7 @@
+/**
+ * Defines the callbacks handed to sheet rendering; mutation effects belong to workflows, not DOM
+ * construction.
+ */
 import type {
     CharacterBuilderUiState,
     CharacterRoutineUiState

@@ -1,3 +1,7 @@
+/**
+ * Renders standalone skills, skill families and composite competencies from their projected
+ * identities. Rank editing is offered only for supported mutation keys.
+ */
 import {
     formatMechanicalValue,
     type CompetencyPresentationItem,
@@ -107,6 +111,8 @@ function renderStandaloneCompetency(
     return disclosure;
 }
 
+// Family membership is projected data. Render each member independently so
+// its own rank controls, sources, and detail disclosure remain available.
 function renderCompetencyFamily(
     item: Extract<CompetencyPresentationItem, { kind: "family" }>,
     control: CompetencyRankControlOptions
@@ -147,6 +153,8 @@ function renderCompetencyFamily(
     return disclosure;
 }
 
+// A composite displays the parent and its contributing components together,
+// but retains their individual identities for diagnostics and rank editing.
 function renderCompositeCompetency(
     item: Extract<CompetencyPresentationItem, { kind: "composite" }>,
     index: number,
@@ -558,6 +566,8 @@ function canEditRank(
         && control.onSetRank !== undefined;
 }
 
+// Native competencies require an explicit Rules Core mutation key. Falling
+// back to a display concept key could persist an unrelated rank input.
 function rankMutationKey(competency: CompetencyView): string | undefined {
     const explicit = competency.rankInputKey?.trim();
     if (explicit !== undefined && explicit.length > 0) return explicit;

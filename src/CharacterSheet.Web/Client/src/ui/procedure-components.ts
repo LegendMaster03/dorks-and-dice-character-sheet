@@ -1,3 +1,7 @@
+/**
+ * Renders Rules Core-provided check procedures and their source references without reimplementing
+ * the procedure's rules.
+ */
 import type {
     CharacterCheckView,
     CharacterProcedureView,

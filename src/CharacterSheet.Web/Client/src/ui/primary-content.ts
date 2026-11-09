@@ -1,3 +1,7 @@
+/**
+ * Composes the selected sheet section from focused feature components, keeping read-only policy
+ * and editing callbacks explicit.
+ */
 import type {
     CharacterBuilderUiState,
     CharacterRoutineUiState

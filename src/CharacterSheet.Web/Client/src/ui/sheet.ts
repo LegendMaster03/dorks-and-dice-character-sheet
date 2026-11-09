@@ -1,3 +1,7 @@
+/**
+ * Composes the character workspace from separate builder, routine, and mechanics states while
+ * enforcing archived and read-only UI policy.
+ */
 import {
     createInitialHarvestingCraftingState,
     type CharacterBuilderUiState,
@@ -80,6 +84,7 @@ export function renderCharacterWorkspace(
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
+    // Treat every read-only source as authoritative before enabling any editor.
     const readOnly = forceReadOnly
         || builder.build?.readOnly === true
         || routine.state?.readOnly === true

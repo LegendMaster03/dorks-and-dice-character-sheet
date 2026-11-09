@@ -1,3 +1,7 @@
+/**
+ * Renders grouped statistics without conflating their independent mechanics or substituting
+ * missing component values.
+ */
 import { createElement } from "./components.js";
 
 export interface SplitStatCell {

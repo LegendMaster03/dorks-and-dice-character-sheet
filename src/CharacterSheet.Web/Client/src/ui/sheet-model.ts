@@ -1,3 +1,7 @@
+/**
+ * Derives builder navigation and display policies from persisted choices and the current mechanics
+ * projection; incomplete does not mean invalid.
+ */
 import {
     CHARACTER_ABILITY_KEYS,
     type BaseAbilityScoreInputResponse,
@@ -128,6 +132,7 @@ export function getGuidedBuilderOwnedChoiceSourceKeys(
     ])];
 }
 
+/** A section is resolved only when its selections and projected follow-up choices are complete. */
 export function getGuidedBuilderSectionStates(
     builder: CharacterBuilderUiState,
     mechanics: CharacterMechanicsView | null = null,
