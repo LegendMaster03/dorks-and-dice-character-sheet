@@ -41,6 +41,10 @@ public sealed record CharacterArtContentResult(
     string? ContentType = null,
     string? OriginalFileName = null);
 
+/// <summary>
+/// Coordinates authorized character art changes. File storage holds image bytes while character
+/// persistence holds asset metadata and portrait selection.
+/// </summary>
 public sealed class CharacterArtService(
     ISiteCharacterAccessGateway siteCharacterAccess,
     ICharacterSheetStore characterSheetStore,

@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Presents saved advancement occurrences by joining character-owned identifiers to Rules Core
+/// descriptions without changing the recorded choices.
+/// </summary>
 internal static class CharacterAdvancementProjector
 {
     internal static CharacterAdvancementPresentationView Project(

@@ -67,6 +67,10 @@ public sealed record CharacterBuildResult(
     CharacterBuildAccessStatus Status,
     CharacterBuildView? View = null);
 
+/// <summary>
+/// Owns the character's persisted builder selections and progression entries, while Site authorizes
+/// the character and Rules Core defines the selectable concepts and relationships.
+/// </summary>
 public sealed class CharacterBuildService(
     ISiteCharacterAccessGateway siteCharacterAccess,
     ICharacterBuildStore buildStore,
@@ -103,6 +107,8 @@ public sealed class CharacterBuildService(
             {
                 var normalizedSpeciesKey = CharacterRuleReference.NormalizeConceptKey(ruleConceptKey);
                 var current = await buildStore.GetAsync(characterId, token);
+                // Retain the existing subspecies only when Rules Core confirms it is valid for
+                // the replacement species; otherwise clear the dependent choice.
                 var previousSpecies = current?.FoundationalSelections.FirstOrDefault(value =>
                     value.Category is CharacterFoundationalSelectionCategory.Species
                         or CharacterFoundationalSelectionCategory.RaceSpecies);

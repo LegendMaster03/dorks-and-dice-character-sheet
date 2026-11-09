@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Assembles the frontend mechanics view from Rules Core evaluations, preserving unavailable values
+/// instead of manufacturing defaults.
+/// </summary>
 internal static class CharacterMechanicsProjector
 {
     internal const string Unconfigured = "-";

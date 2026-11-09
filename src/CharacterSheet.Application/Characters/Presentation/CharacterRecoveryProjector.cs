@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Adapts Rules Core recovery definitions and character-owned recovery state for display without
+/// implementing rest rules in the browser.
+/// </summary>
 internal static class CharacterRecoveryProjector
 {
     internal static IReadOnlyList<CharacterRecoveryProcedurePresentationView>? Project(

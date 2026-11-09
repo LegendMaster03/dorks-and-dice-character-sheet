@@ -36,6 +36,10 @@ public sealed record CharacterSheetBootstrapResult(
     CharacterSheetBootstrapStatus Status,
     CharacterSheetBootstrapView? View = null);
 
+/// <summary>
+/// Bootstraps an owned character sheet from the Site character projection. Site identity and lifecycle
+/// govern access before local sheet state is initialized or read.
+/// </summary>
 public sealed class CharacterSheetBootstrapService(
     ISiteCharacterAccessGateway siteCharacterAccess,
     ICharacterSheetStore characterSheetStore)

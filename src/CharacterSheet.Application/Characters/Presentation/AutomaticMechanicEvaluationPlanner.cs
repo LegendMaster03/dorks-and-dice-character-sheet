@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Selects the mechanics that require automatic evaluation from Rules Core descriptors. The sheet does
+/// not guess values for mechanics absent from the authoritative projection.
+/// </summary>
 internal static class AutomaticMechanicEvaluationPlanner
 {
     internal static RulesCoreMechanicsBatchEvaluationRequest Build(

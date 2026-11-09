@@ -2,6 +2,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Application.Characters;
 
+/// <summary>
+/// Maps authoritative check procedures into displayable steps and references, keeping calculation and
+/// rule choice in Rules Core.
+/// </summary>
 internal static class CheckProcedureProjector
 {
     internal static CharacterCheckPresentationView[] ProjectChecks(

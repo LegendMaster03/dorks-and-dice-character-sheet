@@ -46,6 +46,10 @@ public sealed record CharacterCraftingResult(
     RulesCoreCraftingCheckResolutionView? Resolution = null,
     string? Message = null);
 
+/// <summary>
+/// Collects character and campaign context for crafting checks and delegates rule interpretation to
+/// Rules Core rather than calculating manufacturing or enchanting outcomes locally.
+/// </summary>
 public sealed class CharacterCraftingService(
     CharacterBuildService buildService,
     CharacterStateService stateService,
