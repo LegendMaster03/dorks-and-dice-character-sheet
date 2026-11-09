@@ -1,8 +1,4 @@
 /**
- * Renders shared mechanics display elements from server-projected values without assuming
- * unavailable values are zero.
- */
-/**
  * Compatibility exports for existing consumers.
  *
  * New feature code should import the owning core/feature module directly. This
