@@ -1,3 +1,7 @@
+/**
+ * Formats supplemental rules-backed values and references for sheet cards without introducing
+ * local rule-derived defaults.
+ */
 import {
     formatMechanicalValue,
     type CalculatedMechanicalValueView,

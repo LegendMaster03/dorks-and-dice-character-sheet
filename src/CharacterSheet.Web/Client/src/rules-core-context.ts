@@ -1,3 +1,7 @@
+/**
+ * Manages the ruleset context for requests and display without interpreting identifiers or
+ * treating a changing fingerprint as a distribution policy.
+ */
 import type { CharacterMechanicsView } from "./ui/character-mechanics.js";
 
 export interface RulesCoreContextualHelpView {

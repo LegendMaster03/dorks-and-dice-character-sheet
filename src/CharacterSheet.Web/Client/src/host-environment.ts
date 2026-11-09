@@ -1,3 +1,7 @@
+/**
+ * Describes the embedded host and route context required by authenticated API requests; the
+ * browser does not construct tool-to-tool credentials.
+ */
 export interface HostEnvironment {
     embedded: boolean;
     toolBasePath: string;

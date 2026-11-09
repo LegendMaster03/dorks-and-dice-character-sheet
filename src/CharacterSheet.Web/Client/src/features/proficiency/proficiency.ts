@@ -1,3 +1,7 @@
+/**
+ * Displays projected proficiencies without treating a character's local training input as proof of
+ * an effective Rules Core mechanic.
+ */
 import type { CalculatedMechanicalValueView } from "../../ui/character-mechanics.js";
 import { createElement } from "../../ui/components.js";
 import { renderQuickMechanicalValue } from "../../core/mechanics/mechanic-value.js";

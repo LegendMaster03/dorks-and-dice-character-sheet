@@ -1,3 +1,7 @@
+/**
+ * Presents the authoritative saving-throw projection, including individual source details and
+ * unavailable values.
+ */
 import type { SavingThrowView } from "../../ui/character-mechanics.js";
 import { createElement, createSectionCard } from "../../ui/components.js";
 import {

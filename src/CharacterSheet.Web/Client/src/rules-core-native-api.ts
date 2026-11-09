@@ -1,3 +1,7 @@
+/**
+ * Calls native Rules Core mechanics through the authenticated same-origin bridge and validates
+ * snapshot identities before accepting results.
+ */
 import { RulesCoreApiError } from "./rules-core-api.js";
 import { buildCharacterSheetApiUrl } from "./character-api.js";
 import type { HostEnvironment } from "./host-environment.js";

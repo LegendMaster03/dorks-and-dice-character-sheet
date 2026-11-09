@@ -1,3 +1,7 @@
+/**
+ * Provides the authenticated character-art upload, deletion and portrait-selection transport
+ * calls.
+ */
 import {
     buildCharacterSheetApiUrl,
     CharacterSheetApiError,

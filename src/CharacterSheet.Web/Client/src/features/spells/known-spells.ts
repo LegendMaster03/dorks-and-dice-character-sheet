@@ -1,3 +1,7 @@
+/**
+ * Displays known spells and their source information without calculating casting rules or
+ * spell-slot expenditure.
+ */
 import type { CharacterRoutineUiState } from "../../app-state.js";
 import {
     createButton,

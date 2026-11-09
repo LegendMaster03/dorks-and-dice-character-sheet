@@ -1,3 +1,6 @@
+/**
+ * Saves player-authored biography fields through the routine-state mutation boundary.
+ */
 import {
     setCharacterProfile,
     type CharacterProfileInput

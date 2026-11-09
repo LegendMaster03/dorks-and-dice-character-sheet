@@ -1,3 +1,7 @@
+/**
+ * Displays character-authored profile fields alongside Site-owned identity and supplied campaign
+ * labels without conflating their sources.
+ */
 import type { CharacterRoutineUiState } from "../../app-state.js";
 import type {
     CharacterProfileInput,

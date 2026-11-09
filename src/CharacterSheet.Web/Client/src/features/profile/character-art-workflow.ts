@@ -1,3 +1,7 @@
+/**
+ * Coordinates portrait and image changes with a refreshed character-art projection and read-only
+ * access state.
+ */
 import type { HostEnvironment } from "../../host-environment.js";
 import type { RoutineStateWorkflow } from "../../core/application/routine-state-workflow.js";
 import {

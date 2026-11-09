@@ -1,3 +1,7 @@
+/**
+ * Parses standalone and embedded Character Sheet routes while preserving the Site-issued character
+ * identifier.
+ */
 export type CharacterSheetRoute =
     | { kind: "new" }
     | { kind: "character"; characterId: string }

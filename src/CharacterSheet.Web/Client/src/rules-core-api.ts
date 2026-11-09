@@ -1,3 +1,7 @@
+/**
+ * Defines the Rules Core-related transport contracts used by sheet workflows. Responses are
+ * resolved upstream and are not local rule computations.
+ */
 import { buildCharacterSheetApiUrl, readApiError, type FetchLike } from "./character-api.js";
 import type { HostEnvironment } from "./host-environment.js";
 

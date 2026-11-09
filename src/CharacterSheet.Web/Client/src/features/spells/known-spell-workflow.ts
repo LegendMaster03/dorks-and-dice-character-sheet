@@ -1,3 +1,7 @@
+/**
+ * Coordinates character-owned known-spell selections while relying on Rules Core for spell
+ * definitions and availability.
+ */
 import type { CharacterSheetApplication } from "../../render-lifecycle.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import { loadNativeRuleset, searchNativeOptions } from "../../rules-core-native-api.js";

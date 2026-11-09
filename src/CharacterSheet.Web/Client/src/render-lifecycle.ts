@@ -1,3 +1,7 @@
+/**
+ * Defines the application store/render interface so workflows dispatch state changes without
+ * directly mutating UI components.
+ */
 import type { CharacterSheetAction, CharacterSheetAppState } from "./app-state.js";
 import { reduceAppState } from "./app-state.js";
 import { applyContextualRulesHelp } from "./ui/contextual-help.js";
