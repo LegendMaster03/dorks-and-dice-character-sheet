@@ -393,6 +393,8 @@ public sealed class CharacterStateService(
             cancellationToken);
     }
 
+    // The starting-equipment receipt is server-owned and participates in
+    // idempotency; accepting arbitrary client edits would permit re-granting.
     private static void RejectSystemOwnedRulesInput(string kind, string key)
     {
         if (string.Equals(kind, CharacterRulesInputKinds.BooleanFact,

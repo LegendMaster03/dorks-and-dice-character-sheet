@@ -91,6 +91,8 @@ internal static class RulesCoreCharacterProjectionProjector
                 value.RelatedMechanicKeys,
                 value.RelatedConceptKeys))
             .ToArray();
+        // Preserve richer competency metadata from the existing presentation
+        // when available; native mechanics still supply effective values.
         var effectiveCompetencyFallback = fallback?.Competencies
             ?? ProjectEffectiveCompetencyMetadata(
                 projection.Competencies,
@@ -368,6 +370,8 @@ internal static class RulesCoreCharacterProjectionProjector
             SourceAttributionMapper.Map(value.Provenance));
     }
 
+    // These are the currently exposed Rules Core resource-key conventions,
+    // not a general inference of which resources a spellcaster should possess.
     private static bool ResourceBelongsToSpellcasting(
         string resourceKey,
         string? resourceSystemKey,
@@ -408,6 +412,8 @@ internal static class RulesCoreCharacterProjectionProjector
             SourceAttributionMapper.Map(value.FeatureProvenance ?? value.Provenance));
     }
 
+    // Inventory occurrence identity belongs to the Character; equipment
+    // definitions add transient mechanics without replacing saved items.
     private static InventoryMechanicsPresentationView? ProjectInventory(
         CharacterStateView? state,
         IReadOnlyList<RulesCoreCharacterEquipmentDefinitionView> equipment)

@@ -190,6 +190,8 @@ public sealed class DelegatedRulesCoreGateway(
                 throw;
             }
 
+            // Site issued this capability for the Character Sheet-to-Rules Core
+            // route. Never substitute the incoming Character Sheet host ticket.
             using var request = new HttpRequestMessage(method, $"{delegationPrefix}{targetPath}")
             {
                 Content = content
@@ -264,6 +266,8 @@ public sealed class DelegatedRulesCoreGateway(
                 }
             }
         }
+        // Record failures and timeouts as well as successful dependencies so
+        // a missing Rules Core response remains visible in Server-Timing.
         finally
         {
             dependencyTimer.Stop();

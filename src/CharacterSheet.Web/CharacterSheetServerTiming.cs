@@ -87,6 +87,8 @@ public static class CharacterSheetServerTiming
         }
     }
 
+    // A Server-Timing header may contain commas inside quoted descriptions;
+    // splitting on every comma would corrupt the forwarded metric names.
     private static IEnumerable<string> SplitMetrics(string headerValue)
     {
         var start = 0;

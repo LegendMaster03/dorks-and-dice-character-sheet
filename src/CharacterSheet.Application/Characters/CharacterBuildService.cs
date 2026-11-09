@@ -315,6 +315,8 @@ public sealed class CharacterBuildService(
         string speciesConceptKey,
         CancellationToken cancellationToken)
     {
+        // A missing rule gateway cannot establish parentage. Reject dependent
+        // selections rather than accepting an unverified subspecies relationship.
         if (rulesCore is null)
         {
             return false;
@@ -384,6 +386,8 @@ public sealed class CharacterBuildService(
 
     private static CharacterBuildView ToView(CharacterSheetRoot root, bool readOnly)
     {
+        // Expose the legacy RaceSpecies category as Species, preferring a
+        // canonical Species selection when both categories are present.
         var foundational = root.FoundationalSelections
             .GroupBy(value => value.Category == CharacterFoundationalSelectionCategory.RaceSpecies
                 ? CharacterFoundationalSelectionCategory.Species

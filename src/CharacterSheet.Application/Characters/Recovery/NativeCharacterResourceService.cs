@@ -171,6 +171,8 @@ public sealed class NativeCharacterResourceService(
                 return new(NativeCharacterResourceActionStatus.Unsupported,
                     Message: "Rules Core did not resolve a valid native resource transition.");
 
+            // ExpectedValue makes resource expenditure conditional on the
+            // value that Rules Core evaluated, preventing stale double spending.
             var applied = await states.ApplyIntegerStateMutationsAsync(
                 characterId, [new CharacterIntegerStateMutation(
                     CharacterIntegerStateMutationTarget.Resource,

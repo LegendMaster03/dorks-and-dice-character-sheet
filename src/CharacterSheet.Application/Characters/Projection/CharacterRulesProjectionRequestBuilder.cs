@@ -23,12 +23,16 @@ public static class CharacterRulesProjectionRequestBuilder
             .GroupBy(value => value.AbilityKey, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(value => value.UpdatedAt).First().Score, StringComparer.Ordinal);
 
+        // Keep the original occurrence IDs so Rules Core can distinguish multiple
+        // instances of the same concept without treating the concept key as identity.
         var selectedConcepts = build.FoundationalSelections
             .Select(value => new RulesCoreCharacterSelectedConceptInput(value.RuleConceptKey, value.Id.ToString("D")))
             .Concat(build.ProgressionEntries.Select(value => new RulesCoreCharacterSelectedConceptInput(value.RuleConceptKey, value.Id.ToString("D"))))
             .ToArray();
 
         var advancementById = build.ProgressionEntries.ToDictionary(value => value.Id);
+        // Subclass facts inherit their parent Class level. Entries without an
+        // established positive level are not sent as invented advancement facts.
         var advancements = build.ProgressionEntries
             .Select(value =>
             {
@@ -61,6 +65,8 @@ public static class CharacterRulesProjectionRequestBuilder
                 && value.TextValue is not null)
             .Select(value => new RulesCoreCharacterRuntimeChoiceInput(value.Key, value.TextValue!))
             .ToArray();
+        // Roll values use a dedicated storage-key prefix so they do not leak
+        // into unrelated integer facts. The newest value wins for duplicate keys.
         var rolls = ruleInputs
             .Where(value =>
                 value.Kind == CharacterRulesInputKinds.IntegerFact
@@ -97,6 +103,8 @@ public static class CharacterRulesProjectionRequestBuilder
             .GroupBy(value => value.Key, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Last().TextValue!, StringComparer.Ordinal);
 
+        // Starting Class is an explicit runtime fact: it is not safely inferred
+        // from an arbitrary ordering of the selected Classes.
         var startingClass = build.ProgressionEntries.SingleOrDefault(value =>
             value.Kind == CharacterBuildAdvancementKinds.Class && value.Ordinal == 0 && value.ParentAdvancementEntryId is null);
         if (startingClass is not null) stringFacts[StartingClassFactKey] = startingClass.RuleConceptKey;
@@ -115,6 +123,8 @@ public static class CharacterRulesProjectionRequestBuilder
             equippedItemConceptKeys = equipped.Length == 0 ? null : equipped;
         }
 
+        // Ignore orphaned hit-point gain records when no matching advancement
+        // occurrence exists; Rules Core only receives attributable gains.
         var hitPointGains = (state?.HitPointGains ?? [])
             .Select(value =>
             {

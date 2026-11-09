@@ -13,6 +13,8 @@ internal static class CompetencyProjector
         IReadOnlyList<RulesCoreMechanicView> competencyMechanics,
         IReadOnlyDictionary<string, RulesCoreMechanicEvaluationView> evaluationByKey)
     {
+        // An empty universal collection is authoritative. Fall back to the
+        // legacy mechanic shape only when the universal collection is absent.
         if (universalCompetencies is not null)
         {
             return ProjectUniversalCollection(
@@ -96,6 +98,8 @@ internal static class CompetencyProjector
             }
         }
 
+        // Only fully resolved derive-parent relationships can be displayed as
+        // composites; presentation must not create new composition rules.
         var projected = relationships
             .Where(value => value.CanResolve
                 && value.MissingMechanicKeys.Count == 0
@@ -125,6 +129,8 @@ internal static class CompetencyProjector
             .Where(value => value is not null)
             .Cast<RulesCoreMechanicEvaluationView>()
             .ToArray();
+        // Multiple implementations can map to one semantic competency. Never
+        // choose an arbitrary implementation as its effective numeric value.
         var evaluation = evaluations.Length == 1 ? evaluations[0] : null;
 
         var profiles = universal.Profiles;
@@ -332,6 +338,8 @@ internal static class CompetencyProjector
             .Cast<string>()
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+        // Rank editing needs one unambiguous persisted concept key. Ambiguous
+        // or absent mappings remain read-only rather than guessing a key.
         return conceptKeys.Length == 1 ? conceptKeys[0] : null;
     }
 
