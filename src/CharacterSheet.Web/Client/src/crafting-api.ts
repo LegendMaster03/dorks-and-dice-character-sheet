@@ -1,3 +1,7 @@
+/**
+ * Sends character crafting inputs to the server and receives Rules Core-resolved manufacturing
+ * and enchanting checks; it contains no local crafting rules.
+ */
 import {
     CharacterSheetApiError,
     buildCharacterSheetApiUrl,

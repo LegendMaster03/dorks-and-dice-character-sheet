@@ -1,3 +1,7 @@
+/**
+ * Coordinates advancement preview and application while refreshing builder state and mechanics
+ * when saved progression changes.
+ */
 import {
     clearCharacterBuildChoice,
     setCharacterAdvancementLevel,

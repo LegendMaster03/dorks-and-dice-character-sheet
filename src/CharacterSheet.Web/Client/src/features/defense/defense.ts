@@ -1,3 +1,7 @@
+/**
+ * Presents projected defenses and saves; unknown values are not replaced with zero or inferred
+ * from neighboring statistics.
+ */
 import {
     formatMechanicalValue,
     hasMechanicalDetails,

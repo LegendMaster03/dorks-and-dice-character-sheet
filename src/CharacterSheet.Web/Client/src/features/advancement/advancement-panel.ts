@@ -1,3 +1,7 @@
+/**
+ * Builds the advancement interface from authoritative plan and preview data, keeping confirmation
+ * separate from persistence.
+ */
 import type { CharacterBuilderUiState } from "../../app-state.js";
 import type { CharacterAdvancementView } from "../../ui/character-advancement.js";
 import {

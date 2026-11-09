@@ -1,3 +1,7 @@
+/**
+ * Displays combat mechanics, actions, and attacks supplied by the backend projection and their
+ * source attribution.
+ */
 import type { CharacterMechanicsView } from "../../ui/character-mechanics.js";
 import { createElement, createSectionCard } from "../../ui/components.js";
 import {

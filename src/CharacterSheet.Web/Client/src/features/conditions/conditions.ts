@@ -1,3 +1,7 @@
+/**
+ * Renders conditions, levels, and current status from character-owned inputs and projected rules
+ * without implementing condition mechanics.
+ */
 import type { CharacterRoutineUiState } from "../../app-state.js";
 import type {
     CharacterConditionOccurrenceResponse,

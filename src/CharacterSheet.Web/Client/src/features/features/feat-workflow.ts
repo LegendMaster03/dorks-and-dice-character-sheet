@@ -1,3 +1,7 @@
+/**
+ * Coordinates feat choices using Rules Core option discovery and character-owned advancement
+ * state.
+ */
 import {
     addCharacterFeatOccurrence,
     removeCharacterFeatOccurrence

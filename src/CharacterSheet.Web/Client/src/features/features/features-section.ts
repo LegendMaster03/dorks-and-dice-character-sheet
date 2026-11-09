@@ -1,3 +1,6 @@
+/**
+ * Presents projected features and their source details independently of authored character notes.
+ */
 import type { CharacterBuilderUiState } from "../../app-state.js";
 import type {
     CharacterFeatureView,

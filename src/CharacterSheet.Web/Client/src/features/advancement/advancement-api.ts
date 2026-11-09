@@ -1,3 +1,7 @@
+/**
+ * Calls the server's advancement preview and apply contract so eligibility, available choices,
+ * and resulting progression are resolved outside the browser.
+ */
 import {
     buildCharacterSheetApiUrl,
     CharacterSheetApiError,

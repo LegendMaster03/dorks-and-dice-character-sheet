@@ -1,3 +1,7 @@
+/**
+ * Centralizes normal, advantage, disadvantage, and three-die super variants so roll-selection
+ * behavior stays consistent across character workflows.
+ */
 export type D20RollMode = "normal" | "advantage" | "disadvantage" | "emphasis";
 
 export interface D20RollSelection {

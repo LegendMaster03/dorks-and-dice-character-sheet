@@ -1,3 +1,7 @@
+/**
+ * Coordinates edits to character-owned base ability inputs and requests a refreshed mechanics
+ * projection after mutation.
+ */
 import {
     clearCharacterBaseAbilityScore,
     setCharacterBaseAbilityScore,

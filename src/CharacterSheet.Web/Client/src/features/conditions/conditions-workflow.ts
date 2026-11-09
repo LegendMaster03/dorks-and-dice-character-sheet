@@ -1,3 +1,7 @@
+/**
+ * Coordinates edits to Character-owned condition state; mechanical consequences are supplied by
+ * Rules Core.
+ */
 import {
     addCharacterCondition,
     removeCharacterCondition,

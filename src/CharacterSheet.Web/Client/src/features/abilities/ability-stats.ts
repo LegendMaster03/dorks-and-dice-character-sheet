@@ -1,3 +1,7 @@
+/**
+ * Renders ability inputs alongside projected effective scores and modifiers; missing effective
+ * values remain unknown rather than falling back to authored scores.
+ */
 import type { CharacterBuilderUiState } from "../../app-state.js";
 import {
     formatMechanicalValue,

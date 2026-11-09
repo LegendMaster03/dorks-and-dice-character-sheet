@@ -1,3 +1,7 @@
+/**
+ * Summarizes already-resolved combat statistics for the sheet without calculating attacks or
+ * defenses locally.
+ */
 import {
     formatMechanicalValue,
     type CalculatedMechanicalValueView,

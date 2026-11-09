@@ -1,3 +1,7 @@
+/**
+ * Renders Rules Core-projected action options without deriving action costs or combat rules from
+ * display labels.
+ */
 import type { ActionAttackView } from "../../ui/character-mechanics.js";
 import { createElement, createInlineState } from "../../ui/components.js";
 import {
