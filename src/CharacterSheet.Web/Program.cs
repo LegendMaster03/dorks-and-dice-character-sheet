@@ -24,6 +24,8 @@ if (!string.IsNullOrWhiteSpace(toolHostBaseUrl))
     }
 }
 
+// Upstream HTTP clients do not follow redirects or retain cookies. Tool
+// authentication and delegated Rules Core requests use explicit capabilities.
 builder.Services
     .AddHttpClient<IToolHostAuthenticationClient, DorksAndDiceToolHostAuthenticationClient>(client =>
     {
@@ -108,12 +110,15 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
+// Apply local schema migrations before accepting Character Sheet requests.
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<CharacterSheetDbContext>();
     await dbContext.Database.MigrateAsync();
 }
 
+// The Site-owned tool-host identity must be established before the character
+// endpoints, including when the frontend is mounted in standalone mode.
 app.UseMiddleware<HostedToolAuthenticationMiddleware>();
 app.UseStaticFiles();
 

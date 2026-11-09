@@ -120,6 +120,8 @@ public sealed class CharacterAdvancementService(
         CharacterClassAdvancementRequest request,
         CancellationToken cancellationToken = default)
     {
+        // Re-evaluate eligibility on apply rather than trusting a previously
+        // displayed preview or a client-supplied CanApply flag.
         var preview = await PreviewAsync(characterId, request, cancellationToken);
         if (preview.Status != CharacterAdvancementAccessStatus.Ready ||
             preview.Plan is null)
@@ -304,6 +306,8 @@ public sealed class CharacterAdvancementService(
         // Editing existing class choices is not a request for the next class
         // level. Its authorization comes from the current-level projection and
         // each selected option's eligibility below, not a next-level gate.
+        // Editing existing selections and advancing a class take different
+        // eligibility paths, but both must resolve required native choices.
         if (request.ConfigureCurrentLevel || eligibilityStatus == "eligible")
         {
             var proposedAdvancements = classes.Select(entry => new {

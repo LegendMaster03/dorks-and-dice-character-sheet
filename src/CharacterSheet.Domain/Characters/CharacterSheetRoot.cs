@@ -646,6 +646,8 @@ public sealed class CharacterSheetRoot
         return entry;
     }
 
+    // Evaluate the entire batch against local copies before writing any
+    // state. A failed validation must not leave part of the batch applied.
     public void ApplyIntegerStateMutations(
         IReadOnlyList<CharacterIntegerStateMutation> mutations,
         DateTimeOffset changedAt)
@@ -850,6 +852,8 @@ public sealed class CharacterSheetRoot
         ArgumentNullException.ThrowIfNull(consumptions);
         ArgumentNullException.ThrowIfNull(additions);
 
+        // Coalesce repeated occurrence IDs so splitting a consumption across
+        // request entries cannot bypass the available-quantity check.
         var requested = consumptions
             .GroupBy(value => value.OccurrenceId)
             .Select(group => new CharacterInventoryConsumption(
@@ -945,6 +949,8 @@ public sealed class CharacterSheetRoot
             return false;
         }
 
+        // Removing a container preserves its contents as uncontained items
+        // rather than deleting the child occurrences with it.
         foreach (var child in InventoryItemOccurrences.Where(
             value => value.ContainerOccurrenceId == occurrence.Id))
         {
@@ -991,6 +997,8 @@ public sealed class CharacterSheetRoot
                     "Inventory container must belong to the same Character.");
             }
 
+            // Check existing ancestors before assigning a new container to
+            // avoid attaching an occurrence beneath one of its descendants.
             var cursor = container;
             while (cursor.ContainerOccurrenceId is Guid parentId)
             {

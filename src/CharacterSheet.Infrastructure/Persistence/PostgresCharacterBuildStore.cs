@@ -152,6 +152,8 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         return root;
     }
 
+    // Apply the reviewed level change, option choices and hit-point gain
+    // together in one EF SaveChanges operation, not as separate UI writes.
     public async Task<CharacterSheetRoot?> ApplyProgressionAdvancementAsync(
         Guid characterId,
         Guid? advancementEntryId,
@@ -197,6 +199,8 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
             }
             var currentLevel = progressionEntry.Level
                 ?? throw new InvalidOperationException("Progression advancement does not have a level.");
+            // Reject a plan whose reviewed class level differs from the
+            // currently loaded progression occurrence.
             if (expectedClassLevel is int expected && currentLevel != expected)
                 throw new InvalidOperationException("The Class level changed since review.");
             var targetLevel = configureCurrentLevel ? currentLevel : checked(currentLevel + 1);

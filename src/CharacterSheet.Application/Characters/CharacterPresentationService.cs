@@ -24,6 +24,8 @@ public sealed class CharacterPresentationService(
         var diagnostics = new List<string>();
         CharacterStateView? state = null;
         var stateResult = await stateService.GetAsync(characterId, cancellationToken);
+        // Routine state may be unavailable while owned advancement history is
+        // still readable; keep that distinction in the presentation result.
         if (stateResult.Status == CharacterStateAccessStatus.Ready)
             state = stateResult.View;
         else
@@ -44,6 +46,8 @@ public sealed class CharacterPresentationService(
                 "Native Rules Core is unavailable or returned an invalid response.");
         }
 
+        // Advancement occurrences remain present even when native mechanics
+        // are unavailable; only their optional resolved class names are lost.
         var advancement = ProjectAdvancement(build, projection.NativeClassNames);
         return new CharacterPresentationResult(
             CharacterPresentationAccessStatus.Ready,
