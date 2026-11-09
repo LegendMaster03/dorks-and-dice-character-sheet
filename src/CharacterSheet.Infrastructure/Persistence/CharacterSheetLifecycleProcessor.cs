@@ -12,6 +12,10 @@ public sealed class ProcessedLifecycleEvent
     public DateTimeOffset ProcessedAt { get; set; }
 }
 
+/// <summary>
+/// Makes Site lifecycle events idempotent against local Character Sheet state without promoting the
+/// local database to canonical ownership.
+/// </summary>
 public sealed class CharacterSheetLifecycleProcessor(
     CharacterSheetDbContext dbContext,
     TimeProvider timeProvider,

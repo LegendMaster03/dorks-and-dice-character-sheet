@@ -55,6 +55,10 @@ public static class CharacterRulesInputKey
     }
 }
 
+/// <summary>
+/// Captures player-entered facts and values needed to evaluate Rules Core mechanics without copying
+/// rule definitions into Character Sheet persistence.
+/// </summary>
 public sealed class CharacterRulesInputState
 {
     private CharacterRulesInputState()

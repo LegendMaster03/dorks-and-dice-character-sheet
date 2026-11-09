@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.Infrastructure.Persistence;
 
+/// <summary>
+/// Persists the local sheet root under the Site-issued Character ID. Callers must authorize the
+/// character through Site before accessing this store.
+/// </summary>
 public sealed class PostgresCharacterSheetStore(CharacterSheetDbContext dbContext)
     : ICharacterSheetStore
 {

@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.Infrastructure.Persistence;
 
+/// <summary>
+/// Maps the Character-owned aggregate to PostgreSQL while keeping Site identities and Rules Core rule
+/// definitions outside the local schema.
+/// </summary>
 public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbContext> options)
     : DbContext(options)
 {

@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.Infrastructure.Persistence;
 
+/// <summary>
+/// Persists character-owned routine state and inventory changes, preserving stable item occurrence
+/// identifiers across updates.
+/// </summary>
 public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContext)
     : ICharacterStateStore
 {

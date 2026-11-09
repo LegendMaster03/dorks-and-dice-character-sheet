@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.Infrastructure.Persistence;
 
+/// <summary>
+/// Persists character art metadata and portrait selection; uploaded file contents are handled by the
+/// art storage service.
+/// </summary>
 public sealed class PostgresCharacterArtStore(CharacterSheetDbContext dbContext) : ICharacterArtStore
 {
     public async Task<IReadOnlyList<CharacterArtAsset>> ListAsync(Guid characterId, CancellationToken cancellationToken = default) =>

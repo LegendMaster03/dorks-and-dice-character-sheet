@@ -1,5 +1,7 @@
 namespace CharacterSheet.Domain.Characters;
 
+// Represents mutable, character-owned runtime state such as hit points, conditions, resources, inventory, and notes. It is not a snapshot of calculated Rules Core mechanics.
+
 public sealed record CharacterInventoryConsumption(
     Guid OccurrenceId,
     int Quantity);

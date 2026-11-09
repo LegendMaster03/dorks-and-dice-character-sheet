@@ -6,6 +6,10 @@ using CharacterSheet.Application.Hosting;
 
 namespace CharacterSheet.Infrastructure.Hosting;
 
+/// <summary>
+/// Introspects Site-issued tool-host authorization and delegation. The resulting scoped identity must
+/// not be replaced by a local user claim.
+/// </summary>
 public sealed class DorksAndDiceToolHostAuthenticationClient(HttpClient httpClient)
     : IToolHostAuthenticationClient
 {

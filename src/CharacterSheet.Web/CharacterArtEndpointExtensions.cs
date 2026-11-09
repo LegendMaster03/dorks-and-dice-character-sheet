@@ -2,6 +2,10 @@ using CharacterSheet.Application.Characters;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Exposes authenticated character art operations. Endpoints delegate ownership checks, read-only
+/// behavior, and storage decisions to the application layer.
+/// </summary>
 public static class CharacterArtEndpointExtensions
 {
     public static void MapCharacterArtEndpoints(this WebApplication app)

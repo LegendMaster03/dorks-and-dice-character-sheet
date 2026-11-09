@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.Infrastructure.Persistence;
 
+/// <summary>
+/// Stores stable builder and advancement selections transactionally, not the calculated mechanics
+/// supplied by Rules Core.
+/// </summary>
 public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContext)
     : ICharacterBuildStore
 {

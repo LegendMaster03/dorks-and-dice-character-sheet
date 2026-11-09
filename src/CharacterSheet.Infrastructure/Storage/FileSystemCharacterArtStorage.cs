@@ -2,6 +2,10 @@ using CharacterSheet.Application.Characters;
 
 namespace CharacterSheet.Infrastructure.Storage;
 
+/// <summary>
+/// Stores validated image bytes outside PostgreSQL; the database retains metadata and references to
+/// these files.
+/// </summary>
 public sealed class FileSystemCharacterArtStorage(string rootPath) : ICharacterArtStorage
 {
     private readonly string _rootPath = Path.GetFullPath(rootPath);

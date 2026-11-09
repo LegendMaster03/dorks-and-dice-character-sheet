@@ -6,6 +6,10 @@ using CharacterSheet.Application.Lifecycle;
 
 namespace CharacterSheet.Infrastructure.Hosting;
 
+/// <summary>
+/// Loads Site-owned Character lifecycle data for incoming tool lifecycle events; local persistence
+/// never becomes the lifecycle authority.
+/// </summary>
 public sealed class DorksAndDiceToolLifecycleIntrospectionClient(HttpClient httpClient)
     : IToolLifecycleIntrospectionClient
 {
