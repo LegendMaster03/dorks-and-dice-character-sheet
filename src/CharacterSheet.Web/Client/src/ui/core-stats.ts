@@ -1,3 +1,7 @@
+/**
+ * Renders the core-character statistics from effective mechanics values and clearly distinguishes
+ * missing results.
+ */
 import type { CharacterBuilderUiState } from "../app-state.js";
 import type { CharacterAbilityKey } from "../builder-api.js";
 import {

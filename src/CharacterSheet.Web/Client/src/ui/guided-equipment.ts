@@ -1,3 +1,7 @@
+/**
+ * Renders starting-equipment resolution and one-time acquisition within guided setup, not a live
+ * mirror of initial source grants.
+ */
 import type { CharacterRulesInputStateResponse } from "../character-state-api.js";
 import { getRulesCoreContext } from "../rules-core-context.js";
 import {

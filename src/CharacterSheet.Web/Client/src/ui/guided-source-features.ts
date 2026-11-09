@@ -1,3 +1,7 @@
+/**
+ * Presents the source features associated with guided character choices without promoting their
+ * display text into local mechanics.
+ */
 import type {
     CharacterFeatureView,
     CharacterMechanicsView

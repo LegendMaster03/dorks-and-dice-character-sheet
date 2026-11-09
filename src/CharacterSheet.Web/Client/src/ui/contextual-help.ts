@@ -1,3 +1,7 @@
+/**
+ * Renders context-sensitive rule references and source attribution supplied by the Rules Core
+ * projection.
+ */
 import {
     getRulesCoreContext,
     type RulesCoreCharacterAttackResolutionView,

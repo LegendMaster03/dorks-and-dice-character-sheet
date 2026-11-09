@@ -1,3 +1,7 @@
+/**
+ * Tracks routine-state loading, mutation, and error transitions while leaving authoritative
+ * persistence to the server.
+ */
 import type {
     CharacterRoutineUiState,
     CharacterSheetAction

@@ -1,3 +1,7 @@
+/**
+ * Adapts competency collections, families, and relationships from authoritative projections into
+ * the sheet's display structure.
+ */
 import {
     formatMechanicalValue,
     type CompetencyPresentationItem,

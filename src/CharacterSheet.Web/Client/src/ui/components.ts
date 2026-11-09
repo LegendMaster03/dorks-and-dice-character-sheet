@@ -1,3 +1,7 @@
+/**
+ * Provides reusable DOM primitives for sheet controls and cards without embedding state
+ * persistence or game rules.
+ */
 export type StateTone = "neutral" | "loading" | "warning" | "error" | "readonly";
 
 export function createElement<K extends keyof HTMLElementTagNameMap>(

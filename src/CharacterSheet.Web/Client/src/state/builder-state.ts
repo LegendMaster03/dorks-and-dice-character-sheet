@@ -1,3 +1,7 @@
+/**
+ * Reduces builder choice, search, and mutation state independently of server-owned character
+ * persistence.
+ */
 import { loadingRuleReference } from "../builder-rules.js";
 import type {
     CharacterBuilderUiState,

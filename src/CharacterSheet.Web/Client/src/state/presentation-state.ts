@@ -1,3 +1,7 @@
+/**
+ * Reduces mechanics and equipment-preview responses using request IDs, preventing stale
+ * asynchronous completions from replacing newer state.
+ */
 import type {
     CharacterPresentationUiState,
     CharacterSheetAction
@@ -21,6 +25,8 @@ export function reducePresentationState(
             };
             break;
         case "presentation-loaded":
+            // Match the active load before accepting a response; earlier requests
+            // may finish after a newer presentation refresh has started.
             if (presentation.requestId === action.requestId) {
                 presentation = {
                     status: "ready",

@@ -1,3 +1,7 @@
+/**
+ * Separates native starting-equipment preview from the explicit one-time materialization request.
+ * Successful grants enter normal inventory.
+ */
 import {
     buildCharacterSheetApiUrl,
     CharacterSheetApiError,

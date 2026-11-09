@@ -1,3 +1,7 @@
+/**
+ * Renders the character advancement section from persisted progression and Rules Core-projected
+ * presentation data.
+ */
 import type { CharacterBuilderUiState } from "../app-state.js";
 import {
     advancementKindLabel,

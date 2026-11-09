@@ -1,3 +1,7 @@
+/**
+ * Presents advancement occurrence history and choices using stable character-owned identifiers and
+ * Rules Core display text.
+ */
 import type { DisplayFieldView, MechanicalScalar, SourceAttributionView } from "./character-mechanics.js";
 
 export interface AdvancementProgressionView {

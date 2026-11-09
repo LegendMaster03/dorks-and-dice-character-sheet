@@ -1,3 +1,7 @@
+/**
+ * Adapts the backend mechanics presentation contract for UI components while preserving unknown
+ * and unresolved results.
+ */
 export type MechanicalScalar = string | number;
 
 export type ExtensiblePresentationKey<Known extends string> = Known | (string & {});

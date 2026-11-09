@@ -1,3 +1,7 @@
+/**
+ * Renders builder controls for saved character choices while leaving rule eligibility and
+ * compatibility checks to the server.
+ */
 import { getActiveAdvancementWorkflow } from "../features/advancement/advancement-workflow.js";
 import type { CharacterBuilderUiState } from "../app-state.js";
 import type { CharacterBuilderChoice } from "../builder-api.js";
