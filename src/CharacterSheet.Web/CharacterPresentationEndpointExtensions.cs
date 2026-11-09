@@ -2,6 +2,10 @@ using CharacterSheet.Application.Characters;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Exposes the authorized read-only presentation boundary. Build and mechanics results can be
+/// independently unavailable without changing persisted Character state.
+/// </summary>
 public static class CharacterPresentationEndpointExtensions
 {
     public static void MapCharacterPresentationEndpoints(this WebApplication app)

@@ -2,6 +2,10 @@ using CharacterSheet.Application.Characters;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Exposes one-time native starting-equipment preview and acquisition. Granted equipment becomes
+/// ordinary inventory instead of a synchronized mirror of a source choice.
+/// </summary>
 public static class CharacterStartingEquipmentEndpointExtensions
 {
     public static void MapCharacterStartingEquipmentEndpoints(this WebApplication app)

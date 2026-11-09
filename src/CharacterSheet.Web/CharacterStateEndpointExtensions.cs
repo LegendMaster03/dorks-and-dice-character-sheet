@@ -3,6 +3,10 @@ using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Routes mutable character-state requests through application authorization and validation before
+/// they reach persistence.
+/// </summary>
 public static class CharacterStateEndpointExtensions
 {
     public static void MapCharacterStateEndpoints(this WebApplication app)

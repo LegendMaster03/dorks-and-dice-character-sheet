@@ -2,6 +2,10 @@ using CharacterSheet.Application.Characters;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Maps authorized character crafting requests to the application service; mechanics are resolved
+/// through Rules Core rather than endpoint-local formulas.
+/// </summary>
 public static class CharacterCraftingEndpointExtensions
 {
     public static void MapCharacterCraftingEndpoints(this WebApplication app)

@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Exposes native resource actions through an authorized character-state service. Rules Core resolves
+/// the resource behavior; the endpoint does not infer it.
+/// </summary>
 public static class NativeCharacterResourceEndpoints
 {
     public static void MapNativeCharacterResourceEndpoints(this WebApplication app)

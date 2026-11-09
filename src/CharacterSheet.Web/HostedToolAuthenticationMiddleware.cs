@@ -4,6 +4,10 @@ using CharacterSheet.Application.Hosting;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Establishes the Site-provided tool-host identity and scoped authorization context before Character
+/// endpoints execute.
+/// </summary>
 public sealed class HostedToolAuthenticationMiddleware(RequestDelegate next)
 {
     private const string ContextItemKey = "CharacterSheet.ToolHostAuthenticationContext";

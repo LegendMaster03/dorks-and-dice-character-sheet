@@ -9,6 +9,10 @@ using CharacterSheet.Application.RulesCore;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Calls Rules Core through Site-issued tool-to-tool delegation, never by forwarding a Character Sheet
+/// ticket or using an unscoped service identity.
+/// </summary>
 public sealed class DelegatedRulesCoreGateway(
     HttpClient httpClient,
     IHttpContextAccessor httpContextAccessor,

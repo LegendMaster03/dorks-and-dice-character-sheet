@@ -5,6 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Provides a same-origin, authenticated bridge to native Rules Core endpoints so the browser does not
+/// need to possess upstream delegation credentials.
+/// </summary>
 public static class NativeRulesCoreEndpoints
 {
     public static void MapNativeRulesCoreEndpoints(this WebApplication app)

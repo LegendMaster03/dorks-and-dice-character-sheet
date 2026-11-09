@@ -3,6 +3,10 @@ using System.Globalization;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Records request, authentication, and downstream Rules Core durations in Server-Timing headers for
+/// diagnosis without changing response semantics.
+/// </summary>
 public static class CharacterSheetServerTiming
 {
     public const string HeaderName = "Server-Timing";

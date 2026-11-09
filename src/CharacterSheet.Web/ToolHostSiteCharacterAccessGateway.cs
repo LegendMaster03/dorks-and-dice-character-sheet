@@ -3,6 +3,10 @@ using CharacterSheet.Application.Site;
 
 namespace CharacterSheet.Web;
 
+/// <summary>
+/// Converts Site-owned Character projections into an owner-only access decision. A local database
+/// record never substitutes for Site authorization.
+/// </summary>
 public sealed class ToolHostSiteCharacterAccessGateway(IHttpContextAccessor httpContextAccessor)
     : ISiteCharacterAccessGateway
 {

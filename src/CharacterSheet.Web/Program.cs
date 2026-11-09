@@ -541,4 +541,8 @@ static IResult ToAdvancementApplyApiResult(CharacterAdvancementApplyResult resul
 public sealed record RuleConceptSelectionRequest(string ConceptKey);
 public sealed record BaseAbilityScoreInputRequest(int Score);
 public sealed record AdvancementLevelRequest(int Level);
+/// <summary>
+/// Configures the standalone and embedded Character Sheet host, its service boundaries, authenticated
+/// API routes, and static client assets.
+/// </summary>
 public partial class Program;
