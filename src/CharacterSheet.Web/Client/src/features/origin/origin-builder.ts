@@ -33,6 +33,9 @@ export interface OriginBuilderHandlers {
         id: string | null): void;
     activate(): void;
     reload(): void;
+    loadParentOptions(): void;
+    selectParentSource(contributorId: string, parentCharacterId: string): void;
+    reviewParentSources(): void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -243,6 +246,105 @@ export function renderOriginBuilder(
             parents.append(parentCard);
         }
         section.append(parents);
+
+        // A native Species exemplar is not a real parent Character. This
+        // read-only inspection lets an owner compare the draft's source IDs
+        // against their other Characters without saving a relationship.
+        const proposedSources = mixedNativeParentSources(proposal);
+        const chosenSources = proposedSources.filter(source => source.sourceId !== null);
+        const inspection = origin.parentSources;
+        const inspectionPanel = createElement("section", "dd-origin-parent-inspection");
+        inspectionPanel.setAttribute("data-origin-parent-inspection", "inspection-only");
+        inspectionPanel.append(
+            createElement("h3", "dd-build-choice__label",
+                "Compare with your existing Characters"),
+            createElement("p", "dd-guided-builder__section-copy",
+                "Compare the native Species or Ancestry sources in this saved draft with other Characters you own. This is a temporary inspection, not verified parentage, inheritance authorization, or a change to the Origin.")
+        );
+
+        if (chosenSources.length !== proposedSources.length ||
+            proposedSources.length !== 2 || origin.draft === null) {
+            inspectionPanel.append(createInlineState(
+                "Select both native biological source references and save the draft before inspecting individual Characters.",
+                "neutral"));
+        } else {
+            inspectionPanel.append(createButton(
+                inspection.optionsStatus === "ready" ? "Refresh owned Characters" :
+                    "Load owned Characters",
+                "dd-button dd-button--secondary",
+                handlers.loadParentOptions,
+                origin.busy || inspection.busy || inspection.optionsStatus === "loading"));
+            if (inspection.optionsStatus === "loading") {
+                inspectionPanel.append(createInlineState(
+                    "Loading your Site-owned Character list…", "loading"));
+            }
+            if (inspection.optionsStatus === "error") {
+                inspectionPanel.append(createInlineState(
+                    inspection.message ?? "Owner Character list is unavailable.",
+                    "warning"));
+            }
+            if (inspection.optionsStatus === "ready") {
+                if (inspection.options.length === 0) {
+                    inspectionPanel.append(createInlineState(
+                        "No other owned Characters are available for comparison.",
+                        "neutral"));
+                } else {
+                    const sourceSelections = createElement("div", "dd-build__grid");
+                    for (const source of chosenSources) {
+                        const choice = createElement("label", "dd-rule-chooser__label");
+                        choice.append(createElement("span", "",
+                            `${source.slot === "parent-one" ? "Source 1" : "Source 2"} — ${source.sourceId}`));
+                        const dropdown = createElement("select", "dd-rule-chooser__input");
+                        dropdown.setAttribute("aria-label",
+                            `Choose an owned Character for ${source.slot}`);
+                        const empty = createElement("option", "", "Choose an owned Character");
+                        empty.value = "";
+                        dropdown.append(empty);
+                        for (const character of inspection.options) {
+                            const option = createElement("option", "",
+                                `${character.name}${character.archived ? " (Archived)" : ""} · ${character.id.slice(0, 8)}`);
+                            option.value = character.id;
+                            dropdown.append(option);
+                        }
+                        dropdown.value = inspection.selected[source.slot] ?? "";
+                        dropdown.disabled = origin.busy || inspection.busy;
+                        dropdown.addEventListener("change", () =>
+                            handlers.selectParentSource(source.slot, dropdown.value));
+                        choice.append(dropdown);
+                        sourceSelections.append(choice);
+                    }
+                    inspectionPanel.append(sourceSelections);
+                    const readyForReview = chosenSources.every(source =>
+                        inspection.selected[source.slot] !== undefined);
+                    inspectionPanel.append(createButton(
+                        inspection.busy ? "Reviewing native sources…" :
+                            "Check parent-source alignment",
+                        "dd-button dd-button--secondary",
+                        handlers.reviewParentSources,
+                        origin.busy || inspection.busy || !readyForReview));
+                }
+            }
+            if (inspection.busy) {
+                inspectionPanel.append(createInlineState(
+                    "Revalidating each proposed parent Origin against current native rules…",
+                    "loading"));
+            }
+            if (inspection.result !== null) {
+                const matches = createElement("ul", "dd-guided-builder__review-list");
+                for (const match of inspection.result.matches) {
+                    const owner = inspection.options.find(candidate =>
+                        candidate.id.toLowerCase() === match.parentCharacterId.toLowerCase());
+                    matches.append(createElement("li", "dd-guided-builder__review-item",
+                        `${match.contributorId}: ${owner?.name ?? "Owned Character"} — ${match.nativeSourceId} (Origin revision ${match.parentOriginRevision})`));
+                }
+                inspectionPanel.append(matches, createInlineState(
+                    "The selected individual Origins match these native source identities. The Character relationships, heritable states, and any traits to manifest are not established or authorized.",
+                    "warning"));
+            } else if (inspection.optionsStatus === "ready" && inspection.message) {
+                inspectionPanel.append(createInlineState(inspection.message, "warning"));
+            }
+        }
+        section.append(inspectionPanel);
     }
 
     if (origin.draft !== null) {
