@@ -234,6 +234,53 @@ to a mixed proposal. A parent may have a `Current` temporary form different
 from `Underlying`; the read keeps both distinct rather than collapsing
 them. No mixed Origin activation endpoint uses these records.
 
+### Current native catalog review of an existing parent's Origin
+
+The second inspection endpoint,
+`GET /api/characters/{characterId}/origin/parent-native-review/{parentCharacterId}`,
+uses the same independent Site **owner** checks for both character IDs.
+Unlike `parent-snapshot`, it also checks whether the parent's last
+**initial direct first-party Origin** can still be produced by today's native
+Rules Core catalog. It does so only on the server:
+
+1. Read the committed parent snapshot and its revisioned completed-event
+   evidence after both Site authorizations.
+2. Require exactly one original first-party construction receipt and the
+   unchanged source draft revision used for the commit. This deliberately
+   excludes Rites, replacement Origins, mixed constructions and temporary
+   form history.
+3. Submit the immutable historical *raw proposal* to the authenticated
+   server-side native `/origins/preview`, obtaining a fresh result rather
+   than treating a historical fingerprint as an access or policy gate.
+4. Require a fully supported, zero-issue native result and the same
+   Species/Ancestry, complete Origin history and identical semantic profile
+   JSON. An otherwise valid result with updated source grants returns a
+   `parent_origin_native_profile_changed` conflict rather than silently
+   applying outdated mechanics.
+5. Recheck the committed parent Origin and draft revisions after the Core
+   round-trip, rejecting any concurrent permanent change.
+
+A valid check returns the latest native catalog fingerprint, original
+construction proposal ID and committed Origin revision, with
+`inspectedOriginMatchesLatestNativeCatalog: true`,
+`inspectionOnly: true`, `inheritanceAuthorized: false` and
+`effectiveMechanicsReady: false`. No profile, occurrence grants, independent
+entitlements, signed table ruling or reusable proof token is included.
+A `Ready` check means only that the stored **initial direct Origin profile**
+has the same output under the current selected native catalog *at the time
+of this request*. It does not authenticate biological relationship, provide
+the latest Class/Background/Upbringing/inventory entitlements, establish
+active transformed Species, or authorize inheritance of even one trait.
+
+The service is intentionally incomplete for a transformed parent or a parent
+with an event history after initial creation. Those cases require distinct
+native current-form or permanent-reconstruction revalidation. The typed
+frontend reader and its Node tests reject any response trying to promote
+this inspection into inheritable or effective grants. PostgreSQL tests cover
+current-source matches despite irrelevant fingerprint changes, changed
+inherent grants, newly unresolved native choices, Rite history, unauthorized
+parents and a reconstruction racing a native read.
+
 ### Committed source draft immutability
 
 A successful first-party initial activation fixes the exact source draft

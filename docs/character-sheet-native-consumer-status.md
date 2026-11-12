@@ -80,10 +80,15 @@ rather than a current effective transformed form. The guided Origin editor also 
 source references as a deliberately unresolved mixed evidence draft,
 including Human–Elf; it does not authenticate parent individuals, inherit
 traits, permit DM rulings, or expose a mixed activation route.
-A separate read-only parent-snapshot inspection route requires Site owner
-access to **both** the current and proposed parent characters. It presents
-the stored Underlying/Current identities and revision **without grants** and
-explicitly disclaims inheritance authorization or current mechanics.
+The read-only parent-snapshot and parent-native-review routes require
+Site owner access to **both** the current and proposed parent characters.
+The first presents stored Underlying/Current identity and revision **without
+grants**. The second re-evaluates a parent's saved **initial direct**
+construction under the current native catalog and compares the result with
+the saved complete profile, rejecting changed traits and unsupported Rite
+or temporary-form history. Both explicitly disclaim inheritance
+authorization or general current mechanics; the latter is not a trusted
+biological relationship or independent-entitlement loader.
 Activated initial Origins freeze their source drafts under the same database
 lock used by Origin commit. Rites,
 DM overrides, subsequent modifications, full mixed/nested builder UI and
