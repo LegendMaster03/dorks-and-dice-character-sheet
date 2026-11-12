@@ -151,6 +151,57 @@ export interface NativeOriginParentNativeReviewResponse {
     effectiveMechanicsReady: false;
 }
 
+/**
+ * Site returns the current user's own Character summaries. No other owner's
+ * private sheet or Origin profile is loaded. Character Sheet only uses these
+ * identities as temporary candidate bindings for native-source comparison.
+ */
+export interface OwnerOriginParentOption {
+    id: string;
+    name: string;
+    archived: boolean;
+}
+
+export async function loadOwnerOriginParentOptions(
+    environment: HostEnvironment,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<readonly OwnerOriginParentOption[]> {
+    if (!environment.embedded) {
+        throw new Error("Owned Character selection requires the authenticated Dorks & Dice Site.");
+    }
+    const response = await fetcher("/characters/api?includeArchived=true", {
+        method: "GET", credentials: "same-origin", cache: "no-store",
+        headers: { Accept: "application/json" }
+    });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "The Site owner Character list is unavailable."),
+            response.status);
+    }
+    let data: unknown;
+    try {
+        data = await response.json() as unknown;
+    } catch {
+        throw new Error("The Site Character list returned invalid JSON.");
+    }
+    const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!Array.isArray(data) || !data.every(item =>
+        isObject(item) && typeof item.id === "string" && guid.test(item.id) &&
+        typeof item.name === "string" &&
+        item.name.trim().length > 0 && item.name.length <= 160 &&
+        (item.status === "Active" || item.status === "Archived")) ||
+        new Set(data.map(item => (item as Record<string, unknown>).id
+            ?.toString().toLowerCase())).size !== data.length) {
+        throw new Error("The Site Character list returned an invalid owner identity contract.");
+    }
+    // Deliberately narrow the Site response before any Origin UI sees it.
+    return data.map(item => ({
+        id: item.id as string,
+        name: item.name as string,
+        archived: item.status === "Archived"
+    }));
+}
+
 /** Proposed links only. These IDs never establish biological parentage. */
 export interface NativeOriginParentSourceBinding {
     contributorId: string;
