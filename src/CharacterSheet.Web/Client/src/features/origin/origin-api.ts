@@ -312,7 +312,7 @@ export async function inspectOwnerVisibleParentOrigin(
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parentCharacterId)) {
         throw new Error("Parent snapshot inspection requires a Site Character ID.");
     }
-    const suffix = `parent-snapshot/${encodeURIComponent(parentCharacterId)}`;
+    const suffix = `parent-snapshot/${encodeURIComponent(parentCharacterId)}` as const;
     const result = await requestOrigin(environment, characterId,
         suffix, "GET", undefined, fetcher);
     if (!isObject(result) || result.status !== "ready" ||
