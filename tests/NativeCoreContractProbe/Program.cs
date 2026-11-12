@@ -193,6 +193,39 @@ Ensure(orcOrigin.Status == NativeOriginConstructionStatus.Authorized &&
     "Real Orc native direct-Origin construction was not authorized without DM claims: " +
     string.Join("; ", orcOrigin.Issues.Select(issue => issue.Code + "=" + issue.Path)));
 
+// The Phase 5 Core branch must derive intrinsic slots from the *granted*
+// Orc source occurrences. Sheet may pass these scalars to the ordinary
+// native character kernel only after the server has matched a committed
+// profile against a fresh authoritative Origin evaluation.
+var orcIntrinsics = NativeOriginIntrinsicProjector.Project(orcOrigin);
+Ensure(orcIntrinsics.Status == "resolved" && orcIntrinsics.PreviewOnly &&
+    orcIntrinsics.Size?.Value == "medium" &&
+    orcIntrinsics.CreatureType?.Value == "humanoid" &&
+    orcIntrinsics.WalkingSpeedFeet?.Value == 30 &&
+    orcIntrinsics.WalkingSpeedFeet.SourceId == "species.orc" &&
+    orcIntrinsics.WalkingSpeedFeet.OccurrencePath == "/walkingSpeedFeet",
+    "Orc intrinsic slots were not derived from authorized source occurrences.");
+var nativeWithOrc = new NativeCharacterProjector(catalog).Project(
+    request with { BaseWalkSpeed = orcIntrinsics.WalkingSpeedFeet.Value });
+Ensure(nativeWithOrc.Values.TryGetValue("movement.walk", out var realWalk) &&
+    realWalk.Status == "resolved" && realWalk.Value == 30,
+    "The native character kernel did not resolve verified Orc base movement.");
+var sheetWithOrc = await NativeCharacterPresentationBridge.ProjectAsync(
+    gateway, build, state, CancellationToken.None,
+    hasCommittedOrigin: true,
+    originIntrinsics: new VerifiedOriginIntrinsics(
+        orcIntrinsics.CreatureType.Value,
+        orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value));
+Ensure(sheetWithOrc.Status == "partial" &&
+    sheetWithOrc.Mechanics?.Movement?.Any(value =>
+        value.Key == "movement.walk" &&
+        value.EffectiveValue is int feet && feet == 30) == true &&
+    sheetWithOrc.Mechanics.CharacterMetadata?.Any(value =>
+        value.Key == "origin.base-size" &&
+        value.EffectiveValue is string size && size == "medium") == true &&
+    sheetWithOrc.Mechanics.AbilityValues is null,
+    "Character Sheet did not preserve the verified Orc baseline as partial mechanics.");
+
 // Human's mandatory native Origin choices are not invented or bypassed. A
 // profile object in an incomplete result is not an authorized active Origin.
 var humanOrigin = new NativeOriginConstructionEngine(catalog).Evaluate(
@@ -203,8 +236,9 @@ var humanOrigin = new NativeOriginConstructionEngine(catalog).Evaluate(
     }));
 Ensure(humanOrigin.Status != NativeOriginConstructionStatus.Authorized &&
     humanOrigin.Issues.Any(issue =>
-        issue.Code == "required-origin-selection-missing"),
-    "Human native Origin choices were silently skipped or treated as complete.");
+        issue.Code == "required-origin-selection-missing") &&
+    NativeOriginIntrinsicProjector.Project(humanOrigin).WalkingSpeedFeet is null,
+    "Incomplete Human Origin was silently treated as a complete active intrinsic baseline.");
 // Validate the new first-party choice adapter across the actual Rules Core
 // branch, without relying on a mock "Authorized" response. It is safe to
 // grant a native Skill choice only when current source identity and membership
@@ -267,7 +301,8 @@ var mixedHumanElf = new NativeOriginProposal(
     ], [], []);
 var mixedReviewed = new NativeOriginFirstPartyChoiceEvaluator(catalog)
     .Evaluate(mixedHumanElf);
-Ensure(mixedReviewed.Status != NativeOriginConstructionStatus.Authorized &&
+Ensure(NativeOriginIntrinsicProjector.Project(mixedReviewed).WalkingSpeedFeet is null &&
+    mixedReviewed.Status != NativeOriginConstructionStatus.Authorized &&
     mixedReviewed.Profile is not null &&
     mixedReviewed.Profile.Underlying.SpeciesId is null &&
     mixedReviewed.Profile.Underlying.AncestryId is null &&
@@ -281,7 +316,7 @@ Ensure(mixedReviewed.Status != NativeOriginConstructionStatus.Authorized &&
     "Human–Elf native source evidence must remain inspectable but not automatically authorized.");
 
 Console.WriteLine("Phase 5 Origin native-contract checks passed: Orc authorized; " +
-    "Human native Skill verified; Human-Elf sources inspected but unresolved; " +
+    "Orc size/speed projected; Human native Skill verified; Human-Elf unresolved; " +
     "Origin feat remains incomplete.");
 
 #endif
