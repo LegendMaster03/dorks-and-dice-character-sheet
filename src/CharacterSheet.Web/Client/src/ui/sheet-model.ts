@@ -237,8 +237,12 @@ export function getGuidedBuilderSectionStates(
                 ? "Origin native state and selections have not been loaded."
                 : origin.savedState !== null
                     ? "Native Origin is committed; current cross-pillar mechanics still need integration."
-                    : isAuthorizedInitialNativeOrigin(origin.preview)
-                        ? "Native first-party Origin is eligible, but the draft has not been activated."
+                    : origin.draft !== null &&
+                        (origin.draft.proposal.intent === 1 ||
+                         origin.draft.proposal.intent === "Mixed")
+                        ? "Mixed biological sources are draft evidence only; inheritance and DM authorization remain unresolved."
+                        : isAuthorizedInitialNativeOrigin(origin.preview)
+                            ? "Native first-party Origin is eligible, but the draft has not been activated."
                         : origin.draft !== null
                             ? "Origin draft is saved but not mechanically authorized or complete."
                             : "Choose a Species in the new Origin editor.";

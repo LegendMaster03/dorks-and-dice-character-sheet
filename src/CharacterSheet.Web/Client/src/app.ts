@@ -362,12 +362,15 @@ function renderWorkspace(
         state.presentation.equipmentPreviewStatus,
         originWorkflow.current(),
         {
-            openChooser: (category, candidateId, requirementId) =>
-                void originWorkflow.openChooser(category, candidateId, requirementId),
+            openChooser: (category, candidateId, requirementId, parentSlot) =>
+                void originWorkflow.openChooser(category, candidateId, requirementId, parentSlot),
             searchChooser: query => void originWorkflow.searchChooser(query),
             closeChooser: () => originWorkflow.closeChooser(),
             chooseOption: id => void originWorkflow.chooseOption(character.characterId, id),
             clearAncestry: () => void originWorkflow.clearAncestry(character.characterId),
+            setMode: mode => void originWorkflow.setMode(character.characterId, mode),
+            clearMixedParent: slot =>
+                void originWorkflow.clearMixedParent(character.characterId, slot),
             setFiniteChoice: (candidateId, requirementId, id) =>
                 void originWorkflow.setFiniteChoice(character.characterId,
                     candidateId, requirementId, id),

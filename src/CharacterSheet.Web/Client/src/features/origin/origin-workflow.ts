@@ -24,7 +24,6 @@ import {
     changeNativeOriginMode,
     createInitialOriginProposal,
     canActivateDirectNativeOrigin,
-    isDirectOriginProposal,
     isEditableDirectNativeOrigin,
     isEditableMixedNativeOrigin,
     type MixedNativeParentSlot
@@ -231,7 +230,7 @@ export function createOriginWorkflow(
 
     async function clearAncestry(characterId: string): Promise<void> {
         const proposal = state.draft?.proposal;
-        if (!proposal || !isDirectOriginProposal(proposal)) return;
+        if (!proposal || !isEditableDirectNativeOrigin(proposal)) return;
         await saveProposal(characterId, changeDirectOriginIdentity(
             proposal, "ancestry", null));
     }
@@ -257,7 +256,7 @@ export function createOriginWorkflow(
     async function setFiniteChoice(characterId: string, candidateId: string,
         requirementId: string, id: string | null): Promise<void> {
         const proposal = state.draft?.proposal;
-        if (!proposal || !isDirectOriginProposal(proposal)) return;
+        if (!proposal || !isEditableDirectNativeOrigin(proposal)) return;
         await saveProposal(characterId, changeDirectOriginChoice(
             proposal, candidateId, requirementId, id === null ? [] : [id]));
     }
