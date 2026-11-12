@@ -139,6 +139,156 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     [Fact]
+    public async Task ThreeDistinctOwnerVisibleParentsAlignWithRealNativeSourceWithoutInheritance()
+    {
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var native = new HttpNativeGateway(core.Client);
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        var childId = Guid.NewGuid();
+        // Three inputs intentionally demonstrate that source inspection does
+        // not impose the two-parent limit of the DM Human–Elf example.
+        var parents = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToArray();
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        var roots = new PostgresCharacterSheetStore(db);
+        await roots.GetOrCreateAsync(childId);
+        var drafts = new PostgresCharacterOriginDraftStore(db);
+        var origins = new PostgresCharacterAuthorizedOriginStore(db);
+
+        for (var i = 0; i < parents.Length; i++)
+        {
+            var parentId = parents[i];
+            await roots.GetOrCreateAsync(parentId);
+            var proposalId = "verified-orc-parent-" + i;
+            var directProposal = JsonSerializer.Serialize(new
+            {
+                id = proposalId,
+                intent = 0,
+                method = new { ruleId = "rule.creature-origination", methodId = "biological" },
+                contributors = Array.Empty<object>(),
+                candidates = Array.Empty<object>(),
+                manifestations = Array.Empty<object>(),
+                selectedSpeciesId = "species.orc",
+                selectedAncestryId = (string?)null
+            }, Wire);
+            var parentDraft = await drafts.SaveAsync(parentId,
+                "first-party-001", fingerprint, directProposal, 0, DateTimeOffset.UtcNow);
+            Assert.NotNull(parentDraft);
+            using var parsed = JsonDocument.Parse(directProposal);
+            var actual = await native.PreviewNativeOriginAsync(
+                JsonSerializer.SerializeToElement(new
+                {
+                    rulesetId = "first-party-001", fingerprint,
+                    proposal = parsed.RootElement
+                }, Wire), CancellationToken.None);
+            Assert.Equal(4, actual["result"]?["status"]?.GetValue<int>());
+            var profileJson = actual["result"]?["profile"]?.ToJsonString() ??
+                throw new InvalidOperationException("Native Core returned no parent profile.");
+            var committed = await origins.CommitVerifiedAsync(new(
+                parentId, "first-party-001", fingerprint, profileJson,
+                0, parentDraft.Revision, "construction:" + proposalId,
+                "rule.creature-origination", "biological",
+                "first-party", "native-catalog:" + fingerprint,
+                DateTimeOffset.UtcNow));
+            Assert.Equal(AuthorizedOriginStoreStatus.Applied, committed.Status);
+        }
+
+        string MixedDraft(string thirdSource) => JsonSerializer.Serialize(new
+        {
+            id = "three-parent-source-inspection",
+            intent = 1,
+            method = new { ruleId = "rule.creature-origination", methodId = "biological" },
+            contributors = parents.Select((_, index) => new
+            {
+                id = "parent-" + index,
+                role = new { kind = 0 },
+                source = new
+                {
+                    kind = 0,
+                    id = index == 2 ? thirdSource : "species.orc"
+                }
+            }).ToArray(),
+            candidates = Array.Empty<object>(),
+            manifestations = Array.Empty<object>(),
+            selectedSpeciesId = (string?)null,
+            selectedAncestryId = (string?)null
+        }, Wire);
+
+        var saved = await drafts.SaveAsync(childId, "first-party-001",
+            fingerprint, MixedDraft("species.orc"), 0, DateTimeOffset.UtcNow);
+        Assert.NotNull(saved);
+        var bindings = parents.Select((id, index) =>
+            new CharacterOriginParentSourceBinding("parent-" + index, id)).ToArray();
+
+        CharacterOriginParentSourceAlignmentService Reader(params Guid[] allowedParents)
+        {
+            var site = new MultipleOwnerParentAccess(childId, allowedParents);
+            var builds = new PostgresCharacterBuildStore(db);
+            var nativeReader = new CharacterOriginParentNativeReviewService(
+                new CharacterOriginParentSnapshotService(site, builds, origins),
+                origins, drafts, native);
+            return new(site, builds, drafts, origins, nativeReader);
+        }
+
+        // Parent 2 is unowned in this Site context. It must not be read simply
+        // because its ID appears in an otherwise owner-visible child draft.
+        var denied = await Reader(parents[0], parents[1]).ReviewAsync(
+            childId, 1, bindings);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.NotFoundOrNotOwned,
+            denied.Status);
+        Assert.Null(denied.VerifiedSources);
+
+        var reader = Reader(parents);
+        var stale = await reader.ReviewAsync(childId, 2, bindings);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.DraftRevisionConflict,
+            stale.Status);
+        var duplicate = await reader.ReviewAsync(childId, 1,
+            [bindings[0], bindings[0], bindings[2]]);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.InvalidBindings,
+            duplicate.Status);
+        var invented = await reader.ReviewAsync(childId, 1,
+            [bindings[0], bindings[1], new("not-a-contributor", parents[2])]);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.InvalidBindings,
+            invented.Status);
+
+        var verified = await reader.ReviewAsync(childId, 1, bindings);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.Ready,
+            verified.Status);
+        Assert.Equal(1, verified.DraftRevision);
+        Assert.Equal(3, verified.Matches?.Count);
+        Assert.Equal(3, verified.VerifiedSources?.Count);
+        Assert.All(verified.Matches!, match =>
+        {
+            Assert.Equal("species.orc", match.NativeSourceId);
+            Assert.Equal(1, match.ParentOriginRevision);
+        });
+        Assert.All(verified.VerifiedSources!, source =>
+        {
+            var underlying = source.VerifiedInitialProfile.GetProperty("underlying");
+            Assert.Equal("species.orc", underlying.GetProperty("speciesId").GetString());
+            Assert.NotEmpty(underlying.GetProperty("inherentGrants").EnumerateArray());
+        });
+        var publicJson = JsonSerializer.Serialize(verified, Wire);
+        Assert.DoesNotContain("verifiedSources", publicJson);
+        Assert.DoesNotContain("verifiedInitialProfile", publicJson);
+        Assert.DoesNotContain("underlying", publicJson);
+        Assert.DoesNotContain("inherentGrants", publicJson);
+
+        var changed = await drafts.SaveAsync(childId, "first-party-001",
+            fingerprint, MixedDraft("species.elf"), 1, DateTimeOffset.UtcNow);
+        Assert.Equal(2, changed?.Revision);
+        var mismatch = await reader.ReviewAsync(childId, 2, bindings);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.ParentSourceMismatch,
+            mismatch.Status);
+        Assert.Null(mismatch.VerifiedSources);
+        Assert.Null(await origins.GetAsync(childId));
+        Assert.Empty(await origins.GetEventsAsync(childId));
+    }
+
+    [Fact]
     public async Task SiteScopedHumanElfApprovalEvaluatesPersistsAndReloadsRealNativeGrants()
     {
         await using var core = await RealCore.StartAsync();
@@ -376,6 +526,21 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 characterId == parentId && allowParent)
                 return Task.FromResult(SiteCharacterAccessResult.Authorized(
                     new SiteCharacterProjection(characterId, "Verified parent input",
+                        SiteCharacterLifecycleState.Active, null, [])));
+            return Task.FromResult(new SiteCharacterAccessResult(
+                SiteCharacterAccessStatus.NotFoundOrNotOwned));
+        }
+    }
+
+    private sealed class MultipleOwnerParentAccess(
+        Guid childId, IReadOnlyList<Guid> allowedParentIds) : ISiteCharacterAccessGateway
+    {
+        public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken cancellationToken = default)
+        {
+            if (characterId == childId || allowedParentIds.Contains(characterId))
+                return Task.FromResult(SiteCharacterAccessResult.Authorized(
+                    new SiteCharacterProjection(characterId, "Owner-visible character",
                         SiteCharacterLifecycleState.Active, null, [])));
             return Task.FromResult(new SiteCharacterAccessResult(
                 SiteCharacterAccessStatus.NotFoundOrNotOwned));
