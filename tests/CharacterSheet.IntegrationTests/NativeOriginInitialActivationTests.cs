@@ -226,6 +226,57 @@ public sealed class NativeOriginInitialActivationTests
     }
 
     [Fact]
+    public async Task HumanElfSourceOnlyDraftCannotBeActivatedEvenByAForgedAuthorizedResult()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, id);
+
+        // Source references are not verified parent-character profiles and
+        // confer no inherent trait or inheritance entitlement by themselves.
+        var mixed = """
+            {
+              "id": "creation-1",
+              "intent": 1,
+              "method": {
+                "ruleId": "rule.native-origination",
+                "methodId": "biological"
+              },
+              "contributors": [
+                {"id":"parent-one","role":{"kind":0},
+                 "source":{"kind":0,"id":"species.human"}},
+                {"id":"parent-two","role":{"kind":0},
+                 "source":{"kind":0,"id":"species.elf"}}
+              ],
+              "candidates": [],
+              "manifestations": [],
+              "selectedSpeciesId": null,
+              "selectedAncestryId": null
+            }
+            """;
+        var saved = await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+            id, "first-party-001", "current-native", mixed, 1,
+            DateTimeOffset.UtcNow);
+        Assert.Equal(2, saved!.Revision);
+
+        // Even if an upstream gateway were to advertise an authorized result,
+        // initial activation rejects the mixed Intent *before* consulting it.
+        var forgedGateway = new FakeNativeGateway();
+        var result = await Service(db, id, forgedGateway).ApplyAsync(id, 2);
+        Assert.Equal(CharacterOriginActivationStatus.NotAuthorizedByNativeRules,
+            result.Status);
+        Assert.Equal(0, forgedGateway.Calls);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
+        Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db).GetEventsAsync(id));
+        var persisted = await new PostgresCharacterOriginDraftStore(db).GetAsync(id);
+        Assert.NotNull(persisted);
+        using var document = JsonDocument.Parse(persisted.ProposalJson);
+        Assert.Equal(2, document.RootElement
+            .GetProperty("contributors").GetArrayLength());
+    }
+
+    [Fact]
     public async Task SelfAssertedDmAndIndependentGrantsNeverActivate()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
