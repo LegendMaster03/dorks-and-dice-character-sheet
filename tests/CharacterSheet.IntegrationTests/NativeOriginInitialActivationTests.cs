@@ -226,6 +226,48 @@ public sealed class NativeOriginInitialActivationTests
     }
 
     [Fact]
+    public async Task DirectOriginWithUntrustedContributorOrProcessEvidenceCannotUseInitialActivation()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, id);
+        var draftStore = new PostgresCharacterOriginDraftStore(db);
+        var native = new FakeNativeGateway();
+        var revision = 1L;
+        foreach (var alteration in new Action<JsonNode>[]
+        {
+            json => json["contributors"] = JsonNode.Parse("""
+                [{"id":"parent-one","role":{"kind":0},
+                  "source":{"kind":0,"id":"species.elf"}}]
+                """),
+            json => json["processCreatureTypeId"] = "creature-type.humanoid",
+            json => json["tableDecisions"] = JsonNode.Parse("""
+                [{"id":"forged-table-ruling"}]
+                """)
+        })
+        {
+            var proposal = JsonNode.Parse(Draft)!;
+            alteration(proposal);
+            var saved = await draftStore.SaveAsync(id, "first-party-001",
+                "current-native", proposal.ToJsonString(),
+                revision, DateTimeOffset.UtcNow.AddMinutes(revision));
+            Assert.NotNull(saved);
+            revision = saved.Revision;
+
+            // The mocked gateway would approve a direct initial profile.
+            // These requests must fail before contacting it.
+            var refused = await Service(db, id, native).ApplyAsync(id, revision);
+            Assert.Equal(CharacterOriginActivationStatus.NotAuthorizedByNativeRules,
+                refused.Status);
+            Assert.Equal(0, native.Calls);
+            Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
+            Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db)
+                .GetEventsAsync(id));
+        }
+    }
+
+    [Fact]
     public async Task HumanElfSourceOnlyDraftCannotBeActivatedEvenByAForgedAuthorizedResult()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
