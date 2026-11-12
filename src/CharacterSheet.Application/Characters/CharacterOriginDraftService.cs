@@ -42,6 +42,8 @@ public sealed class CharacterOriginDraftService(
             characterId, cancellationToken);
         var denied = Denied(access.Status);
         if (denied is not null) return new(denied.Value);
+        if (access.Character?.CharacterId != characterId)
+            return new(CharacterOriginDraftStatus.ProjectionUnavailable);
         if (await buildStore.GetAsync(characterId, cancellationToken) is null)
             return new(CharacterOriginDraftStatus.SheetNotInitialized);
         var draft = await draftStore.GetAsync(characterId, cancellationToken);
@@ -58,6 +60,8 @@ public sealed class CharacterOriginDraftService(
             characterId, cancellationToken);
         var denied = Denied(access.Status);
         if (denied is not null) return new(denied.Value);
+        if (access.Character?.CharacterId != characterId)
+            return new(CharacterOriginDraftStatus.ProjectionUnavailable);
         if (!access.Character!.AllowsOrdinaryEditingByLifecycle)
             return new(CharacterOriginDraftStatus.ArchivedReadOnly);
         if (await buildStore.GetAsync(characterId, cancellationToken) is null)
