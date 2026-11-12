@@ -43,7 +43,13 @@ public sealed class CharacterPresentationWorkflowTests
               {"id":"grant:walk","effectiveValue":30,"identity":{
                 "kind":0,"intrinsicSlotId":"walkingSpeedFeet",
                 "occurrence":{"source":{"kind":0,"id":"species.orc"},
-                "occurrencePath":"/walkingSpeedFeet"}}}
+                "occurrencePath":"/walkingSpeedFeet"}}},
+              {"id":"grant:vision","effectiveValue":{
+                "id":"low-light-vision","rule":"rule.low-light-vision"},
+                "identity":{"kind":1,
+                "mechanicalDefinitionId":"species.orc#trait:low-light-vision",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/traits/0"}}}
             ]
           },
           "current":{
@@ -61,7 +67,13 @@ public sealed class CharacterPresentationWorkflowTests
               {"id":"grant:walk","effectiveValue":30,"identity":{
                 "kind":0,"intrinsicSlotId":"walkingSpeedFeet",
                 "occurrence":{"source":{"kind":0,"id":"species.orc"},
-                "occurrencePath":"/walkingSpeedFeet"}}}
+                "occurrencePath":"/walkingSpeedFeet"}}},
+              {"id":"grant:vision","effectiveValue":{
+                "id":"low-light-vision","rule":"rule.low-light-vision"},
+                "identity":{"kind":1,
+                "mechanicalDefinitionId":"species.orc#trait:low-light-vision",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/traits/0"}}}
             ]
           },
           "independentGrants":[],
@@ -135,6 +147,10 @@ public sealed class CharacterPresentationWorkflowTests
         Assert.Contains(metadata, item => item.GetProperty("key").GetString() ==
             "origin.base-creature-type" &&
             item.GetProperty("effectiveValue").GetString() == "humanoid");
+        var sense = Assert.Single(mechanics.GetProperty("senses").EnumerateArray());
+        Assert.Equal("sense.low-light-vision", sense.GetProperty("key").GetString());
+        Assert.Contains("Dim Light", sense.GetProperty("effectiveValue").GetString());
+        Assert.Contains("Darkness unchanged", sense.GetProperty("effectiveValue").GetString());
         Assert.Equal(30, factory.Native.LastBaseWalkSpeed);
         Assert.Equal(1, factory.Native.OriginPreviewCalls);
         Assert.Equal(15, factory.Native.LastAbilityScore);
@@ -166,6 +182,9 @@ public sealed class CharacterPresentationWorkflowTests
         Assert.Contains(metadata, value =>
             value.GetProperty("key").GetString() == "origin.base-walk-speed" &&
             value.GetProperty("effectiveValue").GetInt32() == 30);
+        Assert.Equal("sense.low-light-vision",
+            Assert.Single(mechanics.GetProperty("senses").EnumerateArray())
+                .GetProperty("key").GetString());
         Assert.Equal(30, factory.Native.LastBaseWalkSpeed);
         Assert.Null(factory.Native.LastClassId);
         Assert.Equal(1, factory.Native.OriginPreviewCalls);
@@ -405,6 +424,18 @@ public sealed class CharacterPresentationWorkflowTests
                     status = 4,
                     issues = Array.Empty<object>(),
                     profile = JsonNode.Parse(OrcOriginProfile)
+                },
+                vision = new {
+                    status = "resolved", previewOnly = true,
+                    unresolvedReasons = Array.Empty<string>(),
+                    lowLightVision = new {
+                        grantId = "grant:vision",
+                        sourceId = "species.orc",
+                        occurrencePath = "/traits/0",
+                        ruleId = "rule.low-light-vision",
+                        actualLightLevel = "dim",
+                        perceivedLightLevel = "bright"
+                    }
                 },
                 intrinsics = new {
                     status = "resolved", previewOnly = true,
