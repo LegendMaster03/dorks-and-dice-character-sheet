@@ -194,6 +194,20 @@ public sealed class CharacterOriginMixedActivationService(
             proposalId!, selectedCandidateIds, out var fingerprint, out var profileJson))
             return new(CharacterOriginMixedActivationStatus.NotAuthorizedByNativeRules);
 
+        // Rules Core owns these mechanical interpretations. Reject mismatched
+        // projection/committed source occurrence data before saving either.
+        if (!evaluated.RootElement.TryGetProperty("intrinsics", out var intrinsics) ||
+            !evaluated.RootElement.TryGetProperty("vision", out var vision) ||
+            VerifiedOriginIntrinsicReader.Read(intrinsics, profileJson!) is null)
+            return new(CharacterOriginMixedActivationStatus.NotAuthorizedByNativeRules);
+        var projectionJson = JsonSerializer.Serialize(new
+        {
+            rulesetId = draft.RulesetId,
+            fingerprint,
+            intrinsics,
+            vision
+        }, WireJson);
+
         // The immutable audit and authoritative profile enter PostgreSQL in
         // one transaction. A raced owner draft revision or prior activation
         // leaves the current authorized character state unchanged.
@@ -202,7 +216,8 @@ public sealed class CharacterOriginMixedActivationService(
                 characterId, draft.RulesetId, fingerprint!, profileJson!, 0,
                 draft.Revision, "construction:" + proposalId,
                 methodRuleId!, methodId!, "campaign-dm", evidenceId,
-                clock.GetUtcNow(), actor, campaignId, decisions.ToJsonString()),
+                clock.GetUtcNow(), actor, campaignId, decisions.ToJsonString(),
+                projectionJson),
             cancellationToken);
         return committed.Status switch
         {
