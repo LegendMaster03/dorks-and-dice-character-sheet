@@ -402,6 +402,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasMaxLength(320).HasColumnType("character varying(320)");
             b.Property<string>("AuthorizationKind").IsRequired()
                 .HasMaxLength(32).HasColumnType("character varying(32)");
+            b.Property<Guid?>("ApprovalActorUserId").HasColumnType("uuid");
+            b.Property<Guid?>("ApprovalCampaignId").HasColumnType("uuid");
+            b.Property<string>("ApprovedDecisionsJson").HasColumnType("jsonb");
             b.Property<long>("CommittedRevision").HasColumnType("bigint");
             b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
             b.Property<string>("MethodId").IsRequired()
