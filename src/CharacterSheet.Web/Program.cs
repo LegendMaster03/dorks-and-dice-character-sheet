@@ -109,6 +109,7 @@ builder.Services.AddScoped<CharacterOriginParentSnapshotService>();
 builder.Services.AddScoped<CharacterOriginParentNativeReviewService>();
 builder.Services.AddScoped<CharacterOriginInitialActivationService>();
 builder.Services.AddScoped<CharacterOriginMixedActivationService>();
+builder.Services.AddScoped<CharacterOriginMixedReviewService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
