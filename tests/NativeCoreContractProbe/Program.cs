@@ -250,6 +250,30 @@ Ensure(sheetWithOrc.Status == "partial" &&
     sheetWithOrc.Mechanics.AbilityValues is null,
     "Character Sheet did not preserve the verified Orc baseline as partial mechanics.");
 
+var grappledSheetState = state with
+{
+    Conditions = [new CharacterConditionOccurrenceView(
+        Guid.NewGuid(), "condition.grappled",
+        null, null, null, null, null, null, now, now)]
+};
+var grappledSheet = await NativeCharacterPresentationBridge.ProjectAsync(
+    gateway, build, grappledSheetState, CancellationToken.None,
+    hasCommittedOrigin: true,
+    originProjection: new VerifiedOriginProjectionContext(
+        catalog.RulesetId, catalog.Fingerprint,
+        new VerifiedOriginIntrinsics(
+            orcIntrinsics.CreatureType.Value,
+            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value)));
+Ensure(grappledSheet.Status == "partial" &&
+    grappledSheet.Mechanics?.Movement?.Any(value =>
+        value.Key == "movement.walk" &&
+        value.EffectiveValue is int effective && effective == 0) == true &&
+    grappledSheet.Mechanics.CharacterMetadata?.Any(value =>
+        value.Key == "origin.base-walk-speed" &&
+        value.EffectiveValue is int baseline && baseline == 30) == true,
+    "Character Sheet must show Core-computed Grappled movement 0 while retaining native Orc base speed 30.");
+
+
 // Human's mandatory native Origin choices are not invented or bypassed. A
 // profile object in an incomplete result is not an authorized active Origin.
 var humanOrigin = new NativeOriginConstructionEngine(catalog).Evaluate(
