@@ -122,6 +122,21 @@ public sealed class NativeCharacterPresentationBridgeTests
             value.Key == "origin.base-walk-speed" && Equals(value.EffectiveValue, 30));
     }
 
+    [Fact]
+    public async Task UncommittedOriginPreviewCannotSupplyMovementToNativeCharacterKernel()
+    {
+        var gateway = new FixtureGateway();
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None,
+            hasCommittedOrigin: false,
+            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+
+        Assert.Equal("unconfigured", result.Status);
+        Assert.Null(result.Mechanics);
+        Assert.Equal(0, gateway.Calls);
+        Assert.Null(gateway.LastBaseWalkSpeed);
+    }
+
     [Theory]
     [InlineData("class:wizard")]
     [InlineData("feat:alert")]
