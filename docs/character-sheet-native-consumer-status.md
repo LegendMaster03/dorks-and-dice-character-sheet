@@ -65,9 +65,17 @@ These changes are development-only and **not yet deployed**. Drafts never mint a
 authorized Origin state model, atomic receipt store and owner-scoped read-only
 `/api/characters/{characterId}/origin/state` route have been added. The latter
 returns a saved snapshot, not a current mechanically revalidated entitlement
-list. No public authorized Origin write operation is available. Campaign-DM
-verification, trusted complete Origin apply/Rite services, builder UI and
-effective-grant integration remain required. See
+list. The new `POST /api/characters/{characterId}/origin/activate-native`
+is a strictly first-party **initial direct construction** operation: it
+reloads the saved draft and demands a supported, complete, latest-catalog
+Rules Core result before an atomic revisioned commit. The older Species and
+Subspecies setters reject changes once a canonical Origin is stored, and
+initial activation refuses legacy selections pending reconciliation.
+Rites, DM overrides, subsequent modifications, mixed/nested builder UI and
+independent effective-grant projection remain incomplete. A separate
+branch-to-branch native contract workflow validates the unmerged Phase 5
+Rules Core; Orc native creation is authorized, while Human still has
+creation-time choices to resolve. See
 `docs/pillar2-origin-integration-trust-boundary-20261112.md`.
 
 ## Still required for full tool restoration

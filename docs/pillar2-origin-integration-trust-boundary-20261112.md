@@ -39,10 +39,63 @@ Use one transactional PostgreSQL update of Origin decisions, verified outcome, a
 
 The active form can change `Current` without changing `Underlying`, but must originate in an authorized future Pillar 4 execution. A permanent Rite during an active form needs an explicit rule/DM interaction. Reversion must evaluate the **latest committed Underlying**, never a cached activation-time baseline. A form may suppress independent grant usability but does not revoke the underlying earned Class, Background, Upbringing, training or supernatural progression.
 
+## Implemented initial native activation (Phase 5 increment)
+
+The owner-only `POST /api/characters/{characterId}/origin/activate-native` accepts
+**only** an expected saved-draft revision. `CharacterOriginInitialActivationService`
+reloads the server-held proposal, requires an active, Site-owned character,
+refuses any existing committed Origin, reevaluates the exact draft through
+the Site-delegated Rules Core native preview, and checks **all** of the
+following before committing:
+
+- Latest catalog ruleset identity, fingerprint and `previewOnly: true`;
+  `Authorized` status with zero issues, not merely a non-null profile.
+- Direct initial construction and the same selected Species/Ancestry IDs,
+  proposal ID and native method as the saved draft.
+- Supported first-party adjudication, no table-decision evidence, no
+  independently asserted grants, no persisted supernatural influences or
+  temporary forms, and one **completed** native construction history event.
+- `Current` equal to `Underlying`, with no replacement or unresolved
+  effective-form basis. The complete authorized Core profile, rather than a
+  caller-provided grant list, is the value committed.
+
+The store acquires the character root lock before checking drafts, prior
+Origin and old foundational state. Existing `Species`, `Subspecies` or
+`RaceSpecies` selections cause a **conflict requiring explicit reconciliation**;
+nothing is auto-migrated, erased or silently overwritten. The older
+Species/Subspecies writes now take the same character root lock and fail once
+an authorized Origin exists. Background, Deity, Class and other independently
+earned choices remain in their original owner stores. On a successful commit
+the server writes the new Origin profile and a unique completed event receipt
+atomically. A stale proposal, duplicate initial construction, archived character
+or failed native adjudication makes no authorized-state change.
+
+The native content test runs directly against
+`feature/pillar2-phase5-origin-api-20261112` rather than the current
+unmerged Rules Core `main`:
+`.github/workflows/pillar2-phase5-origin-cross-repo.yml`.
+It proves **Orc** directly authorizes under selected native rules and **Human**
+still needs its required creation-time selections. Human open-catalog options
+(e.g. the selected Skill and Origin feat) require actual native membership
+and eligibility evidence; do **not** manufacture an approval or mark the
+Human–Elf mixed workflow complete. The ordinary cross-repo contract workflow
+continues to test Core `main` for existing consumers.
+
+The response explicitly reports `effectiveMechanicsReady: false`.
+Persisting an authorized inherent Origin **does not yet implement** the
+cross-pillar class/background/upbringing grant and applicability projection.
+The native-only activation path is deliberately **not** a DM override API:
+future DM decisions require independently authenticated campaign-scoped
+ruling evidence and the corresponding trusted Rules Core authority adapter.
+Post-origination Rites, mixed/nested decisions, form activation/reversion,
+supernatural progressions, and exceptional ancestry acquisition do not
+use this direct-initialization endpoint. A DM override remains possible
+under the game rules but is not forged through ordinary player access.
+
 ## Scope for the next integration step
 
 The draft state and its owner-scoped save/load service are implemented. The additional `character_authorized_origins` and `character_origin_event_receipts` tables now provide a **separate server-held authorized-state storage substrate**, without copying drafts into it. The `PostgresCharacterAuthorizedOriginStore.CommitVerifiedAsync` method requires a separately verified application command and commits a snapshot plus unique event receipt in one PostgreSQL transaction. It locks the applicable draft and current Origin rows, compares expected revisions, rejects repeated event IDs and prevents stale tracked objects from overwriting newer revisions. A character deletion cascades the Origin, receipts and draft. The internal store is registered but **not accessible through an HTTP write route**.
 
 The read-only `GET /api/characters/{characterId}/origin/state` requires Site character ownership, works for archived characters as read-only, omits private authorization-evidence IDs, and returns `effectiveMechanicsReady: false`. A stored profile is a verified-history input **only after** a future service revalidates it against current native rules and independently earned entitlements.
 
-**Not yet implemented:** a production application service that establishes authorization before calling `CommitVerifiedAsync`, a native-result-to-commit bridge, fully trusted independent entitlement and history loading, campaign-scoped DM decision verification, executable Rite/other transition APIs, cross-domain effective projection, and builder UI. No user-supplied draft or receipt is an authorized Origin. Validate forged prior state and grants, unauthorized DM claims, real native content evolution, source-specific form interactions and full Human–Elf workflows before granting those capabilities. Neither mocked gateway tests nor a stored record demonstrate live end-to-end rules authority.
+**Not yet implemented:** a general authorized modification/reconstruction service (the new private caller supports **initial direct first-party construction only**), trusted independent entitlement/applicability loading for derived mechanics, campaign-scoped DM decision verification, executable Rite/other transition APIs, cross-domain effective projection, and mixed/nested builder UI. No user-supplied draft or receipt is an authorized Origin. Validate forged prior state and grants, unauthorized DM claims, real native content evolution, source-specific form interactions and full Human–Elf workflows before granting those capabilities. Neither mocked gateway tests nor a stored record demonstrate live end-to-end rules authority.
