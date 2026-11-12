@@ -23,7 +23,8 @@ public sealed record VerifiedOriginPersistenceCommand(
     DateTimeOffset RecordedAt,
     Guid? ApprovalActorUserId = null,
     Guid? ApprovalCampaignId = null,
-    string? ApprovedDecisionsJson = null);
+    string? ApprovedDecisionsJson = null,
+    string? EvaluatedProjectionJson = null);
 
 public enum AuthorizedOriginStoreStatus
 {
