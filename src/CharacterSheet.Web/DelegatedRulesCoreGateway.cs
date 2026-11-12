@@ -57,6 +57,17 @@ public sealed class DelegatedRulesCoreGateway(
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/origins/preview",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    /// <summary>
+    /// The authenticated Site delegation is reused. Trusted actor/campaign
+    /// assertions are checked by Rules Core against its own redeemed ticket;
+    /// no browser-held ticket or target credential is sent.
+    /// </summary>
+    public Task<JsonNode> EvaluateApprovedMixedOriginAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post,
+            "/api/mechanics/v1/origins/evaluate-approved-mixed",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> GetNativeHarvestingCatalogAsync(
         string fingerprint, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Get,
