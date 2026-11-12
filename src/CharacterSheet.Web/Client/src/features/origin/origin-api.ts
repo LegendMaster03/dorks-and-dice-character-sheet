@@ -221,8 +221,8 @@ export async function saveOriginDraft(
     if (forbidden.some(field =>
         Object.hasOwn(proposal, field) &&
         proposal[field] !== null && proposal[field] !== undefined) ||
-        proposal.manifestations.some(manifestation =>
-            manifestation.choices?.some(choice =>
+        proposal.manifestations.some((manifestation: NativeOriginDraftManifestation) =>
+            manifestation.choices?.some((choice: NativeOriginDraftChoice) =>
                 Object.hasOwn(choice, "catalogEligibilityEvidenceId")))) {
         throw new Error("The Origin draft contains server-only state or authority.");
     }
