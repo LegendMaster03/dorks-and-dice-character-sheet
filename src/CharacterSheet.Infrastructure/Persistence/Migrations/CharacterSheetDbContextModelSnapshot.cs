@@ -385,6 +385,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("Fingerprint").IsRequired()
                 .HasMaxLength(200).HasColumnType("character varying(200)");
             b.Property<string>("ProfileJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("EvaluatedProjectionJson").HasColumnType("jsonb");
             b.Property<long>("Revision").HasColumnType("bigint");
             b.Property<string>("RulesetId").IsRequired()
                 .HasMaxLength(160).HasColumnType("character varying(160)");
