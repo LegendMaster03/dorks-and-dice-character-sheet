@@ -20,6 +20,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterRulesInputState> CharacterRulesInputs => Set<CharacterRulesInputState>();
     public DbSet<CharacterHitPointGainState> CharacterHitPointGains => Set<CharacterHitPointGainState>();
     public DbSet<CharacterProfileState> CharacterProfiles => Set<CharacterProfileState>();
+    public DbSet<CharacterOriginDraftState> CharacterOriginDrafts => Set<CharacterOriginDraftState>();
     public DbSet<CharacterCurrencyBalance> CharacterCurrencyBalances => Set<CharacterCurrencyBalance>();
     public DbSet<CharacterArtAsset> CharacterArtAssets => Set<CharacterArtAsset>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
@@ -341,6 +342,24 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         root.HasOne(value => value.Profile)
             .WithOne()
             .HasForeignKey<CharacterProfileState>(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The Origin proposal is deliberately a draft, never active mechanics.
+        var originDraft = modelBuilder.Entity<CharacterOriginDraftState>();
+        originDraft.ToTable("character_origin_drafts");
+        originDraft.HasKey(value => value.CharacterId);
+        originDraft.Property(value => value.CharacterId).ValueGeneratedNever();
+        originDraft.Property(value => value.RulesetId)
+            .HasMaxLength(CharacterOriginDraftState.MaxRulesetIdLength).IsRequired();
+        originDraft.Property(value => value.Fingerprint)
+            .HasMaxLength(CharacterOriginDraftState.MaxFingerprintLength);
+        originDraft.Property(value => value.ProposalJson)
+            .HasColumnType("jsonb").IsRequired();
+        originDraft.Property(value => value.Revision).IsRequired();
+        originDraft.Property(value => value.CreatedAt).IsRequired();
+        originDraft.Property(value => value.UpdatedAt).IsRequired();
+        originDraft.HasOne<CharacterSheetRoot>().WithOne()
+            .HasForeignKey<CharacterOriginDraftState>(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var art = modelBuilder.Entity<CharacterArtAsset>();
