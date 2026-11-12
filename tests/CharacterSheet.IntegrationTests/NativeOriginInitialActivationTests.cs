@@ -106,6 +106,20 @@ public sealed class NativeOriginInitialActivationTests
                 new PostgresCharacterBuildStore(db).ClearFoundationalSelectionAsync(
                     id, CharacterFoundationalSelectionCategory.Subspecies,
                     DateTimeOffset.UtcNow));
+
+            var legacyBuilder = new CharacterBuildService(
+                new Access(SiteCharacterAccessStatus.Authorized, id,
+                    SiteCharacterLifecycleState.Active),
+                new PostgresCharacterBuildStore(db), TimeProvider.System);
+            var denied = await legacyBuilder.SetSpeciesAsync(id, "species.elf");
+            Assert.Equal(CharacterBuildAccessStatus.OriginManaged, denied.Status);
+            // A first-party Origin never revokes independently acquired
+            // Background choices or makes them depend on legacy Species rows.
+            var independent = await legacyBuilder.SetBackgroundAsync(id,
+                "background.acolyte");
+            Assert.Equal(CharacterBuildAccessStatus.Ready, independent.Status);
+            Assert.Contains(independent.View!.FoundationalSelections,
+                x => x.Category == CharacterBuildSelectionCategories.Background);
         }
 
         await using var reload = new CharacterSheetDbContext(database.CreateOptions());
