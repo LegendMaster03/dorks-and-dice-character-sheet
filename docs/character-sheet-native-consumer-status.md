@@ -39,9 +39,14 @@ When a canonical Origin has been committed, character presentation checks
 the Site-authorized state and reports **partial** Species/Ancestry mechanics.
 The Phase 5 branch now also revalidates a direct first-party initial Origin
 against the latest Core catalog and compares its intrinsic grants with the
-immutable saved profile. For verified Orc, it displays Base Size and Creature
-Type and submits the 30-foot base walk speed to the native character kernel
-for its movement calculation. It does not infer other Species traits,
+immutable saved profile. For verified Orc, it displays Base Size, Creature
+Type, and Base Walking Speed and submits the 30-foot base value to the native
+character kernel for effective movement calculation, **even without Class
+or ability inputs**. Active conditions are never bypassed by treating base
+speed as effective movement. The bridge also requires the exact same native
+catalog fingerprint for the Origin verification and character calculation;
+when catalog content changes between calls, Origin effects are withheld
+while independent Class values remain visible. It does not infer other Species traits,
 conditional bonuses, independent entitlements, Rites, mixed inheritance
 or temporary transformations. Supported Class proficiency remains visible,
 but other potentially Origin-dependent scores, saves and training totals

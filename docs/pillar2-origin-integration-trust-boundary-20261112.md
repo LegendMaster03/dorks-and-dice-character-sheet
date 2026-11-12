@@ -342,11 +342,24 @@ value; malformed or changed sources fail closed.
 
 The Sheet passes verified base walking speed into the existing native
 character kernel, which calculates `movement.walk` subject to its
-supported condition effects. Base Size and Creature Type appear as
-**base characteristic metadata**, not as an assertion that arbitrary
-current-form changes have been applied. A committed Origin without Class
-or ability inputs can still show those verified base characteristics
-without inventing other choices. Other Species traits, independent
+supported condition effects. Base Size, Creature Type **and Base Walking
+Speed** appear as base characteristic metadata; only the native
+`movement.walk` result appears as effective movement. **Even when the
+character has no Class or ability inputs**, the Sheet must ask Core to
+calculate movement rather than directly displaying the raw base speed in
+the effective Movement collection. A condition that leaves native movement
+unresolved withholds the effective value while preserving verified base
+metadata, without inventing other character choices.
+
+The native catalog could change between the server's Origin reevaluation
+and the later character projection call. The server now passes the **exact
+ruleset ID and current catalog fingerprint** with the verified scalar
+context, and the bridge compares them to freshly fetched character-kernel
+metadata. If they differ, the bridge discards all Origin-derived scalars,
+including movement, instead of combining two catalog versions. This
+leaves independently calculated Class progression visible and reports
+partial mechanics with an explicit revalidation message. A preview
+supplied without committed state cannot activate the scalars. Other Species traits, independent
 entitlements and ability/save modifiers remain unprojected; presentation
 continues to report `partial` rather than `resolved`.
 
