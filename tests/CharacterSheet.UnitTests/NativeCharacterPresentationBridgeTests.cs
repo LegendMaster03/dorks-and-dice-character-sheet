@@ -22,6 +22,44 @@ public sealed class NativeCharacterPresentationBridgeTests
         Assert.Equal(0, gateway.Calls);
     }
 
+    [Fact]
+    public async Task CommittedOriginAloneIsNotSilentlyPresentedAsAnEmptyCharacter()
+    {
+        var gateway = new FixtureGateway();
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None, hasCommittedOrigin: true);
+
+        Assert.Equal("partial", result.Status);
+        Assert.Null(result.Mechanics);
+        Assert.Contains("Origin", result.Message!, StringComparison.Ordinal);
+        Assert.Equal(0, gateway.Calls);
+    }
+
+    [Fact]
+    public async Task CommittedOriginWithholdsUnprojectedSpeciesEffectsButPreservesClassProficiency()
+    {
+        var gateway = new FixtureGateway();
+        var build = Build(new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1)) with
+        {
+            BaseAbilityScoreInputs = [
+                new BaseAbilityScoreInputView(Guid.NewGuid(), "strength", 14, Now, Now)
+            ]
+        };
+
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None, hasCommittedOrigin: true);
+
+        Assert.Equal("partial", result.Status);
+        Assert.NotNull(result.Mechanics);
+        Assert.Null(result.Mechanics.AbilityValues);
+        Assert.Null(result.Mechanics.SavingThrows);
+        Assert.Null(result.Mechanics.CombatFundamentals);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        Assert.Contains("Species/Ancestry", result.Message!, StringComparison.Ordinal);
+        Assert.Equal(5, gateway.Calls);
+    }
+
     [Theory]
     [InlineData("class:wizard")]
     [InlineData("feat:alert")]
