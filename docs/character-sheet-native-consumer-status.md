@@ -76,9 +76,12 @@ Species/Ancestry discovery and server-held Origin drafts instead of the
 legacy Species/Subspecies setters. Finite creation choices and native Skill
 selection are supported; unsupported Origin Feat eligibility remains
 explicitly unresolved. A committed profile is labeled as *Underlying*
-rather than a current effective transformed form. Rites, DM overrides,
-subsequent modifications, mixed/nested builder UI and independent
-effective-grant projection remain incomplete. A separate
+rather than a current effective transformed form. The guided Origin editor also permits two native biological
+source references as a deliberately unresolved mixed evidence draft,
+including Human–Elf; it does not authenticate parent individuals, inherit
+traits, permit DM rulings, or expose a mixed activation route. Rites,
+DM overrides, subsequent modifications, full mixed/nested builder UI and
+independent effective-grant projection remain incomplete. A separate
 branch-to-branch native contract workflow validates the unmerged Phase 5
 Rules Core; Orc native creation is authorized, while Human still has
 creation-time choices to resolve. See

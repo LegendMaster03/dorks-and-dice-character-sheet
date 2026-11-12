@@ -116,8 +116,10 @@ boundaries. Its Node tests exercise embedded Tool Host URLs, rejected claims,
 stale authorization responses and exact mutation bodies. **The typed API now supports a restricted direct native Origin builder.**
 The former Species/Subspecies edit widgets are no longer offered in guided
 setup or the general Character editor, and previously saved legacy selections
-are displayed as reconciliation conflicts. Mixed, custom, DM and Rite
-editing and the current-effective character projection are not finished.
+are displayed as reconciliation conflicts. A limited mixed biological
+**source-evidence-only** editor is now available, but inherited candidate
+authorization, custom/DM/Rite editing and current-effective character
+projection are not finished.
 
 ## Origin guided builder integration
 
@@ -157,6 +159,47 @@ the pure choice model uses `origin-builder-model.ts`, and the UI uses
 independent Background, Class, Deity and advancement state. This is not
 the mixed Human–Elf editor or a DM/Rite/supernatural form workflow, and
 no full browser/production acceptance is claimed.
+
+## Human–Elf mixed biological source draft (evidence only)
+
+The Origin editor now offers a separately labeled **Mixed biological sources**
+draft mode for the common two-source example. Each source is selected from the
+native Species or Ancestry option catalog and stored as a
+`BiologicalParent`-role contributor with a `Native` source reference. The
+editor can create, save, reopen, replace, or remove the two native source
+references through the ordinary owner-scoped draft/revision API. Switching
+between Direct and Mixed discards previous **draft-only** source selections
+and manifestations; it can not rewrite an already committed Origin.
+
+This deliberately **does not** authenticate the existing individual parent,
+load a parent Character Sheet's `Current` profile, infer biological
+compatibility, decide which of two sources is dominant, combine traits, or
+authorize a resultant Species/Ancestry. A native source label is an
+*offered source exemplar*, not a verified parent's complete manifested
+configuration. The generic native contract supports more than two inputs
+and other input roles; this limited example UI is not a universal parent
+count or mechanics rule. A full nested parent requires a trusted source
+loader and the exact persisted parent configuration.
+
+The branch-to-branch test now checks the actual native Human and Elf
+candidate origins: both source occurrences remain inspectable, while the
+mixed profile has no authorized inherent grants, no selected Species or
+Ancestry and no `Authorized` status. The editor shows native unresolved
+issues and exposes **no mixed activation** action, even when a preview
+object is returned. The server also refuses `Mixed` intent at its native
+initial-activation boundary **before** consulting a possibly spoofed
+`Authorized` result. A `Direct` proposal carrying extra contributors,
+claimed DM rulings, process type, existing configuration, or history is
+also refused before evaluation; a completed direct history receipt cannot
+list contributors. Integration tests cover these refusal cases and verify
+that the authorized state/receipts remain untouched.
+
+The next mixed-Origin steps require a secure parent-individual profile
+loader, an actual campaign-scoped DM ruling interface and evidence for
+exact inherited source occurrences, then a separate authorized
+mixed-construction commit flow. Merely selecting both Human and Elf
+source references does not grant Half-Elf traits, an Elf ancestry, or any
+new independent entitlement.
 
 ## Scope for the next integration step
 
