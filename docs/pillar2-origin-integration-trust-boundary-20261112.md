@@ -548,3 +548,21 @@ the separately proposed future partial state-slot architecture.
 Integration tests verify private materialization of the exact fresh
 profile, omission from serialized browser responses, and no materialized
 profile after denied access or failed/stale native verification.
+
+### Real Core + PostgreSQL individual-parent review acceptance
+
+The branch-specific real Rules Core HTTP / PostgreSQL acceptance suite
+now also evaluates a directly constructed **Orc** parent through the actual
+unmerged Core catalog, saves that profile and its first-party event receipt,
+and re-reviews it with the latest native catalog. It verifies that the
+request-local parent profile exactly matches the real native source,
+retains source-qualified inherent grants privately, and is not serialized
+to the browser. The same test rejects parent inspection if the child
+owner is not authorized to read the parent.
+
+This test verifies a real **individual parent Origin read boundary**,
+not actual biological relationship, a chosen hereditary state,
+reproduction compatibility, a general mixed contributor source resolver
+or a grant to the child. The earlier Human–Elf approved-mixed vertical
+slice still uses native Species exemplar sources, not this individual
+parent profile. Both independent limitations remain explicit.

@@ -49,6 +49,95 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         """;
 
     [Fact]
+    public async Task IndividualParentInitialProfileComesFromRealNativeCoreButIsNotInheritable()
+    {
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var native = new HttpNativeGateway(core.Client);
+        var childId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        const string directOrc = """
+            {
+              "id":"real-parent-orc","intent":0,
+              "method":{"ruleId":"rule.creature-origination","methodId":"biological"},
+              "contributors":[],"candidates":[],"manifestations":[],
+              "selectedSpeciesId":"species.orc","selectedAncestryId":null
+            }
+            """;
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        var roots = new PostgresCharacterSheetStore(db);
+        await roots.GetOrCreateAsync(childId);
+        await roots.GetOrCreateAsync(parentId);
+        var savedDraft = await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+            parentId, "first-party-001", fingerprint, directOrc, 0,
+            DateTimeOffset.UtcNow);
+        Assert.NotNull(savedDraft);
+        using var proposal = JsonDocument.Parse(directOrc);
+        var preview = await native.PreviewNativeOriginAsync(
+            JsonSerializer.SerializeToElement(new
+            {
+                rulesetId = "first-party-001",
+                fingerprint,
+                proposal = proposal.RootElement
+            }, Wire), CancellationToken.None);
+        Assert.Equal(4, preview["result"]?["status"]?.GetValue<int>());
+        Assert.Empty(preview["result"]?["issues"]?.AsArray() ??
+            throw new InvalidOperationException("No real Core issues array."));
+        var profileJson = preview["result"]?["profile"]?.ToJsonString() ??
+            throw new InvalidOperationException("Real Core omitted the profile.");
+        var origins = new PostgresCharacterAuthorizedOriginStore(db);
+        var stored = await origins.CommitVerifiedAsync(new(
+            parentId, "first-party-001", fingerprint, profileJson,
+            0, savedDraft.Revision, "construction:real-parent-orc",
+            "rule.creature-origination", "biological",
+            "first-party", "native-catalog:" + fingerprint,
+            DateTimeOffset.UtcNow));
+        Assert.Equal(AuthorizedOriginStoreStatus.Applied, stored.Status);
+
+        CharacterOriginParentNativeReviewService MakeParentReader(bool allowParent)
+        {
+            var site = new OwnerScopedParentAccess(childId, parentId, allowParent);
+            var snapshot = new CharacterOriginParentSnapshotService(site,
+                new PostgresCharacterBuildStore(db), origins);
+            return new(snapshot, origins,
+                new PostgresCharacterOriginDraftStore(db), native);
+        }
+
+        // Even a real individual Origin cannot be inspected without an
+        // independent Site owner check for both the child and parent IDs.
+        var forbidden = await MakeParentReader(false).ReviewAsync(childId, parentId);
+        Assert.Equal(CharacterOriginParentNativeReviewStatus.NotFoundOrNotOwned,
+            forbidden.Status);
+        Assert.Null(forbidden.VerifiedInitialProfile);
+
+        var verified = await MakeParentReader(true).ReviewAsync(childId, parentId);
+        Assert.Equal(CharacterOriginParentNativeReviewStatus.Ready, verified.Status);
+        Assert.Equal(fingerprint, verified.Review?.LatestNativeFingerprint);
+        Assert.NotNull(verified.VerifiedInitialProfile);
+        using var original = JsonDocument.Parse(profileJson);
+        Assert.True(JsonElement.DeepEquals(original.RootElement,
+            verified.VerifiedInitialProfile!.Value));
+        var underlying = verified.VerifiedInitialProfile.Value
+            .GetProperty("underlying");
+        Assert.Equal("species.orc", underlying.GetProperty("speciesId").GetString());
+        Assert.True(underlying.GetProperty("inherentGrants").GetArrayLength() > 0);
+        Assert.True(JsonElement.DeepEquals(underlying,
+            verified.VerifiedInitialProfile.Value.GetProperty("current")));
+
+        // This verified request-local material is never a public parent
+        // profile download, mixed contributor, or inheritance ruling.
+        var serialized = JsonSerializer.Serialize(verified);
+        Assert.DoesNotContain("VerifiedInitialProfile", serialized);
+        Assert.DoesNotContain("underlying", serialized);
+        Assert.DoesNotContain("inherentGrants", serialized);
+        Assert.DoesNotContain("species.orc", serialized);
+    }
+
+    [Fact]
     public async Task SiteScopedHumanElfApprovalEvaluatesPersistsAndReloadsRealNativeGrants()
     {
         await using var core = await RealCore.StartAsync();
@@ -271,6 +360,26 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             new PostgresCharacterOriginDraftStore(db),
             new PostgresCharacterAuthorizedOriginStore(db),
             native, TimeProvider.System);
+
+    /// <summary>
+    /// This fixture grants child+parent access only when the Site projection
+    /// explicitly owns both. A DM role never supplies private parent access.
+    /// </summary>
+    private sealed class OwnerScopedParentAccess(
+        Guid childId, Guid parentId, bool allowParent) : ISiteCharacterAccessGateway
+    {
+        public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken cancellationToken = default)
+        {
+            if (characterId == childId ||
+                characterId == parentId && allowParent)
+                return Task.FromResult(SiteCharacterAccessResult.Authorized(
+                    new SiteCharacterProjection(characterId, "Verified parent input",
+                        SiteCharacterLifecycleState.Active, null, [])));
+            return Task.FromResult(new SiteCharacterAccessResult(
+                SiteCharacterAccessStatus.NotFoundOrNotOwned));
+        }
+    }
 
     private sealed class TestDmScope(bool allow) : ISiteOriginDmAccessGateway
     {
