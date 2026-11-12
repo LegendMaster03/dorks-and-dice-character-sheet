@@ -173,6 +173,8 @@ public static class CharacterOriginDraftEndpoints
                 Error(403, "character_archived_read_only"),
             CharacterOriginDraftStatus.RevisionConflict =>
                 Error(409, "origin_draft_revision_conflict"),
+            CharacterOriginDraftStatus.OriginAlreadyCommitted =>
+                Error(409, "origin_already_committed"),
             CharacterOriginDraftStatus.InvalidRequest =>
                 Error(400, "invalid_origin_draft"),
             _ => Error(503, "origin_preview_unavailable")

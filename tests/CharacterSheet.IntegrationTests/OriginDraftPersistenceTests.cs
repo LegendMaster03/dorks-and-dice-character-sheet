@@ -108,7 +108,9 @@ public sealed class OriginDraftPersistenceTests
         CharacterOriginDraftService BuildService(SiteCharacterAccessStatus status,
             SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active) =>
             new(new Access(status, id, lifecycle),
-                new PostgresCharacterBuildStore(db), store, native, TimeProvider.System);
+                new PostgresCharacterBuildStore(db), store,
+                new PostgresCharacterAuthorizedOriginStore(db),
+                native, TimeProvider.System);
 
         var denied = await BuildService(SiteCharacterAccessStatus.NotFoundOrNotOwned)
             .SaveAsync(id, "first-party-001", null, proposal, 0);

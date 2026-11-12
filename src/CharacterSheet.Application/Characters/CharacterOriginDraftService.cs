@@ -11,7 +11,7 @@ public enum CharacterOriginDraftStatus
 {
     Ready, NotFoundOrNotOwned, Unauthenticated, ProjectionUnavailable,
     SheetNotInitialized, ArchivedReadOnly, InvalidRequest, RevisionConflict,
-    RulesCoreUnavailable
+    OriginAlreadyCommitted, RulesCoreUnavailable
 }
 
 public sealed record CharacterOriginDraftView(
@@ -32,6 +32,7 @@ public sealed class CharacterOriginDraftService(
     ISiteCharacterAccessGateway characterAccess,
     ICharacterBuildStore buildStore,
     ICharacterOriginDraftStore draftStore,
+    ICharacterAuthorizedOriginStore authorizedOrigins,
     INativeRulesCoreGateway rulesCore,
     TimeProvider timeProvider)
 {
@@ -66,6 +67,8 @@ public sealed class CharacterOriginDraftService(
             return new(CharacterOriginDraftStatus.ArchivedReadOnly);
         if (await buildStore.GetAsync(characterId, cancellationToken) is null)
             return new(CharacterOriginDraftStatus.SheetNotInitialized);
+        if (await authorizedOrigins.GetAsync(characterId, cancellationToken) is not null)
+            return new(CharacterOriginDraftStatus.OriginAlreadyCommitted);
         if (expectedRevision < 0 || expectedRevision == long.MaxValue ||
             proposal.ValueKind != JsonValueKind.Object)
             return new(CharacterOriginDraftStatus.InvalidRequest);
@@ -113,9 +116,17 @@ public sealed class CharacterOriginDraftService(
         var saved = await draftStore.SaveAsync(characterId, validRuleset,
             validFingerprint, validProposal, expectedRevision,
             timeProvider.GetUtcNow(), cancellationToken);
-        return saved is null
-            ? new(CharacterOriginDraftStatus.RevisionConflict)
-            : new(CharacterOriginDraftStatus.Ready, ToView(saved), preview);
+        if (saved is null)
+        {
+            // A concurrent native activation may have committed while Core
+            // was previewing this draft. The store serializes both operations
+            // under the root lock, so distinguish an immutable active Origin
+            // from a stale revision without guessing from the preview.
+            return new(await authorizedOrigins.GetAsync(characterId, cancellationToken) is not null
+                ? CharacterOriginDraftStatus.OriginAlreadyCommitted
+                : CharacterOriginDraftStatus.RevisionConflict);
+        }
+        return new(CharacterOriginDraftStatus.Ready, ToView(saved), preview);
     }
 
     private static CharacterOriginDraftView ToView(CharacterOriginDraftState state) =>
