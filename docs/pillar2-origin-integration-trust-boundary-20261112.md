@@ -113,14 +113,54 @@ only `expectedDraftRevision` to the activation endpoint, rejects
 client-supplied prior profiles/table decisions/catalog proof, and checks
 the `activeGrants: false` / `effectiveMechanicsReady: false` response
 boundaries. Its Node tests exercise embedded Tool Host URLs, rejected claims,
-stale authorization responses and exact mutation bodies. **This is the
-API integration foundation, not the finished Origin builder UI.** Existing
-legacy Species/Subspecies edit widgets must be reconciled and replaced by
-the new Origin workflow rather than used as a second authoritative origin.
+stale authorization responses and exact mutation bodies. **The typed API now supports a restricted direct native Origin builder.**
+The former Species/Subspecies edit widgets are no longer offered in guided
+setup or the general Character editor, and previously saved legacy selections
+are displayed as reconciliation conflicts. Mixed, custom, DM and Rite
+editing and the current-effective character projection are not finished.
+
+## Origin guided builder integration
+
+The Species navigation ID is retained for the existing guided builder route,
+but its visible section is now **Origin**. The guided Origin section and
+ordinary Edit Character overlay use `renderOriginBuilder` instead of the
+legacy Species/Subspecies mutators. The UI loads Site-authorized Origin draft
+and committed state, gets native ruleset metadata, and discovers Species,
+Ancestry and Skill identities from Rules Core. It creates a direct biological
+proposal without inventing contributors, grant lists or authority; changing
+source identity clears stale manifestations.
+
+Creation-time finite choices come from evaluated source candidates rather
+than UI-authored rules, and Human's `any-native-skill` choice uses the
+native Skill option catalog. Unsupported choices (including
+`feat:origin`, unresolved multiplicity, mixed/nested inheritance,
+and source-specific forms) remain visible as incomplete and are not offered
+an unauthorized shortcut. The UI can save and resume incomplete drafts.
+A native-authorized preview enables a separate **Activate Native Origin**
+action; the server performs a fresh trusted reevaluation and atomic commit.
+Optimistic-concurrency conflicts do not automatically overwrite a newer
+saved draft.
+
+A legacy Species/Subspecies selection is shown as a **reconciliation conflict**
+rather than being silently copied, discarded or treated as an authorized
+Origin. The server also rejects the conflict during activation. The
+character header distinguishes committed **Underlying Species/Ancestry**
+from legacy selections and does not present a temporary form as the baseline.
+For a committed Origin, the editor is read-only pending an authorized
+post-origination transition. The guided Origin step remains *incomplete*
+until the cross-pillar effective-character projection is implemented;
+`effectiveMechanicsReady: false` is not transformed into a finished sheet.
+
+The client workflow uses `src/features/origin/origin-workflow.ts`,
+the pure choice model uses `origin-builder-model.ts`, and the UI uses
+`origin-builder.ts`. The rest of the builder continues to own
+independent Background, Class, Deity and advancement state. This is not
+the mixed Human–Elf editor or a DM/Rite/supernatural form workflow, and
+no full browser/production acceptance is claimed.
 
 ## Scope for the next integration step
 
-The draft state and its owner-scoped save/load service are implemented. The additional `character_authorized_origins` and `character_origin_event_receipts` tables now provide a **separate server-held authorized-state storage substrate**, without copying drafts into it. The `PostgresCharacterAuthorizedOriginStore.CommitVerifiedAsync` method requires a separately verified application command and commits a snapshot plus unique event receipt in one PostgreSQL transaction. It locks the applicable draft and current Origin rows, compares expected revisions, rejects repeated event IDs and prevents stale tracked objects from overwriting newer revisions. A character deletion cascades the Origin, receipts and draft. The internal store is registered but **not accessible through an HTTP write route**.
+The draft state and its owner-scoped save/load service are implemented. The additional `character_authorized_origins` and `character_origin_event_receipts` tables now provide a **separate server-held authorized-state storage substrate**, without copying drafts into it. The `PostgresCharacterAuthorizedOriginStore.CommitVerifiedAsync` method requires a separately verified application command and commits a snapshot plus unique event receipt in one PostgreSQL transaction. It locks the applicable draft and current Origin rows, compares expected revisions, rejects repeated event IDs and prevents stale tracked objects from overwriting newer revisions. A character deletion cascades the Origin, receipts and draft. The store has no direct HTTP write route; only the separately authorized `activate-native` application service can currently call it through a restricted HTTP workflow.
 
 The read-only `GET /api/characters/{characterId}/origin/state` requires Site character ownership, works for archived characters as read-only, omits private authorization-evidence IDs, and returns `effectiveMechanicsReady: false`. A stored profile is a verified-history input **only after** a future service revalidates it against current native rules and independently earned entitlements.
 

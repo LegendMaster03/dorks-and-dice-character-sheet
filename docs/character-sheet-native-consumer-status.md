@@ -71,8 +71,14 @@ reloads the saved draft and demands a supported, complete, latest-catalog
 Rules Core result before an atomic revisioned commit. The older Species and
 Subspecies setters reject changes once a canonical Origin is stored, and
 initial activation refuses legacy selections pending reconciliation.
-Rites, DM overrides, subsequent modifications, mixed/nested builder UI and
-independent effective-grant projection remain incomplete. A separate
+The guided Species section is now labeled **Origin** and uses native
+Species/Ancestry discovery and server-held Origin drafts instead of the
+legacy Species/Subspecies setters. Finite creation choices and native Skill
+selection are supported; unsupported Origin Feat eligibility remains
+explicitly unresolved. A committed profile is labeled as *Underlying*
+rather than a current effective transformed form. Rites, DM overrides,
+subsequent modifications, mixed/nested builder UI and independent
+effective-grant projection remain incomplete. A separate
 branch-to-branch native contract workflow validates the unmerged Phase 5
 Rules Core; Orc native creation is authorized, while Human still has
 creation-time choices to resolve. See
