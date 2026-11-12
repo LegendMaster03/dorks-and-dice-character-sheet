@@ -44,6 +44,14 @@ public static class CharacterOriginDraftEndpoints
             Respond(await service.ApplyAsync(characterId,
                 request.ExpectedDraftRevision, cancellationToken)));
 
+        // Read only the owner-submitted mixed Origin proposal and current
+        // native candidate offer summaries. DM/target scope is checked first;
+        // this does not confer general permission to read another user's sheet.
+        group.MapGet("/mixed-review", async (
+            Guid characterId, Guid campaignId, CharacterOriginMixedReviewService service,
+            CancellationToken cancellationToken) =>
+            Respond(await service.ReviewAsync(characterId, campaignId, cancellationToken)));
+
         // The caller must be an active campaign DM for this exact character.
         // The Site-issued scope is checked before any cross-owner draft read.
         // Only this narrow table-authorized Human–Elf initial construction is
@@ -88,6 +96,44 @@ public static class CharacterOriginDraftEndpoints
                 request.Fingerprint, request.Proposal, request.ExpectedRevision,
                 cancellationToken)));
     }
+
+    private static IResult Respond(CharacterOriginMixedReviewResult result) =>
+        result.Status switch
+        {
+            CharacterOriginMixedReviewStatus.Ready =>
+                Results.Ok(new
+                {
+                    status = "ready",
+                    draftRevision = result.DraftRevision,
+                    rulesetId = result.RulesetId,
+                    fingerprint = result.Fingerprint,
+                    proposalId = result.ProposalId,
+                    candidates = result.Candidates,
+                    previewOnly = true,
+                    // Selecting a current candidate is not an approved grant.
+                    // Only the separate Site-scoped activation POST may commit.
+                    activeGrants = false
+                }),
+            CharacterOriginMixedReviewStatus.Unauthenticated =>
+                Results.Unauthorized(),
+            CharacterOriginMixedReviewStatus.NotAuthorized =>
+                Results.NotFound(),
+            CharacterOriginMixedReviewStatus.SiteProjectionUnavailable =>
+                Error(503, "dm_authorization_projection_unavailable"),
+            CharacterOriginMixedReviewStatus.SheetNotInitialized =>
+                Error(409, "character_sheet_not_initialized"),
+            CharacterOriginMixedReviewStatus.OriginAlreadyCommitted =>
+                Error(409, "origin_already_committed"),
+            CharacterOriginMixedReviewStatus.DraftMissing =>
+                Error(409, "origin_draft_missing"),
+            CharacterOriginMixedReviewStatus.InvalidDraft =>
+                Error(422, "unsupported_mixed_origin_draft"),
+            CharacterOriginMixedReviewStatus.NativeSnapshotUnpinned =>
+                Error(409, "native_origin_requires_reviewed_catalog"),
+            CharacterOriginMixedReviewStatus.NativeContentChanged =>
+                Error(409, "native_origin_content_changed_since_dm_review"),
+            _ => Error(503, "native_origin_verification_unavailable")
+        };
 
     private static IResult Respond(CharacterOriginMixedActivationResult result) =>
         result.Status switch
