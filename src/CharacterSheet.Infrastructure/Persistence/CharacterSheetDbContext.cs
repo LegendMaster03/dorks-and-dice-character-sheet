@@ -376,6 +376,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .HasMaxLength(CharacterOriginDraftState.MaxFingerprintLength).IsRequired();
         authorizedOrigin.Property(value => value.ProfileJson)
             .HasColumnType("jsonb").IsRequired();
+        authorizedOrigin.Property(value => value.EvaluatedProjectionJson)
+            .HasColumnType("jsonb");
         authorizedOrigin.Property(value => value.Revision).IsRequired();
         authorizedOrigin.Property(value => value.SourceDraftRevision);
         authorizedOrigin.Property(value => value.CreatedAt).IsRequired();
