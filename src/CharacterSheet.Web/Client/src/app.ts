@@ -38,6 +38,8 @@ import { createConditionsWorkflow } from "./features/conditions/conditions-workf
 import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
 import { createHarvestingCraftingWorkflow } from "./features/harvesting/harvesting-workflow.js";
 import { createOriginWorkflow } from "./features/origin/origin-workflow.js";
+import { createOriginDmWorkflow } from "./features/origin/origin-dm-workflow.js";
+import { renderDmOriginReview } from "./features/origin/origin-dm-review.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -98,6 +100,19 @@ function render(): void {
             break;
         case "error":
             content = renderStateScreen("Character Sheet unavailable", state.screen.message, "error");
+            break;
+        case "dm-origin-review":
+            content = route.kind === "dm-origin-review"
+                ? renderDmOriginReview(route.campaignId, route.characterId,
+                    dmOriginWorkflow.current(), {
+                        reload: () => void dmOriginWorkflow.load(
+                            route.characterId, route.campaignId),
+                        toggle: candidateId => dmOriginWorkflow.toggleCandidate(candidateId),
+                        apply: () => void dmOriginWorkflow.apply(
+                            route.characterId, route.campaignId)
+                    })
+                : renderStateScreen("Origin DM review unavailable",
+                    "No verified campaign and target were supplied.", "warning");
             break;
         case "invalid":
             content = renderStateScreen("Unsupported Character Sheet route", state.screen.route, "warning");
@@ -461,6 +476,7 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
 
 const application = createApplication(initialState, render);
 const originWorkflow = createOriginWorkflow(environment, () => application.render());
+const dmOriginWorkflow = createOriginDmWorkflow(environment, () => application.render());
 const presentationWorkflow = createPresentationWorkflow(application, environment);
 const routineStateWorkflow = createRoutineStateWorkflow(application, environment);
 const harvestingCraftingWorkflow = createHarvestingCraftingWorkflow(
@@ -511,4 +527,10 @@ const conditionsWorkflow = createConditionsWorkflow(
     environment);
 
 application.render();
-void bootstrapCharacter();
+// A DM does not have to own the character. Never bootstrap the owner-only
+// Character editor on a campaign-scoped review route.
+if (route.kind === "dm-origin-review") {
+    void dmOriginWorkflow.load(route.characterId, route.campaignId);
+} else {
+    void bootstrapCharacter();
+}
