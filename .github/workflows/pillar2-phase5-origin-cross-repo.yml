@@ -37,3 +37,35 @@ jobs:
           -p:DefineConstants=PILLAR2_PHASE5_ORIGIN
           --
           "$GITHUB_WORKSPACE/rules-core/data/rulesets"
+      - name: Start ephemeral PostgreSQL for cross-repository Origin acceptance
+        run: |
+          docker run -d --name mixed-origin-phase5-postgres \
+            -p 127.0.0.1:55433:5432 \
+            -e POSTGRES_DB=character_sheet_test \
+            -e POSTGRES_USER=character_sheet_test \
+            -e POSTGRES_PASSWORD=character_sheet_test \
+            postgres:18
+          for i in {1..40}; do
+            if docker exec mixed-origin-phase5-postgres \
+              pg_isready -U character_sheet_test -d character_sheet_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs mixed-origin-phase5-postgres
+          exit 1
+      - name: Exercise real Core HTTP evaluation and Character Sheet PostgreSQL save/reload
+        env:
+          RULES_CORE_CONTENT_ROOT: ${{ github.workspace }}/rules-core/data/rulesets
+          ConnectionStrings__CharacterSheet: Host=127.0.0.1;Port=55433;Database=character_sheet_test;Username=character_sheet_test;Password=character_sheet_test
+        run: >-
+          dotnet test
+          tests/CharacterSheet.IntegrationTests/CharacterSheet.IntegrationTests.csproj
+          --configuration Release
+          --filter FullyQualifiedName~MixedOriginCrossRepositoryPersistenceTests
+          -p:BuildClient=false
+          -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          -p:DefineConstants=PILLAR2_PHASE5_ORIGIN
+      - name: Cleanup Phase 5 PostgreSQL
+        if: always()
+        run: docker rm -f mixed-origin-phase5-postgres 2>/dev/null || true
