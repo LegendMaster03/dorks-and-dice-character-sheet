@@ -100,6 +100,7 @@ builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
+builder.Services.AddScoped<ISiteOriginDmAccessGateway, ToolHostOriginDmAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterOriginDraftService>();
