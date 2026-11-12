@@ -1,0 +1,38 @@
+name: Pillar 2 Phase 5 / Real Rules Core Origin Contract
+
+# Temporary branch-specific integration check: while Core Phase 5 is still
+# unmerged, the ordinary contract smoke checks Core main and cannot validate
+# the new origin contracts. Retarget or remove this workflow at integration.
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  native-origin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out Character Sheet Phase 5
+        uses: actions/checkout@v4
+      - name: Check out Rules Core Phase 5
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-rules-core
+          ref: feature/pillar2-phase5-origin-api-20261112
+          path: rules-core
+          persist-credentials: false
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Run actual native Origin and consumer contract probe
+        run: >-
+          dotnet run
+          --project tests/NativeCoreContractProbe/NativeCoreContractProbe.csproj
+          -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          --
+          "$GITHUB_WORKSPACE/rules-core/data/rulesets"
