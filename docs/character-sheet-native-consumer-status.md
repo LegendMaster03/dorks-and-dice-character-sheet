@@ -46,7 +46,12 @@ or ability inputs**. Active conditions are never bypassed by treating base
 speed as effective movement. The bridge also requires the exact same native
 catalog fingerprint for the Origin verification and character calculation;
 when catalog content changes between calls, Origin effects are withheld
-while independent Class values remain visible. It does not infer other Species traits,
+while independent Class values remain visible. The branch now also exposes a first, narrowly executed passive
+Species sense: source-attributed `rule.low-light-vision`, granting
+perception of Dim Light as Bright Light without changing Darkness or
+inventing a vision range. This value appears in `Senses` only after
+server-held, current-catalog Origin revalidation and exact persisted
+trait-occurrence matching. It does not infer other Species traits,
 conditional bonuses, independent entitlements, Rites, mixed inheritance
 or temporary transformations. Supported Class proficiency remains visible,
 but other potentially Origin-dependent scores, saves and training totals

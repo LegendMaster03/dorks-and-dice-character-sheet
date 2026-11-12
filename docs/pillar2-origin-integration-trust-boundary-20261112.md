@@ -372,6 +372,41 @@ still require their own verified execution paths. Real Orc catalog
 integration checks cover Humanoid, Medium and 30-foot walking speed.
 Human's required Origin Feat remains unresolved.
 
+## First executable passive Species sense: Low-Light Vision
+
+The Phase 5 Core branch's `NativeOriginVisionProjector` now executes
+the selected-native `rule.low-light-vision` from a **real, authorized**
+`low-light-vision` trait grant: Dim Light is perceived as Bright Light;
+Darkness is unchanged. There is no separate Low-Light Vision range.
+No other Species senses or visibility rules are inferred.
+
+The stateless Core preview carries `vision` as `previewOnly`. The
+browser can inspect this offer, but it can not activate the effect.
+The Character Sheet's server-held
+`CharacterOriginParentNativeReviewService` independently confirms the
+actual owning character, immutable direct-first-party source draft,
+completed-event receipt, current native catalog fingerprint and
+**entire** committed Origin profile before exposing a private vision
+interpretation. `VerifiedOriginVisionReader` separately checks the
+reported rule ID, effect levels, grant ID, native source ID, trait
+definition identity and exact occurrence path against the current
+committed inherited grant. Mismatches, transformed profiles, duplicates
+and unsupported effect content provide no active sense.
+
+Only after those checks, the existing Character presentation publishes a
+`sense.low-light-vision` entry in its `Senses` collection, explicitly
+stating Dim Light to Bright Light and that Darkness is unchanged. This
+is independent of native walking-speed arithmetic and does not grant
+additional sensory modalities, Darkvision, range, Class benefits or
+attack advantages. Effective character presentation remains `partial`;
+the underlying biological Origin, any temporary active form, and all
+independently earned entitlements retain separate trust boundaries.
+
+Unit, hosted PostgreSQL and a real Core-to-Sheet acceptance probe check
+the actual Orc trait occurrence and reject forged, incomplete, stale or
+unapproved vision claims. Full scene visibility and other Species senses
+remain future native-mechanics work.
+
 ## Scope for the next integration step
 
 The draft state and its owner-scoped save/load service are implemented.
