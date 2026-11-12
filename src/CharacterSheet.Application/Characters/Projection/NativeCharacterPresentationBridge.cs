@@ -32,15 +32,19 @@ public static class NativeCharacterPresentationBridge
         INativeRulesCoreGateway gateway,
         CharacterBuildView build,
         CharacterStateView? state,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool hasCommittedOrigin = false)
     {
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(build);
 
         if (build.ProgressionEntries.Count == 0 && build.BaseAbilityScoreInputs.Count == 0 &&
             build.FoundationalSelections.Count == 0)
-            return new("unconfigured", null,
-                "Set base ability scores and choose a starting class to calculate character mechanics.");
+            return hasCommittedOrigin
+                ? new("partial", null,
+                    "An initial Origin is committed, but native Species/Ancestry traits and character mechanics have not yet been projected.")
+                : new("unconfigured", null,
+                    "Set base ability scores and choose a starting class to calculate character mechanics.");
 
         // Preserve every saved selection. If a record can not be translated
         // unambiguously, do not submit a partial class history as a complete one.
@@ -125,7 +129,11 @@ public static class NativeCharacterPresentationBridge
             id => (object)new { ranks = storedRanks.GetValueOrDefault(id),
                 proficient = trained.Contains(id), miscModifier = 0 },
             StringComparer.Ordinal);
-        var unmodeledSelections = build.FoundationalSelections.Count != 0 ||
+        // No Origin traits, movement, size, or training may be inferred from
+        // stored identity. An authorized Origin remains unprojected until
+        // the native character kernel accepts server-verified Origin input.
+        var unmodeledSelections = hasCommittedOrigin ||
+            build.FoundationalSelections.Count != 0 ||
             state?.Conditions.Any(condition => !isolatesConditionValues || condition.RuleConceptKey is null ||
                 !condition.RuleConceptKey.StartsWith("condition.", StringComparison.Ordinal)) == true ||
             state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true ||
@@ -280,7 +288,9 @@ public static class NativeCharacterPresentationBridge
             (projection["requiredChoices"] is JsonArray choices && choices.Count != 0);
         return new(partial ? "partial" : "resolved", mechanics,
             partial
-                ? "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
+                ? hasCommittedOrigin
+                    ? "Only independent native calculations are shown. The committed Origin's Species/Ancestry traits, size, movement and effects have not yet been projected."
+                    : "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
                 : null,
             classNames);
     }

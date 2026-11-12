@@ -10,6 +10,7 @@ namespace CharacterSheet.Application.Characters;
 public sealed class CharacterPresentationService(
     CharacterBuildService buildService,
     CharacterStateService stateService,
+    CharacterOriginStateService origins,
     INativeRulesCoreGateway nativeRulesCoreGateway)
 {
     public async Task<CharacterPresentationResult> GetAsync(
@@ -31,11 +32,30 @@ public sealed class CharacterPresentationService(
         else
             diagnostics.Add($"character-state:{stateResult.Status}");
 
+        // The native character kernel does not yet accept or execute a
+        // verified Origin profile. Read it through Site-authorized state,
+        // rather than trusting legacy Species selections or a browser draft.
+        // If Origin state is unavailable, fail closed instead of claiming
+        // a mechanically complete character.
+        var origin = await origins.GetAsync(characterId, cancellationToken);
+        if (origin.Status != CharacterOriginReadStatus.Ready)
+        {
+            diagnostics.Add($"character-origin:{origin.Status}");
+            return new CharacterPresentationResult(
+                CharacterPresentationAccessStatus.Ready,
+                new CharacterPresentationView(
+                    ProjectAdvancement(build, null), null,
+                    MechanicsStatus: "unavailable",
+                    MechanicsMessage: "Authorized Origin state is unavailable; effective character mechanics cannot be verified."),
+                diagnostics);
+        }
+
         NativeCharacterPresentationBridge.Outcome projection;
         try
         {
             projection = await NativeCharacterPresentationBridge.ProjectAsync(
-                nativeRulesCoreGateway, build, state, cancellationToken);
+                nativeRulesCoreGateway, build, state, cancellationToken,
+                hasCommittedOrigin: origin.SavedState is not null);
         }
         catch (Exception exception) when (exception is RulesCoreGatewayException
             or JsonException or InvalidOperationException or FormatException)
