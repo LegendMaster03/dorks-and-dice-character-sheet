@@ -35,13 +35,18 @@ AC, equipment grants, hit points, or rules are invented.
 
 The UI distinguishes resolved, partial, unconfigured and unavailable
 calculations. A network failure is no longer rendered as an ordinary blank character.
-When a canonical Origin has already been committed, Character presentation now
-checks the Site-authorized stored Origin and explicitly reports native
-Species/Ancestry mechanics as **unprojected**. Supported independent Class
-proficiency remains visible, while unprojected Origin-dependent ability,
-save, initiative and training totals are not shown as fully effective.
-The current native character kernel does not accept authorized Origin grants;
-this status change does not itself make those effects executable.
+When a canonical Origin has been committed, character presentation checks
+the Site-authorized state and reports **partial** Species/Ancestry mechanics.
+The Phase 5 branch now also revalidates a direct first-party initial Origin
+against the latest Core catalog and compares its intrinsic grants with the
+immutable saved profile. For verified Orc, it displays Base Size and Creature
+Type and submits the 30-foot base walk speed to the native character kernel
+for its movement calculation. It does not infer other Species traits,
+conditional bonuses, independent entitlements, Rites, mixed inheritance
+or temporary transformations. Supported Class proficiency remains visible,
+but other potentially Origin-dependent scores, saves and training totals
+remain withheld. The native character kernel still does not accept a
+full authorized Origin profile; this is deliberately a narrow subset.
 
 ## Implemented builder and advancement slice
 
