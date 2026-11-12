@@ -91,6 +91,9 @@ builder.Services.AddSingleton<ICharacterArtStorage>(new FileSystemCharacterArtSt
 builder.Services.AddScoped<ICharacterSheetStore, PostgresCharacterSheetStore>();
 builder.Services.AddScoped<ICharacterBuildStore, PostgresCharacterBuildStore>();
 builder.Services.AddScoped<ICharacterOriginDraftStore, PostgresCharacterOriginDraftStore>();
+// Internal-only authorized Origin storage; there is deliberately no direct
+// controller or browser endpoint capable of calling CommitVerifiedAsync.
+builder.Services.AddScoped<ICharacterAuthorizedOriginStore, PostgresCharacterAuthorizedOriginStore>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
 builder.Services.AddScoped<ICharacterStartingEquipmentInventoryStore, PostgresCharacterStartingEquipmentInventoryStore>();
 builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
