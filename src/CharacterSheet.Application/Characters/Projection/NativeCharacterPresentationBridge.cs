@@ -314,7 +314,13 @@ public static class NativeCharacterPresentationBridge
             Senses: lowLightVision is null
                 ? null : [new CalculatedMechanicalValuePresentationView(
                     "sense.low-light-vision", "Low-Light Vision",
-                    "Dim Light perceived as Bright Light; Darkness unchanged")],
+                    "Dim Light perceived as Bright Light; Darkness unchanged",
+                    SourceAttributions: [new SourceAttributionPresentationView(
+                        "origin-grant:" + lowLightVision.GrantId,
+                        "Native Species/Ancestry trait",
+                        Detail: lowLightVision.SourceId +
+                            lowLightVision.OccurrencePath,
+                        PresentationRequired: true)])],
             Movement: resolvedWalkingSpeed is int walk
                 ? [new CalculatedMechanicalValuePresentationView(
                     "movement.walk", "Walking Speed", walk, Unit: "ft")]
