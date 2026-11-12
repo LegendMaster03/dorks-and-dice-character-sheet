@@ -37,6 +37,7 @@ import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
 import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
 import { createHarvestingCraftingWorkflow } from "./features/harvesting/harvesting-workflow.js";
+import { createOriginWorkflow } from "./features/origin/origin-workflow.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -358,7 +359,21 @@ function renderWorkspace(
                 : { status: "loading" },
         state.presentation.equipmentPreview ?? null,
         state.presentation.equipmentPreviewMessage,
-        state.presentation.equipmentPreviewStatus);
+        state.presentation.equipmentPreviewStatus,
+        originWorkflow.current(),
+        {
+            openChooser: (category, candidateId, requirementId) =>
+                void originWorkflow.openChooser(category, candidateId, requirementId),
+            searchChooser: query => void originWorkflow.searchChooser(query),
+            closeChooser: () => originWorkflow.closeChooser(),
+            chooseOption: id => void originWorkflow.chooseOption(character.characterId, id),
+            clearAncestry: () => void originWorkflow.clearAncestry(character.characterId),
+            setFiniteChoice: (candidateId, requirementId, id) =>
+                void originWorkflow.setFiniteChoice(character.characterId,
+                    candidateId, requirementId, id),
+            activate: () => void originWorkflow.activate(character.characterId),
+            reload: () => void originWorkflow.load(character.characterId)
+        });
     return workspace;
 }
 
@@ -394,7 +409,8 @@ async function bootstrapCharacter(): Promise<void> {
             await Promise.all([
                 buildStateWorkflow.load(character.characterId),
                 routineStateWorkflow.load(character.characterId),
-                presentationWorkflow.load(character.characterId)
+                presentationWorkflow.load(character.characterId),
+                originWorkflow.load(character.characterId)
             ]);
         }
     } catch (error) {
@@ -432,7 +448,8 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
         await Promise.all([
             buildStateWorkflow.load(initialized.characterId),
             routineStateWorkflow.load(initialized.characterId),
-            presentationWorkflow.load(initialized.characterId)
+            presentationWorkflow.load(initialized.characterId),
+            originWorkflow.load(initialized.characterId)
         ]);
     } catch (error) {
         application.dispatch({ type: "load-failed", message: requestErrorMessage(error) });
@@ -440,6 +457,7 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
 }
 
 const application = createApplication(initialState, render);
+const originWorkflow = createOriginWorkflow(environment, () => application.render());
 const presentationWorkflow = createPresentationWorkflow(application, environment);
 const routineStateWorkflow = createRoutineStateWorkflow(application, environment);
 const harvestingCraftingWorkflow = createHarvestingCraftingWorkflow(
