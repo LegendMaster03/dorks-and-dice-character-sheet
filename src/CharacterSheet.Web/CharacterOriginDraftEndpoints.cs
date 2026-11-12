@@ -12,6 +12,8 @@ public static class CharacterOriginDraftEndpoints
     public sealed record SaveRequest(string RulesetId, string? Fingerprint,
         JsonElement Proposal, long ExpectedRevision);
 
+    public sealed record ActivateRequest(long ExpectedDraftRevision);
+
     public static void MapCharacterOriginDraftEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/characters/{characterId:guid}/origin");
@@ -29,6 +31,15 @@ public static class CharacterOriginDraftEndpoints
         // Read-only view of last committed server-held Origin. It is not a
         // current effective character mechanics projection; no authorization
         // receipt secret is returned in the public response.
+        // Only initial first-party construction is currently executable.
+        // Rites, form changes and DM outcomes need a separately verified flow.
+        group.MapPost("/activate-native", async (
+            Guid characterId, ActivateRequest request,
+            CharacterOriginInitialActivationService service,
+            CancellationToken cancellationToken) =>
+            Respond(await service.ApplyAsync(characterId,
+                request.ExpectedDraftRevision, cancellationToken)));
+
         group.MapGet("/state", async (
             Guid characterId, CharacterOriginStateService service,
             CancellationToken cancellationToken) =>
@@ -41,6 +52,36 @@ public static class CharacterOriginDraftEndpoints
                 request.Fingerprint, request.Proposal, request.ExpectedRevision,
                 cancellationToken)));
     }
+
+    private static IResult Respond(CharacterOriginActivationResult result) =>
+        result.Status switch
+        {
+            CharacterOriginActivationStatus.Applied =>
+                Results.Ok(new { status = "applied", revision = result.Revision,
+                    // The effective cross-pillar consumer projection is still
+                    // under construction. A stored Origin is not a fully
+                    // evaluated, playable character.
+                    effectiveMechanicsReady = false }),
+            CharacterOriginActivationStatus.NotFoundOrNotOwned => Results.NotFound(),
+            CharacterOriginActivationStatus.Unauthenticated => Results.Unauthorized(),
+            CharacterOriginActivationStatus.ProjectionUnavailable =>
+                Error(503, "character_authorization_unavailable"),
+            CharacterOriginActivationStatus.SheetNotInitialized =>
+                Error(409, "character_sheet_not_initialized"),
+            CharacterOriginActivationStatus.ArchivedReadOnly =>
+                Error(403, "character_archived_read_only"),
+            CharacterOriginActivationStatus.DraftMissing =>
+                Error(409, "origin_draft_missing"),
+            CharacterOriginActivationStatus.DraftRevisionConflict =>
+                Error(409, "origin_draft_revision_conflict"),
+            CharacterOriginActivationStatus.OriginAlreadyCommitted =>
+                Error(409, "origin_already_committed"),
+            CharacterOriginActivationStatus.LegacySelectionConflict =>
+                Error(409, "legacy_origin_selection_requires_reconciliation"),
+            CharacterOriginActivationStatus.NotAuthorizedByNativeRules =>
+                Error(422, "native_origin_not_authorized"),
+            _ => Error(503, "native_origin_verification_unavailable")
+        };
 
     private static IResult Respond(CharacterOriginReadResult result) =>
         result.Status switch
