@@ -256,6 +256,38 @@ public sealed class ParentOriginNativeReviewTests
     }
 
     [Fact]
+    public async Task InPlaceParentProfileRewriteDuringNativeReviewDoesNotYieldVerifiedMaterial()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var childId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var options = database.CreateOptions();
+        await using var db = new CharacterSheetDbContext(options);
+        await InitializeAsync(db, childId, parentId);
+
+        // Simulate an out-of-band data rewrite that fails to advance Origin
+        // revision or timestamp. The service must recheck actual content,
+        // not rely solely on revision metadata after the native HTTP call.
+        var native = new NativeGateway(beforeReturn: async () =>
+        {
+            await using var other = new CharacterSheetDbContext(options);
+            var tampered = JsonNode.Parse(StoredProfile)!;
+            tampered["unverifiedProfileMarker"] = "changed-mid-review";
+            var changed = await other.Database.ExecuteSqlRawAsync(
+                "UPDATE character_authorized_origins SET \"ProfileJson\" = {0}::jsonb WHERE \"CharacterId\" = {1}",
+                tampered.ToJsonString(), parentId);
+            Assert.Equal(1, changed);
+        });
+
+        var result = await Service(db, childId, parentId, native)
+            .ReviewAsync(childId, parentId);
+        Assert.Equal(CharacterOriginParentNativeReviewStatus.ConcurrentOriginChange,
+            result.Status);
+        Assert.Null(result.Review);
+        Assert.Null(result.VerifiedInitialProfile);
+    }
+
+    [Fact]
     public async Task AConcurrentRiteCannotRetroactivelyValidateAnOlderParentRevision()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
