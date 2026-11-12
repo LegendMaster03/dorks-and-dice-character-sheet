@@ -114,6 +114,7 @@ export interface NativeOriginParentSnapshotResponse {
         rulesetId: string;
         fingerprint: string;
         revision: number;
+        snapshotUpdatedAt: string;
         underlying: {
             speciesId: string | null;
             ancestryId: string | null;

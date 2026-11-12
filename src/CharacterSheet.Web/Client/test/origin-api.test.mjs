@@ -228,6 +228,7 @@ test("owned parent inspection exposes only stored identity, not inherited grants
             rulesetId: "first-party-001",
             fingerprint: "native-1",
             revision: 2,
+            snapshotUpdatedAt: "2026-11-12T00:00:00Z",
             underlying: {
                 speciesId: "species.human",
                 ancestryId: null,

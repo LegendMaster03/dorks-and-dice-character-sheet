@@ -30,6 +30,7 @@ public sealed record CharacterOriginParentSnapshot(
     string RulesetId,
     string Fingerprint,
     long Revision,
+    DateTimeOffset SnapshotUpdatedAt,
     CharacterOriginParentIdentity Underlying,
     CharacterOriginParentIdentity Current);
 
@@ -104,7 +105,8 @@ public sealed class CharacterOriginParentSnapshotService(
 
             return new(CharacterOriginParentSnapshotStatus.Ready,
                 new(parentCharacterId, saved.RulesetId, saved.Fingerprint,
-                    saved.Revision, Identity(underlying), Identity(current)));
+                    saved.Revision, saved.UpdatedAt,
+                    Identity(underlying), Identity(current)));
         }
         catch (JsonException)
         {

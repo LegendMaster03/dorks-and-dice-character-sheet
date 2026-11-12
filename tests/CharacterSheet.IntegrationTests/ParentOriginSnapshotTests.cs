@@ -76,6 +76,7 @@ public sealed class ParentOriginSnapshotTests
         Assert.Equal("first-party-001", snapshot.RulesetId);
         Assert.Equal("stored-native", snapshot.Fingerprint);
         Assert.Equal(1, snapshot.Revision);
+        Assert.True(snapshot.SnapshotUpdatedAt <= DateTimeOffset.UtcNow);
         Assert.Equal("species.human", snapshot.Underlying.SpeciesId);
         Assert.Equal("origin:original-parent", snapshot.Underlying.ProfileId);
         Assert.Equal("species.werewolf", snapshot.Current.SpeciesId);
