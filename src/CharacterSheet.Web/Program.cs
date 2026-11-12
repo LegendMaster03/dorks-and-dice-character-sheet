@@ -520,6 +520,10 @@ static IResult ToBuildApiResult(CharacterBuildResult result, bool mutating) => r
     CharacterBuildAccessStatus.ProjectionUnavailable => Results.Json(new { error = "Site Character authorization is unavailable for this request." }, statusCode: StatusCodes.Status503ServiceUnavailable),
     CharacterBuildAccessStatus.Unauthenticated => Results.Unauthorized(),
     CharacterBuildAccessStatus.SheetNotInitialized => Results.NotFound(new { error = "Digital Character Sheet is not initialized." }),
+    CharacterBuildAccessStatus.OriginManaged =>
+        Results.Json(new { error = "origin_is_managed_by_authorized_profile",
+            detail = "Use the Origin builder and validated transition to change Species or Ancestry." },
+            statusCode: StatusCodes.Status409Conflict),
     CharacterBuildAccessStatus.ArchivedReadOnly when mutating => Results.Conflict(new { error = "Archived Characters are read-only. Restore the Character through the Site before editing its build." }),
     _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
 };

@@ -12,6 +12,7 @@ public enum CharacterBuildAccessStatus
     ProjectionUnavailable,
     Unauthenticated,
     SheetNotInitialized,
+    OriginManaged,
     ArchivedReadOnly
 }
 
@@ -363,7 +364,15 @@ public sealed class CharacterBuildService(
             return new CharacterBuildResult(CharacterBuildAccessStatus.ArchivedReadOnly);
         }
 
-        var root = await mutation(timeProvider.GetUtcNow(), cancellationToken);
+        CharacterSheetRoot? root;
+        try
+        {
+            root = await mutation(timeProvider.GetUtcNow(), cancellationToken);
+        }
+        catch (CharacterOriginManagedException)
+        {
+            return new CharacterBuildResult(CharacterBuildAccessStatus.OriginManaged);
+        }
         if (root is null)
         {
             return new CharacterBuildResult(CharacterBuildAccessStatus.SheetNotInitialized);

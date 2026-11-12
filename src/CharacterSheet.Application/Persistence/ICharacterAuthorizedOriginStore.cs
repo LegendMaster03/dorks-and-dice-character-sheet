@@ -27,6 +27,7 @@ public enum AuthorizedOriginStoreStatus
     Applied,
     OriginRevisionConflict,
     DraftRevisionConflict,
+    LegacyOriginSelectionConflict,
     DuplicateEvent,
     SheetNotInitialized
 }

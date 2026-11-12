@@ -46,6 +46,26 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
             command.AuthorizationKind, command.AuthorizationEvidenceId, command.RecordedAt);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // Acquire the canonical character lock before any draft, snapshot, or
+        // event locks. Species/Subspecies legacy writes take this same lock.
+        // This also prevents a new initial Origin from being installed during
+        // a concurrent legacy foundational-selection mutation.
+        var lockedCharacter = await db.CharacterSheets
+            .FromSqlInterpolated(
+                $"""SELECT * FROM character_sheet_roots WHERE "CharacterId" = {command.CharacterId} FOR UPDATE""")
+            .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+        if (lockedCharacter is null)
+            return new(AuthorizedOriginStoreStatus.SheetNotInitialized);
+
+        if (await db.Set<CharacterFoundationalRuleSelection>().AsNoTracking()
+            .AnyAsync(selection =>
+                selection.CharacterId == command.CharacterId &&
+                (selection.Category == CharacterFoundationalSelectionCategory.Species ||
+                 selection.Category == CharacterFoundationalSelectionCategory.Subspecies ||
+                 selection.Category == CharacterFoundationalSelectionCategory.RaceSpecies),
+                cancellationToken))
+            return new(AuthorizedOriginStoreStatus.LegacyOriginSelectionConflict);
+
         if (command.ExpectedDraftRevision is long draftRevision)
         {
             // Lock the exact draft row until commit. A concurrent change to the
