@@ -17,6 +17,10 @@ public static class CharacterOriginDraftEndpoints
         Guid CampaignId, long ExpectedDraftRevision,
         IReadOnlyList<string> CandidateIds);
 
+    public sealed record ReviewParentSourcesRequest(
+        long ExpectedDraftRevision,
+        IReadOnlyList<CharacterOriginParentSourceBinding> Bindings);
+
 
     public static void MapCharacterOriginDraftEndpoints(this WebApplication app)
     {
@@ -83,6 +87,16 @@ public static class CharacterOriginDraftEndpoints
             CancellationToken cancellationToken) =>
             Respond(await service.ReviewAsync(
                 characterId, parentCharacterId, cancellationToken)));
+
+        // Read-only owner review. Browser-provided IDs are proposed source
+        // alignments, not verified parentage or DM-approved inheritance.
+        // In-process native profiles never leave Character Sheet.
+        group.MapPost("/parent-source-alignment-review", async (
+            Guid characterId, ReviewParentSourcesRequest request,
+            CharacterOriginParentSourceAlignmentService service,
+            CancellationToken cancellationToken) =>
+            Respond(await service.ReviewAsync(characterId,
+                request.ExpectedDraftRevision, request.Bindings, cancellationToken)));
 
         group.MapGet("/state", async (
             Guid characterId, CharacterOriginStateService service,
@@ -200,6 +214,48 @@ public static class CharacterOriginDraftEndpoints
             CharacterOriginActivationStatus.NotAuthorizedByNativeRules =>
                 Error(422, "native_origin_not_authorized"),
             _ => Error(503, "native_origin_verification_unavailable")
+        };
+
+    private static IResult Respond(CharacterOriginParentSourceAlignmentResult result) =>
+        result.Status switch
+        {
+            CharacterOriginParentSourceAlignmentStatus.Ready =>
+                Results.Ok(new
+                {
+                    status = "ready",
+                    draftRevision = result.DraftRevision,
+                    matches = result.Matches,
+                    inspectionOnly = true,
+                    relationshipVerified = false,
+                    inheritanceAuthorized = false,
+                    activeGrants = false,
+                    effectiveMechanicsReady = false
+                }),
+            CharacterOriginParentSourceAlignmentStatus.Unauthenticated =>
+                Results.Unauthorized(),
+            CharacterOriginParentSourceAlignmentStatus.NotFoundOrNotOwned =>
+                Results.NotFound(),
+            CharacterOriginParentSourceAlignmentStatus.ProjectionUnavailable =>
+                Error(503, "character_authorization_unavailable"),
+            CharacterOriginParentSourceAlignmentStatus.SheetNotInitialized =>
+                Error(409, "character_sheet_not_initialized"),
+            CharacterOriginParentSourceAlignmentStatus.DraftMissing =>
+                Error(409, "origin_draft_missing"),
+            CharacterOriginParentSourceAlignmentStatus.DraftRevisionConflict =>
+                Error(409, "origin_draft_revision_conflict"),
+            CharacterOriginParentSourceAlignmentStatus.AlreadyCommitted =>
+                Error(409, "origin_already_committed"),
+            CharacterOriginParentSourceAlignmentStatus.UnsupportedDraft =>
+                Error(422, "unsupported_parent_source_draft"),
+            CharacterOriginParentSourceAlignmentStatus.InvalidBindings =>
+                Error(400, "invalid_parent_source_bindings"),
+            CharacterOriginParentSourceAlignmentStatus.ParentNativeCatalogMismatch =>
+                Error(409, "parent_origin_native_catalog_mismatch"),
+            CharacterOriginParentSourceAlignmentStatus.ParentSourceMismatch =>
+                Error(422, "parent_native_source_mismatch"),
+            CharacterOriginParentSourceAlignmentStatus.ConcurrentSourceChange =>
+                Error(409, "parent_source_changed_during_review"),
+            _ => Error(409, "parent_origin_not_natively_verified")
         };
 
     private static IResult Respond(CharacterOriginParentNativeReviewResult result) =>

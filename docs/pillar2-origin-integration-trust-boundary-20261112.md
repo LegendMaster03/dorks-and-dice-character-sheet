@@ -566,3 +566,43 @@ reproduction compatibility, a general mixed contributor source resolver
 or a grant to the child. The earlier Human–Elf approved-mixed vertical
 slice still uses native Species exemplar sources, not this individual
 parent profile. Both independent limitations remain explicit.
+
+### Read-only individual-parent source alignment — Phase 5
+
+Character Sheet now has a narrow owner-scoped
+`POST /api/characters/{characterId}/origin/parent-source-alignment-review`
+request taking `expectedDraftRevision` and an explicit list of
+`{contributorId,parentCharacterId}` pairs. This endpoint is read-only
+despite using POST to carry the bounded association list.
+
+The server loads the **saved child draft** (never a browser-provided
+proposal), requires ordinary Site ownership of the child before reading
+it, and validates that each bound contributor is a distinct native
+biological-source contributor in a plain mixed proposal. The alignment
+reader makes no exactly-two-parents assumption: it supports 1–16 inputs
+per request, bounded only to prevent unbounded external verification.
+This count limit is not an origination rule, and no rule of inheritance
+is introduced.
+
+For each proposed individual parent, the server requires independent
+Site owner access and invokes the existing *direct initial, first-party*
+native re-verifier. It compares only the reviewed parent
+`Underlying.speciesId` or `Underlying.ancestryId` with the saved native
+contributor `source.id`. All reviews must use the same Ruleset and
+current native catalog fingerprint as the child draft. After the last
+parent has been verified, the server checks all parent profile bodies
+and revisions again as well as the saved child draft to avoid a
+partially stale multi-input inspection result.
+
+The public response contains only contributor ID, parent character ID,
+matching native source ID, parent Origin revision, and explicit
+`inspectionOnly:true`, `relationshipVerified:false`,
+`inheritanceAuthorized:false`, `activeGrants:false`,
+`effectiveMechanicsReady:false` flags. All cloned parent profiles are
+**in-process only** (`JsonIgnore`) and no grant or relationship is
+persisted, evaluated as hereditary, or submitted to Core for mixed
+construction. The existing DM-approved Human–Elf activation continues
+to use its separate native exemplar contract and does not consume these
+parent inputs. A future relationship/role policy and secure
+parent-to-manifested-source resolver are still required. This work
+does not implement the future partial-state-slot concept.
