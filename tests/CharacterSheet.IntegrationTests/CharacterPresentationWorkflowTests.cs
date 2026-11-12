@@ -480,13 +480,26 @@ public sealed class CharacterPresentationWorkflowTests
                   }
                 }
                 """)!;
+            var dm = Guid.NewGuid();
+            var campaign = Guid.NewGuid();
+            const string evidence = "origin-dm:presentation-test";
+            var decisions = JsonSerializer.Serialize(new[] { new
+            {
+                id = "candidate-0",
+                authority = new {
+                    actorId = dm.ToString("D"), authorizationEvidenceId = evidence
+                },
+                scope = new { kind = "campaign", id = campaign.ToString("D") },
+                target = new { kind = "candidate", id = "grant:type" },
+                effectiveOutcome = new { eligibility = "eligible" }
+            } });
             var saved = await new PostgresCharacterAuthorizedOriginStore(db)
                 .CommitVerifiedAsync(new VerifiedOriginPersistenceCommand(
                     characterId, "first-party-001", fingerprint,
                     profile.ToJsonString(), 0, 1, "construction:mixed-test",
                     "rule.creature-origination", "biological", "campaign-dm",
-                    "origin-dm:presentation-test", DateTimeOffset.UtcNow,
-                    Guid.NewGuid(), Guid.NewGuid(), """[{"id":"candidate-0"}]""",
+                    evidence, DateTimeOffset.UtcNow,
+                    dm, campaign, decisions,
                     projection.ToJsonString()));
             Assert.Equal(AuthorizedOriginStoreStatus.Applied, saved.Status);
         }
