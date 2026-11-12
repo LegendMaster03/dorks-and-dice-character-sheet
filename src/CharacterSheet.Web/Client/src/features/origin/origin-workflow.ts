@@ -18,6 +18,10 @@ import {
     type NativeOriginSavedState
 } from "./origin-api.js";
 import {
+    createOriginParentSourceInspectionWorkflow,
+    type OriginParentSourceInspectionState
+} from "./origin-parent-source-workflow.js";
+import {
     changeDirectOriginChoice,
     changeDirectOriginIdentity,
     changeMixedNativeParent,
@@ -26,6 +30,7 @@ import {
     canActivateDirectNativeOrigin,
     isEditableDirectNativeOrigin,
     isEditableMixedNativeOrigin,
+    mixedNativeParentSources,
     type MixedNativeParentSlot
 } from "./origin-builder-model.js";
 
@@ -45,6 +50,7 @@ export interface OriginUiState {
     catalog: NativeRulesetMetadata | null;
     readOnly: boolean;
     chooser: OriginChooser;
+    parentSources: OriginParentSourceInspectionState;
     busy: boolean;
     message?: string;
 }
@@ -64,14 +70,21 @@ export interface OriginWorkflow {
     setFiniteChoice(characterId: string, candidateId: string,
         requirementId: string, id: string | null): Promise<void>;
     activate(characterId: string): Promise<void>;
+    loadParentOptions(characterId: string): Promise<void>;
+    selectParentSource(characterId: string, contributorId: string,
+        parentCharacterId: string): void;
+    reviewParentSources(characterId: string): Promise<void>;
 }
 
 export function createOriginWorkflow(
     environment: HostEnvironment, notify: () => void
 ): OriginWorkflow {
+    const parentSources = createOriginParentSourceInspectionWorkflow(
+        environment, () => update({ parentSources: parentSources.current() }));
     let state: OriginUiState = {
         status: "idle", draft: null, savedState: null, preview: null, catalog: null,
-        readOnly: false, chooser: { kind: "closed" }, busy: false
+        readOnly: false, chooser: { kind: "closed" },
+        parentSources: parentSources.current(), busy: false
     };
     let currentCharacterId: string | null = null;
     let sequence = 0;
@@ -83,6 +96,7 @@ export function createOriginWorkflow(
     }
 
     async function load(characterId: string): Promise<void> {
+        parentSources.reset();
         const token = ++sequence;
         currentCharacterId = characterId;
         update({
@@ -114,6 +128,15 @@ export function createOriginWorkflow(
                 catalog, preview, message: previewError,
                 chooser: { kind: "closed" }, busy: false
             });
+            if (draft.draft !== null && authorized.savedState === null &&
+                isEditableMixedNativeOrigin(draft.draft.proposal)) {
+                parentSources.prepare(characterId, draft.draft.revision,
+                    mixedNativeParentSources(draft.draft.proposal)
+                        .filter(source => source.sourceId !== null)
+                        .map(source => ({
+                            contributorId: source.slot, sourceId: source.sourceId!
+                        })));
+            }
         } catch (error) {
             if (token !== sequence) return;
             update({
@@ -179,6 +202,9 @@ export function createOriginWorkflow(
             state.catalog === null) return;
         const token = ++sequence;
         const expectedRevision = state.draft?.revision ?? 0;
+        // Editing a draft invalidates every previous proposed parent binding,
+        // including responses to native requests already in flight.
+        parentSources.reset();
         update({ busy: true, message: undefined });
         try {
             const response = await saveOriginDraft(environment, characterId,
@@ -191,6 +217,15 @@ export function createOriginWorkflow(
                 message: response.preview === null || response.preview === undefined
                     ? "Origin saved, but the native evaluation is not available."
                     : undefined });
+            if (response.draft !== null &&
+                isEditableMixedNativeOrigin(response.draft.proposal)) {
+                parentSources.prepare(characterId, response.draft.revision,
+                    mixedNativeParentSources(response.draft.proposal)
+                        .filter(source => source.sourceId !== null)
+                        .map(source => ({
+                            contributorId: source.slot, sourceId: source.sourceId!
+                        })));
+            }
         } catch (error) {
             if (token !== sequence) return;
             // A 409 is an optimistic-concurrency conflict, not an instruction
@@ -278,9 +313,32 @@ export function createOriginWorkflow(
         }
     }
 
+    async function loadParentOptions(characterId: string): Promise<void> {
+        if (currentCharacterId !== characterId || state.status !== "ready" ||
+            state.busy || state.savedState !== null ||
+            !state.draft || !isEditableMixedNativeOrigin(state.draft.proposal)) return;
+        await parentSources.loadOptions();
+    }
+
+    function selectParentSource(characterId: string, contributorId: string,
+        parentCharacterId: string): void {
+        if (currentCharacterId !== characterId || state.status !== "ready" ||
+            state.busy || state.savedState !== null ||
+            !state.draft || !isEditableMixedNativeOrigin(state.draft.proposal)) return;
+        parentSources.select(contributorId, parentCharacterId);
+    }
+
+    async function reviewParentSources(characterId: string): Promise<void> {
+        if (currentCharacterId !== characterId || state.status !== "ready" ||
+            state.busy || state.savedState !== null ||
+            !state.draft || !isEditableMixedNativeOrigin(state.draft.proposal)) return;
+        await parentSources.review();
+    }
+
     return {
         current: () => state, load, openChooser, searchChooser, closeChooser,
         chooseOption, clearAncestry, setMode, clearMixedParent,
-        setFiniteChoice, activate
+        setFiniteChoice, activate, loadParentOptions, selectParentSource,
+        reviewParentSources
     };
 }
