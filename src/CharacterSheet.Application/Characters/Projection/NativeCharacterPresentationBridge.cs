@@ -39,16 +39,16 @@ public static class NativeCharacterPresentationBridge
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(build);
 
+        // Even with no Class or abilities, an authorized native Origin's
+        // walking speed must go through the Core kernel: active conditions can
+        // suppress or change effective movement. Never display a raw base
+        // speed in the effective Movement collection as a shortcut.
         if (build.ProgressionEntries.Count == 0 && build.BaseAbilityScoreInputs.Count == 0 &&
-            build.FoundationalSelections.Count == 0)
+            build.FoundationalSelections.Count == 0 &&
+            !(hasCommittedOrigin && originIntrinsics is not null))
             return hasCommittedOrigin
-                ? new("partial",
-                    originIntrinsics is null ? null : new CharacterMechanicsPresentationView(
-                        Movement: [new CalculatedMechanicalValuePresentationView(
-                            "movement.walk.base", "Base Walking Speed",
-                            originIntrinsics.BaseWalkingSpeedFeet, Unit: "ft")],
-                        CharacterMetadata: IntrinsicMetadata(originIntrinsics)),
-                    "An initial Origin is committed, but only verified base Species/Ancestry characteristics are available; its other trait effects and character mechanics remain unprojected.")
+                ? new("partial", null,
+                    "An initial Origin is committed, but its native Species/Ancestry characteristics and other trait effects remain unverified or unprojected.")
                 : new("unconfigured", null,
                     "Set base ability scores and choose a starting class to calculate character mechanics.");
 
@@ -306,7 +306,9 @@ public static class NativeCharacterPresentationBridge
         return new(partial ? "partial" : "resolved", mechanics,
             partial
                 ? hasCommittedOrigin
-                    ? "Only independent native calculations are shown. The committed Origin's Species/Ancestry traits, size, movement and effects have not yet been projected."
+                    ? originIntrinsics is null
+                        ? "The committed Origin's Species/Ancestry characteristics and trait effects have not been verified for native character projection."
+                        : "Verified base Species/Ancestry size, creature type and any resolved native movement are shown. Other Origin traits and dependent mechanics remain unresolved."
                     : "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
                 : null,
             classNames);
@@ -316,7 +318,9 @@ public static class NativeCharacterPresentationBridge
         IntrinsicMetadata(VerifiedOriginIntrinsics intrinsics) =>
         [
             new("origin.base-creature-type", "Base Creature Type", intrinsics.CreatureType),
-            new("origin.base-size", "Base Size", intrinsics.Size)
+            new("origin.base-size", "Base Size", intrinsics.Size),
+            new("origin.base-walk-speed", "Base Walking Speed",
+                intrinsics.BaseWalkingSpeedFeet, Unit: "ft")
         ];
 
     private sealed record NativeTrainingSummary(
