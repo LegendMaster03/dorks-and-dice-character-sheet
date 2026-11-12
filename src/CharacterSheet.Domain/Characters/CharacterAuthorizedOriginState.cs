@@ -72,7 +72,8 @@ public sealed class CharacterOriginEventReceipt
     public CharacterOriginEventReceipt(Guid characterId, string eventId,
         long revision, string methodRuleId, string methodId,
         string authorizationKind, string authorizationEvidenceId,
-        DateTimeOffset recordedAt)
+        DateTimeOffset recordedAt, Guid? approvalActorUserId = null,
+        Guid? approvalCampaignId = null, string? approvedDecisionsJson = null)
     {
         if (characterId == Guid.Empty || revision < 1)
             throw new ArgumentException("A valid character and committed revision are required.");
@@ -84,6 +85,29 @@ public sealed class CharacterOriginEventReceipt
         AuthorizationKind = Required(authorizationKind, 32, nameof(authorizationKind));
         AuthorizationEvidenceId = Required(authorizationEvidenceId, 320,
             nameof(authorizationEvidenceId));
+        if (approvalActorUserId.HasValue != approvalCampaignId.HasValue ||
+            approvalActorUserId.HasValue != (approvedDecisionsJson is not null) ||
+            approvalActorUserId == Guid.Empty || approvalCampaignId == Guid.Empty)
+            throw new ArgumentException("DM approval audit requires a complete actor, campaign and ruling set.");
+        if (approvedDecisionsJson is not null)
+        {
+            if (Encoding.UTF8.GetByteCount(approvedDecisionsJson) > 131_072)
+                throw new ArgumentException("DM ruling audit exceeds the maximum size.");
+            try
+            {
+                using var rulings = JsonDocument.Parse(approvedDecisionsJson);
+                if (rulings.RootElement.ValueKind != JsonValueKind.Array ||
+                    rulings.RootElement.GetArrayLength() == 0)
+                    throw new ArgumentException("DM ruling audit must contain decisions.");
+            }
+            catch (JsonException error)
+            {
+                throw new ArgumentException("Invalid DM ruling audit JSON.", nameof(approvedDecisionsJson), error);
+            }
+        }
+        ApprovalActorUserId = approvalActorUserId;
+        ApprovalCampaignId = approvalCampaignId;
+        ApprovedDecisionsJson = approvedDecisionsJson;
         CreatedAt = recordedAt;
     }
 
@@ -94,6 +118,10 @@ public sealed class CharacterOriginEventReceipt
     public string MethodId { get; private set; } = string.Empty;
     public string AuthorizationKind { get; private set; } = string.Empty;
     public string AuthorizationEvidenceId { get; private set; } = string.Empty;
+    /// <summary>Exact immutable DM approval audit; null for native-only events.</summary>
+    public Guid? ApprovalActorUserId { get; private set; }
+    public Guid? ApprovalCampaignId { get; private set; }
+    public string? ApprovedDecisionsJson { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
     private static string Required(string value, int maximum, string parameter)
