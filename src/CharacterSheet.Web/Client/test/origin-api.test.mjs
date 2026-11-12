@@ -5,6 +5,7 @@ import {
     loadOriginDraft,
     loadOriginState,
     originBackendUrl,
+    previewOriginProposal,
     saveOriginDraft
 } from "../.test-dist/features/origin/origin-api.js";
 import { CharacterSheetApiError } from "../.test-dist/character-api.js";
@@ -186,4 +187,32 @@ test("Origin API preserves server-side rejection and rejects untrusted success s
         async () => Response.json({
             status: "applied", revision: 1, effectiveMechanicsReady: true
         })), /invalid trust contract/);
+});
+
+test("stateless preview retains native authority on the server", async () => {
+    const calls = [];
+    const fetcher = async (path, init) => {
+        calls.push({ path: String(path), method: init.method, body: JSON.parse(init.body) });
+        return Response.json({
+            contractVersion: 1, rulesetId: "first-party-001",
+            fingerprint: "f".repeat(64), contentChangedSinceRequest: true,
+            previewOnly: true,
+            result: { status: 1, profile: null, evaluatedProposal: draft,
+                issues: [{ code: "choice-incomplete", path: "traits", detail: "Choice required." }] }
+        });
+    };
+    const review = await previewOriginProposal(environment, "first-party-001",
+        "old-native-fingerprint", draft, fetcher);
+    assert.equal(review.previewOnly, true);
+    assert.equal(review.result.status, 1);
+    assert.deepEqual(calls, [{
+        path: "/tool-host/character-sheet/api/upstream/api/native-rules/origins/preview",
+        method: "POST",
+        body: { rulesetId: "first-party-001", fingerprint: "old-native-fingerprint",
+            proposal: draft }
+    }]);
+    await assert.rejects(() => previewOriginProposal(environment, "first-party-001",
+        null, draft, async () => Response.json({ previewOnly: false,
+            rulesetId: "first-party-001", fingerprint: "latest", result: { issues: [] } })),
+    /stateless Origin preview/);
 });

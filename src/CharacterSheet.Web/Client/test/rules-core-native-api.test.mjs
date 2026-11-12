@@ -113,3 +113,31 @@ test("character projection preserves unsupported numerical values and source ide
     await assert.rejects(projectNativeCharacter(env, metadata, character,
         reply({ ...expected, fingerprint: "c".repeat(64) })), /different native snapshot/);
 });
+
+test("native Origin option categories use catalog identity without raw source", async () => {
+    const metadata = {
+        contractVersion: 1, rulesetId: "first-party-001",
+        schemaVersion: 1, fingerprint: "a".repeat(64),
+        capabilities: { nativeOptionSearch: true }
+    };
+    const env = {
+        embedded: false, contextUrl: null, toolRoute: "/new",
+        toolBasePath: "/", standaloneDevelopment: true,
+        rulesCoreDevelopmentBaseUrl: null
+    };
+    const hits = [];
+    for (const category of ["species", "ancestry"]) {
+        const page = await searchNativeOptions(env, metadata, category, "", 10, 0,
+            async (path) => {
+                hits.push(String(path));
+                return Response.json({
+                    contractVersion: 1, rulesetId: "first-party-001",
+                    fingerprint: metadata.fingerprint, category, total: 1,
+                    options: [{ id: category + ".demo", name: "Demo", kind: category }]
+                });
+            });
+        assert.equal(page.options[0].id, category + ".demo");
+    }
+    assert.ok(hits.some(path => path.includes("category=species")));
+    assert.ok(hits.some(path => path.includes("category=ancestry")));
+});

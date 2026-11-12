@@ -6,7 +6,8 @@ import {
     createInitialOriginProposal,
     hasLegacySpeciesSelections,
     isAuthorizedInitialNativeOrigin,
-    requiredDirectOriginChoices
+    requiredDirectOriginChoices,
+    savedUnderlyingOriginIdentity
 } from "../.test-dist/features/origin/origin-builder-model.js";
 
 const id = "6e32c099-9b23-4664-9f13-ad86e88f9958";
@@ -117,4 +118,16 @@ test("legacy Species/Subspecies records remain explicit reconciliation conflicts
     assert.equal(hasLegacySpeciesSelections([{ category: "Species" }]), true);
     assert.equal(hasLegacySpeciesSelections([{ category: "raceSpecies" }]), true);
     assert.equal(hasLegacySpeciesSelections([{ category: "Background" }]), false);
+});
+
+test("header identity comes from committed Underlying, not Current or draft", () => {
+    const committed = savedUnderlyingOriginIdentity({
+        underlying: { speciesId: "species.elf", ancestryId: "ancestry.elf.high" },
+        current: { speciesId: "species.werewolf", ancestryId: null }
+    });
+    assert.deepEqual(committed, {
+        speciesId: "species.elf", ancestryId: "ancestry.elf.high"
+    });
+    assert.equal(savedUnderlyingOriginIdentity({ current: { speciesId: "species.werewolf" } }), null);
+    assert.equal(savedUnderlyingOriginIdentity(null), null);
 });
