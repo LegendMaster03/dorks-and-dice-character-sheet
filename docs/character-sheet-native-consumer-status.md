@@ -61,10 +61,13 @@ character-owned **draft-only** Origin proposals under
 `/api/characters/{characterId}/origin/draft`, with owner/lifecycle checks,
 native-preview validation, PostgreSQL persistence and revision-safe writes.
 
-These changes are development-only and **not yet deployed**. Drafts never mint
-active gameplay grants. Authoritative active-Origin persistence, campaign-DM
-verification, atomic Rite execution, builder UI and effective-grant integration
-are still required. See
+These changes are development-only and **not yet deployed**. Drafts never mint active gameplay grants. A **separate**, server-held
+authorized Origin state model, atomic receipt store and owner-scoped read-only
+`/api/characters/{characterId}/origin/state` route have been added. The latter
+returns a saved snapshot, not a current mechanically revalidated entitlement
+list. No public authorized Origin write operation is available. Campaign-DM
+verification, trusted complete Origin apply/Rite services, builder UI and
+effective-grant integration remain required. See
 `docs/pillar2-origin-integration-trust-boundary-20261112.md`.
 
 ## Still required for full tool restoration
