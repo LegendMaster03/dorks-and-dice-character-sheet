@@ -56,6 +56,19 @@ public sealed class ParentOriginNativeReviewTests
             ["rulesetId"] = "first-party-001",
             ["fingerprint"] = "native-current",
             ["previewOnly"] = true,
+            // This is deliberately not a valid committed trait grant.
+            // The server preserves native interpretation privately and the
+            // Sheet reader must reject its missing saved occurrence.
+            ["vision"] = JsonNode.Parse("""
+                {
+                  "status":"resolved","previewOnly":true,"unresolvedReasons":[],
+                  "lowLightVision":{
+                    "grantId":"grant:unverified-vision",
+                    "sourceId":"species.orc","occurrencePath":"/traits/0",
+                    "ruleId":"rule.low-light-vision",
+                    "actualLightLevel":"dim","perceivedLightLevel":"bright"}
+                }
+                """),
             ["result"] = new JsonObject
             {
                 ["status"] = 4,
@@ -117,6 +130,13 @@ public sealed class ParentOriginNativeReviewTests
         Assert.Equal(1, result.Review.StoredRevision);
         Assert.Equal("parent-creation-1", result.Review.VerifiedProposalId);
         Assert.Equal(1, native.Calls);
+        Assert.NotNull(result.EvaluatedVision);
+        Assert.Null(VerifiedOriginVisionReader.Read(
+            result.EvaluatedVision, StoredProfile));
+        var serialized = JsonSerializer.Serialize(result);
+        Assert.DoesNotContain("unverified-vision", serialized);
+        Assert.DoesNotContain("EvaluatedVision", serialized);
+        Assert.DoesNotContain("evaluatedVision", serialized);
         Assert.DoesNotContain("InherentGrants",
             JsonSerializer.Serialize(result.Review), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("independentGrants",
