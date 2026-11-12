@@ -20,7 +20,10 @@ public sealed record VerifiedOriginPersistenceCommand(
     string MethodId,
     string AuthorizationKind,
     string AuthorizationEvidenceId,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    Guid? ApprovalActorUserId = null,
+    Guid? ApprovalCampaignId = null,
+    string? ApprovedDecisionsJson = null);
 
 public enum AuthorizedOriginStoreStatus
 {
