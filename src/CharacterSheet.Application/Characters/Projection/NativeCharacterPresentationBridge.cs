@@ -33,7 +33,8 @@ public static class NativeCharacterPresentationBridge
         CharacterBuildView build,
         CharacterStateView? state,
         CancellationToken cancellationToken,
-        bool hasCommittedOrigin = false)
+        bool hasCommittedOrigin = false,
+        VerifiedOriginIntrinsics? originIntrinsics = null)
     {
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(build);
@@ -41,8 +42,13 @@ public static class NativeCharacterPresentationBridge
         if (build.ProgressionEntries.Count == 0 && build.BaseAbilityScoreInputs.Count == 0 &&
             build.FoundationalSelections.Count == 0)
             return hasCommittedOrigin
-                ? new("partial", null,
-                    "An initial Origin is committed, but native Species/Ancestry traits and character mechanics have not yet been projected.")
+                ? new("partial",
+                    originIntrinsics is null ? null : new CharacterMechanicsPresentationView(
+                        Movement: [new CalculatedMechanicalValuePresentationView(
+                            "movement.walk.base", "Base Walking Speed",
+                            originIntrinsics.BaseWalkingSpeedFeet, Unit: "ft")],
+                        CharacterMetadata: IntrinsicMetadata(originIntrinsics)),
+                    "An initial Origin is committed, but only verified base Species/Ancestry characteristics are available; its other trait effects and character mechanics remain unprojected.")
                 : new("unconfigured", null,
                     "Set base ability scores and choose a starting class to calculate character mechanics.");
 
@@ -185,7 +191,10 @@ public static class NativeCharacterPresentationBridge
             selectedOptions = nativeChoices.Ids,
             currentResources,
             skills,
-            competencies
+            competencies,
+            // Supplied only after server-owned Origin and current Rules Core
+            // verification; this is not an untrusted Species-ID shortcut.
+            baseWalkSpeed = originIntrinsics?.BaseWalkingSpeedFeet
         }, JsonOptions);
         var projection = await gateway.ProjectNativeCharacterAsync(request, cancellationToken);
         if (ReadText(projection, "rulesetId") != rulesetId ||
@@ -273,6 +282,8 @@ public static class NativeCharacterPresentationBridge
             presentedTraining.Where(item => item.ComponentIds?.Count > 0)
                 .Select(item => new CompetencyRelationshipPresentationView(
                     item.Id, item.ComponentIds!, Composition: item.Composition)).ToArray());
+        var resolvedWalkingSpeed = originIntrinsics is null
+            ? null : Numeric(values, "movement.walk");
         var mechanics = new CharacterMechanicsPresentationView(
             AbilityValues: abilityValues.Count == 0 ? null : abilityValues,
             Training: training,
@@ -280,7 +291,13 @@ public static class NativeCharacterPresentationBridge
             CombatFundamentals: combat,
             HealthTracks: health,
             Competencies: calculatedTraining,
-            SpellcastingProfiles: spellcasting);
+            SpellcastingProfiles: spellcasting,
+            Movement: resolvedWalkingSpeed is int walk
+                ? [new CalculatedMechanicalValuePresentationView(
+                    "movement.walk", "Walking Speed", walk, Unit: "ft")]
+                : null,
+            CharacterMetadata: originIntrinsics is null
+                ? null : IntrinsicMetadata(originIntrinsics));
         var partial = unmodeledSelections || unknownTraining ||
             invalidHitPointHistory ||
             ReadText(projection, "status") != "resolved" ||
@@ -294,6 +311,13 @@ public static class NativeCharacterPresentationBridge
                 : null,
             classNames);
     }
+
+    private static IReadOnlyList<CalculatedMechanicalValuePresentationView>
+        IntrinsicMetadata(VerifiedOriginIntrinsics intrinsics) =>
+        [
+            new("origin.base-creature-type", "Base Creature Type", intrinsics.CreatureType),
+            new("origin.base-size", "Base Size", intrinsics.Size)
+        ];
 
     private sealed record NativeTrainingSummary(
         string Id, string Name, string Kind, string? GoverningAbility = null,
