@@ -36,8 +36,9 @@ export function createInitialOriginProposal(characterId: string): NativeOriginDr
     };
 }
 
-export function isDirectOriginProposal(proposal: NativeOriginDraftProposal): boolean =>
-    proposal.intent === 0 || proposal.intent === "Direct";
+export function isDirectOriginProposal(proposal: NativeOriginDraftProposal): boolean {
+    return proposal.intent === 0 || proposal.intent === "Direct";
+}
 
 export function changeDirectOriginIdentity(
     proposal: NativeOriginDraftProposal,
@@ -149,5 +150,7 @@ export function isAuthorizedInitialNativeOrigin(preview: NativeOriginPreview | n
 
 export function hasLegacySpeciesSelections(
     selections: readonly { category: string }[]
-): boolean => selections.some(selection =>
-    /^(species|subspecies|racespecies)$/i.test(selection.category));
+): boolean {
+    return selections.some(selection =>
+        /^(species|subspecies|racespecies)$/i.test(selection.category));
+}
