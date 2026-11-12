@@ -4,6 +4,7 @@ import {
     activateNativeOrigin,
     loadOriginDraft,
     loadOriginState,
+    inspectOwnerVisibleParentOrigin,
     originBackendUrl,
     previewOriginProposal,
     saveOriginDraft
@@ -215,4 +216,74 @@ test("stateless preview retains native authority on the server", async () => {
         null, draft, async () => Response.json({ previewOnly: false,
             rulesetId: "first-party-001", fingerprint: "latest", result: { issues: [] } })),
     /stateless Origin preview/);
+});
+
+test("owned parent inspection exposes only stored identity, not inherited grants", async () => {
+    const parentId = "9c97ec43-39bd-45d9-9264-64387d0f6cb6";
+    const seen = [];
+    const expected = {
+        status: "ready",
+        snapshot: {
+            parentCharacterId: parentId,
+            rulesetId: "first-party-001",
+            fingerprint: "native-1",
+            revision: 2,
+            underlying: {
+                speciesId: "species.human",
+                ancestryId: null,
+                profileId: "original"
+            },
+            current: {
+                speciesId: "species.werewolf",
+                ancestryId: null,
+                profileId: "shifted"
+            }
+        },
+        inspectionOnly: true,
+        inheritanceAuthorized: false,
+        effectiveMechanicsReady: false
+    };
+    const reply = await inspectOwnerVisibleParentOrigin(environment, id, parentId,
+        async (url, init) => {
+            seen.push({ url: String(url), method: init.method,
+                credentials: init.credentials, cache: init.cache,
+                body: init.body });
+            return Response.json(expected);
+        });
+    assert.deepEqual(reply, expected);
+    assert.deepEqual(seen, [{
+        url: `/tool-host/character-sheet/api/upstream/api/characters/${id}/origin/parent-snapshot/${parentId}`,
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        body: undefined
+    }]);
+
+    // A malicious or malfunctioning endpoint must not silently elevate a
+    // stored snapshot into a verified inheritance or effective-mechanics claim.
+    for (const alternate of [
+        { ...expected, inheritanceAuthorized: true },
+        { ...expected, inspectionOnly: false },
+        { ...expected, effectiveMechanicsReady: true },
+        { ...expected, snapshot: { ...expected.snapshot, parentCharacterId: id } },
+        { ...expected, snapshot: { ...expected.snapshot,
+            current: { ...expected.snapshot.current, inherentGrants: [] } } }
+    ]) {
+        await assert.rejects(() => inspectOwnerVisibleParentOrigin(
+            environment, id, parentId, async () => Response.json(alternate)),
+        /invalid trust contract/);
+    }
+});
+
+test("parent snapshot inspection rejects malformed IDs and inaccessible parents", async () => {
+    let calls = 0;
+    await assert.rejects(() => inspectOwnerVisibleParentOrigin(environment, id,
+        "../secrets", async () => { calls++; return Response.json({}); }),
+    /Site Character ID/);
+    assert.equal(calls, 0);
+
+    await assert.rejects(() => inspectOwnerVisibleParentOrigin(
+        environment, id, "9c97ec43-39bd-45d9-9264-64387d0f6cb6",
+        async () => Response.json({ error: "not_found" }, { status: 404 })),
+    error => error instanceof CharacterSheetApiError && error.status === 404);
 });
