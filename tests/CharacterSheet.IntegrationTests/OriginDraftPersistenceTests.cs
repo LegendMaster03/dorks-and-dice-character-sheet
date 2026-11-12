@@ -113,6 +113,10 @@ public sealed class OriginDraftPersistenceTests
         var denied = await BuildService(SiteCharacterAccessStatus.NotFoundOrNotOwned)
             .SaveAsync(id, "first-party-001", null, proposal, 0);
         Assert.Equal(CharacterOriginDraftStatus.NotFoundOrNotOwned, denied.Status);
+        var mismatchedProjection = await BuildService(SiteCharacterAccessStatus.Authorized)
+            .SaveAsync(Guid.NewGuid(), "first-party-001", null, proposal, 0);
+        Assert.Equal(CharacterOriginDraftStatus.ProjectionUnavailable,
+            mismatchedProjection.Status);
         var archived = await BuildService(SiteCharacterAccessStatus.Authorized,
                 SiteCharacterLifecycleState.Archived)
             .SaveAsync(id, "first-party-001", null, proposal, 0);
