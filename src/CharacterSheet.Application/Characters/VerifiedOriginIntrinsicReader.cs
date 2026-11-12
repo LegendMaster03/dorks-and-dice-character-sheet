@@ -31,6 +31,8 @@ public static class VerifiedOriginIntrinsicReader
             if (profile.ValueKind != JsonValueKind.Object ||
                 !profile.TryGetProperty("underlying", out var underlying) ||
                 !profile.TryGetProperty("current", out var current) ||
+                underlying.ValueKind != JsonValueKind.Object ||
+                current.ValueKind != JsonValueKind.Object ||
                 !JsonElement.DeepEquals(underlying, current) ||
                 !current.TryGetProperty("inherentGrants", out var grants) ||
                 grants.ValueKind != JsonValueKind.Array)
