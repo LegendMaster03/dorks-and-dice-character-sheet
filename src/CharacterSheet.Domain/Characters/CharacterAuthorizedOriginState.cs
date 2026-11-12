@@ -16,7 +16,7 @@ public sealed class CharacterAuthorizedOriginState
 
     public CharacterAuthorizedOriginState(Guid characterId, string rulesetId,
         string fingerprint, string profileJson, long? sourceDraftRevision,
-        DateTimeOffset recordedAt)
+        DateTimeOffset recordedAt, string? evaluatedProjectionJson = null)
     {
         if (characterId == Guid.Empty)
             throw new ArgumentException("Site Character ID is required.", nameof(characterId));
@@ -25,6 +25,7 @@ public sealed class CharacterAuthorizedOriginState
         Fingerprint = CharacterOriginDraftState.NormalizeFingerprint(fingerprint)
             ?? throw new ArgumentException("A native catalog fingerprint is required.", nameof(fingerprint));
         ProfileJson = ValidateProfileJson(profileJson);
+        EvaluatedProjectionJson = ValidateProjectionJson(evaluatedProjectionJson);
         if (sourceDraftRevision is < 1)
             throw new ArgumentOutOfRangeException(nameof(sourceDraftRevision));
         SourceDraftRevision = sourceDraftRevision;
@@ -37,10 +38,35 @@ public sealed class CharacterAuthorizedOriginState
     public string RulesetId { get; private set; } = string.Empty;
     public string Fingerprint { get; private set; } = string.Empty;
     public string ProfileJson { get; private set; } = string.Empty;
+    /// <summary>
+    /// The original Rules Core source-attributed projection at this revision.
+    /// It is only usable while the current native fingerprint still matches;
+    /// a stored projection by itself is not an effective entitlement.
+    /// </summary>
+    public string? EvaluatedProjectionJson { get; private set; }
     public long Revision { get; private set; }
     public long? SourceDraftRevision { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
+
+    public static string? ValidateProjectionJson(string? json)
+    {
+        if (json is null) return null;
+        if (string.IsNullOrWhiteSpace(json) ||
+            Encoding.UTF8.GetByteCount(json) > 131_072)
+            throw new ArgumentException("Invalid evaluated Origin projection.", nameof(json));
+        try
+        {
+            using var parsed = JsonDocument.Parse(json);
+            if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("An evaluated projection must be a JSON object.", nameof(json));
+        }
+        catch (JsonException exception)
+        {
+            throw new ArgumentException("Invalid evaluated Origin projection JSON.", nameof(json), exception);
+        }
+        return json;
+    }
 
     public static string ValidateProfileJson(string profileJson)
     {
