@@ -142,6 +142,36 @@ public sealed class CharacterPresentationWorkflowTests
     }
 
     [Fact]
+    public async Task CommittedOrcWithoutClassUsesNativeKernelForWalkingSpeed()
+    {
+        using var factory = new PresentationFactory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        using (var initialized = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/sheet"))
+            Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+
+        await factory.CommitOriginForPresentationTestAsync(id);
+        using var response = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/presentation");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var document = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("partial", document.GetProperty("mechanicsStatus").GetString());
+        var mechanics = document.GetProperty("mechanics");
+        var walk = Assert.Single(mechanics.GetProperty("movement").EnumerateArray());
+        Assert.Equal("movement.walk", walk.GetProperty("key").GetString());
+        Assert.Equal(30, walk.GetProperty("effectiveValue").GetInt32());
+        var metadata = mechanics.GetProperty("characterMetadata").EnumerateArray().ToArray();
+        Assert.Contains(metadata, value =>
+            value.GetProperty("key").GetString() == "origin.base-walk-speed" &&
+            value.GetProperty("effectiveValue").GetInt32() == 30);
+        Assert.Equal(30, factory.Native.LastBaseWalkSpeed);
+        Assert.Null(factory.Native.LastClassId);
+        Assert.Equal(1, factory.Native.OriginPreviewCalls);
+    }
+
+    [Fact]
     public async Task SavedAbilityIsReadThroughNativeProjectorWithoutLegacyMechanicsCalls()
     {
         using var factory = new PresentationFactory();
