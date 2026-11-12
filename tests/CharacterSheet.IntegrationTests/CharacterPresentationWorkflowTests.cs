@@ -4,12 +4,15 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Hosting;
+using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Infrastructure.Hosting;
+using CharacterSheet.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.IntegrationTests;
 
@@ -36,6 +39,39 @@ public sealed class CharacterPresentationWorkflowTests
         Assert.Equal("unconfigured", json.GetProperty("mechanicsStatus").GetString());
         Assert.Equal(JsonValueKind.Null, json.GetProperty("mechanics").ValueKind);
         Assert.Equal(0, factory.Native.Calls);
+    }
+
+    [Fact]
+    public async Task CommittedOriginKeepsNativeCalculationsPartialUntilItsEffectsAreIntegrated()
+    {
+        using var factory = new PresentationFactory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        using (var initialized = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/sheet"))
+            Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+        using (var ability = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/build/ability-scores/strength", new { score = 15 }))
+            Assert.Equal(HttpStatusCode.OK, ability.StatusCode);
+        using (var startingClass = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/build/starting-class",
+            new { conceptKey = "class.warlock" }))
+            Assert.Equal(HttpStatusCode.OK, startingClass.StatusCode);
+
+        await factory.CommitOriginForPresentationTestAsync(id);
+        using var response = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/presentation");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var document = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("partial", document.GetProperty("mechanicsStatus").GetString());
+        Assert.Contains("Species/Ancestry",
+            document.GetProperty("mechanicsMessage").GetString()!, StringComparison.Ordinal);
+        var mechanics = document.GetProperty("mechanics");
+        Assert.Equal(JsonValueKind.Null, mechanics.GetProperty("abilityValues").ValueKind);
+        Assert.Equal(JsonValueKind.Null, mechanics.GetProperty("savingThrows").ValueKind);
+        Assert.Equal(15, factory.Native.LastAbilityScore);
+        Assert.Equal("class.warlock", factory.Native.LastClassId);
     }
 
     [Fact]
@@ -165,6 +201,36 @@ public sealed class CharacterPresentationWorkflowTests
                 services.RemoveAll<INativeRulesCoreGateway>();
                 services.AddSingleton<INativeRulesCoreGateway>(Native);
             });
+        }
+
+        public async Task CommitOriginForPresentationTestAsync(Guid characterId)
+        {
+            await using var db = new CharacterSheetDbContext(_database.CreateOptions());
+            await db.Database.MigrateAsync();
+            var draft = await new PostgresCharacterOriginDraftStore(db)
+                .SaveAsync(characterId, "first-party-001", "native-fixture",
+                    """
+                    {"id":"direct-orc","intent":0,
+                     "method":{"ruleId":"rule.creature-origination","methodId":"biological"},
+                     "contributors":[],"candidates":[],"manifestations":[],
+                     "selectedSpeciesId":"species.orc"}
+                    """, 0, DateTimeOffset.UtcNow);
+            Assert.Equal(1, draft!.Revision);
+            // A controlled internal test command bypasses live native
+            // adjudication. This tests presentation behavior, not entitlement.
+            var committed = await new PostgresCharacterAuthorizedOriginStore(db)
+                .CommitVerifiedAsync(new VerifiedOriginPersistenceCommand(
+                    characterId, "first-party-001", "native-fixture",
+                    """
+                    {"id":"origin:direct-orc",
+                     "underlying":{"speciesId":"species.orc","inherentGrants":[]},
+                     "current":{"speciesId":"species.orc","inherentGrants":[]}}
+                    """,
+                    0, 1, "construction:direct-orc",
+                    "rule.creature-origination", "biological",
+                    "first-party", "native-catalog:native-fixture",
+                    DateTimeOffset.UtcNow));
+            Assert.Equal(AuthorizedOriginStoreStatus.Applied, committed.Status);
         }
 
         public async Task<HttpResponseMessage> SendHostedAsync(
