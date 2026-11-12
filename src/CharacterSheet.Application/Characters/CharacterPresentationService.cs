@@ -67,8 +67,15 @@ public sealed class CharacterPresentationService(
                 var scalars = VerifiedOriginIntrinsicReader.Read(
                     reviewed.EvaluatedIntrinsics, saved.ProfileJson);
                 if (scalars is not null)
+                {
+                    // Sense evidence is an independent exact-grant check on
+                    // the same authenticated native profile reevaluation.
+                    // If the supported trait is absent, no sense is invented.
+                    var lowLight = VerifiedOriginVisionReader.Read(
+                        reviewed.EvaluatedVision, saved.ProfileJson);
                     verifiedOrigin = new(reviewed.Review.RulesetId,
-                        reviewed.Review.LatestNativeFingerprint, scalars);
+                        reviewed.Review.LatestNativeFingerprint, scalars, lowLight);
+                }
             }
             if (verifiedOrigin is null)
                 diagnostics.Add($"origin-native-intrinsics:{reviewed.Status}");

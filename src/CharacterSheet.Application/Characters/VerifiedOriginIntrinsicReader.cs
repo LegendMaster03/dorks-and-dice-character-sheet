@@ -17,7 +17,8 @@ public sealed record VerifiedOriginIntrinsics(
 /// or drop the Origin scalars rather than mixing independently loaded versions.
 /// </summary>
 public sealed record VerifiedOriginProjectionContext(
-    string RulesetId, string Fingerprint, VerifiedOriginIntrinsics Intrinsics);
+    string RulesetId, string Fingerprint, VerifiedOriginIntrinsics Intrinsics,
+    VerifiedOriginLowLightVision? LowLightVision = null);
 
 public static class VerifiedOriginIntrinsicReader
 {

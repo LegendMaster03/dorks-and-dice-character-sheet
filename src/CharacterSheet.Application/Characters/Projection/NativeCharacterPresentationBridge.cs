@@ -43,6 +43,7 @@ public static class NativeCharacterPresentationBridge
         // committed Origin state. Exact catalog identity is checked again
         // below when the character projector independently loads its snapshot.
         var originIntrinsics = hasCommittedOrigin ? originProjection?.Intrinsics : null;
+        var lowLightVision = hasCommittedOrigin ? originProjection?.LowLightVision : null;
 
         // Even with no Class or abilities, an authorized native Origin's
         // walking speed must go through the Core kernel: active conditions can
@@ -84,7 +85,10 @@ public static class NativeCharacterPresentationBridge
             (originProjection!.RulesetId != rulesetId ||
              originProjection.Fingerprint != fingerprint);
         if (originCatalogChanged)
+        {
             originIntrinsics = null;
+            lowLightVision = null;
+        }
 
         // A Sheet deploy may precede Core's manual release. Only expose native
         // condition numbers when Core advertises per-value invalidation; older
@@ -307,6 +311,10 @@ public static class NativeCharacterPresentationBridge
             HealthTracks: health,
             Competencies: calculatedTraining,
             SpellcastingProfiles: spellcasting,
+            Senses: lowLightVision is null
+                ? null : [new CalculatedMechanicalValuePresentationView(
+                    "sense.low-light-vision", "Low-Light Vision",
+                    "Dim Light perceived as Bright Light; Darkness unchanged")],
             Movement: resolvedWalkingSpeed is int walk
                 ? [new CalculatedMechanicalValuePresentationView(
                     "movement.walk", "Walking Speed", walk, Unit: "ft")]
@@ -325,7 +333,7 @@ public static class NativeCharacterPresentationBridge
                         ? "Native rules changed after Origin verification. Origin-dependent values are withheld pending revalidation; independently calculated Class values remain available."
                         : originIntrinsics is null
                             ? "The committed Origin's Species/Ancestry characteristics and trait effects have not been verified for native character projection."
-                            : "Verified base Species/Ancestry size, creature type and any resolved native movement are shown. Other Origin traits and dependent mechanics remain unresolved."
+                            : "Verified base Species/Ancestry characteristics, supported passive senses and any resolved native movement are shown. Other Origin traits and dependent mechanics remain unresolved."
                     : "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
                 : null,
             classNames);
