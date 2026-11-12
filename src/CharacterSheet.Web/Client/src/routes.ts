@@ -16,7 +16,7 @@ export function parseCharacterSheetRoute(route: string): CharacterSheetRoute {
     }
 
     // DM-only review resolves a campaign and target without owner-sheet access.
-    const dmMatch = /^\\/dm-origin-review\\/([^/]+)\\/([^/]+)$/.exec(route);
+    const dmMatch = /^\/dm-origin-review\/([^/]+)\/([^/]+)$/.exec(route);
     if (dmMatch && canonicalGuidPattern.test(dmMatch[1]) &&
         canonicalGuidPattern.test(dmMatch[2])) {
         return { kind: "dm-origin-review",
