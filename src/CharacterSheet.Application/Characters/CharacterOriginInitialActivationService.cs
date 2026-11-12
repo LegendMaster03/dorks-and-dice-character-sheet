@@ -139,7 +139,26 @@ public sealed class CharacterOriginInitialActivationService(
             !TryRead(proposal, "intent", out var intent) ||
             !EnumIs(intent, "Direct", 0) ||
             !TryRead(proposal, "method", out var method) ||
-            method.ValueKind != JsonValueKind.Object)
+            method.ValueKind != JsonValueKind.Object ||
+            // A native *direct* initial Origin has no separately asserted
+            // contributors, inherited sources or process/table decisions.
+            // In particular, the ordinary player endpoint must never
+            // repurpose this path to approve a mixed biological Origin.
+            !IsEmptyOrAbsent(proposal, "contributors") ||
+            !IsEmptyOrAbsent(proposal, "candidates") ||
+            !IsEmptyOrAbsent(proposal, "tableDecisions") ||
+            !IsEmptyOrAbsent(proposal, "relationships") ||
+            !IsEmptyOrAbsent(proposal, "resolutions") ||
+            !IsEmptyOrAbsent(proposal, "constraints") ||
+            !IsEmptyOrAbsent(proposal, "inputRequirements") ||
+            !IsEmptyOrAbsent(proposal, "history") ||
+            !IsNullOrAbsent(proposal, "processCreatureTypeId") ||
+            !IsNullOrAbsent(proposal, "existingConfiguration") ||
+            !IsNullOrAbsent(proposal, "existingEffectiveConfiguration") ||
+            !IsNullOrAbsent(proposal, "existingEffectiveConfigurationBasis") ||
+            !IsNullOrAbsent(proposal, "activeTemporaryTransformation") ||
+            !IsEmptyOrAbsent(proposal, "otherActiveTemporaryTransformations") ||
+            !IsNullOrAbsent(proposal, "temporaryTransformationPrecedence"))
             return false;
         id = ReadString(proposal, "id");
         ruleId = ReadString(method, "ruleId");
@@ -207,6 +226,7 @@ public sealed class CharacterOriginInitialActivationService(
             !TryRead(completed, "method", out var completedMethod) ||
             ReadString(completedMethod, "ruleId") != methodRuleId ||
             ReadString(completedMethod, "methodId") != methodId ||
+            !IsEmptyOrAbsent(completed, "contributorIds") ||
             !IsNullOrAbsent(completed, "tableDecisionId") ||
             !IsNullOrAbsent(adjudication, "tableDecisionId"))
             return false;
