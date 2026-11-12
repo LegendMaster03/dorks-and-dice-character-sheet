@@ -130,7 +130,7 @@ public sealed class CharacterOriginInitialActivationService(
         };
     }
 
-    private static bool TryInitialProposal(JsonElement proposal,
+    internal static bool TryInitialProposal(JsonElement proposal,
         out string? id, out string? ruleId, out string? methodId,
         out string? speciesId, out string? ancestryId)
     {
@@ -175,7 +175,7 @@ public sealed class CharacterOriginInitialActivationService(
              !string.IsNullOrWhiteSpace(ancestryId));
     }
 
-    private static bool TryAuthorizedNativeResult(JsonElement response,
+    internal static bool TryAuthorizedNativeResult(JsonElement response,
         string rulesetId, string proposalId, string methodRuleId,
         string methodId, string? speciesId, string? ancestryId,
         out string? fingerprint, out string? profileJson)
