@@ -4,6 +4,7 @@ import {
     activateNativeOrigin,
     loadOriginDraft,
     loadOriginState,
+    loadOwnerOriginParentOptions,
     inspectOwnerVisibleParentOrigin,
     reviewOwnerVisibleParentNativeOrigin,
     reviewOwnerVisibleParentSourceAlignment,
@@ -433,4 +434,52 @@ test("owner parent-source alignment rejects forged grants, relation claims and a
     error => error instanceof CharacterSheetApiError &&
         error.status === 409 &&
         error.message === "parent_origin_not_natively_verified");
+});
+
+test("Site owner characters are narrow name-based parent options, not sheet data", async () => {
+    const parent = "e85ec742-4991-47ef-8994-c7bb08df99ca";
+    const calls = [];
+    const options = await loadOwnerOriginParentOptions(environment,
+        async (url, init) => {
+            calls.push({ url: String(url), method: init.method,
+                credentials: init.credentials, cache: init.cache });
+            return Response.json([{
+                id: parent, name: "Orc Parent", status: "Archived",
+                archivedAt: "2026-11-01T00:00:00Z",
+                campaigns: [{ campaignId: "private", campaignName: "Other Campaign" }]
+            }]);
+        });
+    assert.deepEqual(calls, [{
+        url: "/characters/api?includeArchived=true", method: "GET",
+        credentials: "same-origin", cache: "no-store"
+    }]);
+    assert.deepEqual(options, [{ id: parent, name: "Orc Parent", archived: true }]);
+    assert.equal(options[0].campaigns, undefined);
+    assert.equal(options[0].archivedAt, undefined);
+});
+
+test("Site owner character options reject untrusted or unavailable responses", async () => {
+    const parent = "e85ec742-4991-47ef-8994-c7bb08df99ca";
+    const rows = [{ id: parent, name: "Owner Parent", status: "Active" }];
+    let calls = 0;
+    await assert.rejects(() => loadOwnerOriginParentOptions(
+        { ...environment, embedded: false }, async () => {
+            calls++; return Response.json(rows);
+        }), /authenticated Dorks & Dice Site/);
+    assert.equal(calls, 0);
+    for (const invalid of [
+        { characters: rows },
+        [{ id: "../escape", name: "X", status: "Active" }],
+        [{ id: parent, name: "", status: "Active" }],
+        [{ id: parent, name: "X", status: "NotOwned" }],
+        [rows[0], rows[0]]
+    ]) {
+        await assert.rejects(() => loadOwnerOriginParentOptions(
+            environment, async () => Response.json(invalid)),
+        /invalid owner identity contract/);
+    }
+    await assert.rejects(() => loadOwnerOriginParentOptions(
+        environment, async () =>
+            Response.json({ error: "unauthorized" }, { status: 401 })),
+    error => error instanceof CharacterSheetApiError && error.status === 401);
 });
