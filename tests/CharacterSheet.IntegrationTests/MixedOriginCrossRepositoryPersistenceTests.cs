@@ -117,6 +117,13 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 projection.RootElement.GetProperty("intrinsics"), saved.ProfileJson);
             Assert.Equal(new VerifiedOriginIntrinsics("humanoid", "medium", 30),
                 supportedScalars);
+            var supportedVision = VerifiedOriginVisionReader.Read(
+                projection.RootElement.GetProperty("vision"), saved.ProfileJson);
+            Assert.NotNull(supportedVision);
+            Assert.Equal("species.elf", supportedVision.SourceId);
+            Assert.Equal("/traits/0", supportedVision.OccurrencePath);
+            Assert.Equal("dim", supportedVision.ActualLightLevel);
+            Assert.Equal("bright", supportedVision.PerceivedLightLevel);
             using var profile = JsonDocument.Parse(saved.ProfileJson);
             Assert.Equal("custom.human-elf",
                 profile.RootElement.GetProperty("underlying")
