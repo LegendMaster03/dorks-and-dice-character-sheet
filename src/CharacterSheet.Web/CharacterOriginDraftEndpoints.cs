@@ -13,6 +13,10 @@ public static class CharacterOriginDraftEndpoints
         JsonElement Proposal, long ExpectedRevision);
 
     public sealed record ActivateRequest(long ExpectedDraftRevision);
+    public sealed record ActivateApprovedMixedRequest(
+        Guid CampaignId, long ExpectedDraftRevision,
+        IReadOnlyList<string> CandidateIds);
+
 
     public static void MapCharacterOriginDraftEndpoints(this WebApplication app)
     {
@@ -39,6 +43,18 @@ public static class CharacterOriginDraftEndpoints
             CancellationToken cancellationToken) =>
             Respond(await service.ApplyAsync(characterId,
                 request.ExpectedDraftRevision, cancellationToken)));
+
+        // The caller must be an active campaign DM for this exact character.
+        // The Site-issued scope is checked before any cross-owner draft read.
+        // Only this narrow table-authorized Human–Elf initial construction is
+        // currently eligible; this route never trusts a browser profile.
+        group.MapPost("/activate-mixed-approved", async (
+            Guid characterId, ActivateApprovedMixedRequest request,
+            CharacterOriginMixedActivationService service,
+            CancellationToken cancellationToken) =>
+            Respond(await service.ApplyAsync(characterId,
+                request.CampaignId, request.ExpectedDraftRevision,
+                request.CandidateIds, cancellationToken)));
 
         // Inspect another owner-visible character's last stored Origin identity.
         // This read never returns inheritable grants or authorizes that the
@@ -72,6 +88,41 @@ public static class CharacterOriginDraftEndpoints
                 request.Fingerprint, request.Proposal, request.ExpectedRevision,
                 cancellationToken)));
     }
+
+    private static IResult Respond(CharacterOriginMixedActivationResult result) =>
+        result.Status switch
+        {
+            CharacterOriginMixedActivationStatus.Applied =>
+                Results.Ok(new
+                {
+                    status = "applied",
+                    revision = result.Revision,
+                    effectiveMechanicsReady = false
+                }),
+            CharacterOriginMixedActivationStatus.Unauthenticated =>
+                Results.Unauthorized(),
+            CharacterOriginMixedActivationStatus.DmScopeDenied =>
+                Results.NotFound(),
+            CharacterOriginMixedActivationStatus.SiteProjectionUnavailable =>
+                Error(503, "dm_authorization_projection_unavailable"),
+            CharacterOriginMixedActivationStatus.InvalidSelection =>
+                Error(400, "invalid_mixed_origin_selection"),
+            CharacterOriginMixedActivationStatus.DraftMissing =>
+                Error(409, "origin_draft_missing"),
+            CharacterOriginMixedActivationStatus.DraftRevisionConflict =>
+                Error(409, "origin_draft_revision_conflict"),
+            CharacterOriginMixedActivationStatus.OriginAlreadyCommitted =>
+                Error(409, "origin_already_committed"),
+            CharacterOriginMixedActivationStatus.SheetNotInitialized =>
+                Error(409, "character_sheet_not_initialized"),
+            CharacterOriginMixedActivationStatus.LegacySelectionConflict =>
+                Error(409, "legacy_origin_selection_requires_reconciliation"),
+            CharacterOriginMixedActivationStatus.NativeContentChanged =>
+                Error(409, "native_origin_content_changed_since_dm_review"),
+            CharacterOriginMixedActivationStatus.NotAuthorizedByNativeRules =>
+                Error(422, "mixed_origin_not_authorized"),
+            _ => Error(503, "native_origin_verification_unavailable")
+        };
 
     private static IResult Respond(CharacterOriginActivationResult result) =>
         result.Status switch
