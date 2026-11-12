@@ -1,5 +1,7 @@
 using System.Text.Json;
+using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Persistence;
+using CharacterSheet.Application.Site;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -175,6 +177,90 @@ public sealed class AuthorizedOriginStatePersistenceTests
             .GetAsync(id));
         Assert.Empty(await verify.OriginEventReceipts.ToArrayAsync());
         Assert.Empty(await verify.CharacterOriginDrafts.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task PreviouslyTrackedStateCannotOverwriteALaterRevision()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using (var setup = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await InitializeAsync(setup, id);
+            Assert.Equal(AuthorizedOriginStoreStatus.Applied,
+                (await new PostgresCharacterAuthorizedOriginStore(setup)
+                    .CommitVerifiedAsync(Command(id))).Status);
+        }
+
+        await using var staleContext = new CharacterSheetDbContext(database.CreateOptions());
+        var staleTracked = await staleContext.AuthorizedOrigins.SingleAsync(x =>
+            x.CharacterId == id);
+        Assert.Equal(1, staleTracked.Revision);
+        await using (var latest = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var update = await new PostgresCharacterAuthorizedOriginStore(latest)
+                .CommitVerifiedAsync(Command(id, 1, 1, "rite:new", ElfProfile));
+            Assert.Equal(AuthorizedOriginStoreStatus.Applied, update.Status);
+        }
+
+        // A tracked object predating another transaction is not a CAS token.
+        var conflict = await new PostgresCharacterAuthorizedOriginStore(staleContext)
+            .CommitVerifiedAsync(Command(id, 1, 1, "rite:stale", HumanProfile));
+        Assert.Equal(AuthorizedOriginStoreStatus.OriginRevisionConflict, conflict.Status);
+
+        await using var check = new CharacterSheetDbContext(database.CreateOptions());
+        Assert.Equal(2, (await new PostgresCharacterAuthorizedOriginStore(check)
+            .GetAsync(id))!.Revision);
+        Assert.Equal(2, (await new PostgresCharacterAuthorizedOriginStore(check)
+            .GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task SavedOriginReaderRequiresSiteOwnershipAndSupportsArchivedView()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await InitializeAsync(db, id);
+        var stateStore = new PostgresCharacterAuthorizedOriginStore(db);
+        Assert.Equal(AuthorizedOriginStoreStatus.Applied,
+            (await stateStore.CommitVerifiedAsync(Command(id))).Status);
+
+        CharacterOriginStateService Service(SiteCharacterAccessStatus status,
+            SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
+            Guid? projectionId = null) =>
+            new(new SiteAccessStub(status, projectionId ?? id, lifecycle),
+                new PostgresCharacterBuildStore(db), stateStore);
+
+        var denied = await Service(SiteCharacterAccessStatus.NotFoundOrNotOwned)
+            .GetAsync(id);
+        Assert.Equal(CharacterOriginReadStatus.NotFoundOrNotOwned, denied.Status);
+        Assert.Null(denied.SavedState);
+        var mismatched = await Service(SiteCharacterAccessStatus.Authorized,
+            projectionId: Guid.NewGuid()).GetAsync(id);
+        Assert.Equal(CharacterOriginReadStatus.ProjectionUnavailable, mismatched.Status);
+        Assert.Null(mismatched.SavedState);
+
+        var archived = await Service(SiteCharacterAccessStatus.Authorized,
+            SiteCharacterLifecycleState.Archived).GetAsync(id);
+        Assert.Equal(CharacterOriginReadStatus.Ready, archived.Status);
+        Assert.True(archived.ReadOnly);
+        AssertSameJson(HumanProfile, archived.SavedState!.ProfileJson);
+        Assert.Single(archived.CompletedEvents!);
+    }
+
+    private sealed class SiteAccessStub(
+        SiteCharacterAccessStatus status, Guid projectedId,
+        SiteCharacterLifecycleState lifecycle) : ISiteCharacterAccessGateway
+    {
+        public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(status == SiteCharacterAccessStatus.Authorized
+                ? SiteCharacterAccessResult.Authorized(
+                    new SiteCharacterProjection(projectedId, "Tester", lifecycle,
+                        lifecycle == SiteCharacterLifecycleState.Archived
+                            ? DateTimeOffset.UtcNow : null, []))
+                : new SiteCharacterAccessResult(status));
     }
 
     private static void AssertSameJson(string expected, string actual)
