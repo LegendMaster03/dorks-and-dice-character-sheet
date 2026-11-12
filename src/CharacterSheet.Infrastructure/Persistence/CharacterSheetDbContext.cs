@@ -385,7 +385,9 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .OnDelete(DeleteBehavior.Cascade);
 
         var originEvent = modelBuilder.Entity<CharacterOriginEventReceipt>();
-        originEvent.ToTable("character_origin_event_receipts");
+        originEvent.ToTable("character_origin_event_receipts", table =>
+            table.HasCheckConstraint("CK_origin_receipt_dm_audit_complete",
+                """("ApprovalActorUserId" IS NULL AND "ApprovalCampaignId" IS NULL AND "ApprovedDecisionsJson" IS NULL) OR ("ApprovalActorUserId" IS NOT NULL AND "ApprovalCampaignId" IS NOT NULL AND "ApprovedDecisionsJson" IS NOT NULL)"""));
         originEvent.HasKey(value => new { value.CharacterId, value.EventId });
         originEvent.Property(value => value.CharacterId).ValueGeneratedNever();
         originEvent.Property(value => value.EventId).HasMaxLength(240).IsRequired();
