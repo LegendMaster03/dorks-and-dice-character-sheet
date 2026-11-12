@@ -147,6 +147,25 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             using var approved = JsonDocument.Parse(receipt.ApprovedDecisionsJson!);
             var decisions = approved.RootElement.EnumerateArray().ToArray();
             Assert.Equal(6, decisions.Length);
+            // The stored profile and cached native projections are consumable
+            // only with the current catalog and this exact immutable DM audit.
+            var activeRuleset = JsonSerializer.SerializeToNode(new
+            {
+                rulesetId = saved.RulesetId,
+                fingerprint = core.App.Services
+                    .GetRequiredService<NativeCatalogStore>().Snapshot!.Fingerprint
+            }, Wire)!;
+            var verified = VerifiedCommittedMixedOriginReader.Read(
+                saved, receipts, activeRuleset);
+            Assert.NotNull(verified);
+            Assert.Equal(new VerifiedOriginIntrinsics("humanoid", "medium", 30),
+                verified.Intrinsics);
+            Assert.Equal("species.elf", verified.LowLightVision?.SourceId);
+            Assert.Null(VerifiedCommittedMixedOriginReader.Read(
+                saved, [], activeRuleset));
+            activeRuleset["fingerprint"] = "rules-have-changed";
+            Assert.Null(VerifiedCommittedMixedOriginReader.Read(
+                saved, receipts, activeRuleset));
             Assert.All(decisions, decision =>
             {
                 Assert.Equal(Actor.ToString("D"), decision.GetProperty("authority")
