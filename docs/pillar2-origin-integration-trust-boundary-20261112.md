@@ -4,6 +4,58 @@
 **Development branch:** `feature/pillar2-phase5-origin-integration-20261112`  
 **Rules Core dependency:** `feature/pillar2-phase5-origin-api-20261112`
 
+## Phase 5 continuation — approved mixed Human–Elf vertical slice
+
+The sections below record successive implementation milestones. Statements that
+DM rulings or mixed-Origin activation have not yet been implemented describe
+the **earlier evidence-only phase**. The following narrower workflow now
+supersedes those statements for the native Human–Elf acceptance example only.
+
+- Site draft PR #50 provides an authenticated backend-only
+  `dmCharacterScopes` projection. Each scope requires current DM membership
+  and an active campaign–character association. It does **not** broaden
+  owner-only character reads or by itself approve any outcome.
+- Rules Core draft PR #151 exposes delegated-only
+  `POST /api/mechanics/v1/origins/evaluate-approved-mixed`. It verifies the
+  Site-introspected DM actor/campaign and matching table-decision actor,
+  scope and approval evidence, then reevaluates the native sources. The
+  direct first-party preview and activation endpoints do not accept DM claims.
+- Character Sheet draft PR #67 exposes
+  `POST /api/characters/{characterId}/origin/activate-mixed-approved`.
+  The authenticated DM supplies `campaignId`, `expectedDraftRevision` and
+  exact native `candidateIds`; the server loads the saved two-source draft,
+  verifies the exact Site DM/character scope and native fingerprint, generates
+  matching authority decisions, reevaluates via Site-delegated Rules Core and
+  atomically commits an authorized result with immutable decision/actor audit.
+  No browser-supplied profile, individual parent profile, grant or authority
+  token is accepted.
+- The supported initial acceptance case is exactly `species.human` +
+  `species.elf` through the biological origination method. Source occurrences
+  and inherited trait choices are **DM decisions**, not an automatic Half-Elf
+  Species or a general inheritance algorithm. Class, Background, Upbringing,
+  feats, independent entitlements, transformation, Rite and nested-parent
+  execution remain outside this narrow flow.
+- Rules Core has separate, strictly verified mixed-Origin interpreters for
+  creature type, size, base walking speed and a single actually selected,
+  unmodified native Low-Light Vision occurrence. Character Sheet caches the
+  source-attributed interpretation alongside the committed Origin but reads
+  it into presentation only with a matching completed DM ruling receipt and
+  unchanged native catalog fingerprint. It never converts an unverified
+  cached value into a live grant.
+- `.github/workflows/pillar2-phase5-origin-cross-repo.yml` runs the actual
+  Rules Core Phase 5 HTTP host with Character Sheet's PostgreSQL persistence.
+  It covers approval, reload, supported intrinsic/vision grants, rejected
+  forged selections, invalid scope, revision conflicts and stale content.
+  Site authenticates DM scopes in its separate integration test suite.
+
+**Not yet delivered:** a production-facing DM review/approval screen,
+a verified biological *individual-parent* loader, general mixed Species
+resolution, source-change migration, or full cross-pillar gameplay mechanics.
+The mixed approval route is intentionally backend/API-only until a separate
+campaign DM review interface is built. A persisted native Origin is not a
+complete effective character; `effectiveMechanicsReady: false` remains
+accurate. All three PRs remain unmerged pending coordinated review.
+
 ## Current status
 
 The existing `POST /api/native-rules/origins/preview` forwards a stateless construction proposal to the authenticated, user-delegated Rules Core endpoint. The initial preview itself does not save a record. A separate character-scoped draft route can now persist decisions; neither route authorizes a current character grant. A `previewOnly: true` result is advisory; a caller must not copy its resulting profile into a trusted current-character record.
