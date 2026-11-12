@@ -205,6 +205,27 @@ Ensure(orcIntrinsics.Status == "resolved" && orcIntrinsics.PreviewOnly &&
     orcIntrinsics.WalkingSpeedFeet.SourceId == "species.orc" &&
     orcIntrinsics.WalkingSpeedFeet.OccurrencePath == "/walkingSpeedFeet",
     "Orc intrinsic slots were not derived from authorized source occurrences.");
+// The native trait must be actually granted and match the authored rule.
+// This test serializes the *real* Core objects using the same web JSON
+// shape as the server contract, then asks Sheet to verify provenance.
+var nativeOrcVision = NativeOriginVisionProjector.Project(catalog, orcOrigin);
+Ensure(nativeOrcVision.Status == "resolved" &&
+    nativeOrcVision.LowLightVision?.RuleId == "rule.low-light-vision" &&
+    nativeOrcVision.LowLightVision.ActualLightLevel == "dim" &&
+    nativeOrcVision.LowLightVision.PerceivedLightLevel == "bright" &&
+    NativeOriginVisionProjector.Perceive(nativeOrcVision, "dim").PerceivedLightLevel == "bright" &&
+    NativeOriginVisionProjector.Perceive(nativeOrcVision, "darkness").PerceivedLightLevel == "darkness",
+    "Core must apply only granted Orc low-light vision to Dim Light, not Darkness.");
+
+var visionJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+var activeOrcVision = VerifiedOriginVisionReader.Read(
+    JsonSerializer.SerializeToElement(nativeOrcVision, visionJsonOptions),
+    JsonSerializer.Serialize(orcOrigin.Profile!, visionJsonOptions));
+Ensure(activeOrcVision is not null &&
+    activeOrcVision.SourceId == "species.orc" &&
+    activeOrcVision.OccurrencePath.StartsWith("/traits/", StringComparison.Ordinal),
+    "Sheet could not reconcile the Core low-light effect with its exact Origin grant.");
+
 var nativeWithOrc = new NativeCharacterProjector(catalog).Project(
     request with { BaseWalkSpeed = orcIntrinsics.WalkingSpeedFeet.Value });
 Ensure(nativeWithOrc.Values.TryGetValue("movement.walk", out var realWalk) &&
@@ -239,7 +260,8 @@ var sheetWithOrc = await NativeCharacterPresentationBridge.ProjectAsync(
         catalog.RulesetId, catalog.Fingerprint,
         new VerifiedOriginIntrinsics(
             orcIntrinsics.CreatureType.Value,
-            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value)));
+            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value),
+        activeOrcVision));
 Ensure(sheetWithOrc.Status == "partial" &&
     sheetWithOrc.Mechanics?.Movement?.Any(value =>
         value.Key == "movement.walk" &&
@@ -247,6 +269,11 @@ Ensure(sheetWithOrc.Status == "partial" &&
     sheetWithOrc.Mechanics.CharacterMetadata?.Any(value =>
         value.Key == "origin.base-size" &&
         value.EffectiveValue is string size && size == "medium") == true &&
+    sheetWithOrc.Mechanics.Senses?.Any(value =>
+        value.Key == "sense.low-light-vision" &&
+        value.EffectiveValue is string rule &&
+        rule.Contains("Dim Light", StringComparison.Ordinal) &&
+        rule.Contains("Darkness unchanged", StringComparison.Ordinal)) == true &&
     sheetWithOrc.Mechanics.AbilityValues is null,
     "Character Sheet did not preserve the verified Orc baseline as partial mechanics.");
 
@@ -263,7 +290,8 @@ var grappledSheet = await NativeCharacterPresentationBridge.ProjectAsync(
         catalog.RulesetId, catalog.Fingerprint,
         new VerifiedOriginIntrinsics(
             orcIntrinsics.CreatureType.Value,
-            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value)));
+            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value),
+        activeOrcVision));
 Ensure(grappledSheet.Status == "partial" &&
     grappledSheet.Mechanics?.Movement?.Any(value =>
         value.Key == "movement.walk" &&
