@@ -292,6 +292,36 @@ committed during the native preview. It does not automatically replace an
 activation or clear the original proposal. PostgreSQL tests cover post-commit
 edits and concurrent draft-update/activation races.
 
+## Committed Origin in the character presentation boundary
+
+`CharacterPresentationService` now loads Origin state through the existing
+Site owner-verified `CharacterOriginStateService` **after** checking Character
+build access. A committed Origin is distinct from a user-saved draft and cannot
+be inferred from old Species/Subspecies foundational selections.
+
+The native `/characters/project` kernel currently accepts ability scores,
+class advancement, conditions, resources, and training, **not a verified Origin
+profile or its inherent grants**. Until that contract is expanded and its
+first-party source effects are tested end-to-end, the Character Sheet presenter
+therefore marks a committed Origin as **unprojected**:
+
+- With no other configured inputs, presentation is `partial`, not an empty
+  `unconfigured` character. It makes no native character calculation call.
+- With class/ability inputs, it retains independently resolved Class
+  proficiency, but withholds potentially Origin-dependent ability scores,
+  saves, initiative, hit point maximums, and dependent training totals.
+  The response reports `mechanicsStatus: partial` and a specific missing
+  Species/Ancestry effects message.
+- If authorized Origin state cannot be read, presentation is
+  `unavailable`, not `resolved`. It still exposes saved advancement history.
+
+This is deliberately a **safety and status integration**, not a partial
+trait executor. It does not project Orc Low-Light Vision, movement,
+size, Species features, free choices or temporary transformations. It does
+not introduce a second authoritative Species selector or treat a stored
+Origin fingerprint as an authorization gate. Unit and hosted PostgreSQL
+tests cover the new status and retention of independent Class values.
+
 ## Scope for the next integration step
 
 The draft state and its owner-scoped save/load service are implemented.

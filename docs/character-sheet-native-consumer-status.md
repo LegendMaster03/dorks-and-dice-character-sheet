@@ -35,6 +35,13 @@ AC, equipment grants, hit points, or rules are invented.
 
 The UI distinguishes resolved, partial, unconfigured and unavailable
 calculations. A network failure is no longer rendered as an ordinary blank character.
+When a canonical Origin has already been committed, Character presentation now
+checks the Site-authorized stored Origin and explicitly reports native
+Species/Ancestry mechanics as **unprojected**. Supported independent Class
+proficiency remains visible, while unprojected Origin-dependent ability,
+save, initiative and training totals are not shown as fully effective.
+The current native character kernel does not accept authorized Origin grants;
+this status change does not itself make those effects executable.
 
 ## Implemented builder and advancement slice
 
