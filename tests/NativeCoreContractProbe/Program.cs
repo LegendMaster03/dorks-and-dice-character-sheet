@@ -169,6 +169,42 @@ Ensure(training.Entries.Single(item => item.Key == "skill.listen").SupportsRanks
     training.Entries.Single(item => item.Key == "skill.perception").SupportsRanks == false,
     "Native child and composite rank controls were not preserved.");
 
+// This job must use the *Phase 5* Rules Core branch, not the currently
+// deployed main Core. Validate the actual catalog-backed Origin evaluator
+// before treating a mocked HTTP response as evidence of executable content.
+var firstPartyMethod = new NativeOriginMethodReference(
+    "rule.creature-origination", "biological");
+Ensure(catalog.TryGetById("species.orc", out _),
+    "Selected native Orc is unavailable.");
+var nativeDirectOrigin = new NativeOriginProposal(
+    "cross-repo-orc", NativeOriginIntent.Direct, firstPartyMethod,
+    [], [], [], SelectedSpeciesId: "species.orc");
+var orcOrigin = new NativeOriginConstructionEngine(catalog).Evaluate(
+    new NativeOriginConstructionRequest(nativeDirectOrigin));
+Ensure(orcOrigin.Status == NativeOriginConstructionStatus.Authorized &&
+    orcOrigin.Profile is not null &&
+    orcOrigin.Profile.Underlying.SpeciesId == "species.orc" &&
+    orcOrigin.Profile.Current.SpeciesId == "species.orc" &&
+    orcOrigin.Profile.IndependentGrants.Count == 0 &&
+    orcOrigin.Profile.History.Count == 1 &&
+    orcOrigin.Profile.History[0].Stage == NativeOriginEventStage.Completed &&
+    orcOrigin.Profile.Adjudication.Adjudication == NativeOriginAdjudication.Supported,
+    "Real Orc native direct-Origin construction was not authorized without DM claims: " +
+    string.Join("; ", orcOrigin.Issues.Select(issue => issue.Code + "=" + issue.Path)));
+
+// Human's mandatory native Origin choices are not invented or bypassed. A
+// profile object in an incomplete result is not an authorized active Origin.
+var humanOrigin = new NativeOriginConstructionEngine(catalog).Evaluate(
+    new NativeOriginConstructionRequest(nativeDirectOrigin with
+    {
+        Id = "cross-repo-human",
+        SelectedSpeciesId = "species.human"
+    }));
+Ensure(humanOrigin.Status != NativeOriginConstructionStatus.Authorized &&
+    humanOrigin.Issues.Any(issue =>
+        issue.Code == "required-origin-selection-missing"),
+    "Human native Origin choices were silently skipped or treated as complete.");
+
 Console.WriteLine(
     $"Cross-repository mechanics contract passed: {catalog.RulesetId}, fingerprint {catalog.Fingerprint}, " +
     "Warlock projection, class eligibility, options, skill families/composites, and Sheet presentation.");
