@@ -17,6 +17,7 @@ Site-issued server-side delegation for Rules Core.
 | GET /api/native-rules/options | GET /api/mechanics/v1/catalog/options |
 | POST /api/native-rules/advancements/eligibility | POST /api/mechanics/v1/advancements/eligibility |
 | POST /api/native-rules/characters/project | POST /api/mechanics/v1/characters/project |
+| POST /api/native-rules/origins/preview | POST /api/mechanics/v1/origins/preview (Phase 5 branch only) |
 
 Native rule IDs and the catalog fingerprint are mandatory. Character Sheet
 does not infer old concept aliases or bypass the Site delegation boundary.
@@ -52,11 +53,27 @@ calculations. A network failure is no longer rendered as an ordinary blank chara
 - Subclass, Prestige Class, and unsupported categories do not fall back to the
   retired API or receive invented eligibility decisions.
 
+## Pillar 2 Phase 5 Origin draft integration
+
+The Phase 5 branches add native Species and Ancestry identity queries and
+authenticated **stateless Origin preview**. Character Sheet also stores
+character-owned **draft-only** Origin proposals under
+`/api/characters/{characterId}/origin/draft`, with owner/lifecycle checks,
+native-preview validation, PostgreSQL persistence and revision-safe writes.
+
+These changes are development-only and **not yet deployed**. Drafts never mint
+active gameplay grants. Authoritative active-Origin persistence, campaign-DM
+verification, atomic Rite execution, builder UI and effective-grant integration
+are still required. See
+`docs/pillar2-origin-integration-trust-boundary-20261112.md`.
+
 ## Still required for full tool restoration
 
-1. Expose approved native Species, Subspecies, Background, Deity, Feat, Spell,
-   and Item summaries. The current native options endpoint does not serve
-   these categories; the chooser reports the missing capability.
+1. Complete and deploy the approved native Species/Ancestry, Background,
+   Deity, Feat, Spell, and Item summaries. The Phase 5 Rules Core branch
+   exposes Species and Ancestry identity search; remaining categories and
+   option/parent-child selection semantics are not fully available. Do not
+   treat this branch-only capability as deployed.
 2. Complete native parent-child option selection, especially Warlock Patron,
    Pact, and Invocation choices, and supply those native selections in the
    projection and eligibility requests.
