@@ -34,5 +34,6 @@ jobs:
           dotnet run
           --project tests/NativeCoreContractProbe/NativeCoreContractProbe.csproj
           -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          -p:DefineConstants=PILLAR2_PHASE5_ORIGIN
           --
           "$GITHUB_WORKSPACE/rules-core/data/rulesets"

@@ -169,6 +169,7 @@ Ensure(training.Entries.Single(item => item.Key == "skill.listen").SupportsRanks
     training.Entries.Single(item => item.Key == "skill.perception").SupportsRanks == false,
     "Native child and composite rank controls were not preserved.");
 
+#if PILLAR2_PHASE5_ORIGIN
 // This job must use the *Phase 5* Rules Core branch, not the currently
 // deployed main Core. Validate the actual catalog-backed Origin evaluator
 // before treating a mocked HTTP response as evidence of executable content.
@@ -204,6 +205,8 @@ Ensure(humanOrigin.Status != NativeOriginConstructionStatus.Authorized &&
     humanOrigin.Issues.Any(issue =>
         issue.Code == "required-origin-selection-missing"),
     "Human native Origin choices were silently skipped or treated as complete.");
+
+#endif
 
 Console.WriteLine(
     $"Cross-repository mechanics contract passed: {catalog.RulesetId}, fingerprint {catalog.Fingerprint}, " +
