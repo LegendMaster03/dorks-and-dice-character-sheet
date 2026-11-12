@@ -139,6 +139,10 @@ public sealed class ParentOriginNativeReviewTests
         using var expected = JsonDocument.Parse(StoredProfile);
         Assert.True(JsonElement.DeepEquals(
             expected.RootElement, result.VerifiedInitialProfile.Value));
+        Assert.NotNull(result.PersistenceEvidence);
+        Assert.Equal("native-old", result.PersistenceEvidence.OriginFingerprint);
+        Assert.Equal("construction:parent-creation-1",
+            result.PersistenceEvidence.ReceiptEventId);
         Assert.Null(VerifiedOriginVisionReader.Read(
             result.EvaluatedVision, StoredProfile));
         var serialized = JsonSerializer.Serialize(result);
@@ -147,6 +151,9 @@ public sealed class ParentOriginNativeReviewTests
         Assert.DoesNotContain("evaluatedVision", serialized);
         Assert.DoesNotContain("VerifiedInitialProfile", serialized);
         Assert.DoesNotContain("verifiedInitialProfile", serialized);
+        Assert.DoesNotContain("PersistenceEvidence", serialized);
+        Assert.DoesNotContain("persistenceEvidence", serialized);
+        Assert.DoesNotContain("ReceiptEventId", serialized);
         Assert.DoesNotContain("\"underlying\"", serialized);
         Assert.DoesNotContain("species.orc", serialized);
         Assert.DoesNotContain("InherentGrants",
@@ -285,6 +292,40 @@ public sealed class ParentOriginNativeReviewTests
             result.Status);
         Assert.Null(result.Review);
         Assert.Null(result.VerifiedInitialProfile);
+    }
+
+    [Theory]
+    [InlineData("receipt")]
+    [InlineData("source-draft")]
+    public async Task InPlaceReceiptOrSourceDraftRewriteDuringNativeReviewFailsClosed(
+        string altered)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var childId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var options = database.CreateOptions();
+        await using var db = new CharacterSheetDbContext(options);
+        await InitializeAsync(db, childId, parentId);
+        var native = new NativeGateway(beforeReturn: async () =>
+        {
+            await using var other = new CharacterSheetDbContext(options);
+            var rows = altered == "receipt"
+                ? await other.Database.ExecuteSqlRawAsync(
+                    "UPDATE character_origin_event_receipts SET \"AuthorizationEvidenceId\" = {0} WHERE \"CharacterId\" = {1}",
+                    "native-catalog:forged", parentId)
+                : await other.Database.ExecuteSqlRawAsync(
+                    "UPDATE character_origin_drafts SET \"ProposalJson\" = jsonb_set(\"ProposalJson\", '{id}', to_jsonb({0}::text), true) WHERE \"CharacterId\" = {1}",
+                    "different-parent-proposal", parentId);
+            Assert.Equal(1, rows);
+        });
+
+        var result = await Service(db, childId, parentId, native)
+            .ReviewAsync(childId, parentId);
+        Assert.Equal(CharacterOriginParentNativeReviewStatus.ConcurrentOriginChange,
+            result.Status);
+        Assert.Null(result.Review);
+        Assert.Null(result.VerifiedInitialProfile);
+        Assert.Null(result.PersistenceEvidence);
     }
 
     [Fact]
