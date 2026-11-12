@@ -137,7 +137,8 @@ export interface NativeOriginActivationResponse {
     effectiveMechanicsReady: false;
 }
 
-function originPath(characterId: string, suffix: "draft" | "state" | "activate-native"): string {
+function originPath(characterId: string,
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}`): string {
     if (characterId.trim().length === 0) {
         throw new Error("A Site Character ID is required for Origin state.");
     }
