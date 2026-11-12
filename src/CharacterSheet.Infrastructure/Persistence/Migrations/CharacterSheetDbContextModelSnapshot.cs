@@ -378,6 +378,37 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_hit_point_gains");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginDraftState", b =>
+        {
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("Fingerprint")
+                .HasMaxLength(200)
+                .HasColumnType("character varying(200)");
+
+            b.Property<string>("ProposalJson")
+                .IsRequired()
+                .HasColumnType("jsonb");
+
+            b.Property<long>("Revision")
+                .HasColumnType("bigint");
+
+            b.Property<string>("RulesetId")
+                .IsRequired()
+                .HasMaxLength(160)
+                .HasColumnType("character varying(160)");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("CharacterId");
+            b.ToTable("character_origin_drafts");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterProfileState", b =>
         {
             b.Property<Guid>("CharacterId")
@@ -630,6 +661,15 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
                 .WithMany("Notes")
                 .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginDraftState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithOne()
+                .HasForeignKey("CharacterSheet.Domain.Characters.CharacterOriginDraftState", "CharacterId")
                 .OnDelete(DeleteBehavior.Cascade)
                 .IsRequired();
         });
