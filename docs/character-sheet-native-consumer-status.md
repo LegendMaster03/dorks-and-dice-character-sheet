@@ -79,7 +79,13 @@ explicitly unresolved. A committed profile is labeled as *Underlying*
 rather than a current effective transformed form. The guided Origin editor also permits two native biological
 source references as a deliberately unresolved mixed evidence draft,
 including Human–Elf; it does not authenticate parent individuals, inherit
-traits, permit DM rulings, or expose a mixed activation route. Rites,
+traits, permit DM rulings, or expose a mixed activation route.
+A separate read-only parent-snapshot inspection route requires Site owner
+access to **both** the current and proposed parent characters. It presents
+the stored Underlying/Current identities and revision **without grants** and
+explicitly disclaims inheritance authorization or current mechanics.
+Activated initial Origins freeze their source drafts under the same database
+lock used by Origin commit. Rites,
 DM overrides, subsequent modifications, full mixed/nested builder UI and
 independent effective-grant projection remain incomplete. A separate
 branch-to-branch native contract workflow validates the unmerged Phase 5

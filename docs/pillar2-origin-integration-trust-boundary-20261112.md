@@ -194,16 +194,62 @@ also refused before evaluation; a completed direct history receipt cannot
 list contributors. Integration tests cover these refusal cases and verify
 that the authorized state/receipts remain untouched.
 
-The next mixed-Origin steps require a secure parent-individual profile
-loader, an actual campaign-scoped DM ruling interface and evidence for
+The next mixed-Origin steps still require an authenticated and
+freshly revalidated parent-individual *mechanical profile loader* (the
+owner-only inspection above is not sufficient), an actual campaign-scoped
+DM ruling interface and evidence for
 exact inherited source occurrences, then a separate authorized
 mixed-construction commit flow. Merely selecting both Human and Elf
 source references does not grant Half-Elf traits, an Elf ancestry, or any
 new independent entitlement.
 
+## Owner-scoped parent snapshot inspection (not mixed authorization)
+
+The new read-only
+`GET /api/characters/{characterId}/origin/parent-snapshot/{parentCharacterId}`
+endpoint checks the current Site projection **independently for both** the
+target character and proposed parent character before reading parent
+persistence. It is intentionally **owner-only** at this stage: a character
+visible solely because the user is a DM in its campaign is not automatically
+a trusted biological parent. Archived parent characters are readable if
+Site continues to grant owner access. A client-provided parent ID by itself
+confers no authority.
+
+The response exposes only the saved parent's last `Underlying` and
+`Current` Species/Ancestry identities and profile IDs, saved ruleset,
+fingerprint, revision, and snapshot timestamp. It does **not** expose
+inherent/independent grant arrays or authorization receipts. The service
+requires an initialized parent sheet, a committed Origin snapshot, matching
+completed event revision/count, and structurally present Current and
+Underlying configurations. Missing, incomplete or inconsistent state fails
+closed. The typed frontend function
+`inspectOwnerVisibleParentOrigin` preserves `inspectionOnly: true`,
+`inheritanceAuthorized: false`, and `effectiveMechanicsReady: false`
+and rejects responses claiming otherwise.
+
+**This is stored-state inspection, not a trusted effective-profile loader.**
+It does not revalidate the latest native source catalog, recalculate
+applicability, verify the parent-child relationship, or bind stored grants
+to a mixed proposal. A parent may have a `Current` temporary form different
+from `Underlying`; the read keeps both distinct rather than collapsing
+them. No mixed Origin activation endpoint uses these records.
+
+### Committed source draft immutability
+
+A successful first-party initial activation fixes the exact source draft
+revision used in its completed construction receipt. Draft edits now acquire
+the same PostgreSQL character-root row lock as authorized Origin commits
+and refuse writes once any committed Origin is present. The service returns
+`origin_already_committed` for both an existing committed Origin and one
+committed during the native preview. It does not automatically replace an
+activation or clear the original proposal. PostgreSQL tests cover post-commit
+edits and concurrent draft-update/activation races.
+
 ## Scope for the next integration step
 
-The draft state and its owner-scoped save/load service are implemented. The additional `character_authorized_origins` and `character_origin_event_receipts` tables now provide a **separate server-held authorized-state storage substrate**, without copying drafts into it. The `PostgresCharacterAuthorizedOriginStore.CommitVerifiedAsync` method requires a separately verified application command and commits a snapshot plus unique event receipt in one PostgreSQL transaction. It locks the applicable draft and current Origin rows, compares expected revisions, rejects repeated event IDs and prevents stale tracked objects from overwriting newer revisions. A character deletion cascades the Origin, receipts and draft. The store has no direct HTTP write route; only the separately authorized `activate-native` application service can currently call it through a restricted HTTP workflow.
+The draft state and its owner-scoped save/load service are implemented.
+A committed Origin freezes its original draft under the character-root
+database lock so later draft edits can not invalidate an event's provenance. The additional `character_authorized_origins` and `character_origin_event_receipts` tables now provide a **separate server-held authorized-state storage substrate**, without copying drafts into it. The `PostgresCharacterAuthorizedOriginStore.CommitVerifiedAsync` method requires a separately verified application command and commits a snapshot plus unique event receipt in one PostgreSQL transaction. It locks the applicable draft and current Origin rows, compares expected revisions, rejects repeated event IDs and prevents stale tracked objects from overwriting newer revisions. A character deletion cascades the Origin, receipts and draft. The store has no direct HTTP write route; only the separately authorized `activate-native` application service can currently call it through a restricted HTTP workflow.
 
 The read-only `GET /api/characters/{characterId}/origin/state` requires Site character ownership, works for archived characters as read-only, omits private authorization-evidence IDs, and returns `effectiveMechanicsReady: false`. A stored profile is a verified-history input **only after** a future service revalidates it against current native rules and independently earned entitlements.
 
