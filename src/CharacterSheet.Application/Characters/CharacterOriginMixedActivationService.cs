@@ -261,7 +261,7 @@ public sealed class CharacterOriginMixedActivationService(
             effectiveOutcome = outcome
         }, WireJson)!;
 
-    private static bool TryGetPlainHumanElfDraft(JsonElement root,
+    internal static bool TryGetPlainHumanElfDraft(JsonElement root,
         out string? proposalId, out string? ruleId, out string? methodId)
     {
         proposalId = ruleId = methodId = null;
