@@ -26,6 +26,15 @@ public interface INativeRulesCoreGateway
         JsonElement request, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
             "Native origin preview is unsupported by this gateway."));
+    /// <summary>
+    /// Server-held, Site-scoped DM-reviewed mixed Origin evaluation.
+    /// It computes a result but does not persist or certify the owner's state.
+    /// </summary>
+    Task<JsonNode> EvaluateApprovedMixedOriginAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Approved mixed Origin evaluation is unsupported by this gateway."));
+
     Task<JsonNode> GetNativeHarvestingCatalogAsync(
         string fingerprint, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
