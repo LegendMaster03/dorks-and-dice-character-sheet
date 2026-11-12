@@ -43,7 +43,9 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
             command.ExpectedDraftRevision, command.RecordedAt);
         _ = new CharacterOriginEventReceipt(command.CharacterId, command.EventId,
             command.ExpectedOriginRevision + 1, command.MethodRuleId, command.MethodId,
-            command.AuthorizationKind, command.AuthorizationEvidenceId, command.RecordedAt);
+            command.AuthorizationKind, command.AuthorizationEvidenceId, command.RecordedAt,
+            command.ApprovalActorUserId, command.ApprovalCampaignId,
+            command.ApprovedDecisionsJson);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         // Acquire the canonical character lock before any draft, snapshot, or
@@ -131,7 +133,9 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
         db.OriginEventReceipts.Add(new CharacterOriginEventReceipt(
             command.CharacterId, command.EventId, nextRevision,
             command.MethodRuleId, command.MethodId, command.AuthorizationKind,
-            command.AuthorizationEvidenceId, command.RecordedAt));
+            command.AuthorizationEvidenceId, command.RecordedAt,
+            command.ApprovalActorUserId, command.ApprovalCampaignId,
+            command.ApprovedDecisionsJson));
         try
         {
             await db.SaveChangesAsync(cancellationToken);
