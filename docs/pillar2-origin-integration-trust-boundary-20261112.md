@@ -322,6 +322,43 @@ not introduce a second authoritative Species selector or treat a stored
 Origin fingerprint as an authorization gate. Unit and hosted PostgreSQL
 tests cover the new status and retention of independent Class values.
 
+## Verified native Origin base characteristics
+
+The Phase 5 native Core `/origins/preview` now includes a
+`previewOnly: true` interpretation of the selected-native inherent
+intrinsic slots `creatureType`, `size` and `walkingSpeedFeet`, with
+actual grant IDs, source identities and occurrence paths. Unsupported
+Human choices, mixed sources and duplicate/conflicting intrinsic slots
+never become active baseline mechanics from a preview.
+
+Character Sheet now **separately** consumes these values only for an
+existing, committed direct first-party Origin. Its server rechecks the
+exact immutable source draft, completed event revision, Site ownership,
+whole committed Origin profile and the *latest* native Core evaluation.
+The native intrinsic output remains server-private and is never a browser
+permission. `VerifiedOriginIntrinsicReader` checks each scalar against
+the exact stored inherent grant ID, source, slot, occurrence and effective
+value; malformed or changed sources fail closed.
+
+The Sheet passes verified base walking speed into the existing native
+character kernel, which calculates `movement.walk` subject to its
+supported condition effects. Base Size and Creature Type appear as
+**base characteristic metadata**, not as an assertion that arbitrary
+current-form changes have been applied. A committed Origin without Class
+or ability inputs can still show those verified base characteristics
+without inventing other choices. Other Species traits, independent
+entitlements and ability/save modifiers remain unprojected; presentation
+continues to report `partial` rather than `resolved`.
+
+This is **not** a new general Origin-profile parameter on the native
+character projector. The trusted bridge currently supports only initial
+direct first-party Origins with one completed event and identical
+Underlying/Current configurations. Rites, transformations, mixed
+inheritance, independent grant applicability and campaign DM rulings
+still require their own verified execution paths. Real Orc catalog
+integration checks cover Humanoid, Medium and 30-foot walking speed.
+Human's required Origin Feat remains unresolved.
+
 ## Scope for the next integration step
 
 The draft state and its owner-scoped save/load service are implemented.
