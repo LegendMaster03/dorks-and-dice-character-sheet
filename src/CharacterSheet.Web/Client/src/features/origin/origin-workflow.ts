@@ -1,0 +1,244 @@
+/**
+ * Coordinates owner-scoped Origin drafts and native-only option discovery.
+ * No mutation uses browser-provided grants or an evaluated preview as authority.
+ */
+import type { HostEnvironment } from "../../host-environment.js";
+import { loadNativeRuleset, searchNativeOptions,
+    type NativeOptionSummary, type NativeRulesetMetadata } from "../../rules-core-native-api.js";
+import { CharacterSheetApiError } from "../../character-api.js";
+import { requestErrorMessage } from "../../core/application/request-error.js";
+import {
+    activateNativeOrigin,
+    loadOriginDraft,
+    loadOriginState,
+    previewOriginProposal,
+    saveOriginDraft,
+    type NativeOriginDraftView,
+    type NativeOriginPreview,
+    type NativeOriginSavedState
+} from "./origin-api.js";
+import {
+    changeDirectOriginChoice,
+    changeDirectOriginIdentity,
+    createInitialOriginProposal,
+    isAuthorizedInitialNativeOrigin,
+    isDirectOriginProposal
+} from "./origin-builder-model.js";
+
+export type OriginChooser =
+    | { kind: "closed" }
+    | { kind: "open"; category: "species" | "ancestry" | "skill";
+        candidateId?: string; requirementId?: string;
+        query: string; status: "loading" | "ready" | "error";
+        options: readonly NativeOptionSummary[]; error?: string };
+
+export interface OriginUiState {
+    status: "idle" | "loading" | "ready" | "error";
+    draft: NativeOriginDraftView | null;
+    savedState: NativeOriginSavedState | null;
+    preview: NativeOriginPreview | null;
+    catalog: NativeRulesetMetadata | null;
+    readOnly: boolean;
+    chooser: OriginChooser;
+    busy: boolean;
+    message?: string;
+}
+
+export interface OriginWorkflow {
+    current(): Readonly<OriginUiState>;
+    load(characterId: string): Promise<void>;
+    openChooser(category: "species" | "ancestry" | "skill",
+        candidateId?: string, requirementId?: string): Promise<void>;
+    searchChooser(query: string): Promise<void>;
+    closeChooser(): void;
+    chooseOption(characterId: string, id: string): Promise<void>;
+    clearAncestry(characterId: string): Promise<void>;
+    setFiniteChoice(characterId: string, candidateId: string,
+        requirementId: string, id: string | null): Promise<void>;
+    activate(characterId: string): Promise<void>;
+}
+
+export function createOriginWorkflow(
+    environment: HostEnvironment, notify: () => void
+): OriginWorkflow {
+    let state: OriginUiState = {
+        status: "idle", draft: null, savedState: null, preview: null, catalog: null,
+        readOnly: false, chooser: { kind: "closed" }, busy: false
+    };
+    let currentCharacterId: string | null = null;
+    let sequence = 0;
+    let searchSequence = 0;
+
+    function update(partial: Partial<OriginUiState>): void {
+        state = { ...state, ...partial };
+        notify();
+    }
+
+    async function load(characterId: string): Promise<void> {
+        const token = ++sequence;
+        currentCharacterId = characterId;
+        update({
+            status: "loading", draft: null, savedState: null, preview: null,
+            catalog: null, chooser: { kind: "closed" }, message: undefined
+        });
+        try {
+            const [draft, authorized, catalog] = await Promise.all([
+                loadOriginDraft(environment, characterId),
+                loadOriginState(environment, characterId),
+                loadNativeRuleset(environment)
+            ]);
+            if (token !== sequence) return;
+            let preview = draft.preview ?? null;
+            let previewError: string | undefined;
+            if (draft.draft !== null && authorized.savedState === null && preview === null) {
+                try {
+                    preview = await previewOriginProposal(environment,
+                        draft.draft.rulesetId, draft.draft.fingerprint,
+                        draft.draft.proposal);
+                } catch (error) {
+                    previewError = requestErrorMessage(error);
+                }
+            }
+            if (token !== sequence) return;
+            update({
+                status: "ready", draft: draft.draft,
+                savedState: authorized.savedState, readOnly: authorized.readOnly,
+                catalog, preview, message: previewError,
+                chooser: { kind: "closed" }, busy: false
+            });
+        } catch (error) {
+            if (token !== sequence) return;
+            update({
+                status: "error", draft: null, savedState: null,
+                preview: null, catalog: null, message: requestErrorMessage(error),
+                chooser: { kind: "closed" }, busy: false
+            });
+        }
+    }
+
+    async function searchChooser(query: string): Promise<void> {
+        const chooser = state.chooser;
+        if (chooser.kind !== "open" || state.catalog === null) return;
+        const token = ++searchSequence;
+        const key = `${chooser.category}:${chooser.candidateId ?? ""}:${chooser.requirementId ?? ""}`;
+        update({
+            chooser: { ...chooser, query, status: "loading", options: [], error: undefined }
+        });
+        try {
+            const page = await searchNativeOptions(environment, state.catalog,
+                chooser.category, query, 100);
+            const current = state.chooser;
+            if (token !== searchSequence || current.kind !== "open" ||
+                `${current.category}:${current.candidateId ?? ""}:${current.requirementId ?? ""}` !== key) return;
+            update({ chooser: { ...current, query, status: "ready",
+                options: page.options, error: undefined } });
+        } catch (error) {
+            const current = state.chooser;
+            if (token !== searchSequence || current.kind !== "open") return;
+            update({ chooser: { ...current, query, status: "error",
+                options: [], error: requestErrorMessage(error) } });
+        }
+    }
+
+    async function openChooser(category: "species" | "ancestry" | "skill",
+        candidateId?: string, requirementId?: string): Promise<void> {
+        if (state.status !== "ready" || state.busy || state.readOnly ||
+            state.savedState !== null || state.catalog === null ||
+            (state.draft !== null && !isDirectOriginProposal(state.draft.proposal))) return;
+        ++searchSequence;
+        update({ chooser: { kind: "open", category, candidateId, requirementId,
+            query: "", status: "loading", options: [] }, message: undefined });
+        await searchChooser("");
+    }
+
+    function closeChooser(): void {
+        ++searchSequence;
+        update({ chooser: { kind: "closed" } });
+    }
+
+    async function saveProposal(characterId: string,
+        proposal: NonNullable<OriginUiState["draft"]>["proposal"]): Promise<void> {
+        if (currentCharacterId !== characterId || state.status !== "ready" ||
+            state.busy || state.readOnly || state.savedState !== null ||
+            state.catalog === null) return;
+        const token = ++sequence;
+        const expectedRevision = state.draft?.revision ?? 0;
+        update({ busy: true, message: undefined });
+        try {
+            const response = await saveOriginDraft(environment, characterId,
+                state.catalog.rulesetId, state.catalog.fingerprint,
+                proposal, expectedRevision);
+            if (token !== sequence) return;
+            update({ busy: false, draft: response.draft,
+                preview: response.preview ?? null,
+                chooser: { kind: "closed" },
+                message: response.preview === null || response.preview === undefined
+                    ? "Origin saved, but the native evaluation is not available."
+                    : undefined });
+        } catch (error) {
+            if (token !== sequence) return;
+            // A 409 is an optimistic-concurrency conflict, not an instruction
+            // to automatically overwrite a newer independently edited draft.
+            update({ busy: false, message: error instanceof CharacterSheetApiError
+                && error.status === 409
+                    ? "Origin changed in another session. Reload before editing."
+                    : requestErrorMessage(error) });
+        }
+    }
+
+    async function chooseOption(characterId: string, id: string): Promise<void> {
+        if (state.status !== "ready" || state.chooser.kind !== "open" ||
+            state.catalog === null || state.savedState !== null ||
+            !state.chooser.options.some(option => option.id === id)) return;
+        const chooser = state.chooser;
+        const draft = state.draft?.proposal ??
+            createInitialOriginProposal(characterId);
+        if (!isDirectOriginProposal(draft)) return;
+        if (chooser.category === "skill") {
+            if (!chooser.candidateId || !chooser.requirementId) return;
+            await saveProposal(characterId, changeDirectOriginChoice(draft,
+                chooser.candidateId, chooser.requirementId, [id]));
+        } else {
+            if (chooser.category === "ancestry" && !draft.selectedSpeciesId) return;
+            await saveProposal(characterId, changeDirectOriginIdentity(draft,
+                chooser.category, id));
+        }
+    }
+
+    async function clearAncestry(characterId: string): Promise<void> {
+        const proposal = state.draft?.proposal;
+        if (!proposal || !isDirectOriginProposal(proposal)) return;
+        await saveProposal(characterId, changeDirectOriginIdentity(
+            proposal, "ancestry", null));
+    }
+
+    async function setFiniteChoice(characterId: string, candidateId: string,
+        requirementId: string, id: string | null): Promise<void> {
+        const proposal = state.draft?.proposal;
+        if (!proposal || !isDirectOriginProposal(proposal)) return;
+        await saveProposal(characterId, changeDirectOriginChoice(
+            proposal, candidateId, requirementId, id === null ? [] : [id]));
+    }
+
+    async function activate(characterId: string): Promise<void> {
+        if (state.status !== "ready" || state.savedState !== null || state.readOnly ||
+            state.busy || state.draft === null ||
+            !isAuthorizedInitialNativeOrigin(state.preview) ||
+            currentCharacterId !== characterId) return;
+        const token = ++sequence;
+        update({ busy: true, message: undefined });
+        try {
+            await activateNativeOrigin(environment, characterId, state.draft.revision);
+            if (token !== sequence) return;
+            await load(characterId);
+        } catch (error) {
+            if (token !== sequence) return;
+            update({ busy: false, message: requestErrorMessage(error) });
+        }
+    }
+
+    return {
+        current: () => state, load, openChooser, searchChooser, closeChooser,
+        chooseOption, clearAncestry, setFiniteChoice, activate
+    };
+}
