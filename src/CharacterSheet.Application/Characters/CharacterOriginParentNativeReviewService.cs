@@ -10,7 +10,8 @@ namespace CharacterSheet.Application.Characters;
 /// The parent's last *initial, direct, first-party* construction can be
 /// checked against the current native catalog. This is not verification of
 /// biological parentage, nested ancestry, independent entitlements or form
-/// inheritance. No grants or reusable ruling credentials leave this service.
+/// inheritance. Verified profile data stays server-private; no grants or
+/// reusable ruling credentials leave through the browser review endpoint.
 /// </summary>
 public enum CharacterOriginParentNativeReviewStatus
 {
@@ -42,7 +43,11 @@ public sealed record CharacterOriginParentNativeReviewResult(
     // Server-private intermediary. The HTTP endpoint deliberately sends only
     // Review, never grants, vision effects or the native preview body.
     [property: JsonIgnore] JsonElement? EvaluatedIntrinsics = null,
-    [property: JsonIgnore] JsonElement? EvaluatedVision = null);
+    [property: JsonIgnore] JsonElement? EvaluatedVision = null,
+    // Cloned from a fresh native evaluation only after exact correspondence
+    // with the committed direct Origin and a second persisted-state check.
+    // Not an authorization to inherit any part of the parent's profile.
+    [property: JsonIgnore] JsonElement? VerifiedInitialProfile = null);
 
 public sealed class CharacterOriginParentNativeReviewService(
     CharacterOriginParentSnapshotService snapshots,
@@ -140,7 +145,14 @@ public sealed class CharacterOriginParentNativeReviewService(
             var after = await origins.GetAsync(parentCharacterId, cancellationToken);
             var afterDraft = await drafts.GetAsync(parentCharacterId, cancellationToken);
             if (after is null || !SameSnapshot(after, initial) ||
-                afterDraft is null || afterDraft.Revision != revision)
+                // Revision metadata alone cannot detect an in-place rewrite.
+                // Reject content changes while Rules Core is evaluating.
+                !string.Equals(after.ProfileJson, saved.ProfileJson,
+                    StringComparison.Ordinal) ||
+                after.SourceDraftRevision != saved.SourceDraftRevision ||
+                afterDraft is null || afterDraft.Revision != revision ||
+                !string.Equals(afterDraft.ProposalJson, draft.ProposalJson,
+                    StringComparison.Ordinal))
                 return new(CharacterOriginParentNativeReviewStatus.ConcurrentOriginChange);
 
             var intrinsics = response.RootElement.TryGetProperty("intrinsics",
@@ -153,9 +165,14 @@ public sealed class CharacterOriginParentNativeReviewService(
                 out var evaluatedVision) &&
                 evaluatedVision.ValueKind == JsonValueKind.Object
                 ? evaluatedVision.Clone() : (JsonElement?)null;
+            // Request-local native material, never a second stored effective
+            // state or an HTTP response. Underlying == Current here only
+            // because the checked parent is initial direct first-party.
+            var verifiedProfile = fresh.RootElement.Clone();
             return new(CharacterOriginParentNativeReviewStatus.Ready,
                 new(parentCharacterId, saved.RulesetId, saved.Revision,
-                    latestFingerprint!, proposalId!), intrinsics, vision);
+                    latestFingerprint!, proposalId!), intrinsics, vision,
+                verifiedProfile);
         }
         catch (JsonException)
         {

@@ -131,12 +131,24 @@ public sealed class ParentOriginNativeReviewTests
         Assert.Equal("parent-creation-1", result.Review.VerifiedProposalId);
         Assert.Equal(1, native.Calls);
         Assert.NotNull(result.EvaluatedVision);
+        // Verified native initial parent material is only available to
+        // trusted in-process consumers; it never authorizes inheritance.
+        Assert.NotNull(result.VerifiedInitialProfile);
+        Assert.Equal("species.orc", result.VerifiedInitialProfile!.Value
+            .GetProperty("underlying").GetProperty("speciesId").GetString());
+        using var expected = JsonDocument.Parse(StoredProfile);
+        Assert.True(JsonElement.DeepEquals(
+            expected.RootElement, result.VerifiedInitialProfile.Value));
         Assert.Null(VerifiedOriginVisionReader.Read(
             result.EvaluatedVision, StoredProfile));
         var serialized = JsonSerializer.Serialize(result);
         Assert.DoesNotContain("unverified-vision", serialized);
         Assert.DoesNotContain("EvaluatedVision", serialized);
         Assert.DoesNotContain("evaluatedVision", serialized);
+        Assert.DoesNotContain("VerifiedInitialProfile", serialized);
+        Assert.DoesNotContain("verifiedInitialProfile", serialized);
+        Assert.DoesNotContain("\"underlying\"", serialized);
+        Assert.DoesNotContain("species.orc", serialized);
         Assert.DoesNotContain("InherentGrants",
             JsonSerializer.Serialize(result.Review), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("independentGrants",
@@ -165,6 +177,7 @@ public sealed class ParentOriginNativeReviewTests
         Assert.Equal(CharacterOriginParentNativeReviewStatus.NotFoundOrNotOwned,
             refused.Status);
         Assert.Null(refused.Review);
+        Assert.Null(refused.VerifiedInitialProfile);
         Assert.Equal(0, native.Calls);
     }
 
@@ -192,6 +205,7 @@ public sealed class ParentOriginNativeReviewTests
         Assert.Equal(CharacterOriginParentNativeReviewStatus.NativeProfileChanged,
             result.Status);
         Assert.Null(result.Review);
+        Assert.Null(result.VerifiedInitialProfile);
     }
 
     [Fact]
@@ -214,6 +228,7 @@ public sealed class ParentOriginNativeReviewTests
         Assert.Equal(CharacterOriginParentNativeReviewStatus.NativeRulesUnresolved,
             result.Status);
         Assert.Null(result.Review);
+        Assert.Null(result.VerifiedInitialProfile);
     }
 
     [Fact]
@@ -266,6 +281,7 @@ public sealed class ParentOriginNativeReviewTests
         Assert.Equal(CharacterOriginParentNativeReviewStatus.ConcurrentOriginChange,
             result.Status);
         Assert.Null(result.Review);
+        Assert.Null(result.VerifiedInitialProfile);
     }
 
     private sealed class Access(Guid childId, Guid parentId, bool childOwned,

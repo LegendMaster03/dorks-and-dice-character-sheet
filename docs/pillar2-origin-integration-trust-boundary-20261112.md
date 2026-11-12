@@ -519,3 +519,32 @@ Background/Upbringing integration remain outside this increment.
 The `effectiveMechanicsReady: false` boundary still applies.
 The future partial state-slot architecture is separately documented
 and does not change Phase 5 requirements.
+
+### Request-local verified initial parent profile — Phase 5 continuation
+
+The existing `CharacterOriginParentNativeReviewService` now retains a
+**request-local cloned `VerifiedInitialProfile`** in its result, protected
+by `[JsonIgnore]` alongside the existing private intrinsic and vision
+interpretations. The browser `parent-native-review` endpoint still
+returns only restricted review metadata and still reports
+`inspectionOnly: true` and `inheritanceAuthorized: false`.
+
+A profile is available only after both Site owner checks, the original
+first-party direct Origin receipt/source-draft checks, current Rules Core
+authorization and exact semantic profile equality, followed by another
+persistent-state check. The latter now compares stored profile bytes and
+source-draft JSON, in addition to revisions and timestamps, to reject an
+in-place change during the native round-trip.
+
+The private material is **not** a persistent character-state snapshot or
+an inheritable trait package. It is not returned to the browser, and there
+is no source-contributor/inheritance commit consumer yet. A future
+parent-to-contributor resolver must establish parentage and consent or
+other authorized access, the chosen heritable state, occurrence mapping,
+and independently approved DM decisions. Rites and transformed parents
+remain outside this initial direct-only verifier. This does not implement
+the separately proposed future partial state-slot architecture.
+
+Integration tests verify private materialization of the exact fresh
+profile, omission from serialized browser responses, and no materialized
+profile after denied access or failed/stale native verification.
