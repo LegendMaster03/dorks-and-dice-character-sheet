@@ -223,14 +223,17 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         var bindings = parents.Select((id, index) =>
             new CharacterOriginParentSourceBinding("parent-" + index, id)).ToArray();
 
-        CharacterOriginParentSourceAlignmentService Reader(params Guid[] allowedParents)
+        CharacterOriginParentSourceAlignmentService Reader(params Guid[] allowedParents) =>
+            ReaderWith(new MultipleOwnerParentAccess(childId, allowedParents), native);
+
+        CharacterOriginParentSourceAlignmentService ReaderWith(
+            ISiteCharacterAccessGateway access, INativeRulesCoreGateway nativeGateway)
         {
-            var site = new MultipleOwnerParentAccess(childId, allowedParents);
             var builds = new PostgresCharacterBuildStore(db);
             var nativeReader = new CharacterOriginParentNativeReviewService(
-                new CharacterOriginParentSnapshotService(site, builds, origins),
-                origins, drafts, native);
-            return new(site, builds, drafts, origins, nativeReader);
+                new CharacterOriginParentSnapshotService(access, builds, origins),
+                origins, drafts, nativeGateway);
+            return new(access, builds, drafts, origins, nativeReader);
         }
 
         // Parent 2 is unowned in this Site context. It must not be read simply
@@ -276,6 +279,64 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         Assert.DoesNotContain("verifiedInitialProfile", publicJson);
         Assert.DoesNotContain("underlying", publicJson);
         Assert.DoesNotContain("inherentGrants", publicJson);
+
+        // A Site ownership decision can be withdrawn between separate native
+        // parent evaluations; previous snapshots must not confer lasting access.
+        // Initial child check + 2 per parent = 7 checks before final recheck.
+        var revoked = await ReaderWith(
+            new OwnerRevokedBeforeFinalSourceReturn(childId, parents, parents[0], 7),
+            native).ReviewAsync(childId, 1, bindings);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.NotFoundOrNotOwned,
+            revoked.Status);
+        Assert.Null(revoked.VerifiedSources);
+
+        // Parent 0 may have changed during the native HTTP evaluation of
+        // parent 1, even while its own revision/profile bytes stayed constant.
+        // Mutating a historical receipt in-place is database tampering, not an
+        // allowed edit path; the inspection must nevertheless refuse it.
+        var receiptTamper = new HttpNativeGateway(core.Client,
+            afterPreview: async count =>
+            {
+                if (count != 2) return;
+                await using var other = new CharacterSheetDbContext(
+                    database.CreateOptions());
+                var affected = await other.Database.ExecuteSqlRawAsync(
+                    "UPDATE character_origin_event_receipts SET \"AuthorizationEvidenceId\" = {0} WHERE \"CharacterId\" = {1}",
+                    "native-catalog:tampered", parents[0]);
+                Assert.Equal(1, affected);
+            });
+        var changedReceipt = await ReaderWith(
+            new MultipleOwnerParentAccess(childId, parents), receiptTamper)
+            .ReviewAsync(childId, 1, bindings);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.ConcurrentSourceChange,
+            changedReceipt.Status);
+        Assert.Null(changedReceipt.VerifiedSources);
+
+        // Restore only the fixture, then mutate the source draft JSON without
+        // incrementing its revision or UpdatedAt. A different source proposal
+        // can not be accepted merely because the profile is unchanged.
+        var repaired = await db.Database.ExecuteSqlRawAsync(
+            "UPDATE character_origin_event_receipts SET \"AuthorizationEvidenceId\" = {0} WHERE \"CharacterId\" = {1}",
+            "native-catalog:" + fingerprint, parents[0]);
+        Assert.Equal(1, repaired);
+
+        var draftTamper = new HttpNativeGateway(core.Client,
+            afterPreview: async count =>
+            {
+                if (count != 2) return;
+                await using var other = new CharacterSheetDbContext(
+                    database.CreateOptions());
+                var affected = await other.Database.ExecuteSqlRawAsync(
+                    "UPDATE character_origin_drafts SET \"ProposalJson\" = jsonb_set(\"ProposalJson\", '{id}', to_jsonb({0}::text), true) WHERE \"CharacterId\" = {1}",
+                    "tampered-parent-proposal-id", parents[0]);
+                Assert.Equal(1, affected);
+            });
+        var changedSourceDraft = await ReaderWith(
+            new MultipleOwnerParentAccess(childId, parents), draftTamper)
+            .ReviewAsync(childId, 1, bindings);
+        Assert.Equal(CharacterOriginParentSourceAlignmentStatus.ConcurrentSourceChange,
+            changedSourceDraft.Status);
+        Assert.Null(changedSourceDraft.VerifiedSources);
 
         var changed = await drafts.SaveAsync(childId, "first-party-001",
             fingerprint, MixedDraft("species.elf"), 1, DateTimeOffset.UtcNow);
@@ -532,6 +593,26 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         }
     }
 
+    private sealed class OwnerRevokedBeforeFinalSourceReturn(
+        Guid childId, IReadOnlyList<Guid> allowedParentIds,
+        Guid revokedParentId, int revokeAfterReads) : ISiteCharacterAccessGateway
+    {
+        private int _reads;
+
+        public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken cancellationToken = default)
+        {
+            var count = Interlocked.Increment(ref _reads);
+            if (characterId != childId && !allowedParentIds.Contains(characterId) ||
+                characterId == revokedParentId && count > revokeAfterReads)
+                return Task.FromResult(new SiteCharacterAccessResult(
+                    SiteCharacterAccessStatus.NotFoundOrNotOwned));
+            return Task.FromResult(SiteCharacterAccessResult.Authorized(
+                new SiteCharacterProjection(characterId, "Owner-visible character",
+                    SiteCharacterLifecycleState.Active, null, [])));
+        }
+    }
+
     private sealed class MultipleOwnerParentAccess(
         Guid childId, IReadOnlyList<Guid> allowedParentIds) : ISiteCharacterAccessGateway
     {
@@ -588,12 +669,20 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             .ToArray();
     }
 
-    private sealed class HttpNativeGateway(HttpClient http, string? malformedReply = null)
-        : INativeRulesCoreGateway
+    private sealed class HttpNativeGateway(HttpClient http, string? malformedReply = null,
+        Func<int, Task>? afterPreview = null) : INativeRulesCoreGateway
     {
-        public Task<JsonNode> PreviewNativeOriginAsync(
-            JsonElement request, CancellationToken cancellationToken) =>
-            SendAsync("/api/mechanics/v1/origins/preview", request, cancellationToken);
+        private int _previewCount;
+
+        public async Task<JsonNode> PreviewNativeOriginAsync(
+            JsonElement request, CancellationToken cancellationToken)
+        {
+            var response = await SendAsync(
+                "/api/mechanics/v1/origins/preview", request, cancellationToken);
+            if (afterPreview is not null)
+                await afterPreview(Interlocked.Increment(ref _previewCount));
+            return response;
+        }
 
         public Task<JsonNode> EvaluateApprovedMixedOriginAsync(
             JsonElement request, CancellationToken cancellationToken) =>
