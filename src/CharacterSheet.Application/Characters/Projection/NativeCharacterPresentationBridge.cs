@@ -34,17 +34,15 @@ public static class NativeCharacterPresentationBridge
         CharacterStateView? state,
         CancellationToken cancellationToken,
         bool hasCommittedOrigin = false,
-        VerifiedOriginIntrinsics? originIntrinsics = null)
+        VerifiedOriginProjectionContext? originProjection = null)
     {
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(build);
 
-        // A stateless preview or caller-provided value must not become active
-        // simply because it was supplied to this read-only calculation helper.
-        // The owning CharacterPresentationService only sets this flag after
-        // loading authorized committed Origin state from the server.
-        if (!hasCommittedOrigin)
-            originIntrinsics = null;
+        // The caller may only use these native scalars alongside authenticated
+        // committed Origin state. Exact catalog identity is checked again
+        // below when the character projector independently loads its snapshot.
+        var originIntrinsics = hasCommittedOrigin ? originProjection?.Intrinsics : null;
 
         // Even with no Class or abilities, an authorized native Origin's
         // walking speed must go through the Core kernel: active conditions can
@@ -77,6 +75,16 @@ public static class NativeCharacterPresentationBridge
             fingerprint is null || !Regex.IsMatch(fingerprint, "^[0-9a-f]{64}$") ||
             metadata["capabilities"]?["characterProjection"]?.GetValue<bool>() != true)
             throw new RulesCoreGatewayException("Rules Core returned invalid native projection metadata.");
+
+        // The native catalog can change between the authorized Origin review
+        // and this character projection. Keep independently supported Class
+        // values, but never combine a stale Origin base speed with a different
+        // native condition or Character projection catalog.
+        var originCatalogChanged = originIntrinsics is not null &&
+            (originProjection!.RulesetId != rulesetId ||
+             originProjection.Fingerprint != fingerprint);
+        if (originCatalogChanged)
+            originIntrinsics = null;
 
         // A Sheet deploy may precede Core's manual release. Only expose native
         // condition numbers when Core advertises per-value invalidation; older
@@ -313,9 +321,11 @@ public static class NativeCharacterPresentationBridge
         return new(partial ? "partial" : "resolved", mechanics,
             partial
                 ? hasCommittedOrigin
-                    ? originIntrinsics is null
-                        ? "The committed Origin's Species/Ancestry characteristics and trait effects have not been verified for native character projection."
-                        : "Verified base Species/Ancestry size, creature type and any resolved native movement are shown. Other Origin traits and dependent mechanics remain unresolved."
+                    ? originCatalogChanged
+                        ? "Native rules changed after Origin verification. Origin-dependent values are withheld pending revalidation; independently calculated Class values remain available."
+                        : originIntrinsics is null
+                            ? "The committed Origin's Species/Ancestry characteristics and trait effects have not been verified for native character projection."
+                            : "Verified base Species/Ancestry size, creature type and any resolved native movement are shown. Other Origin traits and dependent mechanics remain unresolved."
                     : "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
                 : null,
             classNames);

@@ -235,9 +235,11 @@ Ensure(classlessOrcProjection.Values.TryGetValue("movement.walk", out var classl
 var sheetWithOrc = await NativeCharacterPresentationBridge.ProjectAsync(
     gateway, build, state, CancellationToken.None,
     hasCommittedOrigin: true,
-    originIntrinsics: new VerifiedOriginIntrinsics(
-        orcIntrinsics.CreatureType.Value,
-        orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value));
+    originProjection: new VerifiedOriginProjectionContext(
+        catalog.RulesetId, catalog.Fingerprint,
+        new VerifiedOriginIntrinsics(
+            orcIntrinsics.CreatureType.Value,
+            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value)));
 Ensure(sheetWithOrc.Status == "partial" &&
     sheetWithOrc.Mechanics?.Movement?.Any(value =>
         value.Key == "movement.walk" &&

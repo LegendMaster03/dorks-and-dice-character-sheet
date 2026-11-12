@@ -11,6 +11,14 @@ namespace CharacterSheet.Application.Characters;
 public sealed record VerifiedOriginIntrinsics(
     string CreatureType, string Size, int BaseWalkingSpeedFeet);
 
+/// <summary>
+/// A revalidated Origin intrinsic payload belongs to one exact native catalog
+/// snapshot. Character projection must use that same ruleset and fingerprint,
+/// or drop the Origin scalars rather than mixing independently loaded versions.
+/// </summary>
+public sealed record VerifiedOriginProjectionContext(
+    string RulesetId, string Fingerprint, VerifiedOriginIntrinsics Intrinsics);
+
 public static class VerifiedOriginIntrinsicReader
 {
     public static VerifiedOriginIntrinsics? Read(

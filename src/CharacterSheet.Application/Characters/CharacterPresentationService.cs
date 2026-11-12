@@ -55,7 +55,7 @@ public sealed class CharacterPresentationService(
         // but only after the server has re-evaluated the *immutable* draft,
         // matched the whole native profile, and verified its event revision.
         // No client-submitted profile or preview is used as an input here.
-        VerifiedOriginIntrinsics? verifiedIntrinsics = null;
+        VerifiedOriginProjectionContext? verifiedOrigin = null;
         if (origin.SavedState is { } saved)
         {
             var reviewed = await nativeOriginReviews.ReviewAsync(
@@ -63,9 +63,14 @@ public sealed class CharacterPresentationService(
             if (reviewed.Status == CharacterOriginParentNativeReviewStatus.Ready &&
                 reviewed.Review?.StoredRevision == saved.Revision &&
                 reviewed.Review.RulesetId == saved.RulesetId)
-                verifiedIntrinsics = VerifiedOriginIntrinsicReader.Read(
+            {
+                var scalars = VerifiedOriginIntrinsicReader.Read(
                     reviewed.EvaluatedIntrinsics, saved.ProfileJson);
-            if (verifiedIntrinsics is null)
+                if (scalars is not null)
+                    verifiedOrigin = new(reviewed.Review.RulesetId,
+                        reviewed.Review.LatestNativeFingerprint, scalars);
+            }
+            if (verifiedOrigin is null)
                 diagnostics.Add($"origin-native-intrinsics:{reviewed.Status}");
         }
 
@@ -75,7 +80,7 @@ public sealed class CharacterPresentationService(
             projection = await NativeCharacterPresentationBridge.ProjectAsync(
                 nativeRulesCoreGateway, build, state, cancellationToken,
                 hasCommittedOrigin: origin.SavedState is not null,
-                originIntrinsics: verifiedIntrinsics);
+                originProjection: verifiedOrigin);
         }
         catch (Exception exception) when (exception is RulesCoreGatewayException
             or JsonException or InvalidOperationException or FormatException)

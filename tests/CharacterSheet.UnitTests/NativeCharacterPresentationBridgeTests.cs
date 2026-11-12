@@ -72,7 +72,8 @@ public sealed class NativeCharacterPresentationBridgeTests
         var result = await NativeCharacterPresentationBridge.ProjectAsync(
             gateway, build, null, CancellationToken.None,
             hasCommittedOrigin: true,
-            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
 
         Assert.Equal("partial", result.Status);
         Assert.Equal(30, gateway.LastBaseWalkSpeed);
@@ -95,7 +96,8 @@ public sealed class NativeCharacterPresentationBridgeTests
         var result = await NativeCharacterPresentationBridge.ProjectAsync(
             gateway, Build(), null, CancellationToken.None,
             hasCommittedOrigin: true,
-            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
         Assert.Equal("partial", result.Status);
         Assert.NotNull(result.Mechanics);
         Assert.Equal(30, Assert.Single(result.Mechanics.Movement!).EffectiveValue);
@@ -113,7 +115,8 @@ public sealed class NativeCharacterPresentationBridgeTests
         var result = await NativeCharacterPresentationBridge.ProjectAsync(
             gateway, Build(), null, CancellationToken.None,
             hasCommittedOrigin: true,
-            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
 
         Assert.Equal("partial", result.Status);
         Assert.Equal(30, gateway.LastBaseWalkSpeed);
@@ -129,12 +132,34 @@ public sealed class NativeCharacterPresentationBridgeTests
         var result = await NativeCharacterPresentationBridge.ProjectAsync(
             gateway, Build(), null, CancellationToken.None,
             hasCommittedOrigin: false,
-            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
 
         Assert.Equal("unconfigured", result.Status);
         Assert.Null(result.Mechanics);
         Assert.Equal(0, gateway.Calls);
         Assert.Null(gateway.LastBaseWalkSpeed);
+    }
+
+    [Fact]
+    public async Task UpdatedNativeCatalogDiscardsFormerOriginScalarsButPreservesClassProgression()
+    {
+        var gateway = new FixtureGateway();
+        var build = Build(new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1));
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originProjection: new VerifiedOriginProjectionContext("first-party-001",
+                new string('b', 64),
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
+
+        Assert.Equal("partial", result.Status);
+        Assert.Null(gateway.LastBaseWalkSpeed);
+        Assert.Null(result.Mechanics!.Movement);
+        Assert.Null(result.Mechanics.CharacterMetadata);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        Assert.Contains("rules changed", result.Message!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
