@@ -90,6 +90,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ICharacterArtStorage>(new FileSystemCharacterArtStorage(characterArtStoragePath));
 builder.Services.AddScoped<ICharacterSheetStore, PostgresCharacterSheetStore>();
 builder.Services.AddScoped<ICharacterBuildStore, PostgresCharacterBuildStore>();
+builder.Services.AddScoped<ICharacterOriginDraftStore, PostgresCharacterOriginDraftStore>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
 builder.Services.AddScoped<ICharacterStartingEquipmentInventoryStore, PostgresCharacterStartingEquipmentInventoryStore>();
 builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
@@ -98,6 +99,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
+builder.Services.AddScoped<CharacterOriginDraftService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
@@ -170,6 +172,7 @@ app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
 app.MapCharacterCraftingEndpoints();
 app.MapNativeRulesCoreEndpoints();
+app.MapCharacterOriginDraftEndpoints();
 app.MapNativeCharacterResourceEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
