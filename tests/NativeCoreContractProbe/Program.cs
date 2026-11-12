@@ -205,7 +205,55 @@ Ensure(humanOrigin.Status != NativeOriginConstructionStatus.Authorized &&
     humanOrigin.Issues.Any(issue =>
         issue.Code == "required-origin-selection-missing"),
     "Human native Origin choices were silently skipped or treated as complete.");
-Console.WriteLine("Phase 5 Origin native-contract checks passed: Orc authorized; Human incomplete.");
+// Validate the new first-party choice adapter across the actual Rules Core
+// branch, without relying on a mock "Authorized" response. It is safe to
+// grant a native Skill choice only when current source identity and membership
+// are independently verified. Origin feats remain unresolved until their
+// native category/prerequisite contract is completed.
+var humanProposal = nativeDirectOrigin with
+{
+    Id = "human-choice-check",
+    SelectedSpeciesId = "species.human"
+};
+var discoveredHuman = new NativeOriginSourceDeconstructor(catalog)
+    .Deconstruct(humanProposal).Proposal.Candidates;
+var sizeCandidate = discoveredHuman.Single(candidate =>
+    candidate.Identity.IntrinsicSlotId == "size" &&
+    candidate.RequiredChoices?.Any(choice => choice.Id == "size") == true);
+var skillCandidate = discoveredHuman.Single(candidate =>
+    candidate.RequiredChoices?.Any(choice =>
+        choice.OptionCatalogId == "any-native-skill") == true);
+var sizeSelected = new NativeOriginManifestation("size", sizeCandidate.Id,
+    Choices: [new NativeOriginChoiceSelection("size", ["medium"])]);
+var skillSelected = new NativeOriginManifestation("skill", skillCandidate.Id,
+    Choices: [new NativeOriginChoiceSelection("selection", ["skill.intimidation"])]);
+var skillReviewed = new NativeOriginFirstPartyChoiceEvaluator(catalog).Evaluate(
+    humanProposal with { Manifestations = [sizeSelected, skillSelected] });
+Ensure(skillReviewed.Status != NativeOriginConstructionStatus.Authorized &&
+    skillReviewed.Issues.Any(issue =>
+        issue.Code == "required-origin-selection-missing") &&
+    !skillReviewed.Issues.Any(issue =>
+        issue.Code == "choice-authorization-unresolved") &&
+    skillReviewed.Profile!.Underlying.InherentGrants.Any(grant =>
+        grant.Identity.Occurrence.OccurrencePath == "/traits/0" &&
+        grant.ResolvedChoices?.Any(choice =>
+            choice.SelectedOptionIds.Contains("skill.intimidation")) == true),
+    "Selected native Human Skill was not independently verified, or an unimplemented feat was approved.");
+var categoryForgery = new NativeOriginFirstPartyChoiceEvaluator(catalog).Evaluate(
+    humanProposal with
+    {
+        Manifestations = [sizeSelected, skillSelected with
+        {
+            Choices = [new("selection", ["competency.alchemy"])]
+        }]
+    });
+Ensure(categoryForgery.Issues.Any(issue =>
+        issue.Code == "choice-authorization-unresolved") &&
+    !categoryForgery.Profile!.Underlying.InherentGrants.Any(grant =>
+        grant.Identity.Occurrence.OccurrencePath == "/traits/0"),
+    "A different native category was incorrectly accepted as a Human Skill choice.");
+Console.WriteLine("Phase 5 Origin native-contract checks passed: Orc authorized; " +
+    "Human native Skill verified; Origin feat remains incomplete.");
 
 #endif
 
