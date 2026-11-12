@@ -20,15 +20,21 @@ import {
 import {
     changeDirectOriginChoice,
     changeDirectOriginIdentity,
+    changeMixedNativeParent,
+    changeNativeOriginMode,
     createInitialOriginProposal,
-    isAuthorizedInitialNativeOrigin,
-    isDirectOriginProposal
+    canActivateDirectNativeOrigin,
+    isDirectOriginProposal,
+    isEditableDirectNativeOrigin,
+    isEditableMixedNativeOrigin,
+    type MixedNativeParentSlot
 } from "./origin-builder-model.js";
 
 export type OriginChooser =
     | { kind: "closed" }
     | { kind: "open"; category: "species" | "ancestry" | "skill";
         candidateId?: string; requirementId?: string;
+        parentSlot?: MixedNativeParentSlot;
         query: string; status: "loading" | "ready" | "error";
         options: readonly NativeOptionSummary[]; error?: string };
 
@@ -48,11 +54,14 @@ export interface OriginWorkflow {
     current(): Readonly<OriginUiState>;
     load(characterId: string): Promise<void>;
     openChooser(category: "species" | "ancestry" | "skill",
-        candidateId?: string, requirementId?: string): Promise<void>;
+        candidateId?: string, requirementId?: string,
+        parentSlot?: MixedNativeParentSlot): Promise<void>;
     searchChooser(query: string): Promise<void>;
     closeChooser(): void;
     chooseOption(characterId: string, id: string): Promise<void>;
     clearAncestry(characterId: string): Promise<void>;
+    setMode(characterId: string, mode: "direct" | "mixed"): Promise<void>;
+    clearMixedParent(characterId: string, slot: MixedNativeParentSlot): Promise<void>;
     setFiniteChoice(characterId: string, candidateId: string,
         requirementId: string, id: string | null): Promise<void>;
     activate(characterId: string): Promise<void>;
@@ -120,7 +129,7 @@ export function createOriginWorkflow(
         const chooser = state.chooser;
         if (chooser.kind !== "open" || state.catalog === null) return;
         const token = ++searchSequence;
-        const key = `${chooser.category}:${chooser.candidateId ?? ""}:${chooser.requirementId ?? ""}`;
+        const key = `${chooser.category}:${chooser.candidateId ?? ""}:${chooser.requirementId ?? ""}:${chooser.parentSlot ?? ""}`;
         update({
             chooser: { ...chooser, query, status: "loading", options: [], error: undefined }
         });
@@ -129,7 +138,7 @@ export function createOriginWorkflow(
                 chooser.category, query, 100);
             const current = state.chooser;
             if (token !== searchSequence || current.kind !== "open" ||
-                `${current.category}:${current.candidateId ?? ""}:${current.requirementId ?? ""}` !== key) return;
+                `${current.category}:${current.candidateId ?? ""}:${current.requirementId ?? ""}:${current.parentSlot ?? ""}` !== key) return;
             update({ chooser: { ...current, query, status: "ready",
                 options: page.options, error: undefined } });
         } catch (error) {
@@ -141,13 +150,21 @@ export function createOriginWorkflow(
     }
 
     async function openChooser(category: "species" | "ancestry" | "skill",
-        candidateId?: string, requirementId?: string): Promise<void> {
+        candidateId?: string, requirementId?: string,
+        parentSlot?: MixedNativeParentSlot): Promise<void> {
+        const proposal = state.draft?.proposal ?? createInitialOriginProposal(
+            currentCharacterId ?? "");
+        const editableDirect = isEditableDirectNativeOrigin(proposal);
+        const editableMixed = isEditableMixedNativeOrigin(proposal);
         if (state.status !== "ready" || state.busy || state.readOnly ||
             state.savedState !== null || state.catalog === null ||
-            (state.draft !== null && !isDirectOriginProposal(state.draft.proposal))) return;
+            (!editableDirect && !editableMixed) ||
+            (editableMixed && (category === "skill" || parentSlot === undefined)) ||
+            (editableDirect && parentSlot !== undefined)) return;
         ++searchSequence;
         update({ chooser: { kind: "open", category, candidateId, requirementId,
-            query: "", status: "loading", options: [] }, message: undefined });
+            parentSlot, query: "", status: "loading", options: [] },
+            message: undefined });
         await searchChooser("");
     }
 
@@ -193,7 +210,14 @@ export function createOriginWorkflow(
         const chooser = state.chooser;
         const draft = state.draft?.proposal ??
             createInitialOriginProposal(characterId);
-        if (!isDirectOriginProposal(draft)) return;
+        if (isEditableMixedNativeOrigin(draft)) {
+            if (!chooser.parentSlot || chooser.category === "skill" ||
+                !id.startsWith(chooser.category + ".")) return;
+            await saveProposal(characterId, changeMixedNativeParent(
+                draft, chooser.parentSlot, id));
+            return;
+        }
+        if (!isEditableDirectNativeOrigin(draft)) return;
         if (chooser.category === "skill") {
             if (!chooser.candidateId || !chooser.requirementId) return;
             await saveProposal(characterId, changeDirectOriginChoice(draft,
@@ -212,6 +236,24 @@ export function createOriginWorkflow(
             proposal, "ancestry", null));
     }
 
+    async function setMode(characterId: string, mode: "direct" | "mixed"): Promise<void> {
+        if (state.status !== "ready" || state.busy || state.savedState !== null ||
+            state.readOnly) return;
+        const proposal = state.draft?.proposal ??
+            createInitialOriginProposal(characterId);
+        if (!isEditableDirectNativeOrigin(proposal) &&
+            !isEditableMixedNativeOrigin(proposal)) return;
+        await saveProposal(characterId, changeNativeOriginMode(proposal, mode));
+    }
+
+    async function clearMixedParent(characterId: string,
+        slot: MixedNativeParentSlot): Promise<void> {
+        const proposal = state.draft?.proposal;
+        if (proposal === undefined || !isEditableMixedNativeOrigin(proposal)) return;
+        await saveProposal(characterId, changeMixedNativeParent(
+            proposal, slot, null));
+    }
+
     async function setFiniteChoice(characterId: string, candidateId: string,
         requirementId: string, id: string | null): Promise<void> {
         const proposal = state.draft?.proposal;
@@ -223,7 +265,7 @@ export function createOriginWorkflow(
     async function activate(characterId: string): Promise<void> {
         if (state.status !== "ready" || state.savedState !== null || state.readOnly ||
             state.busy || state.draft === null ||
-            !isAuthorizedInitialNativeOrigin(state.preview) ||
+            !canActivateDirectNativeOrigin(state.draft.proposal, state.preview) ||
             currentCharacterId !== characterId) return;
         const token = ++sequence;
         update({ busy: true, message: undefined });
@@ -239,6 +281,7 @@ export function createOriginWorkflow(
 
     return {
         current: () => state, load, openChooser, searchChooser, closeChooser,
-        chooseOption, clearAncestry, setFiniteChoice, activate
+        chooseOption, clearAncestry, setMode, clearMixedParent,
+        setFiniteChoice, activate
     };
 }
