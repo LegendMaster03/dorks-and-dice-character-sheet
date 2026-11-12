@@ -195,6 +195,69 @@ public sealed class CharacterPresentationWorkflowTests
     }
 
     [Fact]
+    public async Task CommittedMixedOriginUsesOnlyPinnedNativeScalarAndVisionProjection()
+    {
+        using var factory = new PresentationFactory();
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        using (var initialized = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/sheet"))
+            Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+        await factory.CommitMixedOriginForPresentationTestAsync(id);
+
+        using var response = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/presentation");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("partial", result.GetProperty("mechanicsStatus").GetString());
+        var mechanics = result.GetProperty("mechanics");
+        Assert.Equal(30, Assert.Single(mechanics.GetProperty("movement").EnumerateArray())
+            .GetProperty("effectiveValue").GetInt32());
+        Assert.Contains(mechanics.GetProperty("characterMetadata").EnumerateArray(),
+            entry => entry.GetProperty("key").GetString() == "origin.base-size" &&
+                entry.GetProperty("effectiveValue").GetString() == "medium");
+        var sense = Assert.Single(mechanics.GetProperty("senses").EnumerateArray());
+        Assert.Equal("sense.low-light-vision", sense.GetProperty("key").GetString());
+        Assert.Equal("species.elf/traits/0", Assert.Single(
+            sense.GetProperty("sourceAttributions").EnumerateArray())
+            .GetProperty("detail").GetString());
+        Assert.Equal(30, factory.Native.LastBaseWalkSpeed);
+        // The mixed projection is not incorrectly passed through the
+        // direct-only first-party reconstruction reviewer.
+        Assert.Equal(0, factory.Native.OriginPreviewCalls);
+    }
+
+    [Fact]
+    public async Task ChangedRulesetWithholdsMixedOriginMovementAndVision()
+    {
+        using var factory = new PresentationFactory {
+            Native = new NativeGateway { ReportedFingerprint = new string('b', 64) }
+        };
+        var id = Guid.NewGuid();
+        factory.Context = Context(new ToolHostCharacterContext(id, "Tester", "Active", null, []));
+        using (var initialized = await factory.SendHostedAsync(HttpMethod.Post,
+            $"/api/characters/{id:D}/sheet"))
+            Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+        using (var ability = await factory.SendHostedAsync(HttpMethod.Put,
+            $"/api/characters/{id:D}/build/ability-scores/strength",
+            new { score = 12 }))
+            Assert.Equal(HttpStatusCode.OK, ability.StatusCode);
+        await factory.CommitMixedOriginForPresentationTestAsync(id);
+
+        using var response = await factory.SendHostedAsync(HttpMethod.Get,
+            $"/api/characters/{id:D}/presentation");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("partial", result.GetProperty("mechanicsStatus").GetString());
+        var mechanics = result.GetProperty("mechanics");
+        Assert.False(mechanics.TryGetProperty("movement", out _));
+        Assert.False(mechanics.TryGetProperty("senses", out _));
+        Assert.False(mechanics.TryGetProperty("characterMetadata", out _));
+        Assert.Null(factory.Native.LastBaseWalkSpeed);
+        Assert.Equal(0, factory.Native.OriginPreviewCalls);
+    }
+
+    [Fact]
     public async Task SavedAbilityIsReadThroughNativeProjectorWithoutLegacyMechanicsCalls()
     {
         using var factory = new PresentationFactory();
@@ -349,6 +412,85 @@ public sealed class CharacterPresentationWorkflowTests
             Assert.Equal(AuthorizedOriginStoreStatus.Applied, committed.Status);
         }
 
+        /// <summary>
+        /// Controlled stored state for presentation only. The real Core HTTP
+        /// authorization and PostgreSQL audit are tested separately by the
+        /// Phase 5 cross-repository acceptance workflow.
+        /// </summary>
+        public async Task CommitMixedOriginForPresentationTestAsync(Guid characterId)
+        {
+            await using var db = new CharacterSheetDbContext(_database.CreateOptions());
+            await db.Database.MigrateAsync();
+            const string fingerprint = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+            var draft = await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+                characterId, "first-party-001", fingerprint,
+                """
+                {"id":"mixed-test","intent":1,
+                 "method":{"ruleId":"rule.creature-origination","methodId":"biological"},
+                 "contributors":[
+                   {"id":"parent-one","role":{"kind":0},
+                    "source":{"kind":0,"id":"species.human"}},
+                   {"id":"parent-two","role":{"kind":0},
+                    "source":{"kind":0,"id":"species.elf"}}],
+                 "candidates":[],"manifestations":[]}
+                """, 0, DateTimeOffset.UtcNow);
+            Assert.Equal(1, draft!.Revision);
+
+            var profile = JsonNode.Parse(OrcOriginProfile)!;
+            profile["id"] = "origin:mixed-test";
+            profile["proposalId"] = "mixed-test";
+            profile["adjudication"]!["adjudication"] = 3;
+            profile["history"]![0]!["id"] = "construction:mixed-test";
+            foreach (var configuration in new[] { "underlying", "current" })
+            {
+                var state = profile[configuration]!;
+                state["speciesId"] = "custom.human-elf";
+                state["profileId"] = "origin:mixed-test";
+                var grants = state["inherentGrants"]!.AsArray();
+                for (var i = 0; i < grants.Count; i++)
+                {
+                    grants[i]!["identity"]!["occurrence"]!["source"]!["id"] =
+                        i is 0 or 2 ? "species.human" : "species.elf";
+                    grants[i]!["authorization"] = new JsonObject {
+                        ["adjudication"] = 3, ["tableDecisionId"] = "candidate-" + i
+                    };
+                }
+                grants[3]!["identity"]!["mechanicalDefinitionId"] =
+                    "species.elf#trait:low-light-vision";
+            }
+
+            var projection = JsonNode.Parse("""
+                {
+                  "rulesetId":"first-party-001",
+                  "fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "intrinsics":{
+                    "status":"resolved","previewOnly":true,"unresolvedSlots":[],
+                    "creatureType":{"value":"humanoid","grantId":"grant:type",
+                      "sourceId":"species.human","occurrencePath":"/creatureType"},
+                    "size":{"value":"medium","grantId":"grant:size",
+                      "sourceId":"species.elf","occurrencePath":"/size"},
+                    "walkingSpeedFeet":{"value":30,"grantId":"grant:walk",
+                      "sourceId":"species.human","occurrencePath":"/walkingSpeedFeet"}
+                  },
+                  "vision":{
+                    "status":"resolved","previewOnly":true,"unresolvedReasons":[],
+                    "lowLightVision":{"grantId":"grant:vision","sourceId":"species.elf",
+                      "occurrencePath":"/traits/0","ruleId":"rule.low-light-vision",
+                      "actualLightLevel":"dim","perceivedLightLevel":"bright"}
+                  }
+                }
+                """)!;
+            var saved = await new PostgresCharacterAuthorizedOriginStore(db)
+                .CommitVerifiedAsync(new VerifiedOriginPersistenceCommand(
+                    characterId, "first-party-001", fingerprint,
+                    profile.ToJsonString(), 0, 1, "construction:mixed-test",
+                    "rule.creature-origination", "biological", "campaign-dm",
+                    "origin-dm:presentation-test", DateTimeOffset.UtcNow,
+                    Guid.NewGuid(), Guid.NewGuid(), """[{"id":"candidate-0"}]""",
+                    projection.ToJsonString()));
+            Assert.Equal(AuthorizedOriginStoreStatus.Applied, saved.Status);
+        }
+
         public async Task<HttpResponseMessage> SendHostedAsync(
             HttpMethod method, string path, object? body = null)
         {
@@ -380,6 +522,7 @@ public sealed class CharacterPresentationWorkflowTests
     {
         private static readonly string Fingerprint = new('a', 64);
         public bool HasWarlock { get; init; } = true;
+        public string? ReportedFingerprint { get; init; }
         public bool Throw { get; init; }
         public int Calls { get; private set; }
         public int? LastAbilityScore { get; private set; }
@@ -393,7 +536,7 @@ public sealed class CharacterPresentationWorkflowTests
             if (Throw) throw new RulesCoreGatewayException("Fixture ruleset unavailable.");
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
-                fingerprint = Fingerprint, capabilities = new { characterProjection = true }
+                fingerprint = ReportedFingerprint ?? Fingerprint, capabilities = new { characterProjection = true }
             })!);
         }
 
@@ -410,7 +553,7 @@ public sealed class CharacterPresentationWorkflowTests
                 _ => throw new InvalidOperationException("Unexpected native catalog category.")
             };
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
-                rulesetId = "first-party-001", fingerprint = Fingerprint, options
+                rulesetId = "first-party-001", fingerprint = ReportedFingerprint ?? Fingerprint, options
             })!);
         }
 
@@ -422,7 +565,7 @@ public sealed class CharacterPresentationWorkflowTests
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1,
                 rulesetId = "first-party-001",
-                fingerprint = Fingerprint,
+                fingerprint = ReportedFingerprint ?? Fingerprint,
                 previewOnly = true,
                 result = new {
                     status = 4,
@@ -483,7 +626,7 @@ public sealed class CharacterPresentationWorkflowTests
             }
             return Task.FromResult(JsonSerializer.SerializeToNode(new {
                 contractVersion = 1, rulesetId = "first-party-001",
-                fingerprint = Fingerprint, status = "partial", values,
+                fingerprint = ReportedFingerprint ?? Fingerprint, status = "partial", values,
                 issues = new[] { new { code = "unresolved-input" } },
                 requiredChoices = Array.Empty<string>()
             })!);
