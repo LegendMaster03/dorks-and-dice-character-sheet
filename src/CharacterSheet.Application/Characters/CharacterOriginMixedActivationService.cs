@@ -18,6 +18,7 @@ public enum CharacterOriginMixedActivationStatus
     OriginAlreadyCommitted,
     SheetNotInitialized,
     LegacySelectionConflict,
+    NativeSnapshotUnpinned,
     NativeContentChanged,
     NotAuthorizedByNativeRules,
     RulesCoreUnavailable
@@ -81,6 +82,10 @@ public sealed class CharacterOriginMixedActivationService(
             return new(CharacterOriginMixedActivationStatus.DraftMissing);
         if (draft.Revision != expectedDraftRevision)
             return new(CharacterOriginMixedActivationStatus.DraftRevisionConflict);
+        // DM adjudication must be pinned to a concrete reviewed native snapshot.
+        // Draft editing may omit a fingerprint; activating a table ruling may not.
+        if (draft.Fingerprint is null)
+            return new(CharacterOriginMixedActivationStatus.NativeSnapshotUnpinned);
 
         using var parsedDraft = JsonDocument.Parse(draft.ProposalJson);
         if (!TryGetPlainHumanElfDraft(parsedDraft.RootElement, out var proposalId,
@@ -106,16 +111,26 @@ public sealed class CharacterOriginMixedActivationService(
         // A changed native rule is not necessarily unsafe for ordinary
         // preview, but a DM approval must be reviewed against the same
         // mechanics that will be committed.
-        if (preview["contentChangedSinceRequest"]?.GetValue<bool>() == true)
+        if (preview["contentChangedSinceRequest"]?.ToJsonString() != "false" ||
+            preview["fingerprint"]?.ToJsonString() != JsonSerializer.Serialize(draft.Fingerprint))
             return new(CharacterOriginMixedActivationStatus.NativeContentChanged);
-        if (preview["rulesetId"]?.GetValue<string>() != draft.RulesetId ||
+        if (preview["rulesetId"]?.ToJsonString() != JsonSerializer.Serialize(draft.RulesetId) ||
+            preview["previewOnly"]?.ToJsonString() != "true" ||
             preview["result"]?["evaluatedProposal"]?["candidates"] is not JsonArray offered)
             return new(CharacterOriginMixedActivationStatus.RulesCoreUnavailable);
 
-        var nativeOffers = offered.OfType<JsonObject>()
-            .Where(candidate => candidate["id"] is JsonValue)
-            .ToDictionary(candidate => candidate["id"]!.GetValue<string>(),
-                StringComparer.Ordinal);
+        // A malformed or duplicate Core candidate identifier must not cause
+        // a server error or silently choose the last duplicate.
+        var nativeOffers = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        foreach (var item in offered)
+        {
+            if (item is not JsonObject candidate ||
+                candidate["id"] is not JsonValue idValue ||
+                !idValue.TryGetValue<string>(out var id) ||
+                string.IsNullOrWhiteSpace(id) ||
+                !nativeOffers.TryAdd(id, candidate))
+                return new(CharacterOriginMixedActivationStatus.RulesCoreUnavailable);
+        }
         var choices = new JsonArray();
         var decisions = new JsonArray();
         var evidenceId = "origin-dm:" + Guid.NewGuid().ToString("N");
@@ -186,7 +201,8 @@ public sealed class CharacterOriginMixedActivationService(
             return new(CharacterOriginMixedActivationStatus.RulesCoreUnavailable);
         }
 
-        if (evaluation["contentChangedSinceRequest"]?.GetValue<bool>() == true)
+        if (evaluation["contentChangedSinceRequest"]?.ToJsonString() != "false" ||
+            evaluation["fingerprint"]?.ToJsonString() != JsonSerializer.Serialize(draft.Fingerprint))
             return new(CharacterOriginMixedActivationStatus.NativeContentChanged);
         using var evaluated = JsonDocument.Parse(evaluation.ToJsonString());
         if (!TryVerifiedMixedResult(evaluated.RootElement, characterId,
@@ -253,8 +269,9 @@ public sealed class CharacterOriginMixedActivationService(
             !TryProperty(root, "id", out var id) ||
             id.ValueKind != JsonValueKind.String ||
             (proposalId = id.GetString()) is not { Length: > 0 and <= 180 } ||
-            !TryProperty(root, "intent", out var intent) || intent.ValueKind != JsonValueKind.Number ||
-            intent.GetInt32() != 1 ||
+            !TryProperty(root, "intent", out var intent) ||
+            intent.ValueKind != JsonValueKind.Number ||
+            !intent.TryGetInt32(out var intentValue) || intentValue != 1 ||
             !TryProperty(root, "method", out var method) ||
             (ruleId = String(method, "ruleId")) != "rule.creature-origination" ||
             (methodId = String(method, "methodId")) != "biological" ||
