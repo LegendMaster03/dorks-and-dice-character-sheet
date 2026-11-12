@@ -55,6 +55,12 @@ public static class NativeRulesCoreEndpoints
         group.MapPost("/characters/project", (JsonElement request,
             [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
             Forward(() => gateway.ProjectNativeCharacterAsync(request, cancellationToken)));
+
+        // Initial-construction preview only. The server does not accept a
+        // browser's existing profile or DM approval as trusted character state.
+        group.MapPost("/origins/preview", (JsonElement request,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.PreviewNativeOriginAsync(request, cancellationToken)));
     }
 
     private static async Task<IResult> Forward(Func<Task<JsonNode>> operation)
