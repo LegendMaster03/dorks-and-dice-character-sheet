@@ -149,6 +149,19 @@ export function isAuthorizedInitialNativeOrigin(preview: NativeOriginPreview | n
     return preview.result.status === "Authorized" || preview.result.status === 4;
 }
 
+/** Underlying identity is authoritative only for a committed Origin, not a draft. */
+export function savedUnderlyingOriginIdentity(profile: unknown):
+    { speciesId: string | null; ancestryId: string | null } | null {
+    if (!isRecord(profile) || !isRecord(profile.underlying)) return null;
+    const underlying = profile.underlying;
+    return {
+        speciesId: typeof underlying.speciesId === "string"
+            ? underlying.speciesId : null,
+        ancestryId: typeof underlying.ancestryId === "string"
+            ? underlying.ancestryId : null
+    };
+}
+
 export function hasLegacySpeciesSelections(
     selections: readonly { category: string }[]
 ): boolean {
