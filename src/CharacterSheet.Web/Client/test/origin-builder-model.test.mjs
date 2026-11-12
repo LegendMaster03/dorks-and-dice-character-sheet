@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import {
     changeDirectOriginChoice,
     changeDirectOriginIdentity,
+    changeMixedNativeParent,
+    changeNativeOriginMode,
     createInitialOriginProposal,
+    isEditableDirectNativeOrigin,
+    isEditableMixedNativeOrigin,
+    mixedNativeParentSources,
+    canActivateDirectNativeOrigin,
     hasLegacySpeciesSelections,
     isAuthorizedInitialNativeOrigin,
     requiredDirectOriginChoices,
@@ -130,4 +136,105 @@ test("header identity comes from committed Underlying, not Current or draft", ()
     });
     assert.equal(savedUnderlyingOriginIdentity({ current: { speciesId: "species.werewolf" } }), null);
     assert.equal(savedUnderlyingOriginIdentity(null), null);
+});
+
+test("native Human–Elf biological example persists only distinct source references", () => {
+    const initial = createInitialOriginProposal(id);
+    const mixed = changeNativeOriginMode(initial, "mixed");
+    assert.equal(mixed.intent, 1);
+    assert.deepEqual(mixed.contributors, []);
+    assert.equal(isEditableMixedNativeOrigin(mixed), true);
+
+    const human = changeMixedNativeParent(mixed, "parent-one", "species.human");
+    const both = changeMixedNativeParent(human, "parent-two", "species.elf");
+    assert.deepEqual(both.contributors, [
+        { id: "parent-one", role: { kind: 0 }, source: {
+            kind: 0, id: "species.human"
+        } },
+        { id: "parent-two", role: { kind: 0 }, source: {
+            kind: 0, id: "species.elf"
+        } }
+    ]);
+    assert.deepEqual(mixedNativeParentSources(both), [
+        { slot: "parent-one", sourceId: "species.human" },
+        { slot: "parent-two", sourceId: "species.elf" }
+    ]);
+    assert.equal(both.selectedSpeciesId, null);
+    assert.equal(both.selectedAncestryId, null);
+    assert.deepEqual(both.candidates, []);
+    assert.deepEqual(both.manifestations, []);
+    assert.equal(both.tableDecisions, undefined);
+    assert.equal(both.existingConfiguration, undefined);
+    assert.equal(both.history, undefined);
+    assert.equal(both.contributors[0].manifestedProfile, undefined);
+    assert.equal(isEditableMixedNativeOrigin(both), true);
+    assert.equal(isEditableDirectNativeOrigin(both), false);
+    assert.equal(canActivateDirectNativeOrigin(both, {
+        previewOnly: true, result: { status: 4, issues: [] }
+    }), false);
+    assert.deepEqual(initial.contributors, []);
+});
+
+test("changing a mixed source invalidates its old evidence without granting inheritance", () => {
+    const mixed = changeNativeOriginMode(createInitialOriginProposal(id), "mixed");
+    const both = changeMixedNativeParent(changeMixedNativeParent(mixed,
+        "parent-one", "species.human"), "parent-two", "species.elf");
+    const updated = changeMixedNativeParent(both, "parent-two", "ancestry.elf.high");
+    assert.deepEqual(mixedNativeParentSources(updated), [
+        { slot: "parent-one", sourceId: "species.human" },
+        { slot: "parent-two", sourceId: "ancestry.elf.high" }
+    ]);
+    const cleared = changeMixedNativeParent(updated, "parent-one", null);
+    assert.equal(cleared.contributors.length, 1);
+    assert.equal(cleared.contributors[0].id, "parent-two");
+    assert.equal(both.contributors.length, 2);
+
+    const reset = changeNativeOriginMode(cleared, "direct");
+    assert.equal(reset.intent, 0);
+    assert.equal(reset.id, mixed.id);
+    assert.deepEqual(reset.contributors, []);
+    assert.deepEqual(reset.candidates, []);
+    assert.deepEqual(reset.manifestations, []);
+});
+
+test("basic mixed editor refuses claimed parent grants, rulings and invented options", () => {
+    const mixed = changeNativeOriginMode(createInitialOriginProposal(id), "mixed");
+    assert.throws(() => changeMixedNativeParent(mixed,
+        "parent-one", "custom.unknown"), /Only native Species or Ancestry/);
+    assert.throws(() => changeMixedNativeParent(mixed,
+        "someone-else", "species.human"), /unrecognized biological source/);
+    const withParent = changeMixedNativeParent(mixed, "parent-one", "species.human");
+    const bad = [
+        { ...withParent, tableDecisions: [{ id: "forged-dm" }] },
+        { ...withParent, candidates: [{ id: "forged-grant" }] },
+        { ...withParent, manifestations: [{ id: "forged-selection" }] },
+        { ...withParent, processCreatureTypeId: "creature-type.humanoid" },
+        { ...withParent, contributors: [...withParent.contributors, {
+            id: "parent-two", role: { kind: 0 },
+            source: { kind: 1, id: "forged-parent" },
+            manifestedProfile: { inherentGrants: [{ id: "forged" }] }
+        }] }
+    ];
+    for (const input of bad) {
+        assert.equal(isEditableMixedNativeOrigin(input), false);
+        assert.throws(() => changeMixedNativeParent(input,
+            "parent-two", "species.elf"), /plain biological evidence draft/);
+        assert.throws(() => changeNativeOriginMode(input, "direct"),
+            /can not replace/);
+    }
+});
+
+test("no arbitrary Origin becomes an editable direct or mixed biological draft", () => {
+    const initial = createInitialOriginProposal(id);
+    assert.equal(isEditableDirectNativeOrigin(initial), true);
+    assert.equal(isEditableDirectNativeOrigin({
+        ...initial, method: { ruleId: "rule.other", methodId: "rite" }
+    }), false);
+    assert.equal(isEditableDirectNativeOrigin({
+        ...initial, contributors: [{ id: "claimed-parent" }]
+    }), false);
+    assert.equal(isEditableMixedNativeOrigin({
+        ...changeNativeOriginMode(initial, "mixed"),
+        inputRequirements: [{ role: { kind: 5 }, minimumCount: 1 }]
+    }), false);
 });
