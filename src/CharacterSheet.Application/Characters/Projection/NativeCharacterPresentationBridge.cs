@@ -39,6 +39,13 @@ public static class NativeCharacterPresentationBridge
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(build);
 
+        // A stateless preview or caller-provided value must not become active
+        // simply because it was supplied to this read-only calculation helper.
+        // The owning CharacterPresentationService only sets this flag after
+        // loading authorized committed Origin state from the server.
+        if (!hasCommittedOrigin)
+            originIntrinsics = null;
+
         // Even with no Class or abilities, an authorized native Origin's
         // walking speed must go through the Core kernel: active conditions can
         // suppress or change effective movement. Never display a raw base
