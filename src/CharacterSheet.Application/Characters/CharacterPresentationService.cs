@@ -58,7 +58,56 @@ public sealed class CharacterPresentationService(
         VerifiedOriginProjectionContext? verifiedOrigin = null;
         if (origin.SavedState is { } saved)
         {
-            var reviewed = await nativeOriginReviews.ReviewAsync(
+            // DM-adjudicated mixed Origins cannot be revalidated as if they
+            // were direct first-party constructions. The Core-authored scalar
+            // projection was verified against the committed source occurrence
+            // before the atomic commit. Use it only while the same native
+            // snapshot is still active, and verify its grants again on read.
+            if (saved.EvaluatedProjectionJson is { } pinnedProjection)
+            {
+                try
+                {
+                    var active = await nativeRulesCoreGateway.GetNativeRulesetAsync(
+                        cancellationToken);
+                    if (active["rulesetId"]?.GetValue<string>() == saved.RulesetId &&
+                        active["fingerprint"]?.GetValue<string>() == saved.Fingerprint)
+                    {
+                        using var projection = JsonDocument.Parse(pinnedProjection);
+                        var root = projection.RootElement;
+                        if (root.TryGetProperty("rulesetId", out var id) &&
+                            id.GetString() == saved.RulesetId &&
+                            root.TryGetProperty("fingerprint", out var proof) &&
+                            proof.GetString() == saved.Fingerprint &&
+                            root.TryGetProperty("intrinsics", out var intrinsics) &&
+                            root.TryGetProperty("vision", out var vision))
+                        {
+                            var scalars = VerifiedOriginIntrinsicReader.Read(
+                                intrinsics, saved.ProfileJson);
+                            if (scalars is not null)
+                                verifiedOrigin = new(saved.RulesetId, saved.Fingerprint,
+                                    scalars, VerifiedOriginVisionReader.Read(
+                                        vision, saved.ProfileJson));
+                        }
+                    }
+                    else
+                    {
+                        diagnostics.Add("origin-native-intrinsics:content-changed");
+                    }
+                }
+                catch (Exception error) when (error is JsonException or
+                    RulesCoreGatewayException or InvalidOperationException or
+                    FormatException)
+                {
+                    diagnostics.Add("origin-native-intrinsics:projection-unavailable");
+                }
+                if (verifiedOrigin is null)
+                    diagnostics.Add("origin-native-intrinsics:unverified-mixed-projection");
+            }
+            else
+            {
+                // Legacy direct first-party path still requires its independent
+                // live proposal/complete-profile and event cross-check.
+                var reviewed = await nativeOriginReviews.ReviewAsync(
                 characterId, characterId, cancellationToken);
             if (reviewed.Status == CharacterOriginParentNativeReviewStatus.Ready &&
                 reviewed.Review?.StoredRevision == saved.Revision &&
@@ -77,8 +126,9 @@ public sealed class CharacterPresentationService(
                         reviewed.Review.LatestNativeFingerprint, scalars, lowLight);
                 }
             }
-            if (verifiedOrigin is null)
-                diagnostics.Add($"origin-native-intrinsics:{reviewed.Status}");
+                if (verifiedOrigin is null)
+                    diagnostics.Add($"origin-native-intrinsics:{reviewed.Status}");
+            }
         }
 
         NativeCharacterPresentationBridge.Outcome projection;
