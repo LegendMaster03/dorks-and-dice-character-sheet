@@ -119,17 +119,19 @@ public sealed class CharacterOriginMixedReviewService(
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in offers)
         {
-            var identity = item?["identity"];
-            var source = identity?["occurrence"]?["source"];
             if (item is not JsonObject candidate ||
-                !Text(candidate["id"], out var id) ||
+                candidate["identity"] is not JsonObject identity ||
+                identity["occurrence"] is not JsonObject occurrence ||
+                occurrence["source"] is not JsonObject source)
+                return new(CharacterOriginMixedReviewStatus.RulesCoreUnavailable);
+            if (!Text(candidate["id"], out var id) ||
                 !seen.Add(id!) ||
                 !Text(candidate["contributorId"], out var contributor) ||
-                !Text(source?["id"], out var sourceId) ||
+                !Text(source["id"], out var sourceId) ||
                 sourceId is not ("species.human" or "species.elf") ||
-                source?["kind"]?.ToJsonString() != "0" ||
-                !Text(identity?["occurrence"]?["occurrencePath"], out var path) ||
-                identity?["kind"] is null)
+                source["kind"]?.ToJsonString() != "0" ||
+                !Text(occurrence["occurrencePath"], out var path) ||
+                identity["kind"] is null)
                 return new(CharacterOriginMixedReviewStatus.RulesCoreUnavailable);
 
             var requiresChoices = candidate["requiredChoices"] is JsonArray
