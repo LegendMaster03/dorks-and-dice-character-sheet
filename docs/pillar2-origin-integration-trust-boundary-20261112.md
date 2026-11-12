@@ -606,3 +606,42 @@ to use its separate native exemplar contract and does not consume these
 parent inputs. A future relationship/role policy and secure
 parent-to-manifested-source resolver are still required. This work
 does not implement the future partial-state-slot concept.
+
+### Owner-side provisional individual-parent inspection interface — Phase 5 continuation
+
+The Character Sheet mixed-Origin editor now offers an **explicit, read-only**
+comparison panel after both native source exemplars are selected and the
+draft has been saved. It uses the existing Site-authenticated
+`GET /characters/api?includeArchived=true` owner list (same-origin,
+`no-store`) to present other owned Characters by name, including
+archived parent candidates where historical verification is appropriate.
+The client retains only each Character's Site ID, name and archived status;
+it does not expose campaign membership, another owner's private sheet,
+or any parent grant.
+
+Two temporary owner selections are passed to the existing narrow
+`parent-source-alignment-review` contract with the **exact saved draft
+revision**. The server still independently verifies ownership of child and
+each alleged parent, current native source alignment, and unchanged
+persistence. The UI labels the result as **identity inspection only**:
+it does not assert a parent-child relationship, biologically relevant
+state, hereditary characteristics, or an inheritance approval.
+
+The client invalidates all selections and every in-flight review upon
+changing the child, saving/replacing the draft, changing contributor
+sources, changing modes, or reloading the Origin. The workflow also rejects
+duplicate parent selections, mismatched response contributor/source IDs
+and late responses from older revisions. It does not attach parent IDs to
+the stored draft or send a preconstructed parent profile to Rules Core.
+The existing approved Human–Elf DM route is unchanged.
+
+Owner-character enumeration depends on a running authenticated Site host,
+so stand-alone Character Sheet development without Site authentication
+will report the selection service unavailable rather than assuming a
+parent identity. The UI currently edits the two native-exemplar slots;
+the backend alignment checker remains cardinality-agnostic for up to 16
+sources as a bounded inspection transport. A real relationship resolver
+and trusted heritable-state/execution policy are still required.
+
+No work in this increment changes the separate proposed partial
+character-state-slot architecture.
