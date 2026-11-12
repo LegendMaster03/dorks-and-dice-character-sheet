@@ -40,7 +40,8 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
         // does not confer authority; callers must have verified the result.
         var verifiedShape = new CharacterAuthorizedOriginState(command.CharacterId, command.RulesetId,
             command.Fingerprint, command.ProfileJson,
-            command.ExpectedDraftRevision, command.RecordedAt);
+            command.ExpectedDraftRevision, command.RecordedAt,
+            command.EvaluatedProjectionJson);
         _ = new CharacterOriginEventReceipt(command.CharacterId, command.EventId,
             command.ExpectedOriginRevision + 1, command.MethodRuleId, command.MethodId,
             command.AuthorizationKind, command.AuthorizationEvidenceId, command.RecordedAt,
@@ -122,6 +123,7 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
                     .SetProperty(x => x.RulesetId, verifiedShape.RulesetId)
                     .SetProperty(x => x.Fingerprint, verifiedShape.Fingerprint)
                     .SetProperty(x => x.ProfileJson, verifiedShape.ProfileJson)
+                    .SetProperty(x => x.EvaluatedProjectionJson, verifiedShape.EvaluatedProjectionJson)
                     .SetProperty(x => x.SourceDraftRevision, verifiedShape.SourceDraftRevision)
                     .SetProperty(x => x.Revision, nextRevision)
                     .SetProperty(x => x.UpdatedAt, command.RecordedAt),
