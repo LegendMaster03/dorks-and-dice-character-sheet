@@ -60,6 +60,48 @@ public sealed class NativeCharacterPresentationBridgeTests
         Assert.Equal(5, gateway.Calls);
     }
 
+    [Fact]
+    public async Task VerifiedNativeOriginAddsOnlyBaseMetadataAndCoreCalculatedWalkingSpeed()
+    {
+        var gateway = new FixtureGateway();
+        var build = Build(new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1))
+            with { BaseAbilityScoreInputs = [
+                new BaseAbilityScoreInputView(Guid.NewGuid(), "strength", 14, Now, Now)
+            ] };
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(30, gateway.LastBaseWalkSpeed);
+        Assert.Equal(30, Assert.Single(result.Mechanics!.Movement!).EffectiveValue);
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-size" &&
+            Equals(value.EffectiveValue, "medium"));
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-creature-type" &&
+            Equals(value.EffectiveValue, "humanoid"));
+        Assert.Null(result.Mechanics.AbilityValues);
+        Assert.Null(result.Mechanics.SavingThrows);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+    }
+
+    [Fact]
+    public async Task OriginMetadataDoesNotRequireUnrelatedClassInputs()
+    {
+        var gateway = new FixtureGateway();
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+        Assert.Equal("partial", result.Status);
+        Assert.NotNull(result.Mechanics);
+        Assert.Equal(30, Assert.Single(result.Mechanics.Movement!).EffectiveValue);
+        Assert.Equal(0, gateway.Calls);
+    }
+
     [Theory]
     [InlineData("class:wizard")]
     [InlineData("feat:alert")]
@@ -431,6 +473,7 @@ public sealed class NativeCharacterPresentationBridgeTests
         public int? LastAdvancementLevel { get; private set; }
         public string[] LastSelectedOptions { get; private set; } = [];
         public string[] LastConditionIds { get; private set; } = [];
+        public int? LastBaseWalkSpeed { get; private set; }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken token)
         {
@@ -472,6 +515,9 @@ public sealed class NativeCharacterPresentationBridgeTests
             Calls++;
             LastConditionIds = request.GetProperty("conditionIds").EnumerateArray()
                 .Select(value => value.GetString()!).ToArray();
+            LastBaseWalkSpeed = request.TryGetProperty("baseWalkSpeed", out var speed) &&
+                speed.ValueKind == JsonValueKind.Number
+                ? speed.GetInt32() : null;
             var item = request.GetProperty("advancements").EnumerateArray().Single();
             LastAdvancementClassId = item.GetProperty("classId").GetString();
             LastAdvancementLevel = item.GetProperty("level").GetInt32();
@@ -504,6 +550,9 @@ public sealed class NativeCharacterPresentationBridgeTests
                     }
                     : []
             }))!;
+            if (LastBaseWalkSpeed is int walk)
+                projection["values"]!["movement.walk"] = JsonNode.Parse(
+                    JsonSerializer.Serialize(new { status = "resolved", value = walk }));
             if (IncludeHierarchy)
                 projection["training"] = JsonNode.Parse("""
                     [{"id":"skill.arcana","name":"Arcana","kind":"skill","governingAbility":"intelligence","supportsRanks":true},
