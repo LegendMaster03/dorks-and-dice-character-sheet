@@ -104,6 +104,7 @@ builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterOriginDraftService>();
 builder.Services.AddScoped<CharacterOriginStateService>();
+builder.Services.AddScoped<CharacterOriginParentSnapshotService>();
 builder.Services.AddScoped<CharacterOriginInitialActivationService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();

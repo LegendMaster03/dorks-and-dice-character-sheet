@@ -40,6 +40,16 @@ public static class CharacterOriginDraftEndpoints
             Respond(await service.ApplyAsync(characterId,
                 request.ExpectedDraftRevision, cancellationToken)));
 
+        // Inspect another owner-visible character's last stored Origin identity.
+        // This read never returns inheritable grants or authorizes that the
+        // proposed character is a biological parent of the target.
+        group.MapGet("/parent-snapshot/{parentCharacterId:guid}", async (
+            Guid characterId, Guid parentCharacterId,
+            CharacterOriginParentSnapshotService service,
+            CancellationToken cancellationToken) =>
+            Respond(await service.InspectAsync(
+                characterId, parentCharacterId, cancellationToken)));
+
         group.MapGet("/state", async (
             Guid characterId, CharacterOriginStateService service,
             CancellationToken cancellationToken) =>
@@ -81,6 +91,33 @@ public static class CharacterOriginDraftEndpoints
             CharacterOriginActivationStatus.NotAuthorizedByNativeRules =>
                 Error(422, "native_origin_not_authorized"),
             _ => Error(503, "native_origin_verification_unavailable")
+        };
+
+    private static IResult Respond(CharacterOriginParentSnapshotResult result) =>
+        result.Status switch
+        {
+            CharacterOriginParentSnapshotStatus.Ready =>
+                Results.Ok(new
+                {
+                    status = "ready",
+                    snapshot = result.Snapshot,
+                    inspectionOnly = true,
+                    inheritanceAuthorized = false,
+                    // No native review or independently earned grants have
+                    // been loaded for the proposed parent relationship.
+                    effectiveMechanicsReady = false
+                }),
+            CharacterOriginParentSnapshotStatus.Unauthenticated =>
+                Results.Unauthorized(),
+            CharacterOriginParentSnapshotStatus.NotFoundOrNotOwned =>
+                Results.NotFound(),
+            CharacterOriginParentSnapshotStatus.ProjectionUnavailable =>
+                Error(503, "character_authorization_unavailable"),
+            CharacterOriginParentSnapshotStatus.CharacterSheetNotInitialized =>
+                Error(409, "character_sheet_not_initialized"),
+            CharacterOriginParentSnapshotStatus.ParentOriginMissing =>
+                Error(409, "parent_origin_not_committed"),
+            _ => Error(409, "parent_origin_stored_profile_unverifiable")
         };
 
     private static IResult Respond(CharacterOriginReadResult result) =>
