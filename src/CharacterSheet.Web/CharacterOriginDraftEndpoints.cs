@@ -117,6 +117,8 @@ public static class CharacterOriginDraftEndpoints
                 Error(409, "character_sheet_not_initialized"),
             CharacterOriginMixedActivationStatus.LegacySelectionConflict =>
                 Error(409, "legacy_origin_selection_requires_reconciliation"),
+            CharacterOriginMixedActivationStatus.NativeSnapshotUnpinned =>
+                Error(409, "native_origin_requires_reviewed_catalog"),
             CharacterOriginMixedActivationStatus.NativeContentChanged =>
                 Error(409, "native_origin_content_changed_since_dm_review"),
             CharacterOriginMixedActivationStatus.NotAuthorizedByNativeRules =>
