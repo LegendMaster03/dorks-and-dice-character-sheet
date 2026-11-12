@@ -109,6 +109,14 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             Assert.NotNull(saved);
             Assert.Equal(1, saved.Revision);
             Assert.Equal(fingerprint, saved.Fingerprint);
+            Assert.NotNull(saved.EvaluatedProjectionJson);
+            using var projection = JsonDocument.Parse(saved.EvaluatedProjectionJson);
+            Assert.Equal(fingerprint, projection.RootElement.GetProperty("fingerprint")
+                .GetString());
+            var supportedScalars = VerifiedOriginIntrinsicReader.Read(
+                projection.RootElement.GetProperty("intrinsics"), saved.ProfileJson);
+            Assert.Equal(new VerifiedOriginIntrinsics("humanoid", "medium", 30),
+                supportedScalars);
             using var profile = JsonDocument.Parse(saved.ProfileJson);
             Assert.Equal("custom.human-elf",
                 profile.RootElement.GetProperty("underlying")
