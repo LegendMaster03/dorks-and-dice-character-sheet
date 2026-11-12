@@ -205,6 +205,7 @@ Ensure(humanOrigin.Status != NativeOriginConstructionStatus.Authorized &&
     humanOrigin.Issues.Any(issue =>
         issue.Code == "required-origin-selection-missing"),
     "Human native Origin choices were silently skipped or treated as complete.");
+Console.WriteLine("Phase 5 Origin native-contract checks passed: Orc authorized; Human incomplete.");
 
 #endif
 

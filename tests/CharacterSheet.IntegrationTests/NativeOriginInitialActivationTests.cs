@@ -136,8 +136,14 @@ public sealed class NativeOriginInitialActivationTests
         Assert.Equal("first-party", receipt.AuthorizationKind);
         Assert.Equal("native-catalog:latest-native-content",
             receipt.AuthorizationEvidenceId);
-        Assert.Empty(await reload.Set<CharacterFoundationalRuleSelection>()
-            .ToArrayAsync());
+        var selections = await reload.Set<CharacterFoundationalRuleSelection>()
+            .ToArrayAsync();
+        Assert.Single(selections, x =>
+            x.Category == CharacterFoundationalSelectionCategory.Background);
+        Assert.DoesNotContain(selections, x =>
+            x.Category is CharacterFoundationalSelectionCategory.Species
+                or CharacterFoundationalSelectionCategory.Subspecies
+                or CharacterFoundationalSelectionCategory.RaceSpecies);
     }
 
     [Theory]
