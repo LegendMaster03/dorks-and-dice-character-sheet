@@ -15,6 +15,10 @@ import { renderCharacterBuilder } from "./builder.js";
 import { renderOriginBuilder, type OriginBuilderHandlers } from "../features/origin/origin-builder.js";
 import type { OriginUiState } from "../features/origin/origin-workflow.js";
 import {
+    hasLegacySpeciesSelections,
+    savedUnderlyingOriginIdentity
+} from "../features/origin/origin-builder-model.js";
+import {
     createCompactAdvancementSummary,
     type CharacterAdvancementView
 } from "./character-advancement.js";
@@ -107,7 +111,8 @@ export function renderCharacterWorkspace(
         builder,
         forceReadOnly,
         advancement,
-        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
+        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id),
+        origin));
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = guidedBuilder.open
             && editable
@@ -872,9 +877,22 @@ export function renderCharacterHeader(
     builder: CharacterBuilderUiState,
     forceReadOnly: boolean,
     advancement: CharacterAdvancementView | null = null,
-    portraitUrl: string | null = null
+    portraitUrl: string | null = null,
+    origin?: OriginUiState
 ): HTMLElement {
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
+    const underlying = origin?.savedState === null || origin === undefined
+        ? null : savedUnderlyingOriginIdentity(origin.savedState.profile);
+    const legacyOrigin = origin !== undefined &&
+        hasLegacySpeciesSelections(builder.build?.foundationalSelections ?? []);
+    const speciesLabel = underlying !== null
+        ? "Underlying Species" : legacyOrigin ? "Legacy Species" : "Species";
+    const ancestryLabel = underlying !== null
+        ? "Underlying Ancestry" : legacyOrigin ? "Legacy Subspecies" : "Subspecies";
+    const speciesValue = underlying !== null
+        ? (underlying.speciesId ?? "None") : model.species.value;
+    const ancestryValue = underlying !== null
+        ? (underlying.ancestryId ?? "None") : model.subspecies.value;
     const header = createElement("header", "dd-sheet-header");
 
     const identity = createElement("div", "dd-sheet-header__identity");
@@ -900,20 +918,24 @@ export function renderCharacterHeader(
     const species = createElement(
         "span",
         "dd-sheet-header__headline-item",
-        `Species: ${model.species.value}`);
+        `${speciesLabel}: ${speciesValue}`);
     species.setAttribute("data-sheet-header-identity", "species");
-    species.setAttribute("aria-label", `Species: ${model.species.value}`);
-    if (model.species.detail !== undefined) {
+    species.setAttribute("aria-label", `${speciesLabel}: ${speciesValue}`);
+    if (underlying !== null) {
+        species.setAttribute("title", "Committed underlying Origin, not the current transformed form or effective mechanics.");
+    } else if (model.species.detail !== undefined) {
         species.setAttribute("title", model.species.detail);
     }
 
     const subspecies = createElement(
         "span",
         "dd-sheet-header__headline-item",
-        `Subspecies: ${model.subspecies.value}`);
+        `${ancestryLabel}: ${ancestryValue}`);
     subspecies.setAttribute("data-sheet-header-identity", "subspecies");
-    subspecies.setAttribute("aria-label", `Subspecies: ${model.subspecies.value}`);
-    if (model.subspecies.detail !== undefined) {
+    subspecies.setAttribute("aria-label", `${ancestryLabel}: ${ancestryValue}`);
+    if (underlying !== null) {
+        subspecies.setAttribute("title", "Committed underlying Ancestry; current effective forms are resolved separately.");
+    } else if (model.subspecies.detail !== undefined) {
         subspecies.setAttribute("title", model.subspecies.detail);
     }
 
