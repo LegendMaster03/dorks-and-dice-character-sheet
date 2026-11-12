@@ -74,11 +74,13 @@ The native content test runs directly against
 `feature/pillar2-phase5-origin-api-20261112` rather than the current
 unmerged Rules Core `main`:
 `.github/workflows/pillar2-phase5-origin-cross-repo.yml`.
-It proves **Orc** directly authorizes under selected native rules and **Human**
-still needs its required creation-time selections. Human open-catalog options
-(e.g. the selected Skill and Origin feat) require actual native membership
-and eligibility evidence; do **not** manufacture an approval or mark the
-Human–Elf mixed workflow complete. The ordinary cross-repo contract workflow
+It proves **Orc** directly authorizes under selected native rules.
+The latest branch-to-branch probe also proves a **Human Skill** creation
+selection is eligible when its actual native catalog membership is verified,
+while a substituted Competency is rejected. Human's required Origin feat
+selection still lacks an authored executable choice catalog and remains
+unresolved. Do **not** manufacture feat approval or mark the Human–Elf
+mixed workflow complete. The ordinary cross-repo contract workflow
 continues to test Core `main` for existing consumers.
 
 The response explicitly reports `effectiveMechanicsReady: false`.
@@ -91,6 +93,30 @@ Post-origination Rites, mixed/nested decisions, form activation/reversion,
 supernatural progressions, and exceptional ancestry acquisition do not
 use this direct-initialization endpoint. A DM override remains possible
 under the game rules but is not forged through ordinary player access.
+
+## Native Skill choices and browser API boundary
+
+Rules Core Phase 5 now verifies `any-native-skill` selections against the
+selected-native Skill catalog and mints its own eligibility-evidence reference
+under a **first-party-only** evaluator. The stateless endpoint rejects
+browser-supplied `CatalogEligibilityEvidenceId`. Character Sheet always
+rechecks the **saved raw proposal** on activation; it never commits a
+previously returned `evaluatedProposal` or treats an evidence reference as
+a permission. Unsupported catalogs, including Human's `feat:origin` choice,
+remain unresolved. No selected-native Origin feat prerequisite executor has
+been introduced.
+
+The frontend now has an independently typed API at
+`src/features/origin/origin-api.ts` for owner-scoped draft GET/PUT, read-only
+authorized Origin GET, and restricted native initial activation. It transmits
+only `expectedDraftRevision` to the activation endpoint, rejects
+client-supplied prior profiles/table decisions/catalog proof, and checks
+the `activeGrants: false` / `effectiveMechanicsReady: false` response
+boundaries. Its Node tests exercise embedded Tool Host URLs, rejected claims,
+stale authorization responses and exact mutation bodies. **This is the
+API integration foundation, not the finished Origin builder UI.** Existing
+legacy Species/Subspecies edit widgets must be reconciled and replaced by
+the new Origin workflow rather than used as a second authoritative origin.
 
 ## Scope for the next integration step
 
