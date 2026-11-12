@@ -18,7 +18,7 @@ public sealed class NativeOriginInitialActivationTests
 {
     private const string Draft = """
         {
-          "id":"creation-1", "intent":"Direct",
+          "id":"creation-1", "intent":0,
           "method":{"ruleId":"rule.native-origination","methodId":"biological"},
           "contributors":[], "candidates":[], "manifestations":[],
           "selectedSpeciesId":"species.human"
@@ -32,7 +32,7 @@ public sealed class NativeOriginInitialActivationTests
           "contractVersion":1, "rulesetId":"first-party-001",
           "fingerprint":"latest-native-content", "previewOnly":true,
           "result": {
-            "status":"Authorized", "issues":[],
+            "status":4, "issues":[],
             "profile":{
               "id":"origin:creation-1", "proposalId":"creation-1",
               "underlying":{
@@ -47,11 +47,11 @@ public sealed class NativeOriginInitialActivationTests
               "history":[{
                 "id":"construction:creation-1",
                 "method":{"ruleId":"rule.native-origination","methodId":"biological"},
-                "stage":"Completed","contributorIds":[],
+                "stage":2,"contributorIds":[],
                 "replacesConfiguration":false,"resultingProfileId":"origin:creation-1"
               }],
               "adjudication":{
-                "adjudication":"Supported",
+                "adjudication":0,
                 "nativeRuleReference":"rule.native-origination"
               }
             }
