@@ -104,15 +104,8 @@ public sealed class VerifiedOriginIntrinsicReaderTests
     public void ATemporaryFormOrMissingOriginalGrantCannotBecomeAnInitialBaseline()
     {
         Assert.Null(Read(profile: Profile.Replace(
-            "\"speciesId\":\"species.orc\",\"ancestryId\":null,\"profileId\":\"origin:orc\",",
-            "\"speciesId\":\"species.werewolf\",\"ancestryId\":null,\"profileId\":\"origin:orc\",",
-            StringComparison.Ordinal).Replace(
-            "species.werewolf", "species.orc", StringComparison.Ordinal)[..0] + "{}"));
-        // Actual tampering cases are independently checked below.
-        Assert.Null(Read(profile: Profile.Replace(
             "\"id\":\"grant:walk\"", "\"id\":\"grant:old-walk\"",
             StringComparison.Ordinal)));
-        using var original = JsonDocument.Parse(Profile);
         var altered = System.Text.Json.Nodes.JsonNode.Parse(Profile)!;
         altered["current"]!["speciesId"] = "species.werewolf";
         Assert.Null(Read(profile: altered.ToJsonString()));
