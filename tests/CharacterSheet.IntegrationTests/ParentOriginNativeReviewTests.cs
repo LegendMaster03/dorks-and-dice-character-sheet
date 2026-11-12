@@ -314,7 +314,7 @@ public sealed class ParentOriginNativeReviewTests
                     "UPDATE character_origin_event_receipts SET \"AuthorizationEvidenceId\" = {0} WHERE \"CharacterId\" = {1}",
                     "native-catalog:forged", parentId)
                 : await other.Database.ExecuteSqlRawAsync(
-                    "UPDATE character_origin_drafts SET \"ProposalJson\" = jsonb_set(\"ProposalJson\", '{id}', to_jsonb({0}::text), true) WHERE \"CharacterId\" = {1}",
+                    "UPDATE character_origin_drafts SET \"ProposalJson\" = jsonb_set(\"ProposalJson\", '{{id}}', to_jsonb({0}::text), true) WHERE \"CharacterId\" = {1}",
                     "different-parent-proposal", parentId);
             Assert.Equal(1, rows);
         });

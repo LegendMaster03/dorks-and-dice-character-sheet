@@ -327,7 +327,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 await using var other = new CharacterSheetDbContext(
                     database.CreateOptions());
                 var affected = await other.Database.ExecuteSqlRawAsync(
-                    "UPDATE character_origin_drafts SET \"ProposalJson\" = jsonb_set(\"ProposalJson\", '{id}', to_jsonb({0}::text), true) WHERE \"CharacterId\" = {1}",
+                    "UPDATE character_origin_drafts SET \"ProposalJson\" = jsonb_set(\"ProposalJson\", '{{id}}', to_jsonb({0}::text), true) WHERE \"CharacterId\" = {1}",
                     "tampered-parent-proposal-id", parents[0]);
                 Assert.Equal(1, affected);
             });
