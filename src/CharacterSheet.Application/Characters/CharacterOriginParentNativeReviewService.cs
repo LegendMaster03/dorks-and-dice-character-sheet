@@ -37,6 +37,17 @@ public sealed record CharacterOriginParentNativeReview(
     string LatestNativeFingerprint,
     string VerifiedProposalId);
 
+/// <summary>
+/// Request-local witness for the exact reviewed first-party parent source.
+/// Its values remain server-private and are compared again by a multi-source
+/// inspection after all independent native requests finish.
+/// </summary>
+public sealed record CharacterOriginParentInitialEvidence(
+    string OriginFingerprint, DateTimeOffset OriginUpdatedAt,
+    long SourceDraftRevision, string DraftProposalJson, string? DraftFingerprint,
+    DateTimeOffset DraftUpdatedAt, string ReceiptEventId,
+    DateTimeOffset ReceiptCreatedAt);
+
 public sealed record CharacterOriginParentNativeReviewResult(
     CharacterOriginParentNativeReviewStatus Status,
     CharacterOriginParentNativeReview? Review = null,
@@ -47,7 +58,10 @@ public sealed record CharacterOriginParentNativeReviewResult(
     // Cloned from a fresh native evaluation only after exact correspondence
     // with the committed direct Origin and a second persisted-state check.
     // Not an authorization to inherit any part of the parent's profile.
-    [property: JsonIgnore] JsonElement? VerifiedInitialProfile = null);
+    [property: JsonIgnore] JsonElement? VerifiedInitialProfile = null,
+    // Internal evidence for multi-source freshness checks. Not lineage or
+    // heritability proof, never included in the endpoint response.
+    [property: JsonIgnore] CharacterOriginParentInitialEvidence? PersistenceEvidence = null);
 
 public sealed class CharacterOriginParentNativeReviewService(
     CharacterOriginParentSnapshotService snapshots,
@@ -144,6 +158,7 @@ public sealed class CharacterOriginParentNativeReviewService(
             // the prior revision nor its parent grants are reusable evidence.
             var after = await origins.GetAsync(parentCharacterId, cancellationToken);
             var afterDraft = await drafts.GetAsync(parentCharacterId, cancellationToken);
+            var afterReceipts = await origins.GetEventsAsync(parentCharacterId, cancellationToken);
             if (after is null || !SameSnapshot(after, initial) ||
                 // Revision metadata alone cannot detect an in-place rewrite.
                 // Reject content changes while Rules Core is evaluating.
@@ -151,8 +166,13 @@ public sealed class CharacterOriginParentNativeReviewService(
                     StringComparison.Ordinal) ||
                 after.SourceDraftRevision != saved.SourceDraftRevision ||
                 afterDraft is null || afterDraft.Revision != revision ||
+                afterDraft.RulesetId != draft.RulesetId ||
+                afterDraft.Fingerprint != draft.Fingerprint ||
+                afterDraft.UpdatedAt != draft.UpdatedAt ||
                 !string.Equals(afterDraft.ProposalJson, draft.ProposalJson,
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal) ||
+                afterReceipts.Count != 1 ||
+                !SameFirstPartyReceipt(afterReceipts[0], receipts[0]))
                 return new(CharacterOriginParentNativeReviewStatus.ConcurrentOriginChange);
 
             var intrinsics = response.RootElement.TryGetProperty("intrinsics",
@@ -169,16 +189,35 @@ public sealed class CharacterOriginParentNativeReviewService(
             // state or an HTTP response. Underlying == Current here only
             // because the checked parent is initial direct first-party.
             var verifiedProfile = fresh.RootElement.Clone();
+            var evidence = new CharacterOriginParentInitialEvidence(
+                saved.Fingerprint, saved.UpdatedAt, revision, draft.ProposalJson,
+                draft.Fingerprint, draft.UpdatedAt,
+                receipts[0].EventId, receipts[0].CreatedAt);
             return new(CharacterOriginParentNativeReviewStatus.Ready,
                 new(parentCharacterId, saved.RulesetId, saved.Revision,
                     latestFingerprint!, proposalId!), intrinsics, vision,
-                verifiedProfile);
+                verifiedProfile, evidence);
         }
         catch (JsonException)
         {
             return new(CharacterOriginParentNativeReviewStatus.StoredProfileUnverifiable);
         }
     }
+
+    private static bool SameFirstPartyReceipt(
+        global::CharacterSheet.Domain.Characters.CharacterOriginEventReceipt current,
+        global::CharacterSheet.Domain.Characters.CharacterOriginEventReceipt expected) =>
+        current.CharacterId == expected.CharacterId &&
+        current.EventId == expected.EventId &&
+        current.CommittedRevision == expected.CommittedRevision &&
+        current.MethodRuleId == expected.MethodRuleId &&
+        current.MethodId == expected.MethodId &&
+        current.AuthorizationKind == expected.AuthorizationKind &&
+        current.AuthorizationEvidenceId == expected.AuthorizationEvidenceId &&
+        current.CreatedAt == expected.CreatedAt &&
+        current.ApprovalActorUserId is null &&
+        current.ApprovalCampaignId is null &&
+        current.ApprovedDecisionsJson is null;
 
     private static bool SameSnapshot(
         global::CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState saved,

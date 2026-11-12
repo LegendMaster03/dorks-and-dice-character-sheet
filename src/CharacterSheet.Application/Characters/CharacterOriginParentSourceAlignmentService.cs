@@ -122,6 +122,7 @@ public sealed class CharacterOriginParentSourceAlignmentService(
 
         var matches = new List<CharacterOriginParentSourceMatch>();
         var verified = new List<CharacterOriginVerifiedParentSource>();
+        var witnesses = new List<CharacterOriginParentInitialEvidence>();
         foreach (var binding in bindings)
         {
             // The parent service checks Site ownership of *both* individual
@@ -130,7 +131,9 @@ public sealed class CharacterOriginParentSourceAlignmentService(
             var review = await nativeParents.ReviewAsync(
                 characterId, binding.ParentCharacterId, cancellationToken);
             if (review.Status != CharacterOriginParentNativeReviewStatus.Ready ||
-                review.Review is null || review.VerifiedInitialProfile is not JsonElement profile)
+                review.Review is null ||
+                review.VerifiedInitialProfile is not JsonElement profile ||
+                review.PersistenceEvidence is not CharacterOriginParentInitialEvidence witness)
                 return new(review.Status switch
                 {
                     CharacterOriginParentNativeReviewStatus.Unauthenticated =>
@@ -161,17 +164,49 @@ public sealed class CharacterOriginParentSourceAlignmentService(
             // Server-only, request-local: not a manifested contributor grant
             // and never a second persisted effective-character snapshot.
             verified.Add(new(match, profile.Clone()));
+            witnesses.Add(witness);
         }
 
         // The first parent may have changed while another was being reviewed.
         // Reject the whole inspection instead of returning a mixed-age set.
-        foreach (var source in verified)
+        for (var index = 0; index < verified.Count; index++)
         {
+            var source = verified[index];
+            var witness = witnesses[index];
             var saved = await origins.GetAsync(
+                source.Match.ParentCharacterId, cancellationToken);
+            var sourceDraft = await drafts.GetAsync(
+                source.Match.ParentCharacterId, cancellationToken);
+            var sourceReceipts = await origins.GetEventsAsync(
                 source.Match.ParentCharacterId, cancellationToken);
             if (saved is null ||
                 saved.Revision != source.Match.ParentOriginRevision ||
-                saved.RulesetId != draft.RulesetId)
+                saved.RulesetId != draft.RulesetId ||
+                saved.Fingerprint != witness.OriginFingerprint ||
+                saved.UpdatedAt != witness.OriginUpdatedAt ||
+                saved.SourceDraftRevision != witness.SourceDraftRevision ||
+                sourceDraft is null ||
+                sourceDraft.Revision != witness.SourceDraftRevision ||
+                sourceDraft.RulesetId != saved.RulesetId ||
+                sourceDraft.Fingerprint != witness.DraftFingerprint ||
+                sourceDraft.UpdatedAt != witness.DraftUpdatedAt ||
+                !string.Equals(sourceDraft.ProposalJson, witness.DraftProposalJson,
+                    StringComparison.Ordinal) ||
+                sourceReceipts.Count != 1 ||
+                sourceReceipts[0].CharacterId != source.Match.ParentCharacterId ||
+                sourceReceipts[0].CommittedRevision != saved.Revision ||
+                sourceReceipts[0].EventId != witness.ReceiptEventId ||
+                sourceReceipts[0].CreatedAt != witness.ReceiptCreatedAt ||
+                sourceReceipts[0].EventId != "construction:" +
+                    source.VerifiedInitialProfile.GetProperty("proposalId").GetString() ||
+                sourceReceipts[0].AuthorizationKind != "first-party" ||
+                sourceReceipts[0].AuthorizationEvidenceId !=
+                    "native-catalog:" + witness.OriginFingerprint ||
+                sourceReceipts[0].MethodRuleId != "rule.creature-origination" ||
+                sourceReceipts[0].MethodId != "biological" ||
+                sourceReceipts[0].ApprovalActorUserId is not null ||
+                sourceReceipts[0].ApprovalCampaignId is not null ||
+                sourceReceipts[0].ApprovedDecisionsJson is not null)
                 return new(CharacterOriginParentSourceAlignmentStatus.ConcurrentSourceChange);
             try
             {
@@ -197,6 +232,27 @@ public sealed class CharacterOriginParentSourceAlignmentService(
                 StringComparison.Ordinal) ||
             await origins.GetAsync(characterId, cancellationToken) is not null)
             return new(CharacterOriginParentSourceAlignmentStatus.ConcurrentSourceChange);
+
+        // A Site owner grant may be revoked while native validation is in
+        // flight. Reauthorize the exact child and every source immediately
+        // before returning a successful comparison. These are not durable
+        // permissions: a future state-changing operation must recheck again.
+        foreach (var id in new[] { characterId }.Concat(
+                     bindings.Select(binding => binding.ParentCharacterId)))
+        {
+            var access = await site.GetAuthorizedCharacterAsync(id, cancellationToken);
+            if (access.Status != SiteCharacterAccessStatus.Authorized)
+                return new(access.Status switch
+                {
+                    SiteCharacterAccessStatus.Unauthenticated =>
+                        CharacterOriginParentSourceAlignmentStatus.Unauthenticated,
+                    SiteCharacterAccessStatus.NotFoundOrNotOwned =>
+                        CharacterOriginParentSourceAlignmentStatus.NotFoundOrNotOwned,
+                    _ => CharacterOriginParentSourceAlignmentStatus.ProjectionUnavailable
+                });
+            if (access.Character?.CharacterId != id)
+                return new(CharacterOriginParentSourceAlignmentStatus.ProjectionUnavailable);
+        }
 
         return new(CharacterOriginParentSourceAlignmentStatus.Ready,
             draft.Revision, matches, verified);
