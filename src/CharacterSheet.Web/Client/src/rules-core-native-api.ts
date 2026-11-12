@@ -9,7 +9,7 @@ import type { HostEnvironment } from "./host-environment.js";
 // This client does not reinterpret legacy RuleConceptKey values. Native
 // IDs, ruleset identity and the catalog fingerprint are explicit inputs.
 export const nativeOptionCategories = [
-    "class", "subclass", "patron", "pact", "invocation", "condition", "leveled-condition",
+    "species", "ancestry", "class", "subclass", "patron", "pact", "invocation", "condition", "leveled-condition",
     "skill", "competency", "feat", "spell", "item", "monster"
 ] as const;
 export type NativeOptionCategory = typeof nativeOptionCategories[number];

@@ -180,6 +180,36 @@ function assertStateResponse(value: unknown): asserts value is NativeOriginState
     }
 }
 
+/** Preview is stateless. It never refreshes or commits authorized state. */
+export async function previewOriginProposal(
+    environment: HostEnvironment,
+    rulesetId: string,
+    fingerprint: string | null,
+    proposal: NativeOriginDraftProposal,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<NativeOriginPreview> {
+    const response = await fetcher(
+        buildCharacterSheetApiUrl(environment, "/api/native-rules/origins/preview"), {
+            method: "POST",
+            credentials: "same-origin",
+            cache: "no-store",
+            headers: { Accept: "application/json", "Content-Type": "application/json" },
+            body: JSON.stringify({ rulesetId, fingerprint, proposal })
+        });
+    if (!response.ok) {
+        throw new CharacterSheetApiError(
+            await readApiError(response, "Native Origin preview is unavailable."),
+            response.status);
+    }
+    const result: unknown = await response.json();
+    if (!isObject(result) || result.previewOnly !== true ||
+        result.rulesetId !== rulesetId || typeof result.fingerprint !== "string" ||
+        !isObject(result.result) || !Array.isArray(result.result.issues)) {
+        throw new Error("Rules Core did not return a stateless Origin preview.");
+    }
+    return result as unknown as NativeOriginPreview;
+}
+
 export async function loadOriginDraft(
     environment: HostEnvironment,
     characterId: string,
