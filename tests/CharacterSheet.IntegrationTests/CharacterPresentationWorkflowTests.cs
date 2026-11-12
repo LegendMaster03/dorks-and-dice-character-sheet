@@ -22,6 +22,60 @@ namespace CharacterSheet.IntegrationTests;
 /// </summary>
 public sealed class CharacterPresentationWorkflowTests
 {
+    // Deliberately minimal, but structurally valid first-party direct Orc
+    // record. Tests verify that server-owned committed grant occurrences,
+    // not browser Species IDs, are the only intrinsic input.
+    private const string OrcOriginProfile = """
+        {
+          "id":"origin:direct-orc","proposalId":"direct-orc",
+          "underlying":{
+            "speciesId":"species.orc","ancestryId":null,
+            "profileId":"origin:direct-orc",
+            "inherentGrants":[
+              {"id":"grant:type","effectiveValue":"humanoid","identity":{
+                "kind":0,"intrinsicSlotId":"creatureType",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/creatureType"}}},
+              {"id":"grant:size","effectiveValue":"medium","identity":{
+                "kind":0,"intrinsicSlotId":"size",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/size"}}},
+              {"id":"grant:walk","effectiveValue":30,"identity":{
+                "kind":0,"intrinsicSlotId":"walkingSpeedFeet",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/walkingSpeedFeet"}}}
+            ]
+          },
+          "current":{
+            "speciesId":"species.orc","ancestryId":null,
+            "profileId":"origin:direct-orc",
+            "inherentGrants":[
+              {"id":"grant:type","effectiveValue":"humanoid","identity":{
+                "kind":0,"intrinsicSlotId":"creatureType",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/creatureType"}}},
+              {"id":"grant:size","effectiveValue":"medium","identity":{
+                "kind":0,"intrinsicSlotId":"size",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/size"}}},
+              {"id":"grant:walk","effectiveValue":30,"identity":{
+                "kind":0,"intrinsicSlotId":"walkingSpeedFeet",
+                "occurrence":{"source":{"kind":0,"id":"species.orc"},
+                "occurrencePath":"/walkingSpeedFeet"}}}
+            ]
+          },
+          "independentGrants":[],
+          "history":[{
+            "id":"construction:direct-orc",
+            "method":{"ruleId":"rule.creature-origination","methodId":"biological"},
+            "stage":2,"contributorIds":[],"replacesConfiguration":false,
+            "resultingProfileId":"origin:direct-orc"
+          }],
+          "adjudication":{"adjudication":0,
+            "nativeRuleReference":"rule.creature-origination"}
+        }
+        """;
+
     [Fact]
     public async Task EmptyCharacterIsUnconfiguredWithoutCallingRulesCore()
     {
@@ -72,6 +126,17 @@ public sealed class CharacterPresentationWorkflowTests
         // presentation serializer rather than emitted as JSON null.
         Assert.False(mechanics.TryGetProperty("abilityValues", out _));
         Assert.False(mechanics.TryGetProperty("savingThrows", out _));
+        var walk = Assert.Single(mechanics.GetProperty("movement").EnumerateArray());
+        Assert.Equal("movement.walk", walk.GetProperty("key").GetString());
+        Assert.Equal(30, walk.GetProperty("effectiveValue").GetInt32());
+        var metadata = mechanics.GetProperty("characterMetadata").EnumerateArray().ToArray();
+        Assert.Contains(metadata, item => item.GetProperty("key").GetString() ==
+            "origin.base-size" && item.GetProperty("effectiveValue").GetString() == "medium");
+        Assert.Contains(metadata, item => item.GetProperty("key").GetString() ==
+            "origin.base-creature-type" &&
+            item.GetProperty("effectiveValue").GetString() == "humanoid");
+        Assert.Equal(30, factory.Native.LastBaseWalkSpeed);
+        Assert.Equal(1, factory.Native.OriginPreviewCalls);
         Assert.Equal(15, factory.Native.LastAbilityScore);
         Assert.Equal("class.warlock", factory.Native.LastClassId);
     }
@@ -223,11 +288,7 @@ public sealed class CharacterPresentationWorkflowTests
             var committed = await new PostgresCharacterAuthorizedOriginStore(db)
                 .CommitVerifiedAsync(new VerifiedOriginPersistenceCommand(
                     characterId, "first-party-001", "native-fixture",
-                    """
-                    {"id":"origin:direct-orc",
-                     "underlying":{"speciesId":"species.orc","inherentGrants":[]},
-                     "current":{"speciesId":"species.orc","inherentGrants":[]}}
-                    """,
+                    OrcOriginProfile,
                     0, 1, "construction:direct-orc",
                     "rule.creature-origination", "biological",
                     "first-party", "native-catalog:native-fixture",
@@ -270,6 +331,8 @@ public sealed class CharacterPresentationWorkflowTests
         public int Calls { get; private set; }
         public int? LastAbilityScore { get; private set; }
         public string? LastClassId { get; private set; }
+        public int? LastBaseWalkSpeed { get; private set; }
+        public int OriginPreviewCalls { get; private set; }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken cancellationToken)
         {
@@ -298,6 +361,40 @@ public sealed class CharacterPresentationWorkflowTests
             })!);
         }
 
+        public Task<JsonNode> PreviewNativeOriginAsync(
+            JsonElement request, CancellationToken cancellationToken)
+        {
+            OriginPreviewCalls++;
+            if (Throw) throw new RulesCoreGatewayException("Fixture native Origin unavailable.");
+            return Task.FromResult(JsonSerializer.SerializeToNode(new {
+                contractVersion = 1,
+                rulesetId = "first-party-001",
+                fingerprint = Fingerprint,
+                previewOnly = true,
+                result = new {
+                    status = 4,
+                    issues = Array.Empty<object>(),
+                    profile = JsonNode.Parse(OrcOriginProfile)
+                },
+                intrinsics = new {
+                    status = "resolved", previewOnly = true,
+                    unresolvedSlots = Array.Empty<string>(),
+                    creatureType = new {
+                        value = "humanoid", grantId = "grant:type",
+                        sourceId = "species.orc", occurrencePath = "/creatureType"
+                    },
+                    size = new {
+                        value = "medium", grantId = "grant:size",
+                        sourceId = "species.orc", occurrencePath = "/size"
+                    },
+                    walkingSpeedFeet = new {
+                        value = 30, grantId = "grant:walk",
+                        sourceId = "species.orc", occurrencePath = "/walkingSpeedFeet"
+                    }
+                }
+            })!);
+        }
+
         public Task<JsonNode> ProjectNativeCharacterAsync(
             JsonElement request, CancellationToken cancellationToken)
         {
@@ -308,7 +405,11 @@ public sealed class CharacterPresentationWorkflowTests
             var advancements = request.GetProperty("advancements").EnumerateArray().ToArray();
             LastClassId = advancements.Length == 0
                 ? null : advancements[0].GetProperty("classId").GetString();
+            LastBaseWalkSpeed = request.TryGetProperty("baseWalkSpeed", out var walk) &&
+                walk.ValueKind == JsonValueKind.Number ? walk.GetInt32() : null;
             var values = new Dictionary<string, object>();
+            if (LastBaseWalkSpeed is int baseWalk)
+                values["movement.walk"] = new { status = "resolved", value = baseWalk };
             if (LastAbilityScore is int score)
             {
                 values["ability.strength.score"] = new { status = "resolved", value = score };
