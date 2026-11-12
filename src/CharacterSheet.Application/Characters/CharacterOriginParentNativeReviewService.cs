@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 
@@ -37,7 +38,10 @@ public sealed record CharacterOriginParentNativeReview(
 
 public sealed record CharacterOriginParentNativeReviewResult(
     CharacterOriginParentNativeReviewStatus Status,
-    CharacterOriginParentNativeReview? Review = null);
+    CharacterOriginParentNativeReview? Review = null,
+    // Server-private intermediary. The HTTP endpoint deliberately sends only
+    // Review, never grants or the native profile/preview body.
+    [property: JsonIgnore] JsonElement? EvaluatedIntrinsics = null);
 
 public sealed class CharacterOriginParentNativeReviewService(
     CharacterOriginParentSnapshotService snapshots,
@@ -138,9 +142,13 @@ public sealed class CharacterOriginParentNativeReviewService(
                 afterDraft is null || afterDraft.Revision != revision)
                 return new(CharacterOriginParentNativeReviewStatus.ConcurrentOriginChange);
 
+            var intrinsics = response.RootElement.TryGetProperty("intrinsics",
+                out var verifiedIntrinsics) &&
+                verifiedIntrinsics.ValueKind == JsonValueKind.Object
+                ? verifiedIntrinsics.Clone() : (JsonElement?)null;
             return new(CharacterOriginParentNativeReviewStatus.Ready,
                 new(parentCharacterId, saved.RulesetId, saved.Revision,
-                    latestFingerprint!, proposalId!));
+                    latestFingerprint!, proposalId!), intrinsics);
         }
         catch (JsonException)
         {
