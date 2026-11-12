@@ -6,7 +6,7 @@
 
 ## Current status
 
-The existing `POST /api/native-rules/origins/preview` forwards a stateless construction proposal to the authenticated, user-delegated Rules Core endpoint. No saved Origin record is created and no proposal authorizes a current character grant. A `previewOnly: true` result is advisory; a caller must not copy its resulting profile into a trusted current-character record.
+The existing `POST /api/native-rules/origins/preview` forwards a stateless construction proposal to the authenticated, user-delegated Rules Core endpoint. The initial preview itself does not save a record. A separate character-scoped draft route can now persist decisions; neither route authorizes a current character grant. A `previewOnly: true` result is advisory; a caller must not copy its resulting profile into a trusted current-character record.
 
 **The existing Character Sheet PostgreSQL database remains the sole character state owner.** Site supplies the canonical character ID, the authenticated user, campaign associations and lifecycle/access projections. Rules Core supplies the executable meaning of selections, eligibility, effective inherent grants and permanent reconstruction. No direct browser credentials for Rules Core are issued.
 
@@ -26,7 +26,7 @@ The serialized `NativeOriginProfile` is a mechanics projection, **not a complete
 
 - **Unauthenticated:** deny.
 - **Authenticated initial preview:** accept a client proposal; never load or trust a caller-supplied old profile, history, independent grants, persistent influences or DM authority. The current bridge implements this part only.
-- **Owned character draft save/load:** first check Site-authorized character access; permit incomplete choices as a non-active draft. Archive state remains read-only. Sanitize and validate the proposal separately; do not publish candidate grants into the live sheet.
+- **Owned character draft save/load (implemented):** `GET/PUT /api/characters/{characterId}/origin/draft` check Site-authorized access and initialized character state. An active character may save an incomplete non-active proposal after an authenticated native preview. Archived state is read-only. PostgreSQL enforces one draft per character and compare-and-swap draft revision updates. No candidate grant enters the live sheet.
 - **Owned character authorize/apply:** reload actual saved baseline, entitlements, influences, history and revision through the server database; obtain verified campaign/table decisions; invoke Rules Core with those trusted inputs; atomically commit only a wholly authorized result at the expected revision.
 - **Rite/other permanent transition:** use Rules Core's common permanent-reconstruction executor with the existing authorized prior Origin, exact method completion and form interaction. The operation must have an idempotent event ID; a repeated or stale request returns the existing result or a conflict rather than appending history again.
 - **Sheet read/projection:** revalidate material content changes, combine only earned, applicable grants through Rules Core projection and expose unresolved executable effects without inventing their numbers.
@@ -41,4 +41,4 @@ The active form can change `Current` without changing `Underlying`, but must ori
 
 ## Scope for the next integration step
 
-An actual state model, database migration, concurrency-safe repository, authorized load/apply service, DM authorization gateway, and builder UI are **not yet implemented** by the preview bridge. Begin these only after their trusted inputs are available. Test owner isolation, archived denial, forged previous state, self-asserted DM decisions, duplicate/stale transition, save/reload, evolution of native source content, and the actual Human–Elf mixed-Origin workflow across both applications. Do not label local gateway mocks as live integration.
+The untrusted **draft** state model, database migration, compare-and-swap store, scoped save/load service, and focused PostgreSQL tests are now implemented. The **authorized active-Origin** state model and migration, trusted entitlement/history loader, transactional apply/Rite service, DM authorization gateway, source-to-mechanics projection, and builder UI are **not yet implemented**. Never promote the draft JSON to those privileges. Begin these only after their trusted inputs are available. Test owner isolation, archived denial, forged previous state, self-asserted DM decisions, duplicate/stale transition, save/reload, evolution of native source content, and the actual Human–Elf mixed-Origin workflow across both applications. Do not label local gateway mocks as live integration.
