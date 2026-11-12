@@ -99,7 +99,27 @@ public sealed class NativeCharacterPresentationBridgeTests
         Assert.Equal("partial", result.Status);
         Assert.NotNull(result.Mechanics);
         Assert.Equal(30, Assert.Single(result.Mechanics.Movement!).EffectiveValue);
-        Assert.Equal(0, gateway.Calls);
+        Assert.Equal(30, gateway.LastBaseWalkSpeed);
+        Assert.True(gateway.Calls >= 4,
+            "Even without Class input, effective walking speed must come from the Core kernel.");
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-walk-speed" && Equals(value.EffectiveValue, 30));
+    }
+
+    [Fact]
+    public async Task NativeConditionsCanWithholdEffectiveWalkWithoutHidingVerifiedBaseOrigin()
+    {
+        var gateway = new FixtureGateway { ConditionMovementUnresolved = true };
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originIntrinsics: new VerifiedOriginIntrinsics("humanoid", "medium", 30));
+
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(30, gateway.LastBaseWalkSpeed);
+        Assert.Null(result.Mechanics!.Movement);
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-walk-speed" && Equals(value.EffectiveValue, 30));
     }
 
     [Theory]
@@ -474,6 +494,7 @@ public sealed class NativeCharacterPresentationBridgeTests
         public string[] LastSelectedOptions { get; private set; } = [];
         public string[] LastConditionIds { get; private set; } = [];
         public int? LastBaseWalkSpeed { get; private set; }
+        public bool ConditionMovementUnresolved { get; init; }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken token)
         {
@@ -518,9 +539,12 @@ public sealed class NativeCharacterPresentationBridgeTests
             LastBaseWalkSpeed = request.TryGetProperty("baseWalkSpeed", out var speed) &&
                 speed.ValueKind == JsonValueKind.Number
                 ? speed.GetInt32() : null;
-            var item = request.GetProperty("advancements").EnumerateArray().Single();
-            LastAdvancementClassId = item.GetProperty("classId").GetString();
-            LastAdvancementLevel = item.GetProperty("level").GetInt32();
+            var entries = request.GetProperty("advancements").EnumerateArray().ToArray();
+            Assert.True(entries.Length <= 1, "Fixture models one native class or none.");
+            LastAdvancementClassId = entries.Length == 1
+                ? entries[0].GetProperty("classId").GetString() : null;
+            LastAdvancementLevel = entries.Length == 1
+                ? entries[0].GetProperty("level").GetInt32() : null;
             LastSelectedOptions = request.GetProperty("selectedOptions")
                 .EnumerateArray().Select(value => value.GetString()!).ToArray();
             LastCurrentResources = request.GetProperty("currentResources")
@@ -552,7 +576,13 @@ public sealed class NativeCharacterPresentationBridgeTests
             }))!;
             if (LastBaseWalkSpeed is int walk)
                 projection["values"]!["movement.walk"] = JsonNode.Parse(
-                    JsonSerializer.Serialize(new { status = "resolved", value = walk }));
+                    ConditionMovementUnresolved
+                        ? JsonSerializer.Serialize(new {
+                            status = "unsupported", value = (int?)null
+                        })
+                        : JsonSerializer.Serialize(new {
+                            status = "resolved", value = (int?)walk
+                        }));
             if (IncludeHierarchy)
                 projection["training"] = JsonNode.Parse("""
                     [{"id":"skill.arcana","name":"Arcana","kind":"skill","governingAbility":"intelligence","supportsRanks":true},
