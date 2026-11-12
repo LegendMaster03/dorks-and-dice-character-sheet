@@ -414,7 +414,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.HasKey("CharacterId", "EventId");
             b.HasIndex("CharacterId", "CommittedRevision").IsUnique()
                 .HasDatabaseName("UX_character_origin_event_receipts_Revision");
-            b.ToTable("character_origin_event_receipts");
+            b.ToTable("character_origin_event_receipts", t =>
+                t.HasCheckConstraint("CK_origin_receipt_dm_audit_complete",
+                    """("ApprovalActorUserId" IS NULL AND "ApprovalCampaignId" IS NULL AND "ApprovedDecisionsJson" IS NULL) OR ("ApprovalActorUserId" IS NOT NULL AND "ApprovalCampaignId" IS NOT NULL AND "ApprovedDecisionsJson" IS NOT NULL)"""));
         });
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginDraftState", b =>
