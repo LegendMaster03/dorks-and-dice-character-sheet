@@ -26,6 +26,14 @@ public static class CharacterOriginDraftEndpoints
             CancellationToken cancellationToken) =>
             Respond(await service.GetAsync(characterId, cancellationToken)));
 
+        // Read-only view of last committed server-held Origin. It is not a
+        // current effective character mechanics projection; no authorization
+        // receipt secret is returned in the public response.
+        group.MapGet("/state", async (
+            Guid characterId, CharacterOriginStateService service,
+            CancellationToken cancellationToken) =>
+            Respond(await service.GetAsync(characterId, cancellationToken)));
+
         group.MapPut("/draft", async (
             Guid characterId, SaveRequest request, CharacterOriginDraftService service,
             CancellationToken cancellationToken) =>
@@ -33,6 +41,41 @@ public static class CharacterOriginDraftEndpoints
                 request.Fingerprint, request.Proposal, request.ExpectedRevision,
                 cancellationToken)));
     }
+
+    private static IResult Respond(CharacterOriginReadResult result) =>
+        result.Status switch
+        {
+            CharacterOriginReadStatus.Ready => Results.Ok(new
+            {
+                status = "ready",
+                savedState = result.SavedState is null ? null : new
+                {
+                    characterId = result.SavedState.CharacterId,
+                    rulesetId = result.SavedState.RulesetId,
+                    fingerprint = result.SavedState.Fingerprint,
+                    profile = JsonSerializer.Deserialize<JsonElement>(result.SavedState.ProfileJson),
+                    revision = result.SavedState.Revision,
+                    sourceDraftRevision = result.SavedState.SourceDraftRevision,
+                    updatedAt = result.SavedState.UpdatedAt
+                },
+                events = result.CompletedEvents?.Select(receipt => new
+                {
+                    eventId = receipt.EventId,
+                    committedRevision = receipt.CommittedRevision,
+                    methodRuleId = receipt.MethodRuleId,
+                    methodId = receipt.MethodId,
+                    createdAt = receipt.CreatedAt
+                }).ToArray(),
+                readOnly = result.ReadOnly,
+                // A saved projection is not a revalidated, usable grant list.
+                effectiveMechanicsReady = false
+            }),
+            CharacterOriginReadStatus.NotFoundOrNotOwned => Results.NotFound(),
+            CharacterOriginReadStatus.Unauthenticated => Results.Unauthorized(),
+            CharacterOriginReadStatus.ProjectionUnavailable =>
+                Error(503, "character_authorization_unavailable"),
+            _ => Error(409, "character_sheet_not_initialized")
+        };
 
     private static IResult Respond(CharacterOriginDraftResult result) =>
         result.Status switch

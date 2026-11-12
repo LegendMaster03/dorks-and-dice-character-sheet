@@ -51,7 +51,7 @@ public sealed class CharacterOriginStateService(
             return new(CharacterOriginReadStatus.SheetNotInitialized);
 
         var saved = await authorizedOrigins.GetAsync(characterId, cancellationToken);
-        var receipts = saved is null
+        IReadOnlyList<CharacterOriginEventReceipt> receipts = saved is null
             ? []
             : await authorizedOrigins.GetEventsAsync(characterId, cancellationToken);
         return new(CharacterOriginReadStatus.Ready, saved, receipts,

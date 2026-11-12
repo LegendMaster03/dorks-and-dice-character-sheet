@@ -103,6 +103,7 @@ builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAcc
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterOriginDraftService>();
+builder.Services.AddScoped<CharacterOriginStateService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
