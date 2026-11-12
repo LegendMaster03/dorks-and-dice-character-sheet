@@ -294,7 +294,7 @@ export function getGuidedBuilderSectionStates(
         },
         {
             id: "species",
-            label: "Species",
+            label: "Origin",
             status: speciesResolved ? "resolved" : "incomplete",
             detail: speciesDetail
         },
