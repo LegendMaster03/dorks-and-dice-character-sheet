@@ -11,6 +11,7 @@ public sealed class CharacterPresentationService(
     CharacterBuildService buildService,
     CharacterStateService stateService,
     CharacterOriginStateService origins,
+    CharacterOriginParentNativeReviewService nativeOriginReviews,
     INativeRulesCoreGateway nativeRulesCoreGateway)
 {
     public async Task<CharacterPresentationResult> GetAsync(
@@ -50,12 +51,31 @@ public sealed class CharacterPresentationService(
                 diagnostics);
         }
 
+        // A committed Origin can produce a few current native intrinsics,
+        // but only after the server has re-evaluated the *immutable* draft,
+        // matched the whole native profile, and verified its event revision.
+        // No client-submitted profile or preview is used as an input here.
+        VerifiedOriginIntrinsics? verifiedIntrinsics = null;
+        if (origin.SavedState is { } saved)
+        {
+            var reviewed = await nativeOriginReviews.ReviewAsync(
+                characterId, characterId, cancellationToken);
+            if (reviewed.Status == CharacterOriginParentNativeReviewStatus.Ready &&
+                reviewed.Review?.StoredRevision == saved.Revision &&
+                reviewed.Review.RulesetId == saved.RulesetId)
+                verifiedIntrinsics = VerifiedOriginIntrinsicReader.Read(
+                    reviewed.EvaluatedIntrinsics, saved.ProfileJson);
+            if (verifiedIntrinsics is null)
+                diagnostics.Add($"origin-native-intrinsics:{reviewed.Status}");
+        }
+
         NativeCharacterPresentationBridge.Outcome projection;
         try
         {
             projection = await NativeCharacterPresentationBridge.ProjectAsync(
                 nativeRulesCoreGateway, build, state, cancellationToken,
-                hasCommittedOrigin: origin.SavedState is not null);
+                hasCommittedOrigin: origin.SavedState is not null,
+                originIntrinsics: verifiedIntrinsics);
         }
         catch (Exception exception) when (exception is RulesCoreGatewayException
             or JsonException or InvalidOperationException or FormatException)
