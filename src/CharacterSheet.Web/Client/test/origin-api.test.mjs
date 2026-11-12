@@ -6,6 +6,7 @@ import {
     loadOriginState,
     inspectOwnerVisibleParentOrigin,
     reviewOwnerVisibleParentNativeOrigin,
+    reviewOwnerVisibleParentSourceAlignment,
     originBackendUrl,
     previewOriginProposal,
     saveOriginDraft
@@ -347,4 +348,89 @@ test("native parent Origin review never accepts a path traversal or inaccessible
         environment, id, "9c97ec43-39bd-45d9-9264-64387d0f6cb6",
         async () => Response.json({ error: "not_found" }, { status: 404 })),
     err => err instanceof CharacterSheetApiError && err.status === 404);
+});
+
+test("owner parent-source alignment carries only proposed IDs and draft revision", async () => {
+    const parentOne = "e85ec742-4991-47ef-8994-c7bb08df99ca";
+    const parentTwo = "72b0b0f1-8a0b-4f40-9d15-a99c843db8c3";
+    const bindings = [
+        { contributorId: "parent-one", parentCharacterId: parentOne },
+        { contributorId: "parent-two", parentCharacterId: parentTwo }
+    ];
+    const calls = [];
+    const response = {
+        status: "ready", draftRevision: 3,
+        matches: [
+            { ...bindings[0], nativeSourceId: "species.orc", parentOriginRevision: 1 },
+            { ...bindings[1], nativeSourceId: "ancestry.high-elf", parentOriginRevision: 1 }
+        ],
+        inspectionOnly: true,
+        relationshipVerified: false,
+        inheritanceAuthorized: false,
+        activeGrants: false,
+        effectiveMechanicsReady: false
+    };
+    const fetcher = async (url, init) => {
+        calls.push({ url: String(url), method: init.method,
+            credentials: init.credentials, cache: init.cache, body: JSON.parse(init.body) });
+        return Response.json(response);
+    };
+    const reviewed = await reviewOwnerVisibleParentSourceAlignment(
+        environment, id, 3, bindings, fetcher);
+    assert.equal(reviewed.matches.length, 2);
+    assert.equal(reviewed.relationshipVerified, false);
+    assert.deepEqual(calls, [{
+        url: `/tool-host/character-sheet/api/upstream/api/characters/${id}/origin/parent-source-alignment-review`,
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        body: { expectedDraftRevision: 3, bindings }
+    }]);
+    assert.equal(calls[0].body.parentProfile, undefined);
+    assert.equal(calls[0].body.manifestations, undefined);
+    assert.equal(calls[0].body.relationships, undefined);
+});
+
+test("owner parent-source alignment rejects forged grants, relation claims and ambiguous IDs", async () => {
+    const parent = "e85ec742-4991-47ef-8994-c7bb08df99ca";
+    const binding = [{ contributorId: "parent-one", parentCharacterId: parent }];
+    const baseline = {
+        status: "ready", draftRevision: 2,
+        matches: [{ ...binding[0], nativeSourceId: "species.orc",
+            parentOriginRevision: 1 }],
+        inspectionOnly: true, relationshipVerified: false,
+        inheritanceAuthorized: false, activeGrants: false,
+        effectiveMechanicsReady: false
+    };
+    let calls = 0;
+    const fetcher = async () => { calls++; return Response.json(baseline); };
+    for (const bad of [
+        [{ contributorId: "parent-one", parentCharacterId: id }],
+        [binding[0], binding[0]],
+        [{ contributorId: "parent-one", parentCharacterId: "not-a-guid" }],
+        [{ contributorId: "", parentCharacterId: parent }]
+    ]) {
+        await assert.rejects(() => reviewOwnerVisibleParentSourceAlignment(
+            environment, id, 2, bad, fetcher), /valid, distinct Site Character IDs/);
+    }
+    assert.equal(calls, 0);
+    for (const extra of [
+        { inheritanceAuthorized: true },
+        { relationshipVerified: true },
+        { activeGrants: true },
+        { verifiedSources: [{ underlying: { inherentGrants: [] } }] },
+        { matches: [{ ...baseline.matches[0], inherentGrants: [] }] },
+        { matches: [{ ...baseline.matches[0], parentCharacterId: id }] },
+        { draftRevision: 999 }
+    ]) {
+        await assert.rejects(() => reviewOwnerVisibleParentSourceAlignment(
+            environment, id, 2, binding,
+            async () => Response.json({ ...baseline, ...extra })),
+        /invalid inspection-only trust contract/);
+    }
+    await assert.rejects(() => reviewOwnerVisibleParentSourceAlignment(
+        environment, id, 2, binding,
+        async () => Response.json({ error: "parent_origin_not_natively_verified" },
+            { status: 409 })),
+    error => error instanceof CharacterSheetApiError &&
+        error.status === 409 &&
+        error.message === "parent_origin_not_natively_verified");
 });

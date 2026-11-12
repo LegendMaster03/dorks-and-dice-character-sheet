@@ -151,6 +151,28 @@ export interface NativeOriginParentNativeReviewResponse {
     effectiveMechanicsReady: false;
 }
 
+/** Proposed links only. These IDs never establish biological parentage. */
+export interface NativeOriginParentSourceBinding {
+    contributorId: string;
+    parentCharacterId: string;
+}
+
+export interface NativeOriginParentSourceAlignmentResponse {
+    status: "ready";
+    draftRevision: number;
+    matches: readonly {
+        contributorId: string;
+        parentCharacterId: string;
+        nativeSourceId: string;
+        parentOriginRevision: number;
+    }[];
+    inspectionOnly: true;
+    relationshipVerified: false;
+    inheritanceAuthorized: false;
+    activeGrants: false;
+    effectiveMechanicsReady: false;
+}
+
 export interface NativeOriginActivationResponse {
     status: "applied";
     revision: number;
@@ -158,7 +180,7 @@ export interface NativeOriginActivationResponse {
 }
 
 function originPath(characterId: string,
-    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}`): string {
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}` | "parent-source-alignment-review"): string {
     if (characterId.trim().length === 0) {
         throw new Error("A Site Character ID is required for Origin state.");
     }
@@ -168,7 +190,7 @@ function originPath(characterId: string,
 export function originBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}`
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}` | "parent-source-alignment-review"
 ): string {
     return buildCharacterSheetApiUrl(environment, originPath(characterId, suffix));
 }
@@ -176,7 +198,7 @@ export function originBackendUrl(
 async function requestOrigin(
     environment: HostEnvironment,
     characterId: string,
-    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}`,
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}` | "parent-source-alignment-review",
     method: "GET" | "PUT" | "POST",
     body: object | undefined,
     fetcher: FetchLike
@@ -385,6 +407,75 @@ export async function reviewOwnerVisibleParentNativeOrigin(
         throw new Error("Parent native Origin review returned an invalid trust contract.");
     }
     return result as unknown as NativeOriginParentNativeReviewResponse;
+}
+
+/**
+ * Inspect a complete list of individual-parent/native-source associations.
+ * Only Site-owner-approved IDs, a previously saved mixed draft, and fresh
+ * Rules Core evaluations can satisfy this read-only request. Nothing here
+ * authorizes an actual parent-child relationship or an inherited grant.
+ */
+export async function reviewOwnerVisibleParentSourceAlignment(
+    environment: HostEnvironment,
+    characterId: string,
+    expectedDraftRevision: number,
+    bindings: readonly NativeOriginParentSourceBinding[],
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<NativeOriginParentSourceAlignmentResponse> {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(characterId) ||
+        !Number.isSafeInteger(expectedDraftRevision) ||
+        expectedDraftRevision < 1 ||
+        !Array.isArray(bindings) || bindings.length < 1 || bindings.length > 16 ||
+        bindings.some(binding => !binding ||
+            typeof binding.contributorId !== "string" ||
+            binding.contributorId.trim().length === 0 ||
+            binding.contributorId.length > 180 ||
+            typeof binding.parentCharacterId !== "string" ||
+            !uuid.test(binding.parentCharacterId) ||
+            binding.parentCharacterId.toLowerCase() === characterId.toLowerCase()) ||
+        new Set(bindings.map(binding => binding.contributorId)).size !== bindings.length ||
+        new Set(bindings.map(binding => binding.parentCharacterId.toLowerCase())).size !==
+            bindings.length) {
+        throw new Error("Parent source alignment requires valid, distinct Site Character IDs and a saved draft revision.");
+    }
+
+    // Do not send a manifested parent, choice of heritable state, grant, or
+    // relationship assertion. The server independently loads the saved draft.
+    const payload = {
+        expectedDraftRevision,
+        bindings: bindings.map(binding => ({
+            contributorId: binding.contributorId,
+            parentCharacterId: binding.parentCharacterId
+        }))
+    };
+    const result = await requestOrigin(environment, characterId,
+        "parent-source-alignment-review", "POST", payload, fetcher);
+    if (!isObject(result) || result.status !== "ready" ||
+        result.inspectionOnly !== true || result.relationshipVerified !== false ||
+        result.inheritanceAuthorized !== false || result.activeGrants !== false ||
+        result.effectiveMechanicsReady !== false ||
+        result.draftRevision !== expectedDraftRevision ||
+        !Array.isArray(result.matches) || result.matches.length !== bindings.length ||
+        ["verifiedSources", "verifiedInitialProfile", "profile", "grants",
+            "relationships", "independentGrants", "effectiveGrants"].some(key =>
+                Object.hasOwn(result, key)) ||
+        !result.matches.every((entry: unknown, index: number) =>
+            isObject(entry) &&
+            entry.contributorId === bindings[index].contributorId &&
+            typeof entry.parentCharacterId === "string" &&
+            entry.parentCharacterId.toLowerCase() ===
+                bindings[index].parentCharacterId.toLowerCase() &&
+            typeof entry.nativeSourceId === "string" &&
+            /^(species|ancestry)\.[a-z0-9.-]+$/.test(entry.nativeSourceId) &&
+            Number.isSafeInteger(entry.parentOriginRevision) &&
+            (entry.parentOriginRevision as number) >= 1 &&
+            !["underlying", "current", "inherentGrants", "manifestedProfile",
+                "verifiedInitialProfile", "independentGrants"].some(key =>
+                    Object.hasOwn(entry, key)))) {
+        throw new Error("Parent source alignment returned an invalid inspection-only trust contract.");
+    }
+    return result as unknown as NativeOriginParentSourceAlignmentResponse;
 }
 
 export async function activateNativeOrigin(
