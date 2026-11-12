@@ -14,12 +14,19 @@ public static class CharacterOriginDraftEndpoints
 
     public static void MapCharacterOriginDraftEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/characters/{characterId:guid}/origin/draft", async (
+        var group = app.MapGroup("/api/characters/{characterId:guid}/origin");
+        group.AddEndpointFilter(async (invocation, next) =>
+        {
+            invocation.HttpContext.Response.Headers.CacheControl = "no-store";
+            return await next(invocation);
+        });
+
+        group.MapGet("/draft", async (
             Guid characterId, CharacterOriginDraftService service,
             CancellationToken cancellationToken) =>
             Respond(await service.GetAsync(characterId, cancellationToken)));
 
-        app.MapPut("/api/characters/{characterId:guid}/origin/draft", async (
+        group.MapPut("/draft", async (
             Guid characterId, SaveRequest request, CharacterOriginDraftService service,
             CancellationToken cancellationToken) =>
             Respond(await service.SaveAsync(characterId, request.RulesetId,
