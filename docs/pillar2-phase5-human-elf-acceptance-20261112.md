@@ -2,7 +2,7 @@
 
 **Date:** November 12, 2026  
 **State:** Branch implementation and automated acceptance; not deployed to the shared development environment and not the end of the full Phase 5 roadmap.  
-**Branches:** `dorks-and-dice-rules-core:feature/pillar2-phase5-origin-api-20261112`, `dorks-and-dice-character-sheet:feature/pillar2-phase5-origin-integration-20261112`, and `dorks-and-dice-site:feature/pillar2-origin-dm-campaign-authority-20261112`. All PRs remain drafts.
+**Branches:** `dorks-and-dice-rules-core:feature/pillar2-phase5-origin-api-20261112`, `dorks-and-dice-character-sheet:feature/pillar2-phase5-origin-integration-20261112`, and `dorks-and-dice-site:feature/pillar2-origin-dm-campaign-authority-20261112`. The Rules Core PRs #141 and #151 were closed unmerged; Character Sheet PR #67 and Site PR #50 remain draft.
 
 ## Available, deliberately narrow behavior
 
@@ -25,10 +25,12 @@ The temporary branch-to-branch workflow `.github/workflows/pillar2-phase5-origin
 
 ## Remaining work before the roadmap's playtest-ready milestone
 
-1. Build the authenticated **DM review and selection interface**, including a safe way for a DM to inspect a campaign-linked character's proposed Origin and current native offers without receiving general access to that character's private sheet. The approval endpoint is available, but the ordinary player-side mixed Origin editor still describes itself as evidence-only and does not complete that interaction.
+1. **The restricted DM review interface has been implemented on the branches.** Character Sheet now has the `/dm-origin-review/{campaignId}/{characterId}` route and reviewed native-offer selection workflow; Site provides active-campaign DM links. Verify these together in a deployed, authenticated, second-account session before calling the workflow live-accepted.
 2. Coordinate branch deployment to the shared development environment and run an actual user/DM session, including a second account, role revocation, user-facing save/reload and visible supported mechanics.
 3. Provide an explicit refresh-and-re-review process after native content evolves. A pinned approval now **fails closed** if its draft lacks a fingerprint or the current native snapshot differs; it never silently approves under a new ruleset.
 4. Complete the roadmap's more general reconstruction/update transitions, nested contributor histories, independent-grant application, additional choice catalogs, and later post-origination transformations. Neither this slice nor its five selected offers implements universal inheritance or the missing Human Origin Feat choice.
+
+See [the coordinated deployment readiness review](pillar2-phase5-coordinated-deployment-readiness-20261112.md) for current branch heads, release gates and the real-user/DM acceptance checklist.
 
 ## Deployment and safety boundary
 
