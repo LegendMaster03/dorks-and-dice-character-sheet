@@ -338,6 +338,13 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             changedSourceDraft.Status);
         Assert.Null(changedSourceDraft.VerifiedSources);
 
+        // Reset the in-place corruption before independently exercising a
+        // legitimate parent-vs-child native source ID mismatch.
+        var repairedDraft = await db.Database.ExecuteSqlRawAsync(
+            "UPDATE character_origin_drafts SET \"ProposalJson\" = jsonb_set(\"ProposalJson\", '{{id}}', to_jsonb({0}::text), true) WHERE \"CharacterId\" = {1}",
+            "verified-orc-parent-0", parents[0]);
+        Assert.Equal(1, repairedDraft);
+
         var changed = await drafts.SaveAsync(childId, "first-party-001",
             fingerprint, MixedDraft("species.elf"), 1, DateTimeOffset.UtcNow);
         Assert.Equal(2, changed?.Revision);
