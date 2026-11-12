@@ -151,6 +151,10 @@ public sealed class CharacterPresentationWorkflowTests
         Assert.Equal("sense.low-light-vision", sense.GetProperty("key").GetString());
         Assert.Contains("Dim Light", sense.GetProperty("effectiveValue").GetString());
         Assert.Contains("Darkness unchanged", sense.GetProperty("effectiveValue").GetString());
+        var senseSource = Assert.Single(sense.GetProperty("sourceAttributions").EnumerateArray());
+        Assert.Equal("origin-grant:grant:vision", senseSource.GetProperty("key").GetString());
+        Assert.Equal("species.orc/traits/0", senseSource.GetProperty("detail").GetString());
+        Assert.True(senseSource.GetProperty("presentationRequired").GetBoolean());
         Assert.Equal(30, factory.Native.LastBaseWalkSpeed);
         Assert.Equal(1, factory.Native.OriginPreviewCalls);
         Assert.Equal(15, factory.Native.LastAbilityScore);
