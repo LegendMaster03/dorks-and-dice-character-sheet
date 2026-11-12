@@ -210,6 +210,28 @@ var nativeWithOrc = new NativeCharacterProjector(catalog).Project(
 Ensure(nativeWithOrc.Values.TryGetValue("movement.walk", out var realWalk) &&
     realWalk.Status == "resolved" && realWalk.Value == 30,
     "The native character kernel did not resolve verified Orc base movement.");
+
+var grapplingProjection = new NativeCharacterProjector(catalog).Project(
+    request with {
+        BaseWalkSpeed = orcIntrinsics.WalkingSpeedFeet.Value,
+        ConditionIds = ["condition.grappled"]
+    });
+Ensure(grapplingProjection.Values.TryGetValue("movement.walk", out var grappledSpeed) &&
+    grappledSpeed.Status == "resolved" && grappledSpeed.Value == 0,
+    "A verified Orc baseline must still be overridden by an authored native Grappled condition.");
+
+var classlessOrcProjection = new NativeCharacterProjector(catalog).Project(
+    request with {
+        AbilityScores = new Dictionary<string, int>(),
+        Advancements = [],
+        SelectedOptions = [],
+        BaseWalkSpeed = orcIntrinsics.WalkingSpeedFeet.Value
+    });
+Ensure(classlessOrcProjection.Values.TryGetValue("movement.walk", out var classlessWalk) &&
+    classlessWalk.Status == "resolved" && classlessWalk.Value == 30 &&
+    classlessOrcProjection.Status != "invalid",
+    "Native Core must resolve verified base movement without inventing Class or ability inputs.");
+
 var sheetWithOrc = await NativeCharacterPresentationBridge.ProjectAsync(
     gateway, build, state, CancellationToken.None,
     hasCommittedOrigin: true,
