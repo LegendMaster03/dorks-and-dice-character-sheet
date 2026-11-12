@@ -8,20 +8,26 @@ import { createButton, createElement, createInlineState,
     createSectionCard } from "../../ui/components.js";
 import type { OriginUiState } from "./origin-workflow.js";
 import {
+    canActivateDirectNativeOrigin,
     hasLegacySpeciesSelections,
-    isAuthorizedInitialNativeOrigin,
-    isDirectOriginProposal,
-    requiredDirectOriginChoices
+    isEditableDirectNativeOrigin,
+    isEditableMixedNativeOrigin,
+    mixedNativeParentSources,
+    requiredDirectOriginChoices,
+    type MixedNativeParentSlot
 } from "./origin-builder-model.js";
 import type { NativeOriginRequiredChoice } from "./origin-builder-model.js";
 
 export interface OriginBuilderHandlers {
     openChooser(category: "species" | "ancestry" | "skill",
-        candidateId?: string, requirementId?: string): void;
+        candidateId?: string, requirementId?: string,
+        parentSlot?: MixedNativeParentSlot): void;
     searchChooser(query: string): void;
     closeChooser(): void;
     chooseOption(optionId: string): void;
     clearAncestry(): void;
+    setMode(mode: "direct" | "mixed"): void;
+    clearMixedParent(slot: MixedNativeParentSlot): void;
     setFiniteChoice(candidateId: string, requirementId: string,
         id: string | null): void;
     activate(): void;
@@ -146,7 +152,8 @@ export function renderOriginBuilder(
     const locked = readOnly || origin.readOnly || origin.busy ||
         origin.savedState !== null;
     const proposal = origin.draft?.proposal ?? null;
-    const direct = proposal === null || isDirectOriginProposal(proposal);
+    const direct = proposal === null || isEditableDirectNativeOrigin(proposal);
+    const basicMixed = proposal !== null && isEditableMixedNativeOrigin(proposal);
     section.append(createElement("p", "dd-guided-builder__section-copy",
         "An Origin describes the underlying Species and Ancestry configuration. Save a draft for native review; a draft does not grant any traits. Class, Background, and Upbringing benefits are independent."));
 
@@ -172,9 +179,9 @@ export function renderOriginBuilder(
         return section;
     }
 
-    if (!direct) {
+    if (!direct && !basicMixed) {
         section.append(createInlineState(
-            "This saved proposal contains a mixed, nested, or custom Origin. Its evidence is preserved, but the direct first-party editor can not modify or activate it. A separately authorized editor is required.",
+            "This Origin has custom, nested, post-origination, or separately authorized evidence that the basic editor cannot alter. Existing evidence is preserved; use the future trusted editor.",
             "warning"));
         return section;
     }
@@ -183,34 +190,85 @@ export function renderOriginBuilder(
         section.append(createInlineState("Origin is read-only for this Character.", "readonly"));
     }
 
-    const identity = createElement("div", "dd-build__grid");
-    identity.append(renderSelectedIdentity("Species",
-        proposal?.selectedSpeciesId, "species", locked, handlers));
-    identity.append(renderSelectedIdentity("Ancestry (optional)",
-        proposal?.selectedAncestryId, "ancestry",
-        locked || !proposal?.selectedSpeciesId, handlers));
-    section.append(identity);
+    const mode = createElement("div", "dd-build-choice__actions");
+    mode.setAttribute("data-origin-construction-mode", direct ? "direct" : "mixed");
+    mode.append(createButton(
+        "Direct first-party Origin", "dd-button dd-button--secondary",
+        () => handlers.setMode("direct"), locked || direct));
+    mode.append(createButton(
+        "Mixed biological sources", "dd-button dd-button--secondary",
+        () => handlers.setMode("mixed"), locked || basicMixed));
+    section.append(mode);
+    section.append(createElement("p", "dd-guided-builder__section-copy",
+        "Changing modes discards the saved draft's source selections and required choices. It does not change an authorized Origin."));
+
+    if (direct) {
+        const identity = createElement("div", "dd-build__grid");
+        identity.append(renderSelectedIdentity("Species",
+            proposal?.selectedSpeciesId, "species", locked, handlers));
+        identity.append(renderSelectedIdentity("Ancestry (optional)",
+            proposal?.selectedAncestryId, "ancestry",
+            locked || !proposal?.selectedSpeciesId, handlers));
+        section.append(identity);
+    } else if (proposal !== null) {
+        // These are source exemplars, not trusted identities of existing
+        // parent characters. Do not invent a manifested parent profile.
+        section.append(createInlineState(
+            "Mixed biological Origin is evidence-only. These two native source references are not verified parent-character profiles. Rules Core does not infer biological compatibility, ancestry inheritance or trait stacking; DM-authorized mixed resolution is not yet available.",
+            "warning"));
+        const parents = createElement("div", "dd-build__grid");
+        for (const parent of mixedNativeParentSources(proposal)) {
+            const parentCard = createElement("article", "dd-build-choice");
+            parentCard.setAttribute("data-mixed-origin-parent", parent.slot);
+            parentCard.append(createElement("h3", "dd-build-choice__label",
+                parent.slot === "parent-one" ? "Biological source 1" : "Biological source 2"));
+            parentCard.append(createElement("p", "dd-build-choice__value",
+                parent.sourceId ?? "Not selected"));
+            const actions = createElement("div", "dd-build-choice__actions");
+            actions.append(createButton("Choose Species source",
+                "dd-button dd-button--secondary",
+                () => handlers.openChooser("species", undefined, undefined, parent.slot),
+                locked));
+            actions.append(createButton("Choose Ancestry source",
+                "dd-button dd-button--secondary",
+                () => handlers.openChooser("ancestry", undefined, undefined, parent.slot),
+                locked));
+            if (parent.sourceId !== null) {
+                actions.append(createButton("Clear source",
+                    "dd-button dd-button--ghost",
+                    () => handlers.clearMixedParent(parent.slot), locked));
+            }
+            parentCard.append(actions);
+            parents.append(parentCard);
+        }
+        section.append(parents);
+    }
 
     if (origin.draft !== null) {
         section.append(createElement("p", "dd-build__meta",
             `Draft revision ${origin.draft.revision} — not active`));
     }
-    const choices = requiredDirectOriginChoices(origin.preview, proposal);
-    if (choices.length > 0) {
-        const group = createElement("div", "dd-origin-builder__choices");
-        group.append(createElement("h3", "dd-build-choice__label",
-            "Required native creation choices"));
-        for (const choice of choices) {
-            group.append(renderRequiredChoice(choice, locked, handlers));
+    if (direct) {
+        const choices = requiredDirectOriginChoices(origin.preview, proposal);
+        if (choices.length > 0) {
+            const group = createElement("div", "dd-origin-builder__choices");
+            group.append(createElement("h3", "dd-build-choice__label",
+                "Required native creation choices"));
+            for (const choice of choices) {
+                group.append(renderRequiredChoice(choice, locked, handlers));
+            }
+            section.append(group);
         }
-        section.append(group);
     }
+
     if (origin.preview !== null) {
-        const authorized = isAuthorizedInitialNativeOrigin(origin.preview);
+        const authorized = direct && canActivateDirectNativeOrigin(proposal, origin.preview);
         section.append(createInlineState(
-            authorized
-                ? "Native first-party evaluation is complete. This is still a preview until activated."
-                : "Native evaluation is incomplete or unresolved. The saved draft does not grant traits.",
+            !direct
+                ? "Native mixed-source preview preserves the offered candidates but does not authorize inheritance or activation."
+                : authorized
+                    ? "Native first-party evaluation is complete. This is still a preview until activated."
+                    : "Native evaluation is incomplete or unresolved. The saved draft does not grant traits.",
             authorized ? "neutral" : "warning"));
         const issues = origin.preview.result.issues ?? [];
         if (issues.length > 0) {
@@ -223,10 +281,12 @@ export function renderOriginBuilder(
                 `And ${issues.length - 8} additional native issues.`));
             section.append(list);
         }
-        section.append(createButton(
-            "Activate Native Origin", "dd-button dd-button--primary",
-            handlers.activate,
-            locked || legacy || !authorized || origin.draft === null));
+        if (direct) {
+            section.append(createButton(
+                "Activate Native Origin", "dd-button dd-button--primary",
+                handlers.activate,
+                locked || legacy || !authorized || origin.draft === null));
+        }
     } else if (origin.draft !== null) {
         section.append(createInlineState(
             "The draft is saved, but its current native evaluation is unavailable. Reload before activation.",
@@ -246,7 +306,7 @@ export function renderOriginBuilder(
         const header = createElement("div", "dd-rule-chooser__header");
         header.append(createElement("h3", "dd-rule-chooser__title",
             `Choose native ${chooser.category === "skill" ? "Skill" :
-                chooser.category === "ancestry" ? "Ancestry" : "Species"}`),
+                chooser.category === "ancestry" ? "Ancestry" : "Species"}${chooser.parentSlot === undefined ? "" : " source for " + (chooser.parentSlot === "parent-one" ? "biological source 1" : "biological source 2")}`),
             createButton("Close", "dd-button dd-button--ghost", handlers.closeChooser));
         aside.append(header);
         const form = createElement("form", "dd-rule-chooser__search");
