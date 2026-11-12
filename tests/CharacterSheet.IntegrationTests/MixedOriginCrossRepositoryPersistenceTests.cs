@@ -1,4 +1,5 @@
 #if PILLAR2_PHASE5_ORIGIN
+extern alias CoreHost;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -16,7 +17,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RulesCore.Content;
-using RulesCore.Host;
+using CoreApplication = CoreHost::RulesCore.Host.RulesCoreApplication;
+using CoreTicketValidator = CoreHost::RulesCore.Host.CharacterSheetMechanicsTicketValidator;
 
 namespace CharacterSheet.IntegrationTests;
 
@@ -298,7 +300,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 !Directory.Exists(Path.Combine(root, "first-party-001", "native")))
                 throw new InvalidOperationException(
                     "RULES_CORE_CONTENT_ROOT must contain the real Phase 5 native catalog.");
-            var app = RulesCoreApplication.Create([], builder =>
+            var app = CoreApplication.Create([], builder =>
             {
                 builder.WebHost.UseUrls("http://127.0.0.1:0");
                 builder.Configuration.AddInMemoryCollection(
@@ -311,7 +313,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                     });
             }, services =>
             {
-                services.AddHttpClient<CharacterSheetMechanicsTicketValidator>()
+                services.AddHttpClient<CoreTicketValidator>()
                     .ConfigurePrimaryHttpMessageHandler(() => new SiteTicketHandler());
             });
             await app.StartAsync();
