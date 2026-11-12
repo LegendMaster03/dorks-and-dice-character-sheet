@@ -40,8 +40,9 @@ public sealed record CharacterOriginParentNativeReviewResult(
     CharacterOriginParentNativeReviewStatus Status,
     CharacterOriginParentNativeReview? Review = null,
     // Server-private intermediary. The HTTP endpoint deliberately sends only
-    // Review, never grants or the native profile/preview body.
-    [property: JsonIgnore] JsonElement? EvaluatedIntrinsics = null);
+    // Review, never grants, vision effects or the native preview body.
+    [property: JsonIgnore] JsonElement? EvaluatedIntrinsics = null,
+    [property: JsonIgnore] JsonElement? EvaluatedVision = null);
 
 public sealed class CharacterOriginParentNativeReviewService(
     CharacterOriginParentSnapshotService snapshots,
@@ -146,9 +147,15 @@ public sealed class CharacterOriginParentNativeReviewService(
                 out var verifiedIntrinsics) &&
                 verifiedIntrinsics.ValueKind == JsonValueKind.Object
                 ? verifiedIntrinsics.Clone() : (JsonElement?)null;
+            // This is an interpretation of the same *fresh* full-profile
+            // evaluation, not a separate browser-provided sense entitlement.
+            var vision = response.RootElement.TryGetProperty("vision",
+                out var evaluatedVision) &&
+                evaluatedVision.ValueKind == JsonValueKind.Object
+                ? evaluatedVision.Clone() : (JsonElement?)null;
             return new(CharacterOriginParentNativeReviewStatus.Ready,
                 new(parentCharacterId, saved.RulesetId, saved.Revision,
-                    latestFingerprint!, proposalId!), intrinsics);
+                    latestFingerprint!, proposalId!), intrinsics, vision);
         }
         catch (JsonException)
         {
