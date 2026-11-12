@@ -645,3 +645,37 @@ and trusted heritable-state/execution policy are still required.
 
 No work in this increment changes the separate proposed partial
 character-state-slot architecture.
+
+### Multi-source time-of-check consistency and authorization — Phase 5 hardening
+
+A ready individual-parent alignment now requires **a second validation of
+every source after all native parent evaluations**, not only of the first
+and last saved Origin profile bodies. The in-process direct-parent native
+review captures a source-specific, JSON-ignored persistence witness:
+committed historical fingerprint/timestamp, source draft revision,
+proposal/fingerprint/timestamp, and exact first-party receipt identity and
+timestamp. This witness is request-local and cannot be reused as authority
+outside its specific inspection.
+
+The individual parent verifier now refuses an in-flight rewrite of the
+first-party receipt or saved draft even when the Origin profile and revision
+remain unchanged. The multi-parent service later reloads all committed
+profiles, source drafts and event receipts, verifies the original witness
+and exact native proposal/event correspondence, and refuses mismatched or
+tampered evidence. Only after the saved child draft and absence of an
+already committed child Origin are rechecked does it ask Site to
+**reauthorize the child and every proposed parent**. A revoked parent
+access fails closed rather than returning a partially validated match.
+
+This is a *freshness check for a read-only response*, **not** a distributed
+transaction between Site, Character Sheet and Rules Core; any eventual
+state-changing relationship or heritability operation will need a new
+authorization check and a database compare-and-swap for its own durable
+evidence. These checks neither establish biological relationships nor
+select heritable `Underlying`/`Current` state, and do not authorize
+grants or partial character-state slots.
+
+Tests now cover same-revision in-place receipt and source-draft rewrites
+during the native request, revocation of a source owner's visibility after
+prior parents were reviewed, and real Core HTTP/PostgreSQL multi-source
+revalidation. All returned private evidence retains `JsonIgnore`.
