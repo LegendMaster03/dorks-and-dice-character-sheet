@@ -205,6 +205,65 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             .GetEventsAsync(characterId));
     }
 
+    [Theory]
+    [InlineData("preview-fingerprint")]
+    [InlineData("evaluation-fingerprint")]
+    [InlineData("preview-missing-freshness")]
+    [InlineData("evaluation-missing-freshness")]
+    [InlineData("preview-duplicate-offer")]
+    public async Task UntrustedNativeResponseMetadataCannotCommitDmOrigin(string fault)
+    {
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var native = new HttpNativeGateway(core.Client);
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+            characterId, "first-party-001", fingerprint, HumanElf, 0,
+            DateTimeOffset.UtcNow);
+        var selected = await FiveNativeHumanElfOffers(native, fingerprint);
+
+        var result = await Service(db, new HttpNativeGateway(core.Client, fault),
+            allow: true).ApplyAsync(characterId, Campaign, 1, selected);
+        Assert.Equal(fault == "preview-duplicate-offer"
+                ? CharacterOriginMixedActivationStatus.RulesCoreUnavailable
+                : CharacterOriginMixedActivationStatus.NativeContentChanged,
+            result.Status);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetAsync(characterId));
+        Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetEventsAsync(characterId));
+    }
+
+    [Fact]
+    public async Task UnpinnedDraftCannotReceiveACompletedDmApproval()
+    {
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var native = new HttpNativeGateway(core.Client);
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+            characterId, "first-party-001", null, HumanElf, 0, DateTimeOffset.UtcNow);
+        var selected = await FiveNativeHumanElfOffers(native, fingerprint);
+
+        Assert.Equal(CharacterOriginMixedActivationStatus.NativeSnapshotUnpinned,
+            (await Service(db, native, allow: true).ApplyAsync(
+                characterId, Campaign, 1, selected)).Status);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetAsync(characterId));
+        Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetEventsAsync(characterId));
+    }
+
     private static CharacterOriginMixedActivationService Service(
         CharacterSheetDbContext db, INativeRulesCoreGateway native, bool allow) =>
         new(new TestDmScope(allow),
@@ -254,7 +313,8 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             .ToArray();
     }
 
-    private sealed class HttpNativeGateway(HttpClient http) : INativeRulesCoreGateway
+    private sealed class HttpNativeGateway(HttpClient http, string? malformedReply = null)
+        : INativeRulesCoreGateway
     {
         public Task<JsonNode> PreviewNativeOriginAsync(
             JsonElement request, CancellationToken cancellationToken) =>
@@ -280,8 +340,23 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             if (!response.IsSuccessStatusCode)
                 throw new RulesCoreGatewayException(
                     $"Real Rules Core returned {(int)response.StatusCode} at {path}: {body}");
-            return JsonNode.Parse(body) ??
+            var json = JsonNode.Parse(body) ??
                 throw new RulesCoreGatewayException("Real Rules Core returned no JSON.");
+            var preview = path.EndsWith("/origins/preview", StringComparison.Ordinal);
+            var evaluation = path.EndsWith("/origins/evaluate-approved-mixed",
+                StringComparison.Ordinal);
+            if (malformedReply == "preview-fingerprint" && preview ||
+                malformedReply == "evaluation-fingerprint" && evaluation)
+                json["fingerprint"] = "unreviewed-native-fingerprint";
+            else if (malformedReply == "preview-missing-freshness" && preview ||
+                     malformedReply == "evaluation-missing-freshness" && evaluation)
+                json.AsObject().Remove("contentChangedSinceRequest");
+            else if (malformedReply == "preview-duplicate-offer" && preview)
+            {
+                var offers = json["result"]!["evaluatedProposal"]!["candidates"]!.AsArray();
+                offers.Add(offers[0]!.DeepClone());
+            }
+            return json;
         }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct) =>
