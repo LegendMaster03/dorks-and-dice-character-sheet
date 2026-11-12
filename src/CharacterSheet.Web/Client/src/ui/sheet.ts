@@ -12,6 +12,8 @@ import {
 } from "../app-state.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import { renderCharacterBuilder } from "./builder.js";
+import { renderOriginBuilder, type OriginBuilderHandlers } from "../features/origin/origin-builder.js";
+import type { OriginUiState } from "../features/origin/origin-workflow.js";
 import {
     createCompactAdvancementSummary,
     type CharacterAdvancementView
@@ -80,7 +82,9 @@ export function renderCharacterWorkspace(
     mechanicsAvailability?: { status: "resolved" | "partial" | "unconfigured" | "unavailable" | "loading"; message?: string | null },
     equipmentPreview: NativeStartingEquipmentPreview | null = null,
     equipmentPreviewMessage?: string,
-    equipmentPreviewStatus?: "loading" | "ready" | "error"
+    equipmentPreviewStatus?: "loading" | "ready" | "error",
+    origin?: OriginUiState,
+    originHandlers?: OriginBuilderHandlers
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -158,7 +162,9 @@ export function renderCharacterWorkspace(
             handlers,
             equipmentPreview,
             equipmentPreviewMessage,
-            equipmentPreviewStatus));
+            equipmentPreviewStatus,
+            origin,
+            originHandlers));
         if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
             shell.append(renderHarvestingCraftingOverlay(
                 character,
@@ -289,7 +295,9 @@ export function renderCharacterWorkspace(
             builder,
             routine,
             mechanics,
-            handlers));
+            handlers,
+            origin,
+            originHandlers));
     }
     if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
         shell.append(renderHarvestingCraftingOverlay(
@@ -363,7 +371,9 @@ function renderCharacterEditorOverlay(
     builder: CharacterBuilderUiState,
     routine: CharacterRoutineUiState,
     mechanics: CharacterMechanicsView | null,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    origin?: OriginUiState,
+    originHandlers?: OriginBuilderHandlers
 ): HTMLElement {
     const overlay = createElement("div", "dd-character-editor-overlay");
     overlay.setAttribute("data-character-editor-overlay", "true");
@@ -381,7 +391,16 @@ function renderCharacterEditorOverlay(
         createButton("Done", "dd-button dd-button--ghost", handlers.leaveEditMode));
 
     const body = createElement("div", "dd-character-editor-surface__body");
-    body.append(renderCharacterBuilder(characterId, builder, false, handlers.structural));
+    body.append(renderCharacterBuilder(
+        characterId, builder, false, handlers.structural,
+        { title: "Class & Background", choices: ["startingClass", "subclass", "background", "deity"] }));
+    if (origin !== undefined && originHandlers !== undefined) {
+        body.append(renderOriginBuilder(characterId, origin, builder.build,
+            builder.build?.readOnly === true, originHandlers));
+    } else {
+        body.append(createInlineState("Origin editor is not loaded. Species and Ancestry can not be changed here.",
+            "warning"));
+    }
     const masteryChoices = renderRulesChoices(
         mechanics,
         routine,
@@ -407,7 +426,9 @@ function renderGuidedBuilder(
     handlers: CharacterSheetHandlers,
     nativeEquipment: NativeStartingEquipmentPreview | null,
     equipmentError?: string,
-    equipmentStatus?: "loading" | "ready" | "error"
+    equipmentStatus?: "loading" | "ready" | "error",
+    origin?: OriginUiState,
+    originHandlers?: OriginBuilderHandlers
 ): HTMLElement {
     const container = createElement("section", "dd-guided-builder");
     container.setAttribute("aria-labelledby", "dd-guided-builder-heading");
@@ -430,7 +451,7 @@ function renderGuidedBuilder(
         ? null
         : projectNativeStartingEquipment(nativeEquipment, routine.state?.rulesInputs ?? []);
     const sectionStates = getGuidedBuilderSectionStates(
-        builder, mechanics, nativeEquipment, equipmentReceived);
+        builder, mechanics, nativeEquipment, equipmentReceived, origin);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const [index, section] of sectionStates.entries()) {
@@ -512,27 +533,17 @@ function renderGuidedBuilder(
             break;
         }
         case "species": {
-            panel.append(renderCharacterBuilder(
-                characterId,
-                builder,
-                false,
-                handlers.structural,
-                { title: "Species", choices: ["species", "subspecies"] }));
-            const speciesFeatures = renderGuidedSourceFeatures(
-                mechanics,
-                getGuidedBuilderChoiceSourceKeys(builder, "species"),
-                "Species Traits");
-            if (speciesFeatures !== null) panel.append(speciesFeatures);
-            const speciesChoices = renderRulesChoices(
-                mechanics,
-                routine,
-                handlers,
-                {
-                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "species"),
-                    includeConflicts: false,
-                    heading: "Species Choices"
-                });
-            if (speciesChoices !== null) panel.append(speciesChoices);
+            // The route ID is retained for saved navigation state, but the
+            // editor is the canonical Origin draft. Never duplicate legacy
+            // Species/Subspecies mutations in this guided section.
+            if (origin !== undefined && originHandlers !== undefined) {
+                panel.append(renderOriginBuilder(characterId, origin, builder.build,
+                    builder.build?.readOnly === true, originHandlers));
+            } else {
+                panel.append(createInlineState(
+                    "Origin is unavailable. No legacy Species/Subspecies fallback is permitted.",
+                    "warning"));
+            }
             break;
         }
         case "abilities": {
