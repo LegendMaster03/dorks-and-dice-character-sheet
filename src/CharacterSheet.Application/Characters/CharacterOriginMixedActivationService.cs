@@ -251,14 +251,15 @@ public sealed class CharacterOriginMixedActivationService(
         proposalId = ruleId = methodId = null;
         if (root.ValueKind != JsonValueKind.Object ||
             !TryProperty(root, "id", out var id) ||
+            id.ValueKind != JsonValueKind.String ||
             (proposalId = id.GetString()) is not { Length: > 0 and <= 180 } ||
             !TryProperty(root, "intent", out var intent) || intent.ValueKind != JsonValueKind.Number ||
             intent.GetInt32() != 1 ||
             !TryProperty(root, "method", out var method) ||
             (ruleId = String(method, "ruleId")) != "rule.creature-origination" ||
             (methodId = String(method, "methodId")) != "biological" ||
-            root.GetProperty("selectedSpeciesId").ValueKind != JsonValueKind.Null ||
-            root.GetProperty("selectedAncestryId").ValueKind != JsonValueKind.Null ||
+            !Null(root, "selectedSpeciesId") ||
+            !Null(root, "selectedAncestryId") ||
             !Empty(root, "candidates") || !Empty(root, "manifestations") ||
             !TryProperty(root, "contributors", out var contributors) ||
             contributors.ValueKind != JsonValueKind.Array ||
@@ -267,18 +268,24 @@ public sealed class CharacterOriginMixedActivationService(
         // This is a deliberately narrow acceptance slice. Additional species
         // pairings must receive their own authorizations, never this default.
         var sources = new HashSet<string>(StringComparer.Ordinal);
+        var slots = new HashSet<string>(StringComparer.Ordinal);
         foreach (var contributor in contributors.EnumerateArray())
         {
-            if (String(contributor, "id") is not ("parent-one" or "parent-two") ||
+            var slot = String(contributor, "id");
+            if (slot is not ("parent-one" or "parent-two") ||
+                !slots.Add(slot) ||
+                contributor.EnumerateObject().Any(field => field.Name is not (
+                    "id" or "role" or "source" or "manifestedProfile" or "historicalSourceIds")) ||
                 !TryProperty(contributor, "role", out var role) ||
                 !Numeric(role, "kind", 0) ||
+                role.EnumerateObject().Any(field => field.Name != "kind") ||
                 !TryProperty(contributor, "source", out var source) ||
                 !Numeric(source, "kind", 0) ||
+                source.EnumerateObject().Any(field => field.Name is not ("kind" or "id" or "version")) ||
+                !Null(source, "version") ||
                 !sources.Add(String(source, "id") ?? string.Empty) ||
-                (TryProperty(contributor, "manifestedProfile", out var manifested) &&
-                    manifested.ValueKind != JsonValueKind.Null) ||
-                (TryProperty(contributor, "historicalSourceIds", out var history) &&
-                    history.ValueKind != JsonValueKind.Null))
+                !Null(contributor, "manifestedProfile") ||
+                !Null(contributor, "historicalSourceIds"))
                 return false;
         }
         if (!sources.SetEquals(["species.human", "species.elf"]))
