@@ -72,8 +72,8 @@ public sealed class CharacterPresentationService(
                     if (active["rulesetId"]?.GetValue<string>() == saved.RulesetId &&
                         active["fingerprint"]?.GetValue<string>() == saved.Fingerprint)
                     {
-                        using var projection = JsonDocument.Parse(pinnedProjection);
-                        var root = projection.RootElement;
+                        using var pinnedDocument = JsonDocument.Parse(pinnedProjection);
+                        var root = pinnedDocument.RootElement;
                         if (root.TryGetProperty("rulesetId", out var id) &&
                             id.GetString() == saved.RulesetId &&
                             root.TryGetProperty("fingerprint", out var proof) &&
