@@ -144,6 +144,7 @@ export function requiredDirectOriginChoices(
 /** A preview object is not enough: incomplete results can still carry a profile. */
 export function isAuthorizedInitialNativeOrigin(preview: NativeOriginPreview | null): boolean {
     if (preview === null || preview.previewOnly !== true ||
+        !Array.isArray(preview.result?.issues) ||
         preview.result.issues.length !== 0) return false;
     return preview.result.status === "Authorized" || preview.result.status === 4;
 }
