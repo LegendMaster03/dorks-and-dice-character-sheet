@@ -28,6 +28,20 @@ public sealed class PostgresCharacterOriginDraftStore(CharacterSheetDbContext db
         var normalizedFingerprint = CharacterOriginDraftState.NormalizeFingerprint(fingerprint);
         var validJson = CharacterOriginDraftState.ValidateProposalJson(proposalJson);
 
+        // A completed Origin makes its initial draft an immutable audit input.
+        // Take the same character-root lock as CommitVerifiedAsync *before*
+        // reading authorized state or changing the draft. The two operations
+        // can not pass each other between a preview and an activation commit.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+        var character = await dbContext.CharacterSheets.FromSqlInterpolated(
+                $"""SELECT * FROM character_sheet_roots WHERE "CharacterId" = {characterId} FOR UPDATE""")
+            .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+        if (character is null ||
+            await dbContext.AuthorizedOrigins.AsNoTracking().AnyAsync(
+                item => item.CharacterId == characterId, cancellationToken))
+            return null;
+
         if (expectedRevision == 0)
         {
             var draft = new CharacterOriginDraftState(characterId, normalizedRuleset,
@@ -36,6 +50,7 @@ public sealed class PostgresCharacterOriginDraftStore(CharacterSheetDbContext db
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
                 return draft;
             }
             catch (DbUpdateException error) when (
@@ -58,6 +73,9 @@ public sealed class PostgresCharacterOriginDraftStore(CharacterSheetDbContext db
                 .SetProperty(item => item.Revision, expectedRevision + 1)
                 .SetProperty(item => item.UpdatedAt, changedAt),
                 cancellationToken);
-        return applied == 1 ? await GetAsync(characterId, cancellationToken) : null;
+        if (applied != 1)
+            return null;
+        await transaction.CommitAsync(cancellationToken);
+        return await GetAsync(characterId, cancellationToken);
     }
 }
