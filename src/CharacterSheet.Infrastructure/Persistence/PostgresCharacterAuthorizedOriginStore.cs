@@ -38,7 +38,7 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
 
         // Validate all input before beginning the database transaction. This
         // does not confer authority; callers must have verified the result.
-        _ = new CharacterAuthorizedOriginState(command.CharacterId, command.RulesetId,
+        var verifiedShape = new CharacterAuthorizedOriginState(command.CharacterId, command.RulesetId,
             command.Fingerprint, command.ProfileJson,
             command.ExpectedDraftRevision, command.RecordedAt);
         _ = new CharacterOriginEventReceipt(command.CharacterId, command.EventId,
@@ -67,7 +67,7 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
                 SELECT * FROM character_authorized_origins
                 WHERE "CharacterId" = {command.CharacterId} FOR UPDATE
                 """)
-            .SingleOrDefaultAsync(cancellationToken);
+            .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
 
         if (await db.OriginEventReceipts.AsNoTracking().AnyAsync(
             x => x.CharacterId == command.CharacterId && x.EventId == command.EventId,
@@ -78,31 +78,45 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
             state is not null && state.Revision != command.ExpectedOriginRevision)
             return new(AuthorizedOriginStoreStatus.OriginRevisionConflict, state?.Revision);
 
+        var nextRevision = command.ExpectedOriginRevision + 1;
         if (state is null)
         {
             if (!await db.CharacterSheets.AsNoTracking().AnyAsync(
                 x => x.CharacterId == command.CharacterId, cancellationToken))
                 return new(AuthorizedOriginStoreStatus.SheetNotInitialized);
-            state = new CharacterAuthorizedOriginState(
-                command.CharacterId, command.RulesetId, command.Fingerprint,
-                command.ProfileJson, command.ExpectedDraftRevision, command.RecordedAt);
-            db.AuthorizedOrigins.Add(state);
+            // New origin and first receipt are inserted together. An external
+            // writer racing this insert will lose to the PK/unique constraint.
+            db.AuthorizedOrigins.Add(verifiedShape);
         }
         else
         {
-            state.Replace(command.RulesetId, command.Fingerprint, command.ProfileJson,
-                command.ExpectedDraftRevision, command.RecordedAt);
+            // ExecuteUpdate avoids previously tracked instances in a reused
+            // request context overwriting an origin committed by another writer.
+            // The revision predicate remains mandatory even after FOR UPDATE.
+            var affected = await db.AuthorizedOrigins
+                .Where(x => x.CharacterId == command.CharacterId &&
+                    x.Revision == command.ExpectedOriginRevision)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(x => x.RulesetId, verifiedShape.RulesetId)
+                    .SetProperty(x => x.Fingerprint, verifiedShape.Fingerprint)
+                    .SetProperty(x => x.ProfileJson, verifiedShape.ProfileJson)
+                    .SetProperty(x => x.SourceDraftRevision, verifiedShape.SourceDraftRevision)
+                    .SetProperty(x => x.Revision, nextRevision)
+                    .SetProperty(x => x.UpdatedAt, command.RecordedAt),
+                    cancellationToken);
+            if (affected != 1)
+                return new(AuthorizedOriginStoreStatus.OriginRevisionConflict);
         }
 
         db.OriginEventReceipts.Add(new CharacterOriginEventReceipt(
-            command.CharacterId, command.EventId, state.Revision,
+            command.CharacterId, command.EventId, nextRevision,
             command.MethodRuleId, command.MethodId, command.AuthorizationKind,
             command.AuthorizationEvidenceId, command.RecordedAt));
         try
         {
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new(AuthorizedOriginStoreStatus.Applied, state.Revision);
+            return new(AuthorizedOriginStoreStatus.Applied, nextRevision);
         }
         catch (DbUpdateException error) when (
             error.InnerException is PostgresException postgres &&

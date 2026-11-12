@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
@@ -59,7 +60,7 @@ public sealed class AuthorizedOriginStatePersistenceTests
         Assert.NotNull(active);
         Assert.Equal(1, active.Revision);
         Assert.Equal("catalog-1", active.Fingerprint);
-        Assert.Equal(HumanProfile, active.ProfileJson);
+        AssertSameJson(HumanProfile, active.ProfileJson);
         Assert.Equal(1, active.SourceDraftRevision);
         var receipt = Assert.Single(await store.GetEventsAsync(id));
         Assert.Equal("origin:creation", receipt.EventId);
@@ -119,7 +120,7 @@ public sealed class AuthorizedOriginStatePersistenceTests
         Assert.Equal(AuthorizedOriginStoreStatus.Applied, second.Status);
         Assert.Equal(2, second.Revision);
         Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
-        Assert.Equal(ElfProfile, (await store.GetAsync(id))!.ProfileJson);
+        AssertSameJson(ElfProfile, (await store.GetAsync(id))!.ProfileJson);
     }
 
     [Fact]
@@ -142,9 +143,9 @@ public sealed class AuthorizedOriginStatePersistenceTests
                 .CommitVerifiedAsync(Command(id, 1, 1, "rite:one", ElfProfile)),
             new PostgresCharacterAuthorizedOriginStore(writerB)
                 .CommitVerifiedAsync(Command(id, 1, 1, "rite:two", HumanProfile)));
-        Assert.Single(results.Where(x => x.Status == AuthorizedOriginStoreStatus.Applied));
-        Assert.Single(results.Where(x => x.Status ==
-            AuthorizedOriginStoreStatus.OriginRevisionConflict));
+        Assert.Single(results, x => x.Status == AuthorizedOriginStoreStatus.Applied);
+        Assert.Single(results, x => x.Status ==
+            AuthorizedOriginStoreStatus.OriginRevisionConflict);
 
         await using var check = new CharacterSheetDbContext(database.CreateOptions());
         var store = new PostgresCharacterAuthorizedOriginStore(check);
@@ -174,6 +175,14 @@ public sealed class AuthorizedOriginStatePersistenceTests
             .GetAsync(id));
         Assert.Empty(await verify.OriginEventReceipts.ToArrayAsync());
         Assert.Empty(await verify.CharacterOriginDrafts.ToArrayAsync());
+    }
+
+    private static void AssertSameJson(string expected, string actual)
+    {
+        using var expectedDoc = JsonDocument.Parse(expected);
+        using var actualDoc = JsonDocument.Parse(actual);
+        Assert.True(JsonElement.DeepEquals(expectedDoc.RootElement, actualDoc.RootElement),
+            "Persisted jsonb and evaluated Origin JSON must be structurally equivalent.");
     }
 
     [Fact]

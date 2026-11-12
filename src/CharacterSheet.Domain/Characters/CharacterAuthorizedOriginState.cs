@@ -42,27 +42,6 @@ public sealed class CharacterAuthorizedOriginState
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
-    /// <summary>
-    /// Only the transactional origin store may call this after a separately
-    /// verified Rules Core result. The persisted profile never proves that an
-    /// independently asserted entitlement was originally earned.
-    /// </summary>
-    public void Replace(string rulesetId, string fingerprint, string profileJson,
-        long? sourceDraftRevision, DateTimeOffset changedAt)
-    {
-        if (Revision == long.MaxValue)
-            throw new InvalidOperationException("Origin revision can not be advanced.");
-        RulesetId = CharacterOriginDraftState.NormalizeRulesetId(rulesetId);
-        Fingerprint = CharacterOriginDraftState.NormalizeFingerprint(fingerprint)
-            ?? throw new ArgumentException("A native catalog fingerprint is required.", nameof(fingerprint));
-        ProfileJson = ValidateProfileJson(profileJson);
-        if (sourceDraftRevision is < 1)
-            throw new ArgumentOutOfRangeException(nameof(sourceDraftRevision));
-        SourceDraftRevision = sourceDraftRevision;
-        Revision++;
-        UpdatedAt = changedAt;
-    }
-
     public static string ValidateProfileJson(string profileJson)
     {
         if (string.IsNullOrWhiteSpace(profileJson) ||
