@@ -102,6 +102,34 @@ export interface NativeOriginStateResponse {
     effectiveMechanicsReady: false;
 }
 
+/**
+ * A stored parent snapshot is useful for inspection by the same owner, but
+ * does not establish the actual parent relationship, ruleset freshness,
+ * eligibility or an inheritable grant list.
+ */
+export interface NativeOriginParentSnapshotResponse {
+    status: "ready";
+    snapshot: {
+        parentCharacterId: string;
+        rulesetId: string;
+        fingerprint: string;
+        revision: number;
+        underlying: {
+            speciesId: string | null;
+            ancestryId: string | null;
+            profileId: string | null;
+        };
+        current: {
+            speciesId: string | null;
+            ancestryId: string | null;
+            profileId: string | null;
+        };
+    };
+    inspectionOnly: true;
+    inheritanceAuthorized: false;
+    effectiveMechanicsReady: false;
+}
+
 export interface NativeOriginActivationResponse {
     status: "applied";
     revision: number;
@@ -118,7 +146,7 @@ function originPath(characterId: string, suffix: "draft" | "state" | "activate-n
 export function originBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    suffix: "draft" | "state" | "activate-native"
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}`
 ): string {
     return buildCharacterSheetApiUrl(environment, originPath(characterId, suffix));
 }
@@ -126,7 +154,7 @@ export function originBackendUrl(
 async function requestOrigin(
     environment: HostEnvironment,
     characterId: string,
-    suffix: "draft" | "state" | "activate-native",
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}`,
     method: "GET" | "PUT" | "POST",
     body: object | undefined,
     fetcher: FetchLike
@@ -272,6 +300,35 @@ export async function loadOriginState(
         undefined, fetcher);
     assertStateResponse(result);
     return result;
+}
+
+/** Read metadata for a second character after Site independently checks both owners. */
+export async function inspectOwnerVisibleParentOrigin(
+    environment: HostEnvironment,
+    characterId: string,
+    parentCharacterId: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<NativeOriginParentSnapshotResponse> {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parentCharacterId)) {
+        throw new Error("Parent snapshot inspection requires a Site Character ID.");
+    }
+    const suffix = `parent-snapshot/${encodeURIComponent(parentCharacterId)}`;
+    const result = await requestOrigin(environment, characterId,
+        suffix, "GET", undefined, fetcher);
+    if (!isObject(result) || result.status !== "ready" ||
+        result.inspectionOnly !== true || result.inheritanceAuthorized !== false ||
+        result.effectiveMechanicsReady !== false ||
+        !isObject(result.snapshot) ||
+        result.snapshot.parentCharacterId !== parentCharacterId ||
+        !Number.isSafeInteger(result.snapshot.revision) ||
+        (result.snapshot.revision as number) < 1 ||
+        !isObject(result.snapshot.underlying) || !isObject(result.snapshot.current) ||
+        Object.hasOwn(result.snapshot, "independentGrants") ||
+        Object.hasOwn(result.snapshot.underlying, "inherentGrants") ||
+        Object.hasOwn(result.snapshot.current, "inherentGrants")) {
+        throw new Error("Parent Origin inspection returned an invalid trust contract.");
+    }
+    return result as unknown as NativeOriginParentSnapshotResponse;
 }
 
 export async function activateNativeOrigin(
