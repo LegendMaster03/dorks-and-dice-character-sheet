@@ -40,6 +40,159 @@ export function isDirectOriginProposal(proposal: NativeOriginDraftProposal): boo
     return proposal.intent === 0 || proposal.intent === "Direct";
 }
 
+/**
+ * Two biological *source references*, not verified identities or fully
+ * manifested profiles for actual parent characters. This is an evidence
+ * draft only: no inherent grants, inheritance decisions or approvals.
+ *
+ * The general Origin contract supports arbitrary input roles and numbers;
+ * this editor exposes only the common two-biological-parent example.
+ */
+export type MixedNativeParentSlot = "parent-one" | "parent-two";
+export type MixedNativeSourceCategory = "species" | "ancestry";
+
+export interface MixedNativeParentSource {
+    slot: MixedNativeParentSlot;
+    sourceId: string | null;
+}
+
+function nativeBiologicalMethod(proposal: NativeOriginDraftProposal): boolean {
+    return proposal.method?.ruleId === "rule.creature-origination" &&
+        proposal.method.methodId === "biological";
+}
+
+function containsExtraAuthority(proposal: NativeOriginDraftProposal): boolean {
+    return [
+        "tableDecisions", "resolutions", "relationships", "inputRequirements",
+        "constraints", "history", "existingConfiguration",
+        "existingEffectiveConfiguration", "existingEffectiveConfigurationBasis",
+        "activeTemporaryTransformation", "otherActiveTemporaryTransformations",
+        "temporaryTransformationPrecedence", "processCreatureTypeId"
+    ].some(field => {
+        const value = proposal[field];
+        return value !== undefined && value !== null &&
+            !(Array.isArray(value) && value.length === 0);
+    });
+}
+
+export function isEditableDirectNativeOrigin(
+    proposal: NativeOriginDraftProposal
+): boolean {
+    return isDirectOriginProposal(proposal) &&
+        nativeBiologicalMethod(proposal) &&
+        proposal.contributors.length === 0 && proposal.candidates.length === 0 &&
+        !containsExtraAuthority(proposal);
+}
+
+export function isEditableMixedNativeOrigin(
+    proposal: NativeOriginDraftProposal
+): boolean {
+    if (!(proposal.intent === 1 || proposal.intent === "Mixed") ||
+        !nativeBiologicalMethod(proposal) || proposal.candidates.length !== 0 ||
+        proposal.manifestations.length !== 0 ||
+        proposal.selectedSpeciesId != null || proposal.selectedAncestryId != null ||
+        containsExtraAuthority(proposal) || proposal.contributors.length > 2) return false;
+
+    const slots = new Set<string>();
+    return proposal.contributors.every(raw => {
+        if (!isRecord(raw) || !isRecord(raw.role) || !isRecord(raw.source) ||
+            (raw.id !== "parent-one" && raw.id !== "parent-two") ||
+            slots.has(raw.id) ||
+            !(raw.role.kind === 0 || raw.role.kind === "BiologicalParent") ||
+            !(raw.source.kind === 0 || raw.source.kind === "Native") ||
+            typeof raw.source.id !== "string" ||
+            !/^(species|ancestry)\.[a-z0-9]+(?:[.\-][a-z0-9]+)*$/.test(raw.source.id) ||
+            raw.manifestedProfile != null || raw.historicalSourceIds != null ||
+            raw.source.version != null) return false;
+        slots.add(raw.id);
+        return true;
+    });
+}
+
+/** Switching intent discards all old manifested choices and source evidence. */
+export function changeNativeOriginMode(
+    proposal: NativeOriginDraftProposal, mode: "direct" | "mixed"
+): NativeOriginDraftProposal {
+    if (!isEditableDirectNativeOrigin(proposal) &&
+        !isEditableMixedNativeOrigin(proposal)) {
+        throw new Error("This Origin contains evidence that the basic editor can not replace.");
+    }
+    return {
+        id: proposal.id,
+        intent: mode === "direct" ? 0 : 1,
+        method: { ruleId: "rule.creature-origination", methodId: "biological" },
+        contributors: [],
+        candidates: [],
+        manifestations: [],
+        selectedSpeciesId: null,
+        selectedAncestryId: null
+    };
+}
+
+/** The references are typed native options, but not authenticated parent profiles. */
+export function changeMixedNativeParent(
+    proposal: NativeOriginDraftProposal,
+    slot: MixedNativeParentSlot,
+    selectedSourceId: string | null
+): NativeOriginDraftProposal {
+    if (!isEditableMixedNativeOrigin(proposal)) {
+        throw new Error("Mixed native source references require a plain biological evidence draft.");
+    }
+    if (slot !== "parent-one" && slot !== "parent-two") {
+        throw new Error("An unrecognized biological source slot was supplied.");
+    }
+    if (selectedSourceId !== null &&
+        !/^(species|ancestry)\.[a-z0-9]+(?:[.\-][a-z0-9]+)*$/.test(selectedSourceId)) {
+        throw new Error("Only native Species or Ancestry source identities are supported.");
+    }
+
+    const contributors = proposal.contributors.filter(raw =>
+        isRecord(raw) && raw.id !== slot);
+    if (selectedSourceId !== null) {
+        contributors.push({
+            id: slot,
+            role: { kind: 0 },
+            source: { kind: 0, id: selectedSourceId }
+        });
+    }
+    return {
+        ...proposal,
+        // A changed parent cannot reuse earlier manifestation evidence,
+        // native relationship suggestions, or independently claimed outcomes.
+        contributors: contributors.sort((a, b) =>
+            String((a as Record<string, unknown>).id).localeCompare(
+                String((b as Record<string, unknown>).id))),
+        manifestations: [],
+        candidates: [],
+        selectedSpeciesId: null,
+        selectedAncestryId: null
+    };
+}
+
+export function mixedNativeParentSources(
+    proposal: NativeOriginDraftProposal
+): readonly MixedNativeParentSource[] {
+    const sourceFor = (slot: MixedNativeParentSlot): string | null => {
+        const raw = proposal.contributors.find(value =>
+            isRecord(value) && value.id === slot);
+        return isRecord(raw) && isRecord(raw.source) &&
+            typeof raw.source.id === "string" ? raw.source.id : null;
+    };
+    return [
+        { slot: "parent-one", sourceId: sourceFor("parent-one") },
+        { slot: "parent-two", sourceId: sourceFor("parent-two") }
+    ];
+}
+
+/** Any initial mixed construction requires a separate verified ruling path. */
+export function canActivateDirectNativeOrigin(
+    proposal: NativeOriginDraftProposal | null,
+    preview: NativeOriginPreview | null
+): boolean {
+    return proposal !== null && isEditableDirectNativeOrigin(proposal) &&
+        isAuthorizedInitialNativeOrigin(preview);
+}
+
 export function changeDirectOriginIdentity(
     proposal: NativeOriginDraftProposal,
     target: "species" | "ancestry",
