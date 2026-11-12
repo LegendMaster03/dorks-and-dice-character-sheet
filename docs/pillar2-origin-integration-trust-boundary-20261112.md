@@ -468,3 +468,54 @@ database lock so later draft edits can not invalidate an event's provenance. The
 The read-only `GET /api/characters/{characterId}/origin/state` requires Site character ownership, works for archived characters as read-only, omits private authorization-evidence IDs, and returns `effectiveMechanicsReady: false`. A stored profile is a verified-history input **only after** a future service revalidates it against current native rules and independently earned entitlements.
 
 **Not yet implemented:** a general authorized modification/reconstruction service (the new private caller supports **initial direct first-party construction only**), trusted independent entitlement/applicability loading for derived mechanics, campaign-scoped DM decision verification, executable Rite/other transition APIs, cross-domain effective projection, and mixed/nested builder UI. No user-supplied draft or receipt is an authorized Origin. Validate forged prior state and grants, unauthorized DM claims, real native content evolution, source-specific form interactions and full Human–Elf workflows before granting those capabilities. Neither mocked gateway tests nor a stored record demonstrate live end-to-end rules authority.
+
+## Restricted campaign DM browser review — later Phase 5 increment
+
+The application now has a **separate** tool route
+`/dm-origin-review/{campaignId}/{characterId}` under the registered
+Character Sheet Tool. It deliberately bypasses the owner-only
+`/characters/{characterId}` editor/bootstrap: being the campaign's DM
+does not confer general permission to read another person's Character,
+inventory, Class, private sheet, or build.
+
+The route invokes only the restricted
+`GET /api/characters/{characterId}/origin/mixed-review?campaignId=...`
+endpoint, which authenticates the active DM and exact active
+campaign–character pair **before reading the draft**. The result
+contains the current native candidate source summaries, raw offered
+values, proposal ID, catalog pin and expected draft revision. It
+explicitly sets `previewOnly: true` and `activeGrants: false`.
+It is not a list of mechanically effective entitlements or a reusable
+authorization credential.
+
+The DM reviews and explicitly selects five distinct candidate offer
+IDs for the **current** Human–Elf example. The UI excludes candidates
+requiring unsupported additional authored choices; it never copies
+entire parent packages or invents a generic Half-Elf. Activation sends
+only `campaignId`, `expectedDraftRevision` and `candidateIds` to
+`POST .../activate-mixed-approved`. The server reloads the saved
+owner draft, freshly checks Site scope and current Rules Core content,
+constructs its own scoped DM decisions, validates the final source
+occurrences and atomically commits the Origin with completed-event
+audit or rejects without granting anything. A client-side checkbox
+selection is **not** the decision record.
+
+`origin-dm-api.ts` validates the restricted read/approval responses,
+`origin-dm-workflow.ts` prevents stale review responses and applies
+only the five selected offers for the exact loaded target, and
+`origin-dm-review.ts` renders the standalone DM screen. Their Node
+tests are included in the explicit frontend build runner; route tests
+verify valid and malformed campaign/character identifiers. A fresh
+review clears client-side selections. A server-side rejection after
+role demotion or stale content is displayed as failure, never success.
+
+**Current limitations:** This is a narrow DM browser entrypoint, not
+yet a discoverable campaign navigation item or a general review
+workbench. It has not been exercised as a deployed three-service
+browser workflow. Source exemplars do not authenticate existing
+individual parents; generic mixed inheritance, nonbiological
+origination, special authored choices, and whole-character Class/
+Background/Upbringing integration remain outside this increment.
+The `effectiveMechanicsReady: false` boundary still applies.
+The future partial state-slot architecture is separately documented
+and does not change Phase 5 requirements.
