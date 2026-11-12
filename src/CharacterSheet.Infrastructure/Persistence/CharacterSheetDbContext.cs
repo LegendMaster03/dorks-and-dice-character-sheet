@@ -394,6 +394,9 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         originEvent.Property(value => value.MethodId).HasMaxLength(180).IsRequired();
         originEvent.Property(value => value.AuthorizationKind).HasMaxLength(32).IsRequired();
         originEvent.Property(value => value.AuthorizationEvidenceId).HasMaxLength(320).IsRequired();
+        originEvent.Property(value => value.ApprovalActorUserId);
+        originEvent.Property(value => value.ApprovalCampaignId);
+        originEvent.Property(value => value.ApprovedDecisionsJson).HasColumnType("jsonb");
         originEvent.Property(value => value.CreatedAt).IsRequired();
         originEvent.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
             .HasDatabaseName("UX_character_origin_event_receipts_Revision").IsUnique();
