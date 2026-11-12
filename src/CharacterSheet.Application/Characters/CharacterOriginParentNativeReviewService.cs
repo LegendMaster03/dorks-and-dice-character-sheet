@@ -149,7 +149,7 @@ public sealed class CharacterOriginParentNativeReviewService(
     }
 
     private static bool SameSnapshot(
-        Domain.Characters.CharacterAuthorizedOriginState saved,
+        global::CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState saved,
         CharacterOriginParentSnapshot prior) =>
         saved.CharacterId == prior.ParentCharacterId &&
         saved.RulesetId == prior.RulesetId &&

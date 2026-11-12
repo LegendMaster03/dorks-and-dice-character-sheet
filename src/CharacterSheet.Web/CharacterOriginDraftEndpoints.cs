@@ -50,6 +50,16 @@ public static class CharacterOriginDraftEndpoints
             Respond(await service.InspectAsync(
                 characterId, parentCharacterId, cancellationToken)));
 
+        // Server-side native freshness assessment of an owner-visible
+        // parent's committed *direct first-party* initial Origin only.
+        // No mechanic grant or mixed-parent relationship is authorized.
+        group.MapGet("/parent-native-review/{parentCharacterId:guid}", async (
+            Guid characterId, Guid parentCharacterId,
+            CharacterOriginParentNativeReviewService service,
+            CancellationToken cancellationToken) =>
+            Respond(await service.ReviewAsync(
+                characterId, parentCharacterId, cancellationToken)));
+
         group.MapGet("/state", async (
             Guid characterId, CharacterOriginStateService service,
             CancellationToken cancellationToken) =>
@@ -90,6 +100,44 @@ public static class CharacterOriginDraftEndpoints
                 Error(409, "legacy_origin_selection_requires_reconciliation"),
             CharacterOriginActivationStatus.NotAuthorizedByNativeRules =>
                 Error(422, "native_origin_not_authorized"),
+            _ => Error(503, "native_origin_verification_unavailable")
+        };
+
+    private static IResult Respond(CharacterOriginParentNativeReviewResult result) =>
+        result.Status switch
+        {
+            CharacterOriginParentNativeReviewStatus.Ready =>
+                Results.Ok(new
+                {
+                    status = "ready",
+                    review = result.Review,
+                    inspectedOriginMatchesLatestNativeCatalog = true,
+                    inspectionOnly = true,
+                    inheritanceAuthorized = false,
+                    effectiveMechanicsReady = false
+                }),
+            CharacterOriginParentNativeReviewStatus.Unauthenticated =>
+                Results.Unauthorized(),
+            CharacterOriginParentNativeReviewStatus.NotFoundOrNotOwned =>
+                Results.NotFound(),
+            CharacterOriginParentNativeReviewStatus.ProjectionUnavailable =>
+                Error(503, "character_authorization_unavailable"),
+            CharacterOriginParentNativeReviewStatus.CharacterSheetNotInitialized =>
+                Error(409, "character_sheet_not_initialized"),
+            CharacterOriginParentNativeReviewStatus.ParentOriginMissing =>
+                Error(409, "parent_origin_not_committed"),
+            CharacterOriginParentNativeReviewStatus.StoredProfileUnverifiable =>
+                Error(409, "parent_origin_stored_profile_unverifiable"),
+            CharacterOriginParentNativeReviewStatus.UnsupportedParentHistory =>
+                Error(422, "parent_origin_history_requires_reconciliation"),
+            CharacterOriginParentNativeReviewStatus.OriginSourceDraftUnavailable =>
+                Error(409, "parent_origin_source_draft_unavailable"),
+            CharacterOriginParentNativeReviewStatus.NativeProfileChanged =>
+                Error(409, "parent_origin_native_profile_changed"),
+            CharacterOriginParentNativeReviewStatus.ConcurrentOriginChange =>
+                Error(409, "parent_origin_changed_during_review"),
+            CharacterOriginParentNativeReviewStatus.NativeRulesUnresolved =>
+                Error(422, "parent_origin_native_rules_unresolved"),
             _ => Error(503, "native_origin_verification_unavailable")
         };
 
