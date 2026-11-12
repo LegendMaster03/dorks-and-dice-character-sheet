@@ -5,6 +5,7 @@ import {
     loadOriginDraft,
     loadOriginState,
     inspectOwnerVisibleParentOrigin,
+    reviewOwnerVisibleParentNativeOrigin,
     originBackendUrl,
     previewOriginProposal,
     saveOriginDraft
@@ -287,4 +288,63 @@ test("parent snapshot inspection rejects malformed IDs and inaccessible parents"
         environment, id, "9c97ec43-39bd-45d9-9264-64387d0f6cb6",
         async () => Response.json({ error: "not_found" }, { status: 404 })),
     error => error instanceof CharacterSheetApiError && error.status === 404);
+});
+
+test("native parent Origin review is inspection-only, not an inheritance grant", async () => {
+    const parentId = "9c97ec43-39bd-45d9-9264-64387d0f6cb6";
+    const expected = {
+        status: "ready",
+        review: {
+            parentCharacterId: parentId, rulesetId: "first-party-001",
+            storedRevision: 1, latestNativeFingerprint: "native-current",
+            verifiedProposalId: "parent-creation-1"
+        },
+        inspectedOriginMatchesLatestNativeCatalog: true,
+        inspectionOnly: true,
+        inheritanceAuthorized: false,
+        effectiveMechanicsReady: false
+    };
+    const calls = [];
+    const result = await reviewOwnerVisibleParentNativeOrigin(
+        environment, id, parentId, async (url, options) => {
+            calls.push({ url: String(url), method: options.method,
+                credentials: options.credentials, body: options.body });
+            return Response.json(expected);
+        });
+    assert.deepEqual(result, expected);
+    assert.deepEqual(calls, [{
+        url: `/tool-host/character-sheet/api/upstream/api/characters/${id}/origin/parent-native-review/${parentId}`,
+        method: "GET", credentials: "same-origin", body: undefined
+    }]);
+    assert.equal(result.inheritanceAuthorized, false);
+
+    for (const changed of [
+        { ...expected, inheritanceAuthorized: true },
+        { ...expected, inspectedOriginMatchesLatestNativeCatalog: false },
+        { ...expected, inspectionOnly: false },
+        { ...expected, effectiveMechanicsReady: true },
+        { ...expected, review: { ...expected.review, parentCharacterId: id } },
+        { ...expected, review: { ...expected.review,
+            grants: [{ id: "fabricated-origin-grant" }] } },
+        { ...expected, review: { ...expected.review,
+            profile: { underlying: { speciesId: "species.human" } } } }
+    ]) {
+        await assert.rejects(() => reviewOwnerVisibleParentNativeOrigin(
+            environment, id, parentId, async () => Response.json(changed)),
+        /invalid trust contract/);
+    }
+});
+
+test("native parent Origin review never accepts a path traversal or inaccessible parent", async () => {
+    let attempts = 0;
+    await assert.rejects(() => reviewOwnerVisibleParentNativeOrigin(
+        environment, id, "../private", async () => {
+            attempts++;
+            return Response.json({});
+        }), /Site Character ID/);
+    assert.equal(attempts, 0);
+    await assert.rejects(() => reviewOwnerVisibleParentNativeOrigin(
+        environment, id, "9c97ec43-39bd-45d9-9264-64387d0f6cb6",
+        async () => Response.json({ error: "not_found" }, { status: 404 })),
+    err => err instanceof CharacterSheetApiError && err.status === 404);
 });
