@@ -131,6 +131,26 @@ export interface NativeOriginParentSnapshotResponse {
     effectiveMechanicsReady: false;
 }
 
+/**
+ * Fresh verification of only a committed direct native initial Origin.
+ * It is still not biological parentage, inheritability, a campaign ruling,
+ * or a verification of independently earned/mechanically effective grants.
+ */
+export interface NativeOriginParentNativeReviewResponse {
+    status: "ready";
+    review: {
+        parentCharacterId: string;
+        rulesetId: string;
+        storedRevision: number;
+        latestNativeFingerprint: string;
+        verifiedProposalId: string;
+    };
+    inspectedOriginMatchesLatestNativeCatalog: true;
+    inspectionOnly: true;
+    inheritanceAuthorized: false;
+    effectiveMechanicsReady: false;
+}
+
 export interface NativeOriginActivationResponse {
     status: "applied";
     revision: number;
@@ -138,7 +158,7 @@ export interface NativeOriginActivationResponse {
 }
 
 function originPath(characterId: string,
-    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}`): string {
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}`): string {
     if (characterId.trim().length === 0) {
         throw new Error("A Site Character ID is required for Origin state.");
     }
@@ -148,7 +168,7 @@ function originPath(characterId: string,
 export function originBackendUrl(
     environment: HostEnvironment,
     characterId: string,
-    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}`
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}`
 ): string {
     return buildCharacterSheetApiUrl(environment, originPath(characterId, suffix));
 }
@@ -156,7 +176,7 @@ export function originBackendUrl(
 async function requestOrigin(
     environment: HostEnvironment,
     characterId: string,
-    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}`,
+    suffix: "draft" | "state" | "activate-native" | `parent-snapshot/${string}` | `parent-native-review/${string}`,
     method: "GET" | "PUT" | "POST",
     body: object | undefined,
     fetcher: FetchLike
@@ -331,6 +351,40 @@ export async function inspectOwnerVisibleParentOrigin(
         throw new Error("Parent Origin inspection returned an invalid trust contract.");
     }
     return result as unknown as NativeOriginParentSnapshotResponse;
+}
+
+/**
+ * Reviews an owner-visible parent's original construction through the
+ * current native Rules Core. This does not attach the parent to any draft.
+ */
+export async function reviewOwnerVisibleParentNativeOrigin(
+    environment: HostEnvironment,
+    characterId: string,
+    parentCharacterId: string,
+    fetcher: FetchLike = window.fetch.bind(window)
+): Promise<NativeOriginParentNativeReviewResponse> {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parentCharacterId)) {
+        throw new Error("Parent native review requires a Site Character ID.");
+    }
+    const suffix = `parent-native-review/${encodeURIComponent(parentCharacterId)}` as const;
+    const result = await requestOrigin(environment, characterId,
+        suffix, "GET", undefined, fetcher);
+    if (!isObject(result) || result.status !== "ready" ||
+        result.inspectedOriginMatchesLatestNativeCatalog !== true ||
+        result.inspectionOnly !== true || result.inheritanceAuthorized !== false ||
+        result.effectiveMechanicsReady !== false || !isObject(result.review) ||
+        result.review.parentCharacterId !== parentCharacterId ||
+        !Number.isSafeInteger(result.review.storedRevision) ||
+        (result.review.storedRevision as number) < 1 ||
+        typeof result.review.rulesetId !== "string" ||
+        typeof result.review.latestNativeFingerprint !== "string" ||
+        typeof result.review.verifiedProposalId !== "string" ||
+        Object.hasOwn(result.review, "grants") ||
+        Object.hasOwn(result.review, "profile") ||
+        Object.hasOwn(result.review, "independentGrants")) {
+        throw new Error("Parent native Origin review returned an invalid trust contract.");
+    }
+    return result as unknown as NativeOriginParentNativeReviewResponse;
 }
 
 export async function activateNativeOrigin(
