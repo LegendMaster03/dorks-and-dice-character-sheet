@@ -68,8 +68,10 @@ public sealed class CharacterPresentationWorkflowTests
         Assert.Contains("Species/Ancestry",
             document.GetProperty("mechanicsMessage").GetString()!, StringComparison.Ordinal);
         var mechanics = document.GetProperty("mechanics");
-        Assert.Equal(JsonValueKind.Null, mechanics.GetProperty("abilityValues").ValueKind);
-        Assert.Equal(JsonValueKind.Null, mechanics.GetProperty("savingThrows").ValueKind);
+        // Null-valued optional mechanics fields are omitted by the public
+        // presentation serializer rather than emitted as JSON null.
+        Assert.False(mechanics.TryGetProperty("abilityValues", out _));
+        Assert.False(mechanics.TryGetProperty("savingThrows", out _));
         Assert.Equal(15, factory.Native.LastAbilityScore);
         Assert.Equal("class.warlock", factory.Native.LastClassId);
     }
