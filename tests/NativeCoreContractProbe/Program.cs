@@ -252,8 +252,37 @@ Ensure(categoryForgery.Issues.Any(issue =>
     !categoryForgery.Profile!.Underlying.InherentGrants.Any(grant =>
         grant.Identity.Occurrence.OccurrencePath == "/traits/0"),
     "A different native category was incorrectly accepted as a Human Skill choice.");
+// A Human–Elf mixed draft supplies native *source references* only. The
+// deconstructor can inspect each authored occurrence, but no inheritance
+// rule, biological compatibility, DM ruling, or effective grants are inferred.
+var mixedHumanElf = new NativeOriginProposal(
+    "mixed-human-elf-evidence", NativeOriginIntent.Mixed, firstPartyMethod,
+    [
+        new NativeOriginContributor("parent-one",
+            new(NativeOriginInputKind.BiologicalParent),
+            new(NativeOriginSourceKind.Native, "species.human")),
+        new NativeOriginContributor("parent-two",
+            new(NativeOriginInputKind.BiologicalParent),
+            new(NativeOriginSourceKind.Native, "species.elf"))
+    ], [], []);
+var mixedReviewed = new NativeOriginFirstPartyChoiceEvaluator(catalog)
+    .Evaluate(mixedHumanElf);
+Ensure(mixedReviewed.Status != NativeOriginConstructionStatus.Authorized &&
+    mixedReviewed.Profile is not null &&
+    mixedReviewed.Profile.Underlying.SpeciesId is null &&
+    mixedReviewed.Profile.Underlying.AncestryId is null &&
+    mixedReviewed.Profile.Underlying.InherentGrants.Count == 0 &&
+    mixedReviewed.EvaluatedProposal.Candidates.Any(candidate =>
+        candidate.ContributorId == "parent-one" &&
+        candidate.Identity.Occurrence.Source.Id == "species.human") &&
+    mixedReviewed.EvaluatedProposal.Candidates.Any(candidate =>
+        candidate.ContributorId == "parent-two" &&
+        candidate.Identity.Occurrence.Source.Id == "species.elf"),
+    "Human–Elf native source evidence must remain inspectable but not automatically authorized.");
+
 Console.WriteLine("Phase 5 Origin native-contract checks passed: Orc authorized; " +
-    "Human native Skill verified; Origin feat remains incomplete.");
+    "Human native Skill verified; Human-Elf sources inspected but unresolved; " +
+    "Origin feat remains incomplete.");
 
 #endif
 
