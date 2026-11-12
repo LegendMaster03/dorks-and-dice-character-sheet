@@ -390,7 +390,13 @@ function renderWorkspace(
                 void originWorkflow.setFiniteChoice(character.characterId,
                     candidateId, requirementId, id),
             activate: () => void originWorkflow.activate(character.characterId),
-            reload: () => void originWorkflow.load(character.characterId)
+            reload: () => void originWorkflow.load(character.characterId),
+            loadParentOptions: () => void originWorkflow.loadParentOptions(character.characterId),
+            selectParentSource: (contributorId, parentCharacterId) =>
+                originWorkflow.selectParentSource(character.characterId,
+                    contributorId, parentCharacterId),
+            reviewParentSources: () =>
+                void originWorkflow.reviewParentSources(character.characterId)
         });
     return workspace;
 }
