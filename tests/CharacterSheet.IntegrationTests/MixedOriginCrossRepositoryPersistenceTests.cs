@@ -1057,19 +1057,18 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             builder.Services.AddSingleton(native);
             builder.Services.AddSingleton<INativeRulesCoreGateway>(native);
             builder.Services.AddSingleton(TimeProvider.System);
+            // Minimal APIs classify service parameters against the complete
+            // application's DI registry when compiling the route group, even
+            // though this test invokes only the mixed-activation endpoint.
+            builder.Services.AddScoped<CharacterOriginDraftService>();
+            builder.Services.AddScoped<CharacterOriginStateService>();
+            builder.Services.AddScoped<CharacterOriginInitialActivationService>();
+            builder.Services.AddScoped<CharacterOriginMixedReviewService>();
+            builder.Services.AddScoped<CharacterOriginParentSnapshotService>();
+            builder.Services.AddScoped<CharacterOriginParentNativeReviewService>();
+            builder.Services.AddScoped<CharacterOriginParentSourceAlignmentService>();
             builder.Services.AddScoped<CharacterOriginMixedActivationService>();
             var app = builder.Build();
-            // Temporary focused test instrumentation: surface failures thrown
-            // before an endpoint delegate can format its own error response.
-            app.Use(async (context, continuation) =>
-            {
-                try { await continuation(context); }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine("PHASE5_TEST_HTTP_FAILURE: " + error);
-                    throw;
-                }
-            });
             app.MapCharacterOriginDraftEndpoints();
             await app.StartAsync();
             var server = app.Services.GetRequiredService<IServer>();
