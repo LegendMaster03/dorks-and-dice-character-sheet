@@ -1059,6 +1059,17 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services.AddScoped<CharacterOriginMixedActivationService>();
             var app = builder.Build();
+            // Temporary focused test instrumentation: surface failures thrown
+            // before an endpoint delegate can format its own error response.
+            app.Use(async (context, continuation) =>
+            {
+                try { await continuation(context); }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine("PHASE5_TEST_HTTP_FAILURE: " + error);
+                    throw;
+                }
+            });
             app.MapCharacterOriginDraftEndpoints();
             await app.StartAsync();
             var server = app.Services.GetRequiredService<IServer>();
