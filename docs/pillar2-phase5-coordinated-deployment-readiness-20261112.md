@@ -8,11 +8,11 @@
 
 | Service | Branch | Verified commit | Integration status |
 | --- | --- | --- | --- |
-| Rules Core | `feature/pillar2-phase5-origin-api-20261112` | `88124a81b4891ba5c336ecb9d8bf9afae9dc1224` | Closed PR #151; preserved branch passed full release-suite CI |
-| Character Sheet | `feature/pillar2-phase5-origin-integration-20261112` | `0bb25ed81b1d09cb3d3145cc01ae605cb3df0796` (before this revision) | Draft PR #67 |
+| Rules Core | `feature/pillar2-phase5-origin-api-20261112` | `88124a81b4891ba5c336ecb9d8bf9afae9dc1224` | New draft PR #152 targets `main`; branch passed full release-suite CI |
+| Character Sheet | `feature/pillar2-phase5-origin-integration-20261112` | `d0abb9e4a6f7165c88d228318ec84c669776dcc0` (before this revision) | Draft PR #67 |
 | Site | `feature/pillar2-origin-dm-campaign-authority-20261112` | `e8d0cb7d89de71aa337293b8f36d22bac98687c3` | Draft PR #50; delegated-role-refresh correction included |
 
-All three source branches were zero commits behind `main` at review. The Core Phase 5 branch is 375 commits ahead of `main`, with 155 changed files including the surviving parent Pillar 2 history and the source-divergence reconciliation. The GitHub issue timeline confirms that the repository owner closed PRs #141 and #151 and deleted the original parent branch on November 12; no merge occurred, and their history remains reachable in the Phase 5 branch. The reason for cleanup is not recorded. Do not recreate the removed branch, reopen the PRs, or rewrite history. A future new draft integration PR may target `main` directly from the preserved branch after reviewing the cumulative changes.
+All three source branches were zero commits behind `main` at review. The Core Phase 5 branch is 375 commits ahead of `main`, with 155 changed files including the surviving parent Pillar 2 history and the source-divergence reconciliation. The GitHub issue timeline confirms that the repository owner closed PRs #141 and #151 and deleted the original parent branch on November 12; no merge occurred, and their history remains reachable in the Phase 5 branch. The reason for cleanup is not recorded. Do not recreate the removed branch, reopen the PRs, or rewrite history. New [draft Rules Core PR #152](https://github.com/LegendMaster03/dorks-and-dice-rules-core/pull/152) now targets `main` directly from the preserved branch, without reopening the previous PRs. This makes the entire cumulative change set available for review; it does not grant merge permission.
 
 ## Verified cross-service contract
 
@@ -41,7 +41,7 @@ The restricted Human–Elf example accepts an explicit table-approved set of nat
 
 ## Proposed controlled release sequence (requires explicit authorization)
 
-1. The Core source reconciliation is complete and both expanded branch CI and the full release-validation suite have passed. Review the entire cumulative Core integration diff before preparing an appropriate **new** draft integration PR without reopening deliberately closed PRs or resurrecting their parent branch. Review Character Sheet PR #67 and Site PR #50 against the compatible heads above. The future integrated **main-push** CI run is still required before deployment.
+1. The Core source reconciliation is complete and both expanded branch CI and the full release-validation suite have passed. Review the entire cumulative diff in new **draft PR #152**, without reopening the deliberately closed PRs or resurrecting their parent branch. Review Character Sheet PR #67 and Site PR #50 against compatible heads. PR-triggered Core CI is running as of this record; even successful PR CI will not replace the required integrated **main-push** release check before deployment.
 2. Confirm database backups, migration compatibility, service addresses, authentication ticket audiences, and rollback approach before any release. Confirm both distinct Site accounts and a disposable test campaign/character.
 3. After coordinated merge authorization, **deploy Rules Core using Full deploy first** and verify its authenticated endpoint and readiness. Then deploy Character Sheet and confirm its readiness and owner flow. **Deploy the Site navigation last** to avoid displaying links to unavailable Sheet routes. DM access before Site's new authorization projection must fail closed. Alternative branch-based staging requires a separately established and reviewed deployment path; the existing production workflows do not deploy arbitrary feature branches.
 4. Record the deployed Git SHAs. Stop and roll back according to the approved procedure if any compatibility, readiness, or authorization check fails.
