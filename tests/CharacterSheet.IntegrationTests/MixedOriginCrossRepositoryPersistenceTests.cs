@@ -574,11 +574,12 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         // both rows. This nontransient database defect remains an opaque 500.
         await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
             await db.Database.ExecuteSqlRawAsync("""
-                CREATE FUNCTION phase5_receipt_failure() RETURNS trigger AS $
-                BEGIN
-                    RAISE EXCEPTION 'fixture receipt failure' USING ERRCODE = 'P0001';
-                END;
-                $ LANGUAGE plpgsql;
+                CREATE FUNCTION phase5_receipt_failure() RETURNS trigger
+                    LANGUAGE plpgsql AS
+                    'BEGIN
+                        RAISE EXCEPTION ''fixture receipt failure''
+                            USING ERRCODE = ''P0001'';
+                    END;';
                 CREATE TRIGGER phase5_receipt_failure BEFORE INSERT
                 ON character_origin_event_receipts FOR EACH ROW
                 EXECUTE FUNCTION phase5_receipt_failure();
@@ -595,12 +596,11 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE OR REPLACE FUNCTION phase5_receipt_failure()
-                RETURNS trigger AS $
-                BEGIN
-                    RAISE EXCEPTION 'fixture transient receipt failure'
-                        USING ERRCODE = '57P01';
-                END;
-                $ LANGUAGE plpgsql;
+                RETURNS trigger LANGUAGE plpgsql AS
+                    'BEGIN
+                        RAISE EXCEPTION ''fixture transient receipt failure''
+                            USING ERRCODE = ''57P01'';
+                    END;';
                 """);
         var transient = await Activate(host.Client, failingId);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, transient.Status);
