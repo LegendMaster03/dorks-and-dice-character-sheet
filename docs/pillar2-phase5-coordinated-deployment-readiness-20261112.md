@@ -8,11 +8,11 @@
 
 | Service | Branch | Verified commit | Integration status |
 | --- | --- | --- | --- |
-| Rules Core | `feature/pillar2-phase5-origin-api-20261112` | `299719905261e908a809d22b03e9b9c9327d69a6` | PR #151 closed unmerged; source branch preserved |
-| Character Sheet | `feature/pillar2-phase5-origin-integration-20261112` | `4fd0b67e1a1e726ee6d8a2102e202191e7694cb7` (before this document) | Draft PR #67 |
+| Rules Core | `feature/pillar2-phase5-origin-api-20261112` | `58b08a2a0c84324ee289402eec32f8109c54f20c` | Closed PR #151; preserved branch passed expanded CI |
+| Character Sheet | `feature/pillar2-phase5-origin-integration-20261112` | `0bb25ed81b1d09cb3d3145cc01ae605cb3df0796` (before this revision) | Draft PR #67 |
 | Site | `feature/pillar2-origin-dm-campaign-authority-20261112` | `e8d0cb7d89de71aa337293b8f36d22bac98687c3` | Draft PR #50; delegated-role-refresh correction included |
 
-All three source branches were zero commits behind `main` at review. The Core Phase 5 branch was 371 commits ahead of `main` and included the surviving parent Pillar 2 history. Original Core PRs #141 and #151 were closed without merging; parent branch `feature/pillar2-characteristic-inventory-20261111` was absent. Do not reconstruct that branch or rewrite history without understanding the deliberate cleanup. A future replacement draft integration PR may target `main` directly from the preserved branch, after reviewing its complete 150-file change set.
+All three source branches were zero commits behind `main` at review. The Core Phase 5 branch is 375 commits ahead of `main`, with 155 changed files including the surviving parent Pillar 2 history and the source-divergence reconciliation. The GitHub issue timeline confirms that the repository owner closed PRs #141 and #151 and deleted the original parent branch on November 12; no merge occurred, and their history remains reachable in the Phase 5 branch. The reason for cleanup is not recorded. Do not recreate the removed branch, reopen the PRs, or rewrite history. A future new draft integration PR may target `main` directly from the preserved branch after reviewing the cumulative changes.
 
 ## Verified cross-service contract
 
@@ -25,15 +25,15 @@ The restricted Human–Elf example accepts an explicit table-approved set of nat
 
 ## Automated evidence
 
-- **Rules Core focused Origin CI:** [run 43300906170](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43300906170) passed at executable implementation commit `dcec6e8c1537`. The current Core head adds only one documentation audit, so no new executable delta is present, but that exact head has not independently run this CI.
-- **Character Sheet full CI:** [run 43318573637](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43318573637) passed at `4fd0b67e`.
-- **Real Core HTTP + PostgreSQL branch acceptance:** [run 43318573162](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43318573162) passed at `4fd0b67e`. It uses the real native Rules Core host and PostgreSQL, but a controlled Site actor fixture. This is not a live three-service test.
+- **Rules Core full branch validation:** [run 43339910285](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43339910285) passed at `58b08a2a`, including complete .NET build/tests, Pillar 2 studies, complete Python migration/content tests, and strict native/working source-boundary validation. This includes the 33-record source-divergence reconciliation in [the source audit](https://github.com/LegendMaster03/dorks-and-dice-rules-core/blob/feature/pillar2-phase5-origin-api-20261112/docs/content-promotion/phase5-preserved-source-reconciliation-20261112.md). Selected native/working rule definitions were not changed.
+- **Character Sheet full CI:** [run 43323944188](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43323944188) passed at `0bb25ed8`.
+- **Real Core HTTP + PostgreSQL branch acceptance:** [run 43323944039](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43323944039) passed at `0bb25ed8`. It uses the real native Rules Core host and PostgreSQL, but a controlled Site actor fixture. This is not a live three-service test.
 - **Site with the role-refresh regression:** [run 43323129891](https://github.com/LegendMaster03/dorks-and-dice-site/actions/runs/43323129891) passed at `e8d0cb7`. The regression checks DM demotion when reissuing both delegated and private-tunnel contexts.
 
 ## Release gates and confirmed limitations
 
 1. **No deployment permission:** Current authorization permits feature-branch commits and pushes, not merges into `main` or deployments.
-2. **Core release CI gate:** The Core `deploy.yml` permits only a manual `main` release whose exact commit has passed main-push `phase3b-native-public-api-ci.yml`. This CI runs the **full Python native/working suite**. Existing preserved-source consistency failures (33 reported evidence conflicts; two failing tests in earlier broader runs) require explicit reconciliation or an independently verified passing release run. Focused Origin CI alone does not satisfy the release gate. Do not weaken these tests or modify selected-native content just to obtain a green result.
+2. **Core release CI gate:** The Core `deploy.yml` permits only a manual `main` release whose exact commit has passed main-push `phase3b-native-public-api-ci.yml`. The previous 33 preserved-source evidence conflicts and historical creature-type test mismatch have now been reconciled on the feature branch, with expanded CI passing at `58b08a2a`. **The main-only full release workflow has still not passed for an integration commit**, and its Docker/release checks are not replaced by the branch workflow. Do not weaken these checks or modify native gameplay content to force success.
 3. **Runtime deployment type:** Core Phase 5 changes executable Host and Mechanics code, so its first release requires **Full deploy**, not the content-only path.
 4. **Character Sheet release:** On `main`, a successful `Validate Character Sheet` push run initiates its deployment workflow. Its startup/readiness and persistent database migration behavior must be confirmed with the actual environment.
 5. **Site release:** Site `deploy.yml` deploys automatically on `main` pushes, and also provides manual dispatch; coordinated deployment must prevent a prematurely visible broken DM link.
@@ -41,7 +41,7 @@ The restricted Human–Elf example accepts an explicit table-approved set of nat
 
 ## Proposed controlled release sequence (requires explicit authorization)
 
-1. Resolve the Core main-release validation blocker without silent content rewrites. Review and prepare a safe Core integration PR from the preserved head; review Character Sheet PR #67 and Site PR #50 against the exact compatible heads above.
+1. The Core source reconciliation is complete and branch CI passed; next review the entire cumulative Core integration diff and prepare an appropriate **new** draft integration PR without reopening the deliberately closed PRs or resurrecting their parent branch. Review Character Sheet PR #67 and Site PR #50 against the exact compatible heads above. Main-only release CI is still required before deployment.
 2. Confirm database backups, migration compatibility, service addresses, authentication ticket audiences, and rollback approach before any release. Confirm both distinct Site accounts and a disposable test campaign/character.
 3. After coordinated merge authorization, **deploy Rules Core using Full deploy first** and verify its authenticated endpoint and readiness. Then deploy Character Sheet and confirm its readiness and owner flow. **Deploy the Site navigation last** to avoid displaying links to unavailable Sheet routes. DM access before Site's new authorization projection must fail closed. Alternative branch-based staging requires a separately established and reviewed deployment path; the existing production workflows do not deploy arbitrary feature branches.
 4. Record the deployed Git SHAs. Stop and roll back according to the approved procedure if any compatibility, readiness, or authorization check fails.
@@ -67,4 +67,4 @@ The restricted Human–Elf example accepts an explicit table-approved set of nat
 
 This checkpoint does not implement authorized Origin updates, persisted Rite reconstruction, full nested-contributor resolution, unapproved native Feat selections, independent-grant execution, universal transformation overlays, or the future proposed partial character-state slots. Their Phase 5 and cross-pillar work remains separate and must use the shared reconstruction and provenance contracts.
 
-**Decision needed for deployment:** Explicit approval for an agreed merge and deployment sequence, only after the Core full-CI gate and database/service compatibility have been established. Until then, keep all three branches unmerged.
+**Decision needed for deployment:** Explicit approval for an agreed merge and deployment sequence, only after the main-only Core full-release CI gate and database/service compatibility have been established. Until then, keep all three branches unmerged.
