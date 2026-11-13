@@ -451,6 +451,10 @@ public sealed class CharacterPresentationWorkflowTests
                 {
                     grants[i]!["identity"]!["occurrence"]!["source"]!["id"] =
                         i is 0 or 2 ? "species.human" : "species.elf";
+                    // Mirror the exact selected native-offer IDs required
+                    // by the approved mixed-Origin persistence contract.
+                    grants[i]!["sourceCandidateIds"] = JsonSerializer.SerializeToNode(
+                        new[] { "native-candidate-" + i });
                     grants[i]!["authorization"] = new JsonObject {
                         ["adjudication"] = 3, ["tableDecisionId"] = "candidate-" + i
                     };
@@ -483,23 +487,41 @@ public sealed class CharacterPresentationWorkflowTests
             var dm = Guid.NewGuid();
             var campaign = Guid.NewGuid();
             const string evidence = "origin-dm:presentation-test";
-            var decisions = JsonSerializer.Serialize(new[] { new
+            // Every committed grant must be justified by a matching
+            // candidate decision; the custom Species identity requires its
+            // own configuration decision. This is a local presentation fixture,
+            // not an invented rule for universal inheritance.
+            var decisions = new JsonArray();
+            for (var i = 0; i < 4; i++)
             {
-                id = "candidate-0",
+                decisions.Add(JsonSerializer.SerializeToNode(new
+                {
+                    id = "candidate-" + i,
+                    authority = new {
+                        actorId = dm.ToString("D"), authorizationEvidenceId = evidence
+                    },
+                    scope = new { kind = "campaign", id = campaign.ToString("D") },
+                    target = new { kind = "candidate", id = "native-candidate-" + i },
+                    effectiveOutcome = new { eligibility = "eligible" }
+                }));
+            }
+            decisions.Add(JsonSerializer.SerializeToNode(new
+            {
+                id = "identity",
                 authority = new {
                     actorId = dm.ToString("D"), authorizationEvidenceId = evidence
                 },
                 scope = new { kind = "campaign", id = campaign.ToString("D") },
-                target = new { kind = "candidate", id = "grant:type" },
-                effectiveOutcome = new { eligibility = "eligible" }
-            } });
+                target = new { kind = "configuration", id = "mixed-test" },
+                effectiveOutcome = new { speciesId = "custom.human-elf" }
+            }));
             var saved = await new PostgresCharacterAuthorizedOriginStore(db)
                 .CommitVerifiedAsync(new VerifiedOriginPersistenceCommand(
                     characterId, "first-party-001", fingerprint,
                     profile.ToJsonString(), 0, 1, "construction:mixed-test",
                     "rule.creature-origination", "biological", "campaign-dm",
                     evidence, DateTimeOffset.UtcNow,
-                    dm, campaign, decisions,
+                    dm, campaign, decisions.ToJsonString(),
                     projection.ToJsonString()));
             Assert.Equal(AuthorizedOriginStoreStatus.Applied, saved.Status);
         }
