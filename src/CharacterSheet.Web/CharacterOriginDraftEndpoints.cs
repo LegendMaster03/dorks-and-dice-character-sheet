@@ -1,5 +1,7 @@
 using System.Text.Json;
 using CharacterSheet.Application.Characters;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CharacterSheet.Web;
 
@@ -63,10 +65,38 @@ public static class CharacterOriginDraftEndpoints
         group.MapPost("/activate-mixed-approved", async (
             Guid characterId, ActivateApprovedMixedRequest request,
             CharacterOriginMixedActivationService service,
+            ILogger<CharacterOriginMixedActivationService> logger,
             CancellationToken cancellationToken) =>
-            Respond(await service.ApplyAsync(characterId,
-                request.CampaignId, request.ExpectedDraftRevision,
-                request.CandidateIds, cancellationToken)));
+        {
+            try
+            {
+                return Respond(await service.ApplyAsync(characterId,
+                    request.CampaignId, request.ExpectedDraftRevision,
+                    request.CandidateIds, cancellationToken));
+            }
+            catch (OperationCanceledException)
+            {
+                // A canceled HTTP operation is neither a database outage nor
+                // a failed gameplay decision. Preserve normal cancellation.
+                throw;
+            }
+            catch (Exception error) when (IsTransientPersistenceFailure(error))
+            {
+                logger.LogError(error,
+                    "Mixed Origin activation persistence unavailable for character {CharacterId}",
+                    characterId);
+                return Error(503, "origin_persistence_unavailable");
+            }
+            catch (Exception error)
+            {
+                // Keep the existing structured error envelope, but never
+                // expose PostgreSQL exception messages or SQL to clients.
+                logger.LogError(error,
+                    "Unexpected mixed Origin activation failure for character {CharacterId}",
+                    characterId);
+                return Error(500, "origin_activation_failed");
+            }
+        });
 
         // Inspect another owner-visible character's last stored Origin identity.
         // This read never returns inheritable grants or authorizes that the
@@ -382,6 +412,16 @@ public static class CharacterOriginDraftEndpoints
                 Error(400, "invalid_origin_draft"),
             _ => Error(503, "origin_preview_unavailable")
         };
+
+    /// <summary>
+    /// Only database-provider-confirmed transient failures become HTTP 503.
+    /// A constraint violation, schema defect, or programming error is not
+    /// automatically retryable; transaction cleanup remains with the store.
+    /// </summary>
+    private static bool IsTransientPersistenceFailure(Exception error) =>
+        error is NpgsqlException databaseError && databaseError.IsTransient ||
+        error is DbUpdateException { InnerException: { } inner } &&
+            IsTransientPersistenceFailure(inner);
 
     private static IResult Error(int status, string code) =>
         Results.Json(new { error = code }, statusCode: status);
