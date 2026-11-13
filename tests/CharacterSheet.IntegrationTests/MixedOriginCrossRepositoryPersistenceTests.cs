@@ -494,6 +494,10 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             missingApproval.RemoveAt(0);
             Assert.Null(VerifiedCommittedMixedOriginReader.Read(
                 saved, [ReceiptWithAudit(missingApproval.ToJsonString())], activeRuleset));
+            var changedDecisionId = JsonNode.Parse(receipt.ApprovedDecisionsJson!)!.AsArray();
+            changedDecisionId[0]!["id"] = "unrelated-approval";
+            Assert.Null(VerifiedCommittedMixedOriginReader.Read(
+                saved, [ReceiptWithAudit(changedDecisionId.ToJsonString())], activeRuleset));
 
             activeRuleset["fingerprint"] = "rules-have-changed";
             Assert.Null(VerifiedCommittedMixedOriginReader.Read(

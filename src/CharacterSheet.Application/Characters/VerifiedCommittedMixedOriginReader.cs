@@ -126,7 +126,7 @@ public static class VerifiedCommittedMixedOriginReader
             decisions.GetArrayLength() != grants.GetArrayLength() + 1)
             return false;
 
-        var approvedCandidates = new HashSet<string>(StringComparer.Ordinal);
+        var approvedCandidates = new Dictionary<string, string>(StringComparer.Ordinal);
         var configurationApprovals = 0;
         foreach (var decision in decisions.EnumerateArray())
         {
@@ -139,7 +139,8 @@ public static class VerifiedCommittedMixedOriginReader
             {
                 if (!TryString(outcome, "eligibility", out var eligibility) ||
                     eligibility != "eligible" ||
-                    !approvedCandidates.Add(targetId!))
+                    !TryString(decision, "id", out var decisionId) ||
+                    !approvedCandidates.TryAdd(targetId!, decisionId!))
                     return false;
             }
             else if (targetKind == "configuration")
@@ -168,10 +169,13 @@ public static class VerifiedCommittedMixedOriginReader
                 string.IsNullOrWhiteSpace(ids[0].GetString()) ||
                 !committedCandidates.Add(ids[0].GetString()!) ||
                 !Object(grant, "authorization", out var authorization) ||
-                !Numeric(authorization, "adjudication", 3))
+                !Numeric(authorization, "adjudication", 3) ||
+                !TryString(authorization, "tableDecisionId", out var grantDecisionId) ||
+                !approvedCandidates.TryGetValue(ids[0].GetString()!, out var auditDecisionId) ||
+                auditDecisionId != grantDecisionId)
                 return false;
         }
-        return committedCandidates.SetEquals(approvedCandidates);
+        return committedCandidates.SetEquals(approvedCandidates.Keys);
     }
 
     private static bool Object(JsonElement parent, string name, out JsonElement value)
