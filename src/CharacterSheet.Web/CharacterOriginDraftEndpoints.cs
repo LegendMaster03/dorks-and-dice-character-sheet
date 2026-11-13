@@ -429,7 +429,10 @@ public static class CharacterOriginDraftEndpoints
              postgres.SqlState is "57P01" or "57P02" or "57P03" or
                  "53300" or "53400") ||
         error is NpgsqlException databaseError && databaseError.IsTransient ||
-        error is DbUpdateException { InnerException: { } inner } &&
+        // Persistence libraries may add a transport/execution wrapper.
+        // Recurse only to locate a recognized provider failure; unrelated
+        // nested exceptions do not become retryable.
+        error.InnerException is { } inner &&
             IsTransientPersistenceFailure(inner);
 
     private static IResult Error(int status, string code) =>

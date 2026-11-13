@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using RulesCore.Content;
 using CoreApplication = CoreHost::RulesCore.Host.RulesCoreApplication;
 using CoreTicketValidator = CoreHost::RulesCore.Host.CharacterSheetMechanicsTicketValidator;
@@ -603,7 +604,13 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                     END;';
                 """);
         var transient = await Activate(host.Client, failingId);
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, transient.Status);
+        // Diagnostic assertions report only exception types and SQLSTATE,
+        // never SQL text or server connection details.
+        Assert.True(transient.Status == HttpStatusCode.ServiceUnavailable,
+            "Expected structured HTTP 503; got " + (int)transient.Status +
+            ". Server exception chain: " +
+            string.Join(" | ", host.Logger.Exceptions.Select(Shape)));
+
         Assert.Equal("origin_persistence_unavailable",
             transient.Body.GetProperty("error").GetString());
 
@@ -1034,10 +1041,12 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     /// Minimal actual Character Sheet endpoint host: Site roles are supplied
     /// by the fixed, authorized test actor; all database writes use PostgreSQL.
     /// </summary>
-    private sealed class MixedOriginEndpointHost(WebApplication app, HttpClient client)
+    private sealed class MixedOriginEndpointHost(
+        WebApplication app, HttpClient client, RecordingOriginLogger logger)
         : IAsyncDisposable
     {
         public HttpClient Client { get; } = client;
+        public RecordingOriginLogger Logger { get; } = logger;
 
         public static async Task<MixedOriginEndpointHost> StartAsync(
             string connectionString, INativeRulesCoreGateway native)
@@ -1057,6 +1066,9 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             builder.Services.AddSingleton(native);
             builder.Services.AddSingleton<INativeRulesCoreGateway>(native);
             builder.Services.AddSingleton(TimeProvider.System);
+            var originLogger = new RecordingOriginLogger();
+            builder.Services.AddSingleton<ILogger<CharacterOriginMixedActivationService>>(
+                originLogger);
             // Minimal APIs classify service parameters against the complete
             // application's DI registry when compiling the route group, even
             // though this test invokes only the mixed-activation endpoint.
@@ -1074,13 +1086,37 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             var server = app.Services.GetRequiredService<IServer>();
             var url = server.Features.Get<IServerAddressesFeature>()!.Addresses.Single();
             return new MixedOriginEndpointHost(app,
-                new HttpClient { BaseAddress = new Uri(url) });
+                new HttpClient { BaseAddress = new Uri(url) }, originLogger);
         }
 
         public async ValueTask DisposeAsync()
         {
             Client.Dispose();
             await app.DisposeAsync();
+        }
+    }
+
+    private static string Shape(Exception error) =>
+        error.GetType().Name +
+        (error is PostgresException postgres ? ":" + postgres.SqlState : "") +
+        (error.InnerException is { } inner ? " -> " + Shape(inner) : "");
+
+    private sealed class RecordingOriginLogger : ILogger<CharacterOriginMixedActivationService>
+    {
+        public List<Exception> Exceptions { get; } = [];
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull =>
+            NoopScope.Instance;
+        public void Log<TState>(LogLevel logLevel, EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (exception is not null) Exceptions.Add(exception);
+        }
+
+        private sealed class NoopScope : IDisposable
+        {
+            public static readonly NoopScope Instance = new();
+            public void Dispose() { }
         }
     }
 
