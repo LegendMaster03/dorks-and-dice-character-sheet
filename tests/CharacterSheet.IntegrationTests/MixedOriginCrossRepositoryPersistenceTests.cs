@@ -488,6 +488,76 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     [Fact]
+    public async Task CurrentDmScopeIsCheckedAgainAfterReviewAndPastApprovalRemainsAudited()
+    {
+        // This exercises the service boundary with a revocable Site identity
+        // projection. Site ticket issuance and membership storage have their
+        // own integration tests; this is not a deployed two-account test.
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var otherCharacterId = Guid.NewGuid();
+        var native = new HttpNativeGateway(core.Client);
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var draft = await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+            characterId, "first-party-001", fingerprint,
+            HumanElf, 0, DateTimeOffset.UtcNow);
+        Assert.Equal(1, draft?.Revision);
+
+        var scope = new RevocableDmScope(characterId);
+        var builds = new PostgresCharacterBuildStore(db);
+        var drafts = new PostgresCharacterOriginDraftStore(db);
+        var origins = new PostgresCharacterAuthorizedOriginStore(db);
+        var review = new CharacterOriginMixedReviewService(
+            scope, builds, drafts, origins, native);
+        var activation = new CharacterOriginMixedActivationService(
+            scope, builds, drafts, origins, native, TimeProvider.System);
+
+        // An authorized campaign role does not authorize a different target.
+        Assert.Equal(CharacterOriginMixedReviewStatus.NotAuthorized,
+            (await review.ReviewAsync(otherCharacterId, Campaign)).Status);
+        Assert.Equal(CharacterOriginMixedActivationStatus.DmScopeDenied,
+            (await activation.ApplyAsync(otherCharacterId, Campaign, 1, ["any"])).Status);
+
+        var offered = await review.ReviewAsync(characterId, Campaign);
+        Assert.Equal(CharacterOriginMixedReviewStatus.Ready, offered.Status);
+        Assert.Equal(1, offered.DraftRevision);
+        var selected = await FiveNativeHumanElfOffers(native, fingerprint);
+
+        // Authorization at review does not become a reusable approval token.
+        scope.Allow = false;
+        Assert.Equal(CharacterOriginMixedReviewStatus.NotAuthorized,
+            (await review.ReviewAsync(characterId, Campaign)).Status);
+        Assert.Equal(CharacterOriginMixedActivationStatus.DmScopeDenied,
+            (await activation.ApplyAsync(characterId, Campaign, 1, selected)).Status);
+        Assert.Null(await origins.GetAsync(characterId));
+        Assert.Empty(await origins.GetEventsAsync(characterId));
+
+        // A fresh eligible DM scope can make the separate approval decision.
+        scope.Allow = true;
+        Assert.Equal(CharacterOriginMixedActivationStatus.Applied,
+            (await activation.ApplyAsync(characterId, Campaign, 1, selected)).Status);
+        var saved = await origins.GetAsync(characterId);
+        Assert.NotNull(saved);
+        Assert.Equal(1, saved.Revision);
+        var receipt = Assert.Single(await origins.GetEventsAsync(characterId));
+        Assert.Equal(Actor, receipt.ApprovalActorUserId);
+        Assert.Equal(Campaign, receipt.ApprovalCampaignId);
+
+        // Revocation blocks later requests without erasing valid history.
+        scope.Allow = false;
+        Assert.Equal(CharacterOriginMixedActivationStatus.DmScopeDenied,
+            (await activation.ApplyAsync(characterId, Campaign, 1, selected)).Status);
+        Assert.Equal(1, (await origins.GetAsync(characterId))?.Revision);
+        Assert.Single(await origins.GetEventsAsync(characterId));
+    }
+
+    [Fact]
     public async Task ChangedNativeCatalogOrMissingSelectionDoesNotCommitAProfile()
     {
         await using var core = await RealCore.StartAsync();
@@ -633,6 +703,21 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             return Task.FromResult(new SiteCharacterAccessResult(
                 SiteCharacterAccessStatus.NotFoundOrNotOwned));
         }
+    }
+
+    private sealed class RevocableDmScope(Guid allowedCharacterId)
+        : ISiteOriginDmAccessGateway
+    {
+        public bool Allow { get; set; } = true;
+
+        public Task<SiteOriginDmAccessResult> CheckAsync(
+            Guid campaignId, Guid characterId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Allow && campaignId == Campaign &&
+                            characterId == allowedCharacterId
+                ? new SiteOriginDmAccessResult(SiteOriginDmAccessStatus.Authorized,
+                    Actor, campaignId, characterId)
+                : new SiteOriginDmAccessResult(SiteOriginDmAccessStatus.NotAuthorized));
     }
 
     private sealed class TestDmScope(bool allow) : ISiteOriginDmAccessGateway
