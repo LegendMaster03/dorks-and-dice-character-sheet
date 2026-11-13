@@ -11,6 +11,8 @@ using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
+using CharacterSheet.Web;
+using Npgsql;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -516,6 +518,134 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     [Fact]
+    public async Task MixedOriginHttpReportsPersistenceFailureWithoutPartialAuthority()
+    {
+        // Exercise the real HTTP mapping, the real native Core evaluator and
+        // PostgreSQL transaction behavior. Only Site's DM projection is a
+        // scoped fixture; the separate Site tests cover actual delegation.
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var native = new HttpNativeGateway(core.Client);
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        var existingId = Guid.NewGuid();
+        var failingId = Guid.NewGuid();
+        var selected = await FiveNativeHumanElfOffers(native, fingerprint);
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await db.Database.MigrateAsync();
+            foreach (var characterId in new[] { existingId, failingId })
+            {
+                await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+                Assert.NotNull(await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+                    characterId, "first-party-001", fingerprint, HumanElf,
+                    0, DateTimeOffset.UtcNow));
+            }
+        }
+
+        await using var host = await MixedOriginEndpointHost.StartAsync(
+            database.ConnectionString, native);
+        async Task<(HttpStatusCode Status, JsonElement Body)> Activate(
+            HttpClient client, Guid characterId, long revision = 1)
+        {
+            using var response = await client.PostAsJsonAsync(
+                $"/api/characters/{characterId:D}/origin/activate-mixed-approved",
+                new { campaignId = Campaign, expectedDraftRevision = revision,
+                    candidateIds = selected });
+            return (response.StatusCode,
+                await response.Content.ReadFromJsonAsync<JsonElement>());
+        }
+
+        var applied = await Activate(host.Client, existingId);
+        Assert.Equal(HttpStatusCode.OK, applied.Status);
+        Assert.Equal("applied", applied.Body.GetProperty("status").GetString());
+        var duplicate = await Activate(host.Client, existingId);
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.Status);
+        Assert.Equal("origin_already_committed",
+            duplicate.Body.GetProperty("error").GetString());
+        var stale = await Activate(host.Client, failingId, 2);
+        Assert.Equal(HttpStatusCode.Conflict, stale.Status);
+        Assert.Equal("origin_draft_revision_conflict",
+            stale.Body.GetProperty("error").GetString());
+
+        // A backend exception after profile insertion begins must roll back
+        // both rows. This nontransient database defect remains an opaque 500.
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE FUNCTION phase5_receipt_failure() RETURNS trigger AS $
+                BEGIN
+                    RAISE EXCEPTION 'fixture receipt failure' USING ERRCODE = 'P0001';
+                END;
+                $ LANGUAGE plpgsql;
+                CREATE TRIGGER phase5_receipt_failure BEFORE INSERT
+                ON character_origin_event_receipts FOR EACH ROW
+                EXECUTE FUNCTION phase5_receipt_failure();
+                """);
+        var unexpected = await Activate(host.Client, failingId);
+        Assert.Equal(HttpStatusCode.InternalServerError, unexpected.Status);
+        Assert.Equal("origin_activation_failed",
+            unexpected.Body.GetProperty("error").GetString());
+        Assert.DoesNotContain("fixture receipt failure",
+            unexpected.Body.GetRawText(), StringComparison.Ordinal);
+
+        // Change only the injected SQLSTATE to a provider-recognized transient
+        // database failure, without disabling the transactional store.
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE OR REPLACE FUNCTION phase5_receipt_failure()
+                RETURNS trigger AS $
+                BEGIN
+                    RAISE EXCEPTION 'fixture transient receipt failure'
+                        USING ERRCODE = '57P01';
+                END;
+                $ LANGUAGE plpgsql;
+                """);
+        var transient = await Activate(host.Client, failingId);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, transient.Status);
+        Assert.Equal("origin_persistence_unavailable",
+            transient.Body.GetProperty("error").GetString());
+
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var origins = new PostgresCharacterAuthorizedOriginStore(db);
+            Assert.Null(await origins.GetAsync(failingId));
+            Assert.Empty(await origins.GetEventsAsync(failingId));
+            Assert.Equal(1, (await origins.GetAsync(existingId))?.Revision);
+            Assert.Single(await origins.GetEventsAsync(existingId));
+            await db.Database.ExecuteSqlRawAsync("""
+                DROP TRIGGER phase5_receipt_failure ON character_origin_event_receipts;
+                DROP FUNCTION phase5_receipt_failure();
+                """);
+        }
+
+        // The same draft can be committed after the injected failure is
+        // removed; the earlier original character remains untouched.
+        var recovered = await Activate(host.Client, failingId);
+        Assert.Equal(HttpStatusCode.OK, recovered.Status);
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var origins = new PostgresCharacterAuthorizedOriginStore(db);
+            Assert.Equal(1, (await origins.GetAsync(failingId))?.Revision);
+            Assert.Single(await origins.GetEventsAsync(failingId));
+            Assert.Equal(1, (await origins.GetAsync(existingId))?.Revision);
+            Assert.Single(await origins.GetEventsAsync(existingId));
+        }
+
+        // A genuinely refused TCP connection before activation also maps to
+        // 503, not an empty 500 or a misleading authorization denial.
+        var refused = new NpgsqlConnectionStringBuilder(database.ConnectionString)
+        {
+            Host = "127.0.0.1", Port = 1, Timeout = 1, CommandTimeout = 1
+        };
+        await using var unavailableHost = await MixedOriginEndpointHost.StartAsync(
+            refused.ConnectionString, native);
+        var unavailable = await Activate(unavailableHost.Client, Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.Status);
+        Assert.Equal("origin_persistence_unavailable",
+            unavailable.Body.GetProperty("error").GetString());
+    }
+
+    [Fact]
     public async Task CurrentDmScopeIsCheckedAgainAfterReviewAndPastApprovalRemainsAudited()
     {
         // This exercises the service boundary with a revocable Site identity
@@ -895,6 +1025,50 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
             });
+        }
+    }
+
+    /// <summary>
+    /// Minimal actual Character Sheet endpoint host: Site roles are supplied
+    /// by the fixed, authorized test actor; all database writes use PostgreSQL.
+    /// </summary>
+    private sealed class MixedOriginEndpointHost(WebApplication app, HttpClient client)
+        : IAsyncDisposable
+    {
+        public HttpClient Client { get; } = client;
+
+        public static async Task<MixedOriginEndpointHost> StartAsync(
+            string connectionString, INativeRulesCoreGateway native)
+        {
+            var builder = WebApplication.CreateBuilder();
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            builder.Services.AddDbContext<CharacterSheetDbContext>(options =>
+                options.UseNpgsql(connectionString));
+            builder.Services.AddScoped<ICharacterBuildStore,
+                PostgresCharacterBuildStore>();
+            builder.Services.AddScoped<ICharacterOriginDraftStore,
+                PostgresCharacterOriginDraftStore>();
+            builder.Services.AddScoped<ICharacterAuthorizedOriginStore,
+                PostgresCharacterAuthorizedOriginStore>();
+            builder.Services.AddSingleton<ISiteOriginDmAccessGateway>(
+                new TestDmScope(true));
+            builder.Services.AddSingleton(native);
+            builder.Services.AddSingleton<INativeRulesCoreGateway>(native);
+            builder.Services.AddSingleton(TimeProvider.System);
+            builder.Services.AddScoped<CharacterOriginMixedActivationService>();
+            var app = builder.Build();
+            app.MapCharacterOriginDraftEndpoints();
+            await app.StartAsync();
+            var server = app.Services.GetRequiredService<IServer>();
+            var url = server.Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            return new MixedOriginEndpointHost(app,
+                new HttpClient { BaseAddress = new Uri(url) });
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            Client.Dispose();
+            await app.DisposeAsync();
         }
     }
 
