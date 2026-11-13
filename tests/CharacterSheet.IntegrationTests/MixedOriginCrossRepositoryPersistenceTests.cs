@@ -9,6 +9,7 @@ using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
+using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
