@@ -363,6 +363,12 @@ public sealed class CharacterOriginMixedActivationService(
             !Null(profile, "effectiveConfigurationBasis"))
             return false;
         var selectedSet = selected.ToHashSet(StringComparer.Ordinal);
+        // Candidate approvals are minted by this server with a stable
+        // selection-index decision ID. A Core response that grants an offer
+        // under another ruling must never become an authoritative Origin.
+        var expectedDecisions = selected.Select((id, index) =>
+                new KeyValuePair<string, string>(id, "candidate-" + index))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var grant in grants.EnumerateArray())
         {
@@ -373,7 +379,10 @@ public sealed class CharacterOriginMixedActivationService(
                 !selectedSet.Contains(ids[0].GetString()!) ||
                 !seen.Add(ids[0].GetString()!) ||
                 !TryProperty(grant, "authorization", out var basis) ||
-                !Numeric(basis, "adjudication", 3))
+                !Numeric(basis, "adjudication", 3) ||
+                !expectedDecisions.TryGetValue(ids[0].GetString()!,
+                    out var expectedDecisionId) ||
+                String(basis, "tableDecisionId") != expectedDecisionId)
                 return false;
         }
         if (!seen.SetEquals(selectedSet)) return false;

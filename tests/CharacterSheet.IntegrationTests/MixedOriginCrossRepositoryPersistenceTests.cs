@@ -616,6 +616,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     [InlineData("evaluation-fingerprint")]
     [InlineData("preview-missing-freshness")]
     [InlineData("evaluation-missing-freshness")]
+    [InlineData("evaluation-grant-wrong-decision")]
     [InlineData("preview-duplicate-offer")]
     public async Task UntrustedNativeResponseMetadataCannotCommitDmOrigin(string fault)
     {
@@ -635,9 +636,14 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
 
         var result = await Service(db, new HttpNativeGateway(core.Client, fault),
             allow: true).ApplyAsync(characterId, Campaign, 1, selected);
-        Assert.Equal(fault == "preview-duplicate-offer"
-                ? CharacterOriginMixedActivationStatus.RulesCoreUnavailable
-                : CharacterOriginMixedActivationStatus.NativeContentChanged,
+        Assert.Equal(fault switch
+            {
+                "preview-duplicate-offer" =>
+                    CharacterOriginMixedActivationStatus.RulesCoreUnavailable,
+                "evaluation-grant-wrong-decision" =>
+                    CharacterOriginMixedActivationStatus.NotAuthorizedByNativeRules,
+                _ => CharacterOriginMixedActivationStatus.NativeContentChanged
+            },
             result.Status);
         Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db)
             .GetAsync(characterId));
@@ -839,6 +845,17 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             {
                 var offers = json["result"]!["evaluatedProposal"]!["candidates"]!.AsArray();
                 offers.Add(offers[0]!.DeepClone());
+            }
+            else if (malformedReply == "evaluation-grant-wrong-decision" && evaluation)
+            {
+                // Preserve every actual native value, source candidate and
+                // configuration while corrupting only its approval provenance.
+                // Both configurations must agree so the exact-ruling check,
+                // rather than the Underlying/Current equality guard, rejects it.
+                var profile = json["result"]!["profile"]!;
+                foreach (var part in new[] { "underlying", "current" })
+                    profile[part]!["inherentGrants"]![0]!["authorization"]![
+                        "tableDecisionId"] = "unrelated-approval";
             }
             return json;
         }
