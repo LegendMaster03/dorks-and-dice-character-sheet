@@ -552,8 +552,10 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 $"/api/characters/{characterId:D}/origin/activate-mixed-approved",
                 new { campaignId = Campaign, expectedDraftRevision = revision,
                     candidateIds = selected });
-            return (response.StatusCode,
-                await response.Content.ReadFromJsonAsync<JsonElement>());
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.True(!string.IsNullOrWhiteSpace(body),
+                $"Origin endpoint returned HTTP {(int)response.StatusCode} without JSON.");
+            return (response.StatusCode, JsonDocument.Parse(body).RootElement.Clone());
         }
 
         var applied = await Activate(host.Client, existingId);
