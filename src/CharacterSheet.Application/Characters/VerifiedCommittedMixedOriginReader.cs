@@ -79,7 +79,8 @@ public static class VerifiedCommittedMixedOriginReader
                 history.GetArrayLength() != 1 ||
                 !TryString(history[0], "id", out var eventId) ||
                 eventId != eventReceipt.EventId ||
-                !Numeric(history[0], "stage", 2))
+                !Numeric(history[0], "stage", 2) ||
+                !MatchesCommittedDecisions(decisions, profile, proposalId!))
                 return null;
 
             using var projection = JsonDocument.Parse(storedProjection);
@@ -103,6 +104,74 @@ public static class VerifiedCommittedMixedOriginReader
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Reconcile the recorded DM outcomes with the exact candidate identities
+    /// in this initial mixed construction. A receipt belonging to the correct
+    /// actor and campaign is insufficient if it approved different grants.
+    /// Broader Origin updates require a separate event-aware verifier.
+    /// </summary>
+    private static bool MatchesCommittedDecisions(
+        JsonElement decisions, JsonElement profile, string proposalId)
+    {
+        if (!Object(profile, "underlying", out var underlying) ||
+            !Object(profile, "current", out var current) ||
+            !JsonElement.DeepEquals(underlying, current) ||
+            !TryString(underlying, "speciesId", out var speciesId) ||
+            speciesId != "custom.human-elf" ||
+            !underlying.TryGetProperty("inherentGrants", out var grants) ||
+            grants.ValueKind != JsonValueKind.Array ||
+            grants.GetArrayLength() is < 1 or > 32 ||
+            decisions.GetArrayLength() != grants.GetArrayLength() + 1)
+            return false;
+
+        var approvedCandidates = new HashSet<string>(StringComparer.Ordinal);
+        var configurationApprovals = 0;
+        foreach (var decision in decisions.EnumerateArray())
+        {
+            if (!Object(decision, "target", out var target) ||
+                !TryString(target, "kind", out var targetKind) ||
+                !TryString(target, "id", out var targetId) ||
+                !Object(decision, "effectiveOutcome", out var outcome))
+                return false;
+            if (targetKind == "candidate")
+            {
+                if (!TryString(outcome, "eligibility", out var eligibility) ||
+                    eligibility != "eligible" ||
+                    !approvedCandidates.Add(targetId!))
+                    return false;
+            }
+            else if (targetKind == "configuration")
+            {
+                if (targetId != proposalId ||
+                    !TryString(outcome, "speciesId", out var species) ||
+                    species != "custom.human-elf")
+                    return false;
+                configurationApprovals++;
+            }
+            else
+                return false;
+        }
+
+        if (configurationApprovals != 1 ||
+            approvedCandidates.Count != grants.GetArrayLength())
+            return false;
+        var committedCandidates = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var grant in grants.EnumerateArray())
+        {
+            if (grant.ValueKind != JsonValueKind.Object ||
+                !grant.TryGetProperty("sourceCandidateIds", out var ids) ||
+                ids.ValueKind != JsonValueKind.Array ||
+                ids.GetArrayLength() != 1 ||
+                ids[0].ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(ids[0].GetString()) ||
+                !committedCandidates.Add(ids[0].GetString()!) ||
+                !Object(grant, "authorization", out var authorization) ||
+                !Numeric(authorization, "adjudication", 3))
+                return false;
+        }
+        return committedCandidates.SetEquals(approvedCandidates);
     }
 
     private static bool Object(JsonElement parent, string name, out JsonElement value)

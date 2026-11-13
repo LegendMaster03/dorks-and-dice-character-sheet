@@ -471,6 +471,29 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             Assert.Equal("species.elf", verified.LowLightVision?.SourceId);
             Assert.Null(VerifiedCommittedMixedOriginReader.Read(
                 saved, [], activeRuleset));
+
+            // Audit metadata can match actor, campaign and event while the
+            // recorded candidate targets or configuration ruling disagree
+            // with the source grants in the committed profile. Reject both.
+            CharacterOriginEventReceipt ReceiptWithAudit(string rulingJson) =>
+                new(receipt.CharacterId, receipt.EventId, receipt.CommittedRevision,
+                    receipt.MethodRuleId, receipt.MethodId, receipt.AuthorizationKind,
+                    receipt.AuthorizationEvidenceId, receipt.CreatedAt,
+                    receipt.ApprovalActorUserId, receipt.ApprovalCampaignId, rulingJson);
+            var wrongCandidate = JsonNode.Parse(receipt.ApprovedDecisionsJson!)!.AsArray();
+            wrongCandidate[0]!["target"]!["id"] = "unrelated-native-offer";
+            Assert.Null(VerifiedCommittedMixedOriginReader.Read(
+                saved, [ReceiptWithAudit(wrongCandidate.ToJsonString())], activeRuleset));
+            var wrongConfiguration = JsonNode.Parse(receipt.ApprovedDecisionsJson!)!.AsArray();
+            wrongConfiguration[wrongConfiguration.Count - 1]!["effectiveOutcome"]!["speciesId"] =
+                "unapproved-hybrid";
+            Assert.Null(VerifiedCommittedMixedOriginReader.Read(
+                saved, [ReceiptWithAudit(wrongConfiguration.ToJsonString())], activeRuleset));
+            var missingApproval = JsonNode.Parse(receipt.ApprovedDecisionsJson!)!.AsArray();
+            missingApproval.RemoveAt(0);
+            Assert.Null(VerifiedCommittedMixedOriginReader.Read(
+                saved, [ReceiptWithAudit(missingApproval.ToJsonString())], activeRuleset));
+
             activeRuleset["fingerprint"] = "rules-have-changed";
             Assert.Null(VerifiedCommittedMixedOriginReader.Read(
                 saved, receipts, activeRuleset));
