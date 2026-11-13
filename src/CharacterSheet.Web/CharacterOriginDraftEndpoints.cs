@@ -419,6 +419,15 @@ public static class CharacterOriginDraftEndpoints
     /// automatically retryable; transaction cleanup remains with the store.
     /// </summary>
     private static bool IsTransientPersistenceFailure(Exception error) =>
+        // Npgsql's flag covers connectivity timeouts and socket failures.
+        // Explicit SQLSTATEs also cover server shutdown/restart conditions,
+        // which a trigger-based integration fixture can report without
+        // actually terminating the disposable PostgreSQL instance.
+        error is PostgresException postgres &&
+            (postgres.IsTransient ||
+             postgres.SqlState.StartsWith("08", StringComparison.Ordinal) ||
+             postgres.SqlState is "57P01" or "57P02" or "57P03" or
+                 "53300" or "53400") ||
         error is NpgsqlException databaseError && databaseError.IsTransient ||
         error is DbUpdateException { InnerException: { } inner } &&
             IsTransientPersistenceFailure(inner);
