@@ -70,6 +70,7 @@ export interface OriginWorkflow {
     setFiniteChoice(characterId: string, candidateId: string,
         requirementId: string, id: string | null): Promise<void>;
     activate(characterId: string): Promise<void>;
+    refreshDraft(characterId: string): Promise<void>;
     loadParentOptions(characterId: string): Promise<void>;
     selectParentSource(characterId: string, contributorId: string,
         parentCharacterId: string): void;
@@ -211,12 +212,17 @@ export function createOriginWorkflow(
                 state.catalog.rulesetId, state.catalog.fingerprint,
                 proposal, expectedRevision);
             if (token !== sequence) return;
+            const previewDrifted = response.preview?.contentChangedSinceRequest === true ||
+                (response.preview !== null && response.preview !== undefined &&
+                 response.preview.fingerprint !== state.catalog?.fingerprint);
             update({ busy: false, draft: response.draft,
                 preview: response.preview ?? null,
                 chooser: { kind: "closed" },
-                message: response.preview === null || response.preview === undefined
-                    ? "Origin saved, but the native evaluation is not available."
-                    : undefined });
+                message: previewDrifted
+                    ? "Native content changed during this save. Reload the Origin before approving or activating."
+                    : response.preview === null || response.preview === undefined
+                        ? "Origin saved, but the native evaluation is not available."
+                        : undefined });
             if (response.draft !== null &&
                 isEditableMixedNativeOrigin(response.draft.proposal)) {
                 parentSources.prepare(characterId, response.draft.revision,
@@ -313,6 +319,38 @@ export function createOriginWorkflow(
         }
     }
 
+    /**
+     * A content fingerprint is a review snapshot, never an access capability.
+     * Re-read both the draft and active catalog before explicitly renewing an
+     * outdated proposal. The server checks ownership, editability, preview,
+     * and the exact draft revision again. This never approves the proposal.
+     */
+    async function refreshDraft(characterId: string): Promise<void> {
+        if (currentCharacterId !== characterId || state.status !== "ready" ||
+            state.busy || state.readOnly || state.savedState !== null ||
+            state.draft === null || state.catalog === null ||
+            (!isEditableDirectNativeOrigin(state.draft.proposal) &&
+             !isEditableMixedNativeOrigin(state.draft.proposal))) return;
+
+        // Refresh current Site access, current draft revision and current
+        // native catalog. Do not write the earlier in-memory draft.
+        await load(characterId);
+        if (currentCharacterId !== characterId || state.status !== "ready" ||
+            state.busy || state.readOnly || state.savedState !== null ||
+            state.draft === null || state.catalog === null ||
+            (!isEditableDirectNativeOrigin(state.draft.proposal) &&
+             !isEditableMixedNativeOrigin(state.draft.proposal))) return;
+
+        if (state.draft.rulesetId === state.catalog.rulesetId &&
+            state.draft.fingerprint === state.catalog.fingerprint &&
+            state.preview?.contentChangedSinceRequest !== true)
+            return;
+
+        // Revision changes invalidate the DM's previous candidate review
+        // even if the owner left every proposed choice unchanged.
+        await saveProposal(characterId, state.draft.proposal);
+    }
+
     async function loadParentOptions(characterId: string): Promise<void> {
         if (currentCharacterId !== characterId || state.status !== "ready" ||
             state.busy || state.savedState !== null ||
@@ -338,7 +376,7 @@ export function createOriginWorkflow(
     return {
         current: () => state, load, openChooser, searchChooser, closeChooser,
         chooseOption, clearAncestry, setMode, clearMixedParent,
-        setFiniteChoice, activate, loadParentOptions, selectParentSource,
+        setFiniteChoice, activate, refreshDraft, loadParentOptions, selectParentSource,
         reviewParentSources
     };
 }

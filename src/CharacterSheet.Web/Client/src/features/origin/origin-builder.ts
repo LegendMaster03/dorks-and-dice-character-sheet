@@ -32,6 +32,7 @@ export interface OriginBuilderHandlers {
     setFiniteChoice(candidateId: string, requirementId: string,
         id: string | null): void;
     activate(): void;
+    refreshDraft(): void;
     reload(): void;
     loadParentOptions(): void;
     selectParentSource(contributorId: string, parentCharacterId: string): void;
@@ -192,6 +193,23 @@ export function renderOriginBuilder(
 
     if (readOnly || origin.readOnly) {
         section.append(createInlineState("Origin is read-only for this Character.", "readonly"));
+    }
+
+    const nativeSnapshotChanged = origin.draft !== null &&
+        (origin.draft.rulesetId !== origin.catalog.rulesetId ||
+         origin.draft.fingerprint !== origin.catalog.fingerprint ||
+         origin.preview?.contentChangedSinceRequest === true);
+    if (nativeSnapshotChanged) {
+        const refresh = createElement("div", "dd-origin-native-re-review");
+        refresh.setAttribute("data-origin-native-re-review", "required");
+        refresh.append(createInlineState(
+            "The native catalog differs from the saved Origin draft. Previous DM offer selections must be reviewed again. Refreshing re-evaluates the same proposal, increments its draft revision, and does not approve grants. Any choices that no longer satisfy the rules remain unresolved.",
+            "warning"));
+        refresh.append(createButton(
+            "Review draft against current native rules",
+            "dd-button dd-button--secondary",
+            handlers.refreshDraft, locked));
+        section.append(refresh);
     }
 
     const mode = createElement("div", "dd-build-choice__actions");

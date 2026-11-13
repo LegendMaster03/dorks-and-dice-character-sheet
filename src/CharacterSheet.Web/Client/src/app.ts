@@ -390,6 +390,7 @@ function renderWorkspace(
                 void originWorkflow.setFiniteChoice(character.characterId,
                     candidateId, requirementId, id),
             activate: () => void originWorkflow.activate(character.characterId),
+            refreshDraft: () => void originWorkflow.refreshDraft(character.characterId),
             reload: () => void originWorkflow.load(character.characterId),
             loadParentOptions: () => void originWorkflow.loadParentOptions(character.characterId),
             selectParentSource: (contributorId, parentCharacterId) =>
