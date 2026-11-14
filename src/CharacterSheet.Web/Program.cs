@@ -90,14 +90,27 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ICharacterArtStorage>(new FileSystemCharacterArtStorage(characterArtStoragePath));
 builder.Services.AddScoped<ICharacterSheetStore, PostgresCharacterSheetStore>();
 builder.Services.AddScoped<ICharacterBuildStore, PostgresCharacterBuildStore>();
+builder.Services.AddScoped<ICharacterOriginDraftStore, PostgresCharacterOriginDraftStore>();
+// Internal-only authorized Origin storage; there is deliberately no direct
+// controller or browser endpoint capable of calling CommitVerifiedAsync.
+builder.Services.AddScoped<ICharacterAuthorizedOriginStore, PostgresCharacterAuthorizedOriginStore>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
 builder.Services.AddScoped<ICharacterStartingEquipmentInventoryStore, PostgresCharacterStartingEquipmentInventoryStore>();
 builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
+builder.Services.AddScoped<ISiteOriginDmAccessGateway, ToolHostOriginDmAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
+builder.Services.AddScoped<CharacterOriginDraftService>();
+builder.Services.AddScoped<CharacterOriginStateService>();
+builder.Services.AddScoped<CharacterOriginParentSnapshotService>();
+builder.Services.AddScoped<CharacterOriginParentNativeReviewService>();
+builder.Services.AddScoped<CharacterOriginParentSourceAlignmentService>();
+builder.Services.AddScoped<CharacterOriginInitialActivationService>();
+builder.Services.AddScoped<CharacterOriginMixedActivationService>();
+builder.Services.AddScoped<CharacterOriginMixedReviewService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
@@ -170,6 +183,7 @@ app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
 app.MapCharacterCraftingEndpoints();
 app.MapNativeRulesCoreEndpoints();
+app.MapCharacterOriginDraftEndpoints();
 app.MapNativeCharacterResourceEndpoints();
 
 app.MapGet("/api/characters/{characterId:guid}/sheet", async (
@@ -513,6 +527,10 @@ static IResult ToBuildApiResult(CharacterBuildResult result, bool mutating) => r
     CharacterBuildAccessStatus.ProjectionUnavailable => Results.Json(new { error = "Site Character authorization is unavailable for this request." }, statusCode: StatusCodes.Status503ServiceUnavailable),
     CharacterBuildAccessStatus.Unauthenticated => Results.Unauthorized(),
     CharacterBuildAccessStatus.SheetNotInitialized => Results.NotFound(new { error = "Digital Character Sheet is not initialized." }),
+    CharacterBuildAccessStatus.OriginManaged =>
+        Results.Json(new { error = "origin_is_managed_by_authorized_profile",
+            detail = "Use the Origin builder and validated transition to change Species or Ancestry." },
+            statusCode: StatusCodes.Status409Conflict),
     CharacterBuildAccessStatus.ArchivedReadOnly when mutating => Results.Conflict(new { error = "Archived Characters are read-only. Restore the Character through the Site before editing its build." }),
     _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
 };

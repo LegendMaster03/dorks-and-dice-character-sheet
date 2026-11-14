@@ -22,6 +22,146 @@ public sealed class NativeCharacterPresentationBridgeTests
         Assert.Equal(0, gateway.Calls);
     }
 
+    [Fact]
+    public async Task CommittedOriginAloneIsNotSilentlyPresentedAsAnEmptyCharacter()
+    {
+        var gateway = new FixtureGateway();
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None, hasCommittedOrigin: true);
+
+        Assert.Equal("partial", result.Status);
+        Assert.Null(result.Mechanics);
+        Assert.Contains("Origin", result.Message!, StringComparison.Ordinal);
+        Assert.Equal(0, gateway.Calls);
+    }
+
+    [Fact]
+    public async Task CommittedOriginWithholdsUnprojectedSpeciesEffectsButPreservesClassProficiency()
+    {
+        var gateway = new FixtureGateway();
+        var build = Build(new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1)) with
+        {
+            BaseAbilityScoreInputs = [
+                new BaseAbilityScoreInputView(Guid.NewGuid(), "strength", 14, Now, Now)
+            ]
+        };
+
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None, hasCommittedOrigin: true);
+
+        Assert.Equal("partial", result.Status);
+        Assert.NotNull(result.Mechanics);
+        Assert.Null(result.Mechanics.AbilityValues);
+        Assert.Null(result.Mechanics.SavingThrows);
+        Assert.Null(result.Mechanics.CombatFundamentals);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        Assert.Contains("Species/Ancestry", result.Message!, StringComparison.Ordinal);
+        Assert.Equal(5, gateway.Calls);
+    }
+
+    [Fact]
+    public async Task VerifiedNativeOriginAddsOnlyBaseMetadataAndCoreCalculatedWalkingSpeed()
+    {
+        var gateway = new FixtureGateway();
+        var build = Build(new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1))
+            with { BaseAbilityScoreInputs = [
+                new BaseAbilityScoreInputView(Guid.NewGuid(), "strength", 14, Now, Now)
+            ] };
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
+
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(30, gateway.LastBaseWalkSpeed);
+        Assert.Equal(30, Assert.Single(result.Mechanics!.Movement!).EffectiveValue);
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-size" &&
+            Equals(value.EffectiveValue, "medium"));
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-creature-type" &&
+            Equals(value.EffectiveValue, "humanoid"));
+        Assert.Null(result.Mechanics.AbilityValues);
+        Assert.Null(result.Mechanics.SavingThrows);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+    }
+
+    [Fact]
+    public async Task OriginMetadataDoesNotRequireUnrelatedClassInputs()
+    {
+        var gateway = new FixtureGateway();
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
+        Assert.Equal("partial", result.Status);
+        Assert.NotNull(result.Mechanics);
+        Assert.Equal(30, Assert.Single(result.Mechanics.Movement!).EffectiveValue);
+        Assert.Equal(30, gateway.LastBaseWalkSpeed);
+        Assert.True(gateway.Calls >= 4,
+            "Even without Class input, effective walking speed must come from the Core kernel.");
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-walk-speed" && Equals(value.EffectiveValue, 30));
+    }
+
+    [Fact]
+    public async Task NativeConditionsCanWithholdEffectiveWalkWithoutHidingVerifiedBaseOrigin()
+    {
+        var gateway = new FixtureGateway { ConditionMovementUnresolved = true };
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
+
+        Assert.Equal("partial", result.Status);
+        Assert.Equal(30, gateway.LastBaseWalkSpeed);
+        Assert.Null(result.Mechanics!.Movement);
+        Assert.Contains(result.Mechanics.CharacterMetadata!, value =>
+            value.Key == "origin.base-walk-speed" && Equals(value.EffectiveValue, 30));
+    }
+
+    [Fact]
+    public async Task UncommittedOriginPreviewCannotSupplyMovementToNativeCharacterKernel()
+    {
+        var gateway = new FixtureGateway();
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None,
+            hasCommittedOrigin: false,
+            originProjection: new VerifiedOriginProjectionContext("first-party-001", Fingerprint,
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
+
+        Assert.Equal("unconfigured", result.Status);
+        Assert.Null(result.Mechanics);
+        Assert.Equal(0, gateway.Calls);
+        Assert.Null(gateway.LastBaseWalkSpeed);
+    }
+
+    [Fact]
+    public async Task UpdatedNativeCatalogDiscardsFormerOriginScalarsButPreservesClassProgression()
+    {
+        var gateway = new FixtureGateway();
+        var build = Build(new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1));
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originProjection: new VerifiedOriginProjectionContext("first-party-001",
+                new string('b', 64),
+                new VerifiedOriginIntrinsics("humanoid", "medium", 30)));
+
+        Assert.Equal("partial", result.Status);
+        Assert.Null(gateway.LastBaseWalkSpeed);
+        Assert.Null(result.Mechanics!.Movement);
+        Assert.Null(result.Mechanics.CharacterMetadata);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        Assert.Contains("rules changed", result.Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("class:wizard")]
     [InlineData("feat:alert")]
@@ -393,6 +533,8 @@ public sealed class NativeCharacterPresentationBridgeTests
         public int? LastAdvancementLevel { get; private set; }
         public string[] LastSelectedOptions { get; private set; } = [];
         public string[] LastConditionIds { get; private set; } = [];
+        public int? LastBaseWalkSpeed { get; private set; }
+        public bool ConditionMovementUnresolved { get; init; }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken token)
         {
@@ -434,9 +576,15 @@ public sealed class NativeCharacterPresentationBridgeTests
             Calls++;
             LastConditionIds = request.GetProperty("conditionIds").EnumerateArray()
                 .Select(value => value.GetString()!).ToArray();
-            var item = request.GetProperty("advancements").EnumerateArray().Single();
-            LastAdvancementClassId = item.GetProperty("classId").GetString();
-            LastAdvancementLevel = item.GetProperty("level").GetInt32();
+            LastBaseWalkSpeed = request.TryGetProperty("baseWalkSpeed", out var speed) &&
+                speed.ValueKind == JsonValueKind.Number
+                ? speed.GetInt32() : null;
+            var entries = request.GetProperty("advancements").EnumerateArray().ToArray();
+            Assert.True(entries.Length <= 1, "Fixture models one native class or none.");
+            LastAdvancementClassId = entries.Length == 1
+                ? entries[0].GetProperty("classId").GetString() : null;
+            LastAdvancementLevel = entries.Length == 1
+                ? entries[0].GetProperty("level").GetInt32() : null;
             LastSelectedOptions = request.GetProperty("selectedOptions")
                 .EnumerateArray().Select(value => value.GetString()!).ToArray();
             LastCurrentResources = request.GetProperty("currentResources")
@@ -466,6 +614,15 @@ public sealed class NativeCharacterPresentationBridgeTests
                     }
                     : []
             }))!;
+            if (LastBaseWalkSpeed is int walk)
+                projection["values"]!["movement.walk"] = JsonNode.Parse(
+                    ConditionMovementUnresolved
+                        ? JsonSerializer.Serialize(new {
+                            status = "unsupported", value = (int?)null
+                        })
+                        : JsonSerializer.Serialize(new {
+                            status = "resolved", value = (int?)walk
+                        }));
             if (IncludeHierarchy)
                 projection["training"] = JsonNode.Parse("""
                     [{"id":"skill.arcana","name":"Arcana","kind":"skill","governingAbility":"intelligence","supportsRanks":true},

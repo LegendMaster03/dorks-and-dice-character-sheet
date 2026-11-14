@@ -14,6 +14,12 @@ public sealed record ToolHostUserContext(string Id, string DisplayName);
 
 public sealed record ToolHostCampaignContext(Guid Id, string Name, string Role);
 
+/// <summary>
+/// Site-verified target pairs for active campaign DMs. These do not confer
+/// character ownership or themselves authorize any specific Origin ruling.
+/// </summary>
+public sealed record ToolHostDmCharacterScope(Guid CampaignId, Guid CharacterId);
+
 public sealed record ToolHostCharacterContext(
     Guid Id,
     string Name,
@@ -28,7 +34,8 @@ public sealed record ToolHostAuthenticationContext(
     ToolHostUserContext User,
     IReadOnlyList<string> GlobalRoles,
     IReadOnlyList<ToolHostCampaignContext> Campaigns,
-    IReadOnlyList<ToolHostCharacterContext>? Characters = null)
+    IReadOnlyList<ToolHostCharacterContext>? Characters = null,
+    IReadOnlyList<ToolHostDmCharacterScope>? DmCharacterScopes = null)
 {
     public string? DelegationCapability { get; init; }
     public string? DelegationPath { get; init; }

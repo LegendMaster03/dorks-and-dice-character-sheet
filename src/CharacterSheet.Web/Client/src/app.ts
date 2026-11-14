@@ -37,6 +37,9 @@ import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
 import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
 import { createHarvestingCraftingWorkflow } from "./features/harvesting/harvesting-workflow.js";
+import { createOriginWorkflow } from "./features/origin/origin-workflow.js";
+import { createOriginDmWorkflow } from "./features/origin/origin-dm-workflow.js";
+import { renderDmOriginReview } from "./features/origin/origin-dm-review.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -97,6 +100,19 @@ function render(): void {
             break;
         case "error":
             content = renderStateScreen("Character Sheet unavailable", state.screen.message, "error");
+            break;
+        case "dm-origin-review":
+            content = route.kind === "dm-origin-review"
+                ? renderDmOriginReview(route.campaignId, route.characterId,
+                    dmOriginWorkflow.current(), {
+                        reload: () => void dmOriginWorkflow.load(
+                            route.characterId, route.campaignId),
+                        toggle: candidateId => dmOriginWorkflow.toggleCandidate(candidateId),
+                        apply: () => void dmOriginWorkflow.apply(
+                            route.characterId, route.campaignId)
+                    })
+                : renderStateScreen("Origin DM review unavailable",
+                    "No verified campaign and target were supplied.", "warning");
             break;
         case "invalid":
             content = renderStateScreen("Unsupported Character Sheet route", state.screen.route, "warning");
@@ -358,7 +374,31 @@ function renderWorkspace(
                 : { status: "loading" },
         state.presentation.equipmentPreview ?? null,
         state.presentation.equipmentPreviewMessage,
-        state.presentation.equipmentPreviewStatus);
+        state.presentation.equipmentPreviewStatus,
+        originWorkflow.current(),
+        {
+            openChooser: (category, candidateId, requirementId, parentSlot) =>
+                void originWorkflow.openChooser(category, candidateId, requirementId, parentSlot),
+            searchChooser: query => void originWorkflow.searchChooser(query),
+            closeChooser: () => originWorkflow.closeChooser(),
+            chooseOption: id => void originWorkflow.chooseOption(character.characterId, id),
+            clearAncestry: () => void originWorkflow.clearAncestry(character.characterId),
+            setMode: mode => void originWorkflow.setMode(character.characterId, mode),
+            clearMixedParent: slot =>
+                void originWorkflow.clearMixedParent(character.characterId, slot),
+            setFiniteChoice: (candidateId, requirementId, id) =>
+                void originWorkflow.setFiniteChoice(character.characterId,
+                    candidateId, requirementId, id),
+            activate: () => void originWorkflow.activate(character.characterId),
+            refreshDraft: () => void originWorkflow.refreshDraft(character.characterId),
+            reload: () => void originWorkflow.load(character.characterId),
+            loadParentOptions: () => void originWorkflow.loadParentOptions(character.characterId),
+            selectParentSource: (contributorId, parentCharacterId) =>
+                originWorkflow.selectParentSource(character.characterId,
+                    contributorId, parentCharacterId),
+            reviewParentSources: () =>
+                void originWorkflow.reviewParentSources(character.characterId)
+        });
     return workspace;
 }
 
@@ -394,7 +434,8 @@ async function bootstrapCharacter(): Promise<void> {
             await Promise.all([
                 buildStateWorkflow.load(character.characterId),
                 routineStateWorkflow.load(character.characterId),
-                presentationWorkflow.load(character.characterId)
+                presentationWorkflow.load(character.characterId),
+                originWorkflow.load(character.characterId)
             ]);
         }
     } catch (error) {
@@ -432,7 +473,8 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
         await Promise.all([
             buildStateWorkflow.load(initialized.characterId),
             routineStateWorkflow.load(initialized.characterId),
-            presentationWorkflow.load(initialized.characterId)
+            presentationWorkflow.load(initialized.characterId),
+            originWorkflow.load(initialized.characterId)
         ]);
     } catch (error) {
         application.dispatch({ type: "load-failed", message: requestErrorMessage(error) });
@@ -440,6 +482,8 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
 }
 
 const application = createApplication(initialState, render);
+const originWorkflow = createOriginWorkflow(environment, () => application.render());
+const dmOriginWorkflow = createOriginDmWorkflow(environment, () => application.render());
 const presentationWorkflow = createPresentationWorkflow(application, environment);
 const routineStateWorkflow = createRoutineStateWorkflow(application, environment);
 const harvestingCraftingWorkflow = createHarvestingCraftingWorkflow(
@@ -490,4 +534,10 @@ const conditionsWorkflow = createConditionsWorkflow(
     environment);
 
 application.render();
-void bootstrapCharacter();
+// A DM does not have to own the character. Never bootstrap the owner-only
+// Character editor on a campaign-scoped review route.
+if (route.kind === "dm-origin-review") {
+    void dmOriginWorkflow.load(route.characterId, route.campaignId);
+} else {
+    void bootstrapCharacter();
+}

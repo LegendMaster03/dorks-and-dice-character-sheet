@@ -944,6 +944,35 @@ test("support surfaces stay neutral when unavailable and consume supplied values
     assert.equal(walk(trainingCard).includes(competenciesCard), false);
 });
 
+test("Low-Light Vision senses display verified grant source without fabricating one", () => {
+    const source = {
+        key: "origin-grant:grant:vision",
+        label: "Native Species/Ancestry trait",
+        detail: "species.orc/traits/0",
+        presentationRequired: true
+    };
+    const vision = mechanical(
+        "sense.low-light-vision", "Low-Light Vision",
+        "Dim Light perceived as Bright Light; Darkness unchanged",
+        { sourceAttributions: [source] }
+    );
+    const sheet = render("actions", { senses: [vision] });
+    assert.match(visibleText(sheet), /Low-Light Vision/);
+    assert.match(visibleText(sheet), /Dim Light perceived as Bright Light/);
+    assert.match(visibleText(sheet), /Darkness unchanged/);
+    const shown = byClass(sheet, "dd-support-scaffold__source");
+    assert.equal(shown.length, 1);
+    assert.match(shown[0].textContent,
+        /Native Species\/Ancestry trait: species\.orc\/traits\/0/);
+
+    const other = render("actions", {
+        senses: [mechanical("sense.placeholder", "Unverified", "Unknown", {
+            sourceAttributions: [{ ...source, presentationRequired: false }]
+        })]
+    });
+    assert.equal(byClass(other, "dd-support-scaffold__source").length, 0);
+});
+
 test("null mechanics projection keeps the normal sheet structure and uses neutral dashes", () => {
     const rendered = render("actions", null);
     const text = visibleText(rendered);

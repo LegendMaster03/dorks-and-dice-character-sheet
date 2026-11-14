@@ -378,6 +378,79 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_hit_point_gains");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState", b =>
+        {
+            b.Property<Guid>("CharacterId").HasColumnType("uuid");
+            b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+            b.Property<string>("Fingerprint").IsRequired()
+                .HasMaxLength(200).HasColumnType("character varying(200)");
+            b.Property<string>("ProfileJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("EvaluatedProjectionJson").HasColumnType("jsonb");
+            b.Property<long>("Revision").HasColumnType("bigint");
+            b.Property<string>("RulesetId").IsRequired()
+                .HasMaxLength(160).HasColumnType("character varying(160)");
+            b.Property<long?>("SourceDraftRevision").HasColumnType("bigint");
+            b.Property<DateTimeOffset>("UpdatedAt").HasColumnType("timestamp with time zone");
+            b.HasKey("CharacterId");
+            b.ToTable("character_authorized_origins");
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginEventReceipt", b =>
+        {
+            b.Property<Guid>("CharacterId").HasColumnType("uuid");
+            b.Property<string>("EventId").HasMaxLength(240).HasColumnType("character varying(240)");
+            b.Property<string>("AuthorizationEvidenceId").IsRequired()
+                .HasMaxLength(320).HasColumnType("character varying(320)");
+            b.Property<string>("AuthorizationKind").IsRequired()
+                .HasMaxLength(32).HasColumnType("character varying(32)");
+            b.Property<Guid?>("ApprovalActorUserId").HasColumnType("uuid");
+            b.Property<Guid?>("ApprovalCampaignId").HasColumnType("uuid");
+            b.Property<string>("ApprovedDecisionsJson").HasColumnType("jsonb");
+            b.Property<long>("CommittedRevision").HasColumnType("bigint");
+            b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+            b.Property<string>("MethodId").IsRequired()
+                .HasMaxLength(180).HasColumnType("character varying(180)");
+            b.Property<string>("MethodRuleId").IsRequired()
+                .HasMaxLength(180).HasColumnType("character varying(180)");
+            b.HasKey("CharacterId", "EventId");
+            b.HasIndex("CharacterId", "CommittedRevision").IsUnique()
+                .HasDatabaseName("UX_character_origin_event_receipts_Revision");
+            b.ToTable("character_origin_event_receipts", t =>
+                t.HasCheckConstraint("CK_origin_receipt_dm_audit_complete",
+                    """("ApprovalActorUserId" IS NULL AND "ApprovalCampaignId" IS NULL AND "ApprovedDecisionsJson" IS NULL) OR ("ApprovalActorUserId" IS NOT NULL AND "ApprovalCampaignId" IS NOT NULL AND "ApprovedDecisionsJson" IS NOT NULL)"""));
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginDraftState", b =>
+        {
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<DateTimeOffset>("CreatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("Fingerprint")
+                .HasMaxLength(200)
+                .HasColumnType("character varying(200)");
+
+            b.Property<string>("ProposalJson")
+                .IsRequired()
+                .HasColumnType("jsonb");
+
+            b.Property<long>("Revision")
+                .HasColumnType("bigint");
+
+            b.Property<string>("RulesetId")
+                .IsRequired()
+                .HasMaxLength(160)
+                .HasColumnType("character varying(160)");
+
+            b.Property<DateTimeOffset>("UpdatedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.HasKey("CharacterId");
+            b.ToTable("character_origin_drafts");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterProfileState", b =>
         {
             b.Property<Guid>("CharacterId")
@@ -630,6 +703,30 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
                 .WithMany("Notes")
                 .HasForeignKey("CharacterId")
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithOne()
+                .HasForeignKey("CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState", "CharacterId")
+                .OnDelete(DeleteBehavior.Cascade).IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginEventReceipt", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState", null)
+                .WithMany()
+                .HasForeignKey("CharacterId").OnDelete(DeleteBehavior.Cascade).IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginDraftState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithOne()
+                .HasForeignKey("CharacterSheet.Domain.Characters.CharacterOriginDraftState", "CharacterId")
                 .OnDelete(DeleteBehavior.Cascade)
                 .IsRequired();
         });

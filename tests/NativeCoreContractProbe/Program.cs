@@ -169,6 +169,234 @@ Ensure(training.Entries.Single(item => item.Key == "skill.listen").SupportsRanks
     training.Entries.Single(item => item.Key == "skill.perception").SupportsRanks == false,
     "Native child and composite rank controls were not preserved.");
 
+#if PILLAR2_PHASE5_ORIGIN
+// This job must use the *Phase 5* Rules Core branch, not the currently
+// deployed main Core. Validate the actual catalog-backed Origin evaluator
+// before treating a mocked HTTP response as evidence of executable content.
+var firstPartyMethod = new NativeOriginMethodReference(
+    "rule.creature-origination", "biological");
+Ensure(catalog.TryGetById("species.orc", out _),
+    "Selected native Orc is unavailable.");
+var nativeDirectOrigin = new NativeOriginProposal(
+    "cross-repo-orc", NativeOriginIntent.Direct, firstPartyMethod,
+    [], [], [], SelectedSpeciesId: "species.orc");
+var orcOrigin = new NativeOriginConstructionEngine(catalog).Evaluate(
+    new NativeOriginConstructionRequest(nativeDirectOrigin));
+Ensure(orcOrigin.Status == NativeOriginConstructionStatus.Authorized &&
+    orcOrigin.Profile is not null &&
+    orcOrigin.Profile.Underlying.SpeciesId == "species.orc" &&
+    orcOrigin.Profile.Current.SpeciesId == "species.orc" &&
+    orcOrigin.Profile.IndependentGrants.Count == 0 &&
+    orcOrigin.Profile.History.Count == 1 &&
+    orcOrigin.Profile.History[0].Stage == NativeOriginEventStage.Completed &&
+    orcOrigin.Profile.Adjudication.Adjudication == NativeOriginAdjudication.Supported,
+    "Real Orc native direct-Origin construction was not authorized without DM claims: " +
+    string.Join("; ", orcOrigin.Issues.Select(issue => issue.Code + "=" + issue.Path)));
+
+// The Phase 5 Core branch must derive intrinsic slots from the *granted*
+// Orc source occurrences. Sheet may pass these scalars to the ordinary
+// native character kernel only after the server has matched a committed
+// profile against a fresh authoritative Origin evaluation.
+var orcIntrinsics = NativeOriginIntrinsicProjector.Project(orcOrigin);
+Ensure(orcIntrinsics.Status == "resolved" && orcIntrinsics.PreviewOnly &&
+    orcIntrinsics.Size?.Value == "medium" &&
+    orcIntrinsics.CreatureType?.Value == "humanoid" &&
+    orcIntrinsics.WalkingSpeedFeet?.Value == 30 &&
+    orcIntrinsics.WalkingSpeedFeet.SourceId == "species.orc" &&
+    orcIntrinsics.WalkingSpeedFeet.OccurrencePath == "/walkingSpeedFeet",
+    "Orc intrinsic slots were not derived from authorized source occurrences.");
+// The native trait must be actually granted and match the authored rule.
+// This test serializes the *real* Core objects using the same web JSON
+// shape as the server contract, then asks Sheet to verify provenance.
+var nativeOrcVision = NativeOriginVisionProjector.Project(catalog, orcOrigin);
+Ensure(nativeOrcVision.Status == "resolved" &&
+    nativeOrcVision.LowLightVision?.RuleId == "rule.low-light-vision" &&
+    nativeOrcVision.LowLightVision.ActualLightLevel == "dim" &&
+    nativeOrcVision.LowLightVision.PerceivedLightLevel == "bright" &&
+    NativeOriginVisionProjector.Perceive(nativeOrcVision, "dim").PerceivedLightLevel == "bright" &&
+    NativeOriginVisionProjector.Perceive(nativeOrcVision, "darkness").PerceivedLightLevel == "darkness",
+    "Core must apply only granted Orc low-light vision to Dim Light, not Darkness.");
+
+var visionJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+var activeOrcVision = VerifiedOriginVisionReader.Read(
+    JsonSerializer.SerializeToElement(nativeOrcVision, visionJsonOptions),
+    JsonSerializer.Serialize(orcOrigin.Profile!, visionJsonOptions));
+Ensure(activeOrcVision is not null &&
+    activeOrcVision.SourceId == "species.orc" &&
+    activeOrcVision.OccurrencePath.StartsWith("/traits/", StringComparison.Ordinal),
+    "Sheet could not reconcile the Core low-light effect with its exact Origin grant.");
+
+var nativeWithOrc = new NativeCharacterProjector(catalog).Project(
+    request with { BaseWalkSpeed = orcIntrinsics.WalkingSpeedFeet.Value });
+Ensure(nativeWithOrc.Values.TryGetValue("movement.walk", out var realWalk) &&
+    realWalk.Status == "resolved" && realWalk.Value == 30,
+    "The native character kernel did not resolve verified Orc base movement.");
+
+var grapplingProjection = new NativeCharacterProjector(catalog).Project(
+    request with {
+        BaseWalkSpeed = orcIntrinsics.WalkingSpeedFeet.Value,
+        ConditionIds = ["condition.grappled"]
+    });
+Ensure(grapplingProjection.Values.TryGetValue("movement.walk", out var grappledSpeed) &&
+    grappledSpeed.Status == "resolved" && grappledSpeed.Value == 0,
+    "A verified Orc baseline must still be overridden by an authored native Grappled condition.");
+
+var classlessOrcProjection = new NativeCharacterProjector(catalog).Project(
+    request with {
+        AbilityScores = new Dictionary<string, int>(),
+        Advancements = [],
+        SelectedOptions = [],
+        BaseWalkSpeed = orcIntrinsics.WalkingSpeedFeet.Value
+    });
+Ensure(classlessOrcProjection.Values.TryGetValue("movement.walk", out var classlessWalk) &&
+    classlessWalk.Status == "resolved" && classlessWalk.Value == 30 &&
+    classlessOrcProjection.Status != "invalid",
+    "Native Core must resolve verified base movement without inventing Class or ability inputs.");
+
+var sheetWithOrc = await NativeCharacterPresentationBridge.ProjectAsync(
+    gateway, build, state, CancellationToken.None,
+    hasCommittedOrigin: true,
+    originProjection: new VerifiedOriginProjectionContext(
+        catalog.RulesetId, catalog.Fingerprint,
+        new VerifiedOriginIntrinsics(
+            orcIntrinsics.CreatureType.Value,
+            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value),
+        activeOrcVision));
+Ensure(sheetWithOrc.Status == "partial" &&
+    sheetWithOrc.Mechanics?.Movement?.Any(value =>
+        value.Key == "movement.walk" &&
+        value.EffectiveValue is int feet && feet == 30) == true &&
+    sheetWithOrc.Mechanics.CharacterMetadata?.Any(value =>
+        value.Key == "origin.base-size" &&
+        value.EffectiveValue is string size && size == "medium") == true &&
+    sheetWithOrc.Mechanics.Senses?.Any(value =>
+        value.Key == "sense.low-light-vision" &&
+        value.EffectiveValue is string rule &&
+        rule.Contains("Dim Light", StringComparison.Ordinal) &&
+        rule.Contains("Darkness unchanged", StringComparison.Ordinal)) == true &&
+    sheetWithOrc.Mechanics.AbilityValues is null,
+    "Character Sheet did not preserve the verified Orc baseline as partial mechanics.");
+
+var grappledSheetState = state with
+{
+    Conditions = [new CharacterConditionOccurrenceView(
+        Guid.NewGuid(), "condition.grappled",
+        null, null, null, null, null, null, now, now)]
+};
+var grappledSheet = await NativeCharacterPresentationBridge.ProjectAsync(
+    gateway, build, grappledSheetState, CancellationToken.None,
+    hasCommittedOrigin: true,
+    originProjection: new VerifiedOriginProjectionContext(
+        catalog.RulesetId, catalog.Fingerprint,
+        new VerifiedOriginIntrinsics(
+            orcIntrinsics.CreatureType.Value,
+            orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value),
+        activeOrcVision));
+Ensure(grappledSheet.Status == "partial" &&
+    grappledSheet.Mechanics?.Movement?.Any(value =>
+        value.Key == "movement.walk" &&
+        value.EffectiveValue is int effective && effective == 0) == true &&
+    grappledSheet.Mechanics.CharacterMetadata?.Any(value =>
+        value.Key == "origin.base-walk-speed" &&
+        value.EffectiveValue is int baseline && baseline == 30) == true,
+    "Character Sheet must show Core-computed Grappled movement 0 while retaining native Orc base speed 30.");
+
+
+// Human's mandatory native Origin choices are not invented or bypassed. A
+// profile object in an incomplete result is not an authorized active Origin.
+var humanOrigin = new NativeOriginConstructionEngine(catalog).Evaluate(
+    new NativeOriginConstructionRequest(nativeDirectOrigin with
+    {
+        Id = "cross-repo-human",
+        SelectedSpeciesId = "species.human"
+    }));
+Ensure(humanOrigin.Status != NativeOriginConstructionStatus.Authorized &&
+    humanOrigin.Issues.Any(issue =>
+        issue.Code == "required-origin-selection-missing") &&
+    NativeOriginIntrinsicProjector.Project(humanOrigin).WalkingSpeedFeet is null,
+    "Incomplete Human Origin was silently treated as a complete active intrinsic baseline.");
+// Validate the new first-party choice adapter across the actual Rules Core
+// branch, without relying on a mock "Authorized" response. It is safe to
+// grant a native Skill choice only when current source identity and membership
+// are independently verified. Origin feats remain unresolved until their
+// native category/prerequisite contract is completed.
+var humanProposal = nativeDirectOrigin with
+{
+    Id = "human-choice-check",
+    SelectedSpeciesId = "species.human"
+};
+var discoveredHuman = new NativeOriginSourceDeconstructor(catalog)
+    .Deconstruct(humanProposal).Proposal.Candidates;
+var sizeCandidate = discoveredHuman.Single(candidate =>
+    candidate.Identity.IntrinsicSlotId == "size" &&
+    candidate.RequiredChoices?.Any(choice => choice.Id == "size") == true);
+var skillCandidate = discoveredHuman.Single(candidate =>
+    candidate.RequiredChoices?.Any(choice =>
+        choice.OptionCatalogId == "any-native-skill") == true);
+var sizeSelected = new NativeOriginManifestation("size", sizeCandidate.Id,
+    Choices: [new NativeOriginChoiceSelection("size", ["medium"])]);
+var skillSelected = new NativeOriginManifestation("skill", skillCandidate.Id,
+    Choices: [new NativeOriginChoiceSelection("selection", ["skill.intimidation"])]);
+var skillReviewed = new NativeOriginFirstPartyChoiceEvaluator(catalog).Evaluate(
+    humanProposal with { Manifestations = [sizeSelected, skillSelected] });
+Ensure(skillReviewed.Status != NativeOriginConstructionStatus.Authorized &&
+    skillReviewed.Issues.Any(issue =>
+        issue.Code == "required-origin-selection-missing") &&
+    !skillReviewed.Issues.Any(issue =>
+        issue.Code == "choice-authorization-unresolved") &&
+    skillReviewed.Profile!.Underlying.InherentGrants.Any(grant =>
+        grant.Identity.Occurrence.OccurrencePath == "/traits/0" &&
+        grant.ResolvedChoices?.Any(choice =>
+            choice.SelectedOptionIds.Contains("skill.intimidation")) == true),
+    "Selected native Human Skill was not independently verified, or an unimplemented feat was approved.");
+var categoryForgery = new NativeOriginFirstPartyChoiceEvaluator(catalog).Evaluate(
+    humanProposal with
+    {
+        Manifestations = [sizeSelected, skillSelected with
+        {
+            Choices = [new("selection", ["competency.alchemy"])]
+        }]
+    });
+Ensure(categoryForgery.Issues.Any(issue =>
+        issue.Code == "choice-authorization-unresolved") &&
+    !categoryForgery.Profile!.Underlying.InherentGrants.Any(grant =>
+        grant.Identity.Occurrence.OccurrencePath == "/traits/0"),
+    "A different native category was incorrectly accepted as a Human Skill choice.");
+// A Human–Elf mixed draft supplies native *source references* only. The
+// deconstructor can inspect each authored occurrence, but no inheritance
+// rule, biological compatibility, DM ruling, or effective grants are inferred.
+var mixedHumanElf = new NativeOriginProposal(
+    "mixed-human-elf-evidence", NativeOriginIntent.Mixed, firstPartyMethod,
+    [
+        new NativeOriginContributor("parent-one",
+            new(NativeOriginInputKind.BiologicalParent),
+            new(NativeOriginSourceKind.Native, "species.human")),
+        new NativeOriginContributor("parent-two",
+            new(NativeOriginInputKind.BiologicalParent),
+            new(NativeOriginSourceKind.Native, "species.elf"))
+    ], [], []);
+var mixedReviewed = new NativeOriginFirstPartyChoiceEvaluator(catalog)
+    .Evaluate(mixedHumanElf);
+Ensure(NativeOriginIntrinsicProjector.Project(mixedReviewed).WalkingSpeedFeet is null &&
+    mixedReviewed.Status != NativeOriginConstructionStatus.Authorized &&
+    mixedReviewed.Profile is not null &&
+    mixedReviewed.Profile.Underlying.SpeciesId is null &&
+    mixedReviewed.Profile.Underlying.AncestryId is null &&
+    mixedReviewed.Profile.Underlying.InherentGrants.Count == 0 &&
+    mixedReviewed.EvaluatedProposal.Candidates.Any(candidate =>
+        candidate.ContributorId == "parent-one" &&
+        candidate.Identity.Occurrence.Source.Id == "species.human") &&
+    mixedReviewed.EvaluatedProposal.Candidates.Any(candidate =>
+        candidate.ContributorId == "parent-two" &&
+        candidate.Identity.Occurrence.Source.Id == "species.elf"),
+    "Human–Elf native source evidence must remain inspectable but not automatically authorized.");
+
+Console.WriteLine("Phase 5 Origin native-contract checks passed: Orc authorized; " +
+    "Orc size/speed projected; Human native Skill verified; Human-Elf unresolved; " +
+    "Origin feat remains incomplete.");
+
+#endif
+
 Console.WriteLine(
     $"Cross-repository mechanics contract passed: {catalog.RulesetId}, fingerprint {catalog.Fingerprint}, " +
     "Warlock projection, class eligibility, options, skill families/composites, and Sheet presentation.");

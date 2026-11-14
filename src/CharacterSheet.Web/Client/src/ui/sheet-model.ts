@@ -9,6 +9,8 @@ import {
     type CharacterBuilderChoice
 } from "../builder-api.js";
 import type { CharacterBuilderUiState } from "../app-state.js";
+import type { OriginUiState } from "../features/origin/origin-workflow.js";
+import { hasLegacySpeciesSelections, isAuthorizedInitialNativeOrigin } from "../features/origin/origin-builder-model.js";
 import { getStartingClassEntry, getStoredChoiceConceptKey } from "../builder-rules.js";
 import type { RuleReferenceState } from "../builder-rules.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
@@ -74,7 +76,7 @@ export interface GuidedBuilderSectionDefinition {
 export const GUIDED_BUILDER_SECTIONS: readonly GuidedBuilderSectionDefinition[] = [
     { id: "class", label: "Class" },
     { id: "background", label: "Background" },
-    { id: "species", label: "Species" },
+    { id: "species", label: "Origin" },
     { id: "abilities", label: "Abilities" },
     { id: "equipment", label: "Equipment" },
     { id: "review", label: "Review" }
@@ -137,7 +139,8 @@ export function getGuidedBuilderSectionStates(
     builder: CharacterBuilderUiState,
     mechanics: CharacterMechanicsView | null = null,
     nativeEquipment: NativeStartingEquipmentPreview | null = null,
-    equipmentReceived = false
+    equipmentReceived = false,
+    origin?: OriginUiState
 ): readonly GuidedBuilderSectionState[] {
     if (builder.status !== "ready" || builder.build === null) {
         return GUIDED_BUILDER_SECTIONS.map(section => ({
@@ -199,7 +202,10 @@ export function getGuidedBuilderSectionStates(
         && rulesVerificationAvailable
         && pendingBackgroundChoices.length === 0
         && !backgroundHasConflict;
-    const speciesResolved = speciesSelected
+    // Authorized Origin is stored separately from legacy foundational Species.
+    // Its effective grants are not yet projected into Character Sheet, so the
+    // setup step remains incomplete even when initial Origin is committed.
+    const speciesResolved = origin === undefined && speciesSelected
         && rulesVerificationAvailable
         && pendingSpeciesChoices.length === 0
         && !speciesHasConflict;
@@ -221,13 +227,25 @@ export function getGuidedBuilderSectionStates(
         "Background",
         rulesVerificationAvailable,
         backgroundHasConflict);
-    const speciesDetail = guidedSelectionDetail(
-        "Species",
-        speciesSelected,
-        pendingSpeciesChoices.length,
-        "Species",
-        rulesVerificationAvailable,
-        speciesHasConflict);
+    const speciesDetail = origin === undefined
+        ? guidedSelectionDetail(
+            "Species", speciesSelected, pendingSpeciesChoices.length,
+            "Species", rulesVerificationAvailable, speciesHasConflict)
+        : hasLegacySpeciesSelections(builder.build.foundationalSelections)
+            ? "Legacy Species/Subspecies selections require explicit Origin reconciliation."
+            : origin.status !== "ready"
+                ? "Origin native state and selections have not been loaded."
+                : origin.savedState !== null
+                    ? "Native Origin is committed; current cross-pillar mechanics still need integration."
+                    : origin.draft !== null &&
+                        (origin.draft.proposal.intent === 1 ||
+                         origin.draft.proposal.intent === "Mixed")
+                        ? "Mixed biological sources are draft evidence only; inheritance and DM authorization remain unresolved."
+                        : isAuthorizedInitialNativeOrigin(origin.preview)
+                            ? "Native first-party Origin is eligible, but the draft has not been activated."
+                        : origin.draft !== null
+                            ? "Origin draft is saved but not mechanically authorized or complete."
+                            : "Choose a Species in the new Origin editor.";
 
     let abilityDetail: string;
     if (!allBaseAbilitiesConfigured) {
@@ -280,7 +298,7 @@ export function getGuidedBuilderSectionStates(
         },
         {
             id: "species",
-            label: "Species",
+            label: "Origin",
             status: speciesResolved ? "resolved" : "incomplete",
             detail: speciesDetail
         },

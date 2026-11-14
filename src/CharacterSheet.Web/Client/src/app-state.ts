@@ -48,6 +48,7 @@ export type CharacterSheetScreen =
     | { kind: "archived"; character: CharacterSheetBootstrapResponse }
     | { kind: "not-found" }
     | { kind: "error"; message: string }
+    | { kind: "dm-origin-review" }
     | { kind: "invalid"; route: string };
 
 export type RuleChooserState =
@@ -385,6 +386,9 @@ export function createInitialState(route: CharacterSheetRoute): CharacterSheetAp
             break;
         case "character":
             screen = { kind: "loading" };
+            break;
+        case "dm-origin-review":
+            screen = { kind: "dm-origin-review" };
             break;
         case "invalid":
             screen = { kind: "invalid", route: route.route };

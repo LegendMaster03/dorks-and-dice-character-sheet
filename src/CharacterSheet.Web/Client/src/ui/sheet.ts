@@ -12,6 +12,12 @@ import {
 } from "../app-state.js";
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import { renderCharacterBuilder } from "./builder.js";
+import { renderOriginBuilder, type OriginBuilderHandlers } from "../features/origin/origin-builder.js";
+import type { OriginUiState } from "../features/origin/origin-workflow.js";
+import {
+    hasLegacySpeciesSelections,
+    savedUnderlyingOriginIdentity
+} from "../features/origin/origin-builder-model.js";
 import {
     createCompactAdvancementSummary,
     type CharacterAdvancementView
@@ -80,7 +86,9 @@ export function renderCharacterWorkspace(
     mechanicsAvailability?: { status: "resolved" | "partial" | "unconfigured" | "unavailable" | "loading"; message?: string | null },
     equipmentPreview: NativeStartingEquipmentPreview | null = null,
     equipmentPreviewMessage?: string,
-    equipmentPreviewStatus?: "loading" | "ready" | "error"
+    equipmentPreviewStatus?: "loading" | "ready" | "error",
+    origin?: OriginUiState,
+    originHandlers?: OriginBuilderHandlers
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -103,7 +111,8 @@ export function renderCharacterWorkspace(
         builder,
         forceReadOnly,
         advancement,
-        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id)));
+        portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id),
+        origin));
     if (advancement !== null && advancement.occurrences.length > 0) {
         const advancementEditing = guidedBuilder.open
             && editable
@@ -158,7 +167,9 @@ export function renderCharacterWorkspace(
             handlers,
             equipmentPreview,
             equipmentPreviewMessage,
-            equipmentPreviewStatus));
+            equipmentPreviewStatus,
+            origin,
+            originHandlers));
         if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
             shell.append(renderHarvestingCraftingOverlay(
                 character,
@@ -289,7 +300,9 @@ export function renderCharacterWorkspace(
             builder,
             routine,
             mechanics,
-            handlers));
+            handlers,
+            origin,
+            originHandlers));
     }
     if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
         shell.append(renderHarvestingCraftingOverlay(
@@ -363,7 +376,9 @@ function renderCharacterEditorOverlay(
     builder: CharacterBuilderUiState,
     routine: CharacterRoutineUiState,
     mechanics: CharacterMechanicsView | null,
-    handlers: CharacterSheetHandlers
+    handlers: CharacterSheetHandlers,
+    origin?: OriginUiState,
+    originHandlers?: OriginBuilderHandlers
 ): HTMLElement {
     const overlay = createElement("div", "dd-character-editor-overlay");
     overlay.setAttribute("data-character-editor-overlay", "true");
@@ -381,7 +396,16 @@ function renderCharacterEditorOverlay(
         createButton("Done", "dd-button dd-button--ghost", handlers.leaveEditMode));
 
     const body = createElement("div", "dd-character-editor-surface__body");
-    body.append(renderCharacterBuilder(characterId, builder, false, handlers.structural));
+    body.append(renderCharacterBuilder(
+        characterId, builder, false, handlers.structural,
+        { title: "Class & Background", choices: ["startingClass", "subclass", "background", "deity"] }));
+    if (origin !== undefined && originHandlers !== undefined) {
+        body.append(renderOriginBuilder(characterId, origin, builder.build,
+            builder.build?.readOnly === true, originHandlers));
+    } else {
+        body.append(createInlineState("Origin editor is not loaded. Species and Ancestry can not be changed here.",
+            "warning"));
+    }
     const masteryChoices = renderRulesChoices(
         mechanics,
         routine,
@@ -407,7 +431,9 @@ function renderGuidedBuilder(
     handlers: CharacterSheetHandlers,
     nativeEquipment: NativeStartingEquipmentPreview | null,
     equipmentError?: string,
-    equipmentStatus?: "loading" | "ready" | "error"
+    equipmentStatus?: "loading" | "ready" | "error",
+    origin?: OriginUiState,
+    originHandlers?: OriginBuilderHandlers
 ): HTMLElement {
     const container = createElement("section", "dd-guided-builder");
     container.setAttribute("aria-labelledby", "dd-guided-builder-heading");
@@ -430,7 +456,7 @@ function renderGuidedBuilder(
         ? null
         : projectNativeStartingEquipment(nativeEquipment, routine.state?.rulesInputs ?? []);
     const sectionStates = getGuidedBuilderSectionStates(
-        builder, mechanics, nativeEquipment, equipmentReceived);
+        builder, mechanics, nativeEquipment, equipmentReceived, origin);
     const nav = createElement("nav", "dd-guided-builder__nav");
     nav.setAttribute("aria-label", "Guided builder sections");
     for (const [index, section] of sectionStates.entries()) {
@@ -512,27 +538,17 @@ function renderGuidedBuilder(
             break;
         }
         case "species": {
-            panel.append(renderCharacterBuilder(
-                characterId,
-                builder,
-                false,
-                handlers.structural,
-                { title: "Species", choices: ["species", "subspecies"] }));
-            const speciesFeatures = renderGuidedSourceFeatures(
-                mechanics,
-                getGuidedBuilderChoiceSourceKeys(builder, "species"),
-                "Species Traits");
-            if (speciesFeatures !== null) panel.append(speciesFeatures);
-            const speciesChoices = renderRulesChoices(
-                mechanics,
-                routine,
-                handlers,
-                {
-                    sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "species"),
-                    includeConflicts: false,
-                    heading: "Species Choices"
-                });
-            if (speciesChoices !== null) panel.append(speciesChoices);
+            // The route ID is retained for saved navigation state, but the
+            // editor is the canonical Origin draft. Never duplicate legacy
+            // Species/Subspecies mutations in this guided section.
+            if (origin !== undefined && originHandlers !== undefined) {
+                panel.append(renderOriginBuilder(characterId, origin, builder.build,
+                    builder.build?.readOnly === true, originHandlers));
+            } else {
+                panel.append(createInlineState(
+                    "Origin is unavailable. No legacy Species/Subspecies fallback is permitted.",
+                    "warning"));
+            }
             break;
         }
         case "abilities": {
@@ -861,9 +877,22 @@ export function renderCharacterHeader(
     builder: CharacterBuilderUiState,
     forceReadOnly: boolean,
     advancement: CharacterAdvancementView | null = null,
-    portraitUrl: string | null = null
+    portraitUrl: string | null = null,
+    origin?: OriginUiState
 ): HTMLElement {
     const model = createCharacterHeaderModel(character, builder, forceReadOnly);
+    const underlying = origin?.savedState === null || origin === undefined
+        ? null : savedUnderlyingOriginIdentity(origin.savedState.profile);
+    const legacyOrigin = origin !== undefined &&
+        hasLegacySpeciesSelections(builder.build?.foundationalSelections ?? []);
+    const speciesLabel = underlying !== null
+        ? "Underlying Species" : legacyOrigin ? "Legacy Species" : "Species";
+    const ancestryLabel = underlying !== null
+        ? "Underlying Ancestry" : legacyOrigin ? "Legacy Subspecies" : "Subspecies";
+    const speciesValue = underlying !== null
+        ? (underlying.speciesId ?? "None") : model.species.value;
+    const ancestryValue = underlying !== null
+        ? (underlying.ancestryId ?? "None") : model.subspecies.value;
     const header = createElement("header", "dd-sheet-header");
 
     const identity = createElement("div", "dd-sheet-header__identity");
@@ -889,20 +918,24 @@ export function renderCharacterHeader(
     const species = createElement(
         "span",
         "dd-sheet-header__headline-item",
-        `Species: ${model.species.value}`);
+        `${speciesLabel}: ${speciesValue}`);
     species.setAttribute("data-sheet-header-identity", "species");
-    species.setAttribute("aria-label", `Species: ${model.species.value}`);
-    if (model.species.detail !== undefined) {
+    species.setAttribute("aria-label", `${speciesLabel}: ${speciesValue}`);
+    if (underlying !== null) {
+        species.setAttribute("title", "Committed underlying Origin, not the current transformed form or effective mechanics.");
+    } else if (model.species.detail !== undefined) {
         species.setAttribute("title", model.species.detail);
     }
 
     const subspecies = createElement(
         "span",
         "dd-sheet-header__headline-item",
-        `Subspecies: ${model.subspecies.value}`);
+        `${ancestryLabel}: ${ancestryValue}`);
     subspecies.setAttribute("data-sheet-header-identity", "subspecies");
-    subspecies.setAttribute("aria-label", `Subspecies: ${model.subspecies.value}`);
-    if (model.subspecies.detail !== undefined) {
+    subspecies.setAttribute("aria-label", `${ancestryLabel}: ${ancestryValue}`);
+    if (underlying !== null) {
+        subspecies.setAttribute("title", "Committed underlying Ancestry; current effective forms are resolved separately.");
+    } else if (model.subspecies.detail !== undefined) {
         subspecies.setAttribute("title", model.subspecies.detail);
     }
 

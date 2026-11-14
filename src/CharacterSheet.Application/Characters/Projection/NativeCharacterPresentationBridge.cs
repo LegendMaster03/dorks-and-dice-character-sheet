@@ -32,15 +32,31 @@ public static class NativeCharacterPresentationBridge
         INativeRulesCoreGateway gateway,
         CharacterBuildView build,
         CharacterStateView? state,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool hasCommittedOrigin = false,
+        VerifiedOriginProjectionContext? originProjection = null)
     {
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(build);
 
+        // The caller may only use these native scalars alongside authenticated
+        // committed Origin state. Exact catalog identity is checked again
+        // below when the character projector independently loads its snapshot.
+        var originIntrinsics = hasCommittedOrigin ? originProjection?.Intrinsics : null;
+        var lowLightVision = hasCommittedOrigin ? originProjection?.LowLightVision : null;
+
+        // Even with no Class or abilities, an authorized native Origin's
+        // walking speed must go through the Core kernel: active conditions can
+        // suppress or change effective movement. Never display a raw base
+        // speed in the effective Movement collection as a shortcut.
         if (build.ProgressionEntries.Count == 0 && build.BaseAbilityScoreInputs.Count == 0 &&
-            build.FoundationalSelections.Count == 0)
-            return new("unconfigured", null,
-                "Set base ability scores and choose a starting class to calculate character mechanics.");
+            build.FoundationalSelections.Count == 0 &&
+            !(hasCommittedOrigin && originIntrinsics is not null))
+            return hasCommittedOrigin
+                ? new("partial", null,
+                    "An initial Origin is committed, but its native Species/Ancestry characteristics and other trait effects remain unverified or unprojected.")
+                : new("unconfigured", null,
+                    "Set base ability scores and choose a starting class to calculate character mechanics.");
 
         // Preserve every saved selection. If a record can not be translated
         // unambiguously, do not submit a partial class history as a complete one.
@@ -60,6 +76,19 @@ public static class NativeCharacterPresentationBridge
             fingerprint is null || !Regex.IsMatch(fingerprint, "^[0-9a-f]{64}$") ||
             metadata["capabilities"]?["characterProjection"]?.GetValue<bool>() != true)
             throw new RulesCoreGatewayException("Rules Core returned invalid native projection metadata.");
+
+        // The native catalog can change between the authorized Origin review
+        // and this character projection. Keep independently supported Class
+        // values, but never combine a stale Origin base speed with a different
+        // native condition or Character projection catalog.
+        var originCatalogChanged = originIntrinsics is not null &&
+            (originProjection!.RulesetId != rulesetId ||
+             originProjection.Fingerprint != fingerprint);
+        if (originCatalogChanged)
+        {
+            originIntrinsics = null;
+            lowLightVision = null;
+        }
 
         // A Sheet deploy may precede Core's manual release. Only expose native
         // condition numbers when Core advertises per-value invalidation; older
@@ -125,7 +154,11 @@ public static class NativeCharacterPresentationBridge
             id => (object)new { ranks = storedRanks.GetValueOrDefault(id),
                 proficient = trained.Contains(id), miscModifier = 0 },
             StringComparer.Ordinal);
-        var unmodeledSelections = build.FoundationalSelections.Count != 0 ||
+        // No Origin traits, movement, size, or training may be inferred from
+        // stored identity. An authorized Origin remains unprojected until
+        // the native character kernel accepts server-verified Origin input.
+        var unmodeledSelections = hasCommittedOrigin ||
+            build.FoundationalSelections.Count != 0 ||
             state?.Conditions.Any(condition => !isolatesConditionValues || condition.RuleConceptKey is null ||
                 !condition.RuleConceptKey.StartsWith("condition.", StringComparison.Ordinal)) == true ||
             state?.InventoryItemOccurrences.Any(item => item.IsEquipped) == true ||
@@ -177,7 +210,10 @@ public static class NativeCharacterPresentationBridge
             selectedOptions = nativeChoices.Ids,
             currentResources,
             skills,
-            competencies
+            competencies,
+            // Supplied only after server-owned Origin and current Rules Core
+            // verification; this is not an untrusted Species-ID shortcut.
+            baseWalkSpeed = originIntrinsics?.BaseWalkingSpeedFeet
         }, JsonOptions);
         var projection = await gateway.ProjectNativeCharacterAsync(request, cancellationToken);
         if (ReadText(projection, "rulesetId") != rulesetId ||
@@ -265,6 +301,8 @@ public static class NativeCharacterPresentationBridge
             presentedTraining.Where(item => item.ComponentIds?.Count > 0)
                 .Select(item => new CompetencyRelationshipPresentationView(
                     item.Id, item.ComponentIds!, Composition: item.Composition)).ToArray());
+        var resolvedWalkingSpeed = originIntrinsics is null
+            ? null : Numeric(values, "movement.walk");
         var mechanics = new CharacterMechanicsPresentationView(
             AbilityValues: abilityValues.Count == 0 ? null : abilityValues,
             Training: training,
@@ -272,7 +310,23 @@ public static class NativeCharacterPresentationBridge
             CombatFundamentals: combat,
             HealthTracks: health,
             Competencies: calculatedTraining,
-            SpellcastingProfiles: spellcasting);
+            SpellcastingProfiles: spellcasting,
+            Senses: lowLightVision is null
+                ? null : [new CalculatedMechanicalValuePresentationView(
+                    "sense.low-light-vision", "Low-Light Vision",
+                    "Dim Light perceived as Bright Light; Darkness unchanged",
+                    SourceAttributions: [new SourceAttributionPresentationView(
+                        "origin-grant:" + lowLightVision.GrantId,
+                        "Native Species/Ancestry trait",
+                        Detail: lowLightVision.SourceId +
+                            lowLightVision.OccurrencePath,
+                        PresentationRequired: true)])],
+            Movement: resolvedWalkingSpeed is int walk
+                ? [new CalculatedMechanicalValuePresentationView(
+                    "movement.walk", "Walking Speed", walk, Unit: "ft")]
+                : null,
+            CharacterMetadata: originIntrinsics is null
+                ? null : IntrinsicMetadata(originIntrinsics));
         var partial = unmodeledSelections || unknownTraining ||
             invalidHitPointHistory ||
             ReadText(projection, "status") != "resolved" ||
@@ -280,10 +334,25 @@ public static class NativeCharacterPresentationBridge
             (projection["requiredChoices"] is JsonArray choices && choices.Count != 0);
         return new(partial ? "partial" : "resolved", mechanics,
             partial
-                ? "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
+                ? hasCommittedOrigin
+                    ? originCatalogChanged
+                        ? "Native rules changed after Origin verification. Origin-dependent values are withheld pending revalidation; independently calculated Class values remain available."
+                        : originIntrinsics is null
+                            ? "The committed Origin's Species/Ancestry characteristics and trait effects have not been verified for native character projection."
+                            : "Verified base Species/Ancestry characteristics, supported passive senses and any resolved native movement are shown. Other Origin traits and dependent mechanics remain unresolved."
+                    : "Native Rules Core calculated only supported values. Unmapped selections, missing inputs, or rule effects remain unresolved."
                 : null,
             classNames);
     }
+
+    private static IReadOnlyList<CalculatedMechanicalValuePresentationView>
+        IntrinsicMetadata(VerifiedOriginIntrinsics intrinsics) =>
+        [
+            new("origin.base-creature-type", "Base Creature Type", intrinsics.CreatureType),
+            new("origin.base-size", "Base Size", intrinsics.Size),
+            new("origin.base-walk-speed", "Base Walking Speed",
+                intrinsics.BaseWalkingSpeedFeet, Unit: "ft")
+        ];
 
     private sealed record NativeTrainingSummary(
         string Id, string Name, string Kind, string? GoverningAbility = null,

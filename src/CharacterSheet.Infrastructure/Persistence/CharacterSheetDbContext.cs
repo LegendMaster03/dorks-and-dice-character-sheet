@@ -20,6 +20,9 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterRulesInputState> CharacterRulesInputs => Set<CharacterRulesInputState>();
     public DbSet<CharacterHitPointGainState> CharacterHitPointGains => Set<CharacterHitPointGainState>();
     public DbSet<CharacterProfileState> CharacterProfiles => Set<CharacterProfileState>();
+    public DbSet<CharacterOriginDraftState> CharacterOriginDrafts => Set<CharacterOriginDraftState>();
+    public DbSet<CharacterAuthorizedOriginState> AuthorizedOrigins => Set<CharacterAuthorizedOriginState>();
+    public DbSet<CharacterOriginEventReceipt> OriginEventReceipts => Set<CharacterOriginEventReceipt>();
     public DbSet<CharacterCurrencyBalance> CharacterCurrencyBalances => Set<CharacterCurrencyBalance>();
     public DbSet<CharacterArtAsset> CharacterArtAssets => Set<CharacterArtAsset>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
@@ -342,6 +345,67 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .WithOne()
             .HasForeignKey<CharacterProfileState>(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The Origin proposal is deliberately a draft, never active mechanics.
+        var originDraft = modelBuilder.Entity<CharacterOriginDraftState>();
+        originDraft.ToTable("character_origin_drafts");
+        originDraft.HasKey(value => value.CharacterId);
+        originDraft.Property(value => value.CharacterId).ValueGeneratedNever();
+        originDraft.Property(value => value.RulesetId)
+            .HasMaxLength(CharacterOriginDraftState.MaxRulesetIdLength).IsRequired();
+        originDraft.Property(value => value.Fingerprint)
+            .HasMaxLength(CharacterOriginDraftState.MaxFingerprintLength);
+        originDraft.Property(value => value.ProposalJson)
+            .HasColumnType("jsonb").IsRequired();
+        originDraft.Property(value => value.Revision).IsRequired();
+        originDraft.Property(value => value.CreatedAt).IsRequired();
+        originDraft.Property(value => value.UpdatedAt).IsRequired();
+        originDraft.HasOne<CharacterSheetRoot>().WithOne()
+            .HasForeignKey<CharacterOriginDraftState>(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Only a trusted application evaluator may publish this state; keeping
+        // it in separate tables prevents draft JSON from becoming live grants.
+        var authorizedOrigin = modelBuilder.Entity<CharacterAuthorizedOriginState>();
+        authorizedOrigin.ToTable("character_authorized_origins");
+        authorizedOrigin.HasKey(value => value.CharacterId);
+        authorizedOrigin.Property(value => value.CharacterId).ValueGeneratedNever();
+        authorizedOrigin.Property(value => value.RulesetId)
+            .HasMaxLength(CharacterOriginDraftState.MaxRulesetIdLength).IsRequired();
+        authorizedOrigin.Property(value => value.Fingerprint)
+            .HasMaxLength(CharacterOriginDraftState.MaxFingerprintLength).IsRequired();
+        authorizedOrigin.Property(value => value.ProfileJson)
+            .HasColumnType("jsonb").IsRequired();
+        authorizedOrigin.Property(value => value.EvaluatedProjectionJson)
+            .HasColumnType("jsonb");
+        authorizedOrigin.Property(value => value.Revision).IsRequired();
+        authorizedOrigin.Property(value => value.SourceDraftRevision);
+        authorizedOrigin.Property(value => value.CreatedAt).IsRequired();
+        authorizedOrigin.Property(value => value.UpdatedAt).IsRequired();
+        authorizedOrigin.HasOne<CharacterSheetRoot>().WithOne()
+            .HasForeignKey<CharacterAuthorizedOriginState>(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var originEvent = modelBuilder.Entity<CharacterOriginEventReceipt>();
+        originEvent.ToTable("character_origin_event_receipts", table =>
+            table.HasCheckConstraint("CK_origin_receipt_dm_audit_complete",
+                """("ApprovalActorUserId" IS NULL AND "ApprovalCampaignId" IS NULL AND "ApprovedDecisionsJson" IS NULL) OR ("ApprovalActorUserId" IS NOT NULL AND "ApprovalCampaignId" IS NOT NULL AND "ApprovedDecisionsJson" IS NOT NULL)"""));
+        originEvent.HasKey(value => new { value.CharacterId, value.EventId });
+        originEvent.Property(value => value.CharacterId).ValueGeneratedNever();
+        originEvent.Property(value => value.EventId).HasMaxLength(240).IsRequired();
+        originEvent.Property(value => value.CommittedRevision).IsRequired();
+        originEvent.Property(value => value.MethodRuleId).HasMaxLength(180).IsRequired();
+        originEvent.Property(value => value.MethodId).HasMaxLength(180).IsRequired();
+        originEvent.Property(value => value.AuthorizationKind).HasMaxLength(32).IsRequired();
+        originEvent.Property(value => value.AuthorizationEvidenceId).HasMaxLength(320).IsRequired();
+        originEvent.Property(value => value.ApprovalActorUserId);
+        originEvent.Property(value => value.ApprovalCampaignId);
+        originEvent.Property(value => value.ApprovedDecisionsJson).HasColumnType("jsonb");
+        originEvent.Property(value => value.CreatedAt).IsRequired();
+        originEvent.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
+            .HasDatabaseName("UX_character_origin_event_receipts_Revision").IsUnique();
+        originEvent.HasOne<CharacterAuthorizedOriginState>().WithMany()
+            .HasForeignKey(value => value.CharacterId).OnDelete(DeleteBehavior.Cascade);
 
         var art = modelBuilder.Entity<CharacterArtAsset>();
         art.ToTable("character_art_assets");

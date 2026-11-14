@@ -14,6 +14,11 @@
     <ProjectReference Include="../../src/CharacterSheet.Web/CharacterSheet.Web.csproj" />
     <ProjectReference Include="../../src/CharacterSheet.Infrastructure/CharacterSheet.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup Condition="'$(RulesCoreCheckout)' != ''">
+    <!-- Temporary Phase 5 cross-repository acceptance: compile the actual
+         Rules Core Host rather than relying on a mocked Authorized response. -->
+    <ProjectReference Include="$(RulesCoreCheckout)/src/RulesCore.Host/RulesCore.Host.csproj" Aliases="CoreHost" />
+  </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

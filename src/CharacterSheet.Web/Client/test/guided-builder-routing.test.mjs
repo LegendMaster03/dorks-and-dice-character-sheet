@@ -159,6 +159,34 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(sourceResolvedStates.find(section => section.id === "equipment").status, "incomplete");
 });
 
+test("canonical Origin uses its own state rather than the legacy Species step", () => {
+    const builder = readyBuilder();
+    const metadata = {
+        status: "ready",
+        savedState: null, draft: null, catalog: {}, preview: null,
+        readOnly: false, chooser: { kind: "closed" }, busy: false
+    };
+    const legacy = getGuidedBuilderSectionStates(builder,
+        { ruleChoices: [], projectionConflicts: [] }, null, false, metadata);
+    assert.equal(legacy.find(section => section.id === "species").label, "Origin");
+    assert.equal(legacy.find(section => section.id === "species").status, "incomplete");
+    assert.match(legacy.find(section => section.id === "species").detail,
+        /Legacy Species\/Subspecies selections require explicit Origin reconciliation/);
+
+    const nativeBuilder = structuredClone(builder);
+    nativeBuilder.build.foundationalSelections = nativeBuilder.build.foundationalSelections
+        .filter(item => !["species", "subspecies"].includes(item.category));
+    const saved = getGuidedBuilderSectionStates(nativeBuilder,
+        { ruleChoices: [], projectionConflicts: [] }, null, false, {
+            ...metadata,
+            savedState: { revision: 1, profile: { underlying: {
+                speciesId: "species.orc", ancestryId: null } } }
+        });
+    assert.equal(saved.find(section => section.id === "species").status, "incomplete");
+    assert.match(saved.find(section => section.id === "species").detail,
+        /committed; current cross-pillar mechanics still need integration/);
+});
+
 test("only the current native equipment preview can mark the Equipment step resolved", () => {
     const builder = readyBuilder();
     const pendingEquipment = {
@@ -271,14 +299,17 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     assert.match(source, /sourceConceptKeys:\s*getGuidedBuilderChoiceSourceKeys\(builder, "class"\)/);
     assert.match(source, /sourceConceptKeys:\s*getGuidedBuilderChoiceSourceKeys\(builder, "background"\)/);
-    assert.match(source, /sourceConceptKeys:\s*getGuidedBuilderChoiceSourceKeys\(builder, "species"\)/);
+    assert.match(source, /case "species": \{/);
+    assert.match(source, /renderOriginBuilder\(characterId, origin, builder\.build/);
+    assert.doesNotMatch(source, /choices:\s*\["species", "subspecies"\]/);
     assert.match(source, /excludedSourceConceptKeys:\s*getGuidedBuilderOwnedChoiceSourceKeys\(builder\)/);
     assert.match(source, /excludedChoiceKinds:\s*\["subclass", "starting-equipment"\]/);
     assert.match(source, /excludedChoiceKinds:\s*\["starting-equipment"\]/);
     assert.match(source, /excludedChoiceKinds:\s*\["starting-class", "subclass", "starting-equipment"\]/);
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Class Features"/);
     assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Background Features"/);
-    assert.match(source, /renderGuidedSourceFeatures\([\s\S]*"Species Traits"/);
+    // Origin grants are not yet projected through legacy Species source keys.
+    assert.doesNotMatch(source, /"Species Traits"/);
     assert.doesNotMatch(source, /getGuidedBuilderSectionStates\(builder, mechanics\)\.map/);
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });

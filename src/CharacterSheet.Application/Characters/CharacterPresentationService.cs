@@ -10,6 +10,8 @@ namespace CharacterSheet.Application.Characters;
 public sealed class CharacterPresentationService(
     CharacterBuildService buildService,
     CharacterStateService stateService,
+    CharacterOriginStateService origins,
+    CharacterOriginParentNativeReviewService nativeOriginReviews,
     INativeRulesCoreGateway nativeRulesCoreGateway)
 {
     public async Task<CharacterPresentationResult> GetAsync(
@@ -31,11 +33,89 @@ public sealed class CharacterPresentationService(
         else
             diagnostics.Add($"character-state:{stateResult.Status}");
 
+        // The native character kernel does not yet accept or execute a
+        // verified Origin profile. Read it through Site-authorized state,
+        // rather than trusting legacy Species selections or a browser draft.
+        // If Origin state is unavailable, fail closed instead of claiming
+        // a mechanically complete character.
+        var origin = await origins.GetAsync(characterId, cancellationToken);
+        if (origin.Status != CharacterOriginReadStatus.Ready)
+        {
+            diagnostics.Add($"character-origin:{origin.Status}");
+            return new CharacterPresentationResult(
+                CharacterPresentationAccessStatus.Ready,
+                new CharacterPresentationView(
+                    ProjectAdvancement(build, null), null,
+                    MechanicsStatus: "unavailable",
+                    MechanicsMessage: "Authorized Origin state is unavailable; effective character mechanics cannot be verified."),
+                diagnostics);
+        }
+
+        // A committed Origin can produce a few current native intrinsics,
+        // but only after the server has re-evaluated the *immutable* draft,
+        // matched the whole native profile, and verified its event revision.
+        // No client-submitted profile or preview is used as an input here.
+        VerifiedOriginProjectionContext? verifiedOrigin = null;
+        if (origin.SavedState is { } saved)
+        {
+            // DM-adjudicated mixed Origins cannot be revalidated as if they
+            // were direct first-party constructions. The Core-authored scalar
+            // projection was verified against the committed source occurrence
+            // before the atomic commit. Use it only while the same native
+            // snapshot is still active, and verify its grants again on read.
+            if (saved.EvaluatedProjectionJson is not null)
+            {
+                try
+                {
+                    var active = await nativeRulesCoreGateway.GetNativeRulesetAsync(
+                        cancellationToken);
+                    verifiedOrigin = VerifiedCommittedMixedOriginReader.Read(
+                        saved, origin.CompletedEvents, active);
+                    if (verifiedOrigin is null)
+                        diagnostics.Add("origin-native-intrinsics:unverified-mixed-projection");
+                }
+                catch (Exception error) when (error is JsonException or
+                    RulesCoreGatewayException or InvalidOperationException or
+                    FormatException)
+                {
+                    diagnostics.Add("origin-native-intrinsics:projection-unavailable");
+                }
+            }
+            else
+            {
+                // Legacy direct first-party path still requires its independent
+                // live proposal/complete-profile and event cross-check.
+                var reviewed = await nativeOriginReviews.ReviewAsync(
+                    characterId, characterId, cancellationToken);
+                if (reviewed.Status == CharacterOriginParentNativeReviewStatus.Ready &&
+                    reviewed.Review?.StoredRevision == saved.Revision &&
+                    reviewed.Review.RulesetId == saved.RulesetId)
+                {
+                    var scalars = VerifiedOriginIntrinsicReader.Read(
+                        reviewed.EvaluatedIntrinsics, saved.ProfileJson);
+                    if (scalars is not null)
+                    {
+                        // Sense evidence is an independent exact-grant check on
+                        // the same authenticated native profile reevaluation.
+                        // If the supported trait is absent, no sense is invented.
+                        var lowLight = VerifiedOriginVisionReader.Read(
+                            reviewed.EvaluatedVision, saved.ProfileJson);
+                        verifiedOrigin = new(reviewed.Review.RulesetId,
+                            reviewed.Review.LatestNativeFingerprint, scalars, lowLight);
+                    }
+                }
+                if (verifiedOrigin is null)
+                    diagnostics.Add($"origin-native-intrinsics:{reviewed.Status}");
+            }
+        }
+
         NativeCharacterPresentationBridge.Outcome projection;
         try
         {
             projection = await NativeCharacterPresentationBridge.ProjectAsync(
-                nativeRulesCoreGateway, build, state, cancellationToken);
+                nativeRulesCoreGateway, build, state, cancellationToken,
+                hasCommittedOrigin: origin.SavedState is not null,
+                originProjection: verifiedOrigin);
         }
         catch (Exception exception) when (exception is RulesCoreGatewayException
             or JsonException or InvalidOperationException or FormatException)

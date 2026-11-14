@@ -63,6 +63,18 @@ function renderSupportGroup(
             row.append(
                 createElement("span", "dd-support-scaffold__label", value.label),
                 createElement("strong", "dd-support-scaffold__value", formatMechanicalValue(value)));
+            // A mechanically verified Origin sense keeps its exact source
+            // visible in the Senses summary. Unverified labels must not be
+            // fabricated from a selected Species name.
+            if (kind === "senses") {
+                for (const source of value.sourceAttributions ?? []) {
+                    if (!source.presentationRequired) continue;
+                    row.append(createElement("small", "dd-support-scaffold__source",
+                        source.detail
+                            ? `${source.label}: ${source.detail}`
+                            : source.label));
+                }
+            }
             list.append(row);
         }
     }
