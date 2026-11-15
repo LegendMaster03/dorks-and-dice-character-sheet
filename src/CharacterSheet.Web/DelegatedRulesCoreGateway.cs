@@ -48,6 +48,12 @@ public sealed class DelegatedRulesCoreGateway(
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/project",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    public Task<JsonNode> PlanVerifiedManifestationAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post,
+            "/api/mechanics/v1/characters/manifestations/plan",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> EvaluatePrimaryStateBaselineAsync(
         JsonElement request, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Post,

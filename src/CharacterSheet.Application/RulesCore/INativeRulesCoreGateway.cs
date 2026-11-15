@@ -19,6 +19,16 @@ public interface INativeRulesCoreGateway
         JsonElement request, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Delegated read-only planning for a separately verified manifestation.
+    /// The Rules Core host must independently resolve an acquisition and
+    /// transition authority provider; no provider means no commit candidate.
+    /// </summary>
+    Task<JsonNode> PlanVerifiedManifestationAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Verified manifestation planning is unsupported by this gateway."));
+
+    /// <summary>
     /// Authenticated server-owned primary character effective-state evaluation.
     /// Rejects all supernatural entitlements until independently verified.
     /// </summary>
