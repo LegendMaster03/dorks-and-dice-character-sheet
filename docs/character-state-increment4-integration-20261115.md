@@ -89,26 +89,41 @@ Only the test implementation emits synthetic Wolf/Hybrid transitions.
 
 ### Read-only transport
 
-Character Sheet now exposes
-`GET /api/characters/{characterId}/state/effective`. It uses the established
-Site-authorized Build, State and Origin services to assemble a primary
-character and sends a delegated server-side request to Rules Core
-`POST /api/mechanics/v1/characters/effective-state-baseline`.
+Character Sheet exposes
+`GET /api/characters/{characterId}/state/effective`. It retrieves the
+Site-authorized Character Build, State, Origin, and current supernatural
+ownership snapshot. The shared `CharacterNativePrimaryStateAdapter` constructs
+the narrow current Class/ability/native-option subset from authoritative
+Character Sheet rows; unsupported Feats, Origin grants, equipment, and HP
+policies remain unresolved.
 
-Rules Core checks the existing Site tool-to-tool ticket and accepts **only**
-an empty supernatural ledger with no alternate sheets or influences. It
-requires the current native ruleset identity and calls the existing
-manifestation projection mechanics under a strict primary-only authority.
-It explicitly rejects forged supernatural events, instances and stored
-grants. The Character Sheet consumer checks the response metadata and
-rechecks authoritative input digest after the remote calculation.
+For ordinary characters, Character Sheet delegates to Rules Core
+`POST /api/mechanics/v1/characters/effective-state-baseline`. The baseline
+rejects all supernatural ownership and events.
 
-Every returned read is `partial` or `unresolved`, never
-`effectiveMechanicsReady: true`. Origin Underlying grants, Class/Origin
-entitlement interaction, equipment, resource and Hit Point policy are not
-yet fully wired into this evaluator. Persisted supernatural state is **not**
-sent to the primary-only evaluator and remains unresolved. An archived
-character may read but does not gain mutation rights.
+For stored supernatural ownership, Character Sheet now delegates to
+`POST /api/mechanics/v1/characters/effective-state`. Rules Core uses the
+existing `NativeCharacterManifestationProjector`, but only after an
+`INativeManifestationHostReadAuthorityProvider` independently authenticates
+the actual character snapshot, persisted form acquisition and progression,
+source and DM evidence, ruleset and history. **There is no production read
+provider registration**. Without it, the Core endpoint rejects the request
+and Character Sheet reports an unresolved form, never a fictional default
+manifestation.
+
+After Core responds, Character Sheet compares the current primary dependency
+fingerprint, the exact native catalog pin, the response contract, the returned
+sheet identity and any selected active instance against persisted ownership.
+The result remains `partial` and
+`effectiveMechanicsReady: false` even when verified: this endpoint has not
+completed form-specific Class, Origin, equipment, HP or resource-policy
+entitlement reconciliation. A verified read can surface the currently active
+Wolf or Hybrid and its native-projected source provenance. Reversion and
+fresh-context reload dynamically resolve the current primary character
+instead of restoring an old activation snapshot. Reads do not commit ledger
+events or consume resources.
+
+An archived character may read but does not gain mutation rights.
 
 ## Verification
 
@@ -175,6 +190,12 @@ character may read but does not gain mutation rights.
   with unmatched or presently unsupported primary policies fail closed.
   Synthetic end-to-end tests include a forged primary score rejection;
   isolated unit tests exercise source injection and incomplete mechanics.
+* The verified manifestation read test uses real authenticated Rules Core
+  HTTP and real Character Sheet PostgreSQL, with an independently checking
+  **test-only** host read provider. It verifies active Wolf projection,
+  reversion to primary, Hybrid after a fresh database context, retained source
+  progression, and denial without a registered verifier. A successful test
+  projection is never proof of a production acquisition or DM policy.
 * A saved Origin or supernatural record pinned to an older native catalog
   fingerprint is reported as `authorized-origin-native-content-changed` or
   `supernatural-native-content-changed`. Such reads remain unresolved and
@@ -193,9 +214,10 @@ authenticated Werewolf/Wolf/Hybrid acquisition and transition tests.
 2. Implement authenticated acquisition and transition application services.
    Their requests may carry intent, event ID and expected revision but not
    authoritative state, ledger, grants or ad hoc approvals.
-3. Add a delegated Rules Core endpoint for full verified manifestation
-   planning and resolution using the existing Core implementations and an
-   actual verifying authority; no independent character engine.
+3. Register real independently verifying Core host authority providers
+   for both transition planning and effective-state reads. The transport
+   endpoints are implemented and fail closed, but the host has no production
+   source-of-truth verifier or DM acquisition policy.
 4. Connect the authorized complete plan to `CommitVerifiedAsync`, proving
    exact provenance, source versions, effects, interaction decisions and
    resource ownership; persist complete transition-step audit data.
