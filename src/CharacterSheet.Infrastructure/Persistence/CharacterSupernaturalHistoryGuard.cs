@@ -63,6 +63,7 @@ internal static class CharacterSupernaturalHistoryGuard
 
             PreserveResources(old, next);
             PreserveInstances(old, next, command);
+            PreserveAuditedActivationResources(old, next, command.TransitionRequestJson!);
             PreserveInteractionDecisions(old, next, command.TransitionRequestJson!);
         }
         else
@@ -214,6 +215,72 @@ internal static class CharacterSupernaturalHistoryGuard
                 oldInstances.ContainsKey(owner.GetString()!))
                 throw new ArgumentException("A new transition resource must belong to a new manifestation instance.");
         }
+    }
+
+    /// <summary>
+    /// A new manifestation pool is minted only by the matching authorized
+    /// Activate step. Its source, identity, quantity and owner must match the
+    /// exact NewResources payload retained in the immutable event audit.
+    /// This is an equality check on a Core-planned command, not a separate
+    /// grant authority or a resource spending operation.
+    /// </summary>
+    private static void PreserveAuditedActivationResources(
+        JsonElement previous, JsonElement proposed, string transitionRequestJson)
+    {
+        var previousResources = ById(previous.GetProperty("resources"), "previous resources");
+        var proposedResources = ById(proposed.GetProperty("resources"), "proposed resources");
+        var previousInstances = ById(previous.GetProperty("instances"), "previous instances");
+        var proposedInstances = ById(proposed.GetProperty("instances"), "proposed instances");
+
+        using var audit = JsonDocument.Parse(transitionRequestJson);
+        var steps = audit.RootElement.GetProperty("steps");
+        var expectedNewResources = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var step in steps.EnumerateArray())
+        {
+            var action = step.GetProperty("action");
+            var activates = action.ValueKind == JsonValueKind.Number &&
+                action.TryGetInt32(out var ordinal) && ordinal == 0 ||
+                action.ValueKind == JsonValueKind.String &&
+                action.GetString() == "Activate";
+            if (!step.TryGetProperty("newResources", out var resources) ||
+                resources.ValueKind == JsonValueKind.Null)
+                continue;
+            if (!activates || resources.ValueKind != JsonValueKind.Array)
+                throw new ArgumentException(
+                    "Only an audited Activate step can introduce manifestation resources.");
+            var target = step.GetProperty("targetInstanceId").GetString();
+            if (string.IsNullOrWhiteSpace(target) ||
+                previousInstances.ContainsKey(target) ||
+                !proposedInstances.ContainsKey(target))
+                throw new ArgumentException(
+                    "An activation resource must belong to a newly created manifestation.");
+
+            foreach (var resource in resources.EnumerateArray())
+            {
+                if (resource.ValueKind != JsonValueKind.Object ||
+                    !resource.TryGetProperty("id", out var identity) ||
+                    identity.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(identity.GetString()) ||
+                    !resource.TryGetProperty("ownerKind", out var ownerKind) ||
+                    !IsManifestationOwner(ownerKind) ||
+                    !resource.TryGetProperty("ownerId", out var owner) ||
+                    owner.ValueKind != JsonValueKind.String ||
+                    owner.GetString() != target ||
+                    !expectedNewResources.TryAdd(identity.GetString()!, resource))
+                    throw new ArgumentException(
+                        "An audited activation resource has an invalid or duplicate owner.");
+            }
+        }
+
+        var minted = proposedResources
+            .Where(pair => !previousResources.ContainsKey(pair.Key))
+            .ToArray();
+        if (minted.Length != expectedNewResources.Count ||
+            minted.Any(pair =>
+                !expectedNewResources.TryGetValue(pair.Key, out var audited) ||
+                !JsonElement.DeepEquals(pair.Value, audited)))
+            throw new ArgumentException(
+                "New manifestation resources must exactly match the ordered activation audit.");
     }
 
     private static bool IsManifestationOwner(JsonElement value) =>

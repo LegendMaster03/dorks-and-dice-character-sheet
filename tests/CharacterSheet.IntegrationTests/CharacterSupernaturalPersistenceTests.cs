@@ -47,16 +47,53 @@ public sealed class CharacterSupernaturalPersistenceTests
         Guid id, string digest, long expectedRevision = 0,
         long ledgerRevision = 0, long nextLedgerRevision = 0,
         string eventId = "acquire:wolf", bool transition = false,
-        string? ledger = null, string? alternate = null) =>
-        new(id, "first-party-001", "test-native-catalog", alternate ?? WolfSheet, "[]",
-            ledger ?? (transition ? Ledger(id, nextLedgerRevision, eventId)
-                : Ledger(id, nextLedgerRevision)),
+        string? ledger = null, string? alternate = null)
+    {
+        var candidate = ledger ?? (transition
+            ? Ledger(id, nextLedgerRevision, eventId)
+            : Ledger(id, nextLedgerRevision));
+        return new(id, "first-party-001", "test-native-catalog",
+            alternate ?? WolfSheet, "[]", candidate,
             expectedRevision, ledgerRevision, nextLedgerRevision, digest,
             eventId, "fixture:verified-source", transition, Now,
-            transition ? SyntheticTransitionAudit(id, ledgerRevision, eventId) : null);
+            transition ? SyntheticTransitionAudit(id, ledgerRevision, eventId, candidate) : null);
+    }
 
-    private static string SyntheticTransitionAudit(Guid id, long previousRevision, string eventId) =>
-        JsonSerializer.Serialize(new
+    private static string SyntheticTransitionAudit(
+        Guid id, long previousRevision, string eventId, string? candidateLedger = null)
+    {
+        // Fixtures explicitly describe any newly minted resource in the
+        // event audit. The persisted store must never infer real authority
+        // from the proposed ledger, even though this isolated test builder
+        // conveniently derives the expected controlled payload.
+        using var ledger = candidateLedger is null ? null : JsonDocument.Parse(candidateLedger);
+        var root = ledger?.RootElement;
+        JsonElement? newInstance = null;
+        if (root is { } current &&
+            current.TryGetProperty("instances", out var instances))
+            foreach (var instance in instances.EnumerateArray())
+                if (instance.ValueKind == JsonValueKind.Object &&
+                    instance.TryGetProperty("activationEventId", out var activated) &&
+                    activated.ValueKind == JsonValueKind.String &&
+                    activated.GetString() == eventId)
+                {
+                    newInstance = instance;
+                    break;
+                }
+
+        var target = newInstance is JsonElement activation
+            ? activation.GetProperty("id").GetString()! : "fixture.instance";
+        var newResources = new List<JsonElement>();
+        if (newInstance is not null && root is { } state &&
+            state.TryGetProperty("resources", out var resources))
+            foreach (var resource in resources.EnumerateArray())
+                if (resource.ValueKind == JsonValueKind.Object &&
+                    resource.TryGetProperty("ownerId", out var ownerId) &&
+                    ownerId.ValueKind == JsonValueKind.String &&
+                    ownerId.GetString() == target)
+                    newResources.Add(resource);
+
+        return JsonSerializer.Serialize(new
         {
             characterId = id.ToString("D"), expectedRevision = previousRevision,
             eventId,
@@ -64,7 +101,7 @@ public sealed class CharacterSupernaturalPersistenceTests
             {
                 new
                 {
-                    action = 0, targetInstanceId = "fixture.instance",
+                    action = 0, targetInstanceId = target,
                     ruleOccurrence = new
                     {
                         source = new
@@ -74,10 +111,12 @@ public sealed class CharacterSupernaturalPersistenceTests
                         occurrencePath = "actions.fixture"
                     },
                     basis = new { adjudication = 3, nativeRuleReference = "rule.synthetic.fixture" },
-                    authorizationEvidenceId = "fixture:verified-source"
+                    authorizationEvidenceId = "fixture:verified-source",
+                    newResources
                 }
             }
         });
+    }
 
 
     [Fact]
@@ -645,6 +684,74 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Contains("hybrid", updated.AlternateSheetsJson);
         Assert.Equal(0, updated.LedgerRevision);
         Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task ActivationResourceMustExactlyMatchRecordedOrderedStepAudit()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+        var ledger = ActivationLedger(id, 1, ["enter:wolf"],
+            [Instance(id, "enter:wolf")], [Resource()]);
+        var valid = Write(id, digest, 1, 0, 1, "enter:wolf",
+            transition: true, ledger: ledger);
+        using (var audit = JsonDocument.Parse(valid.TransitionRequestJson!))
+        {
+            var listed = Assert.Single(audit.RootElement.GetProperty("steps")[0]
+                .GetProperty("newResources").EnumerateArray());
+            Assert.Equal("resource.wolf", listed.GetProperty("id").GetString());
+        }
+
+        var missing = JsonNode.Parse(valid.TransitionRequestJson!)!.AsObject();
+        missing["steps"]![0]!["newResources"] = new JsonArray();
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(valid with
+            {
+                TransitionRequestJson = missing.ToJsonString()
+            }));
+
+        var changed = JsonNode.Parse(valid.TransitionRequestJson!)!.AsObject();
+        changed["steps"]![0]!["newResources"]![0]!["current"] = 9;
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(valid with
+            {
+                TransitionRequestJson = changed.ToJsonString()
+            }));
+
+        var foreign = JsonNode.Parse(valid.TransitionRequestJson!)!.AsObject();
+        foreign["steps"]![0]!["newResources"]![0]!["ownerId"] = "manifest.other";
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(valid with
+            {
+                TransitionRequestJson = foreign.ToJsonString()
+            }));
+
+        var extra = JsonNode.Parse(valid.TransitionRequestJson!)!.AsObject();
+        extra["steps"]![0]!["newResources"]!.AsArray().Add(
+            extra["steps"]![0]!["newResources"]![0]!.DeepClone());
+        // The event audit may not repeat or invent an additional pool.
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(valid with
+            {
+                TransitionRequestJson = extra.ToJsonString()
+            }));
+
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(0, (await store.GetAsync(id))!.LedgerRevision);
+        Assert.Single(await store.GetEventsAsync(id));
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(valid)).Status);
+        using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var stored = new PostgresCharacterSupernaturalStateStore(reload);
+        var eventReceipt = (await stored.GetEventsAsync(id))[1];
+        using var persisted = JsonDocument.Parse(eventReceipt.TransitionRequestJson!);
+        Assert.Equal("resource.wolf", persisted.RootElement.GetProperty("steps")[0]
+            .GetProperty("newResources")[0].GetProperty("id").GetString());
     }
 
     [Fact]
