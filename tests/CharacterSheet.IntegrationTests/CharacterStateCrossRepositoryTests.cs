@@ -446,6 +446,13 @@ public sealed class CharacterStateCrossRepositoryTests
             "receipt.transition." + eventId,
             EndingConditionId: "rule.synthetic.revert");
 
+    private static NativeManifestationTransitionStep UnlistedEnd(
+        string instanceId, string eventId) =>
+        End(instanceId, eventId) with
+        {
+            EndingConditionId = "rule.synthetic.unlisted-ending"
+        };
+
     private static NativeManifestationTransitionStep Contribution(
         NativeManifestationTransitionAction action, string instanceId,
         string eventId) =>
@@ -678,6 +685,7 @@ public sealed class CharacterStateCrossRepositoryTests
                 "enter:resource-wolf" => [EnterWithResource(characterId, eventId)],
                 "revert:wolf" => [End("manifest.wolf.1", eventId)],
                 "revert:resource-wolf" => [End("manifest.wolf.1", eventId)],
+                "end:unlisted" => [UnlistedEnd("manifest.wolf.1", eventId)],
                 "suppress:wolf" => [Contribution(
                     NativeManifestationTransitionAction.Suppress,
                     "manifest.wolf.1", eventId)],
@@ -1201,6 +1209,13 @@ public sealed class CharacterStateCrossRepositoryTests
         var endedService = TransitionRunner(reload,
             new OwnerAccess(id), fresh, gateway, source);
         var beforeEnding = (await fresh.GetAsync(id))!;
+        var refusedEnd = await endedService.ApplyAsync(id, beforeEnding.Revision,
+            beforeEnding.LedgerRevision, "end:unlisted", "end:unlisted");
+        Assert.Equal(CharacterManifestationApplyStatus.PlanUnresolved,
+            refusedEnd.Status);
+        Assert.Equal(beforeEnding.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
+        Assert.Equal(4, (await fresh.GetEventsAsync(id)).Count);
+
         var ending = await endedService.ApplyAsync(id, beforeEnding.Revision,
             beforeEnding.LedgerRevision, "revert:resource-wolf",
             "revert:resource-wolf");
