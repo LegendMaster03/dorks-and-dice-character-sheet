@@ -91,6 +91,11 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 return new(CharacterSupernaturalWriteStatus.LedgerRevisionConflict,
                     existing?.Revision, existing?.LedgerRevision);
 
+            // Compare the proposed snapshot to what is actually persisted under
+            // the same lock. Revision checks alone can not detect rewritten
+            // acquisition history or dropped manifestation event identities.
+            CharacterSupernaturalHistoryGuard.Validate(existing, command);
+
             if (existing is null)
             {
                 db.SupernaturalStates.Add(next);

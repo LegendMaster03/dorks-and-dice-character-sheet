@@ -46,7 +46,8 @@ public sealed class CharacterSupernaturalPersistenceTests
         string eventId = "acquire:wolf", bool transition = false,
         string? ledger = null, string? alternate = null) =>
         new(id, "first-party-001", "test-native-catalog", alternate ?? WolfSheet, "[]",
-            ledger ?? Ledger(id, nextLedgerRevision, transition ? eventId : "prior"),
+            ledger ?? (transition ? Ledger(id, nextLedgerRevision, eventId)
+                : Ledger(id, nextLedgerRevision)),
             expectedRevision, ledgerRevision, nextLedgerRevision, digest,
             eventId, "fixture:verified-source", transition, Now);
 
