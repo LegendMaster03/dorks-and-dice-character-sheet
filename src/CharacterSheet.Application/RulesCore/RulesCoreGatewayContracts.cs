@@ -5,10 +5,18 @@ namespace CharacterSheet.Application.RulesCore;
 // Models the rule-resolution gateway responses consumed by Character Sheet. Persisted character choices are deliberately separate from these transient rule definitions.
 
 public sealed class RulesCoreGatewayException(
-    string message, Exception? innerException = null, int? statusCode = null)
+    string message, Exception? innerException = null, int? statusCode = null,
+    string? errorCode = null)
     : Exception(message, innerException)
 {
     public int? StatusCode { get; } = statusCode;
+
+    /// <summary>
+    /// A recognized, bounded downstream mechanics error identity. This is
+    /// transport metadata, not proof of source authorization or a safe message
+    /// to display verbatim to a player.
+    /// </summary>
+    public string? ErrorCode { get; } = errorCode;
 }
 
 public sealed record RulesCoreResolvedRuleRelationshipView(

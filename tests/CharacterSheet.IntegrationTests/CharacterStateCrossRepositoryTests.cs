@@ -176,9 +176,14 @@ public sealed class CharacterStateCrossRepositoryTests
         {
             var payload = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
+            {
+                string? code = null;
+                try { code = JsonNode.Parse(payload)?["error"]?.GetValue<string>(); }
+                catch (JsonException) { }
                 throw new RulesCoreGatewayException(
                     $"Real Core HTTP {(int)response.StatusCode}: {payload}",
-                    statusCode: (int)response.StatusCode);
+                    statusCode: (int)response.StatusCode, errorCode: code);
+            }
             return JsonNode.Parse(payload) ??
                 throw new RulesCoreGatewayException("Real Core returned empty JSON.");
         }
@@ -792,7 +797,7 @@ public sealed class CharacterStateCrossRepositoryTests
 
         var missingAuthority = await active.ApplyAsync(id, 1, 0,
             "enter:wolf", "enter:wolf");
-        Assert.Equal(CharacterManifestationApplyStatus.PlanUnresolved,
+        Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized,
             missingAuthority.Status);
         Assert.Equal(1, actions.Calls);
 

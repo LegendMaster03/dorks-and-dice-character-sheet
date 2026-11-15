@@ -267,7 +267,14 @@ public sealed class DelegatedRulesCoreGateway(
                     var message = response.StatusCode == HttpStatusCode.BadRequest
                         ? "Rules Core rejected a mechanics evaluation request."
                         : "Rules Core is unavailable for this projection.";
-                    throw new RulesCoreGatewayException(message, statusCode: (int)response.StatusCode);
+                    // Only manifestation planning needs structured failure
+                    // identity. Never forward arbitrary downstream body text.
+                    var errorCode = targetPath.EndsWith(
+                        "/characters/manifestations/plan", StringComparison.Ordinal)
+                        ? await ReadManifestationErrorCodeAsync(response, cancellationToken)
+                        : null;
+                    throw new RulesCoreGatewayException(message,
+                        statusCode: (int)response.StatusCode, errorCode: errorCode);
                 }
 
                 try
@@ -311,8 +318,50 @@ public sealed class DelegatedRulesCoreGateway(
         }
     }
 
+    private static async Task<string?> ReadManifestationErrorCodeAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        // A remote error body is untrusted. Read at most 4 KiB, recognize only
+        // protocol-owned error identities, and never expose the body to callers.
+        const int maximum = 4096;
+        if (response.Content.Headers.ContentLength is > maximum) return null;
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var buffer = new byte[maximum + 1];
+            var length = 0;
+            while (length < buffer.Length)
+            {
+                var count = await stream.ReadAsync(buffer.AsMemory(length), cancellationToken);
+                if (count == 0) break;
+                length += count;
+            }
+            if (length is 0 or > maximum) return null;
+            using var json = JsonDocument.Parse(buffer.AsMemory(0, length));
+            if (json.RootElement.ValueKind != JsonValueKind.Object ||
+                !json.RootElement.TryGetProperty("error", out var error) ||
+                error.ValueKind != JsonValueKind.String)
+                return null;
+            var code = error.GetString();
+            return code is "native_content_changed" or
+                "manifestation_revision_conflict" or
+                "supernatural_authority_unavailable" or
+                "supernatural_authority_unverified" or
+                "manifestation_plan_not_committable" or
+                "invalid_character_scope" ? code : null;
+        }
+        catch (Exception error) when (error is JsonException or IOException or HttpRequestException)
+        {
+            return null;
+        }
+    }
+
     private static string TimingOperationFor(string targetPath)
     {
+        if (targetPath.EndsWith("/characters/manifestations/plan", StringComparison.Ordinal))
+            return "native-manifestation-plan";
+        if (targetPath.EndsWith("/characters/effective-state-baseline", StringComparison.Ordinal))
+            return "native-effective-state-baseline";
         if (targetPath.EndsWith("/characters/project", StringComparison.Ordinal))
             return "native-character-projection";
         if (targetPath.EndsWith("/resources/resolve", StringComparison.Ordinal))

@@ -148,11 +148,27 @@ public sealed class CharacterManifestationTransitionService(
         {
             response = await rules.PlanVerifiedManifestationAsync(request, cancellationToken);
         }
+        catch (RulesCoreGatewayException error) when (
+            error.StatusCode == 409 && error.ErrorCode == "native_content_changed")
+        {
+            return new(CharacterManifestationApplyStatus.NativeContentChanged);
+        }
+        catch (RulesCoreGatewayException error) when (
+            error.StatusCode == 409 && error.ErrorCode == "manifestation_revision_conflict")
+        {
+            return new(CharacterManifestationApplyStatus.LedgerRevisionConflict);
+        }
+        catch (RulesCoreGatewayException error) when (
+            error.StatusCode == 422 && error.ErrorCode is
+                "supernatural_authority_unavailable" or
+                "supernatural_authority_unverified")
+        {
+            return new(CharacterManifestationApplyStatus.SourceUnauthorized);
+        }
         catch (RulesCoreGatewayException error) when (error.StatusCode is 400 or 409 or 422)
         {
-            // Rules Core answered with a deterministic rejection. Neither an
-            // invalid mechanical plan nor missing acquisition authority means
-            // that its service was unavailable. No state has been committed.
+            // Rules Core returned a deterministic mechanical refusal. No
+            // transition was committed, and transport itself was responsive.
             return new(CharacterManifestationApplyStatus.PlanUnresolved);
         }
         catch (Exception error) when (error is RulesCoreGatewayException or JsonException

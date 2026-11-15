@@ -60,6 +60,71 @@ public sealed class DelegatedRulesCoreGatewayTests
         Assert.Equal(409, error.StatusCode);
     }
 
+
+    [Theory]
+    [InlineData(HttpStatusCode.Conflict, "native_content_changed")]
+    [InlineData(HttpStatusCode.Conflict, "manifestation_revision_conflict")]
+    [InlineData(HttpStatusCode.UnprocessableEntity, "supernatural_authority_unavailable")]
+    [InlineData(HttpStatusCode.UnprocessableEntity, "manifestation_plan_not_committable")]
+    public async Task ManifestationPlanningPreservesOnlyKnownMachineReadableRejectionCodes(
+        HttpStatusCode status, string expectedError)
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(status)
+        {
+            Content = JsonContent.Create(new
+            {
+                error = expectedError, detail = "sensitive downstream payload"
+            })
+        });
+        var httpContext = await AuthenticatedContextAsync(withDelegation: true);
+        var gateway = new DelegatedRulesCoreGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+            new HttpContextAccessor { HttpContext = httpContext },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+        var rejected = await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+            gateway.PlanVerifiedManifestationAsync(
+                System.Text.Json.JsonSerializer.SerializeToElement(new { }), CancellationToken.None));
+        Assert.Equal((int)status, rejected.StatusCode);
+        Assert.Equal(expectedError, rejected.ErrorCode);
+        Assert.DoesNotContain("sensitive", rejected.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ManifestationPlanningIgnoresUnrecognizedOrOversizedErrorBodies()
+    {
+        var handlers = new[]
+        {
+            new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+            {
+                Content = JsonContent.Create(new
+                {
+                    error = "arbitrary.client.claimed.approval",
+                    detail = "untrusted error"
+                })
+            },
+            new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+            {
+                Content = new StringContent(
+                    "{\\"error\\":\\"native_content_changed\\",\\"padding\\":\\"" +
+                    new string('x', 6000) + "\\"}")
+            }
+        };
+        foreach (var response in handlers)
+        {
+            var handler = new RecordingHandler(_ => response);
+            var context = await AuthenticatedContextAsync(withDelegation: true);
+            var gateway = new DelegatedRulesCoreGateway(
+                new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+                new HttpContextAccessor { HttpContext = context },
+                NullLogger<DelegatedRulesCoreGateway>.Instance);
+            var rejected = await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+                gateway.PlanVerifiedManifestationAsync(
+                    System.Text.Json.JsonSerializer.SerializeToElement(new { }), CancellationToken.None));
+            Assert.Equal(422, rejected.StatusCode);
+            Assert.Null(rejected.ErrorCode);
+        }
+    }
+
     [Fact]
     public async Task RetiredRulesContractsDoNotDispatchAnyRequests()
     {
