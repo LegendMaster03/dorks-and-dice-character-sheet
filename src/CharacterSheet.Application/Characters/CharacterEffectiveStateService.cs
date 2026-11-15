@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
+using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Application.Characters;
 
@@ -75,6 +76,7 @@ public sealed class CharacterEffectiveStateService(
         string? activeManifestationId = null;
         string? ruleset = persisted?.RulesetId;
         string? fingerprint = persisted?.Fingerprint;
+        var supernaturalChanged = false;
 
         if (persisted is not null)
         {
@@ -129,7 +131,15 @@ public sealed class CharacterEffectiveStateService(
                             request, cancellationToken);
                         var after = await supernatural.GetAuthoritativeInputsFingerprintAsync(
                             id, cancellationToken);
-                        if (after is null || before != after)
+                        // Primary row digests do not include supernatural
+                        // ownership. A concurrent transition or acquisition
+                        // may change the active form without changing Class,
+                        // Origin, equipment or HP inputs.
+                        var latest = await supernatural.GetAsync(id, cancellationToken);
+                        supernaturalChanged = !SameSupernaturalSnapshot(persisted, latest);
+                        if (supernaturalChanged)
+                            issues.Add("supernatural-state-changed-during-resolution");
+                        else if (after is null || before != after)
                             issues.Add("authoritative-inputs-changed-during-resolution");
                         else if (response["contractVersion"]?.GetValue<int>() != 1 ||
                             response["supportedScope"]?.GetValue<string>() !=
@@ -214,7 +224,15 @@ public sealed class CharacterEffectiveStateService(
                     }, Wire);
                     var response = await core.EvaluatePrimaryStateBaselineAsync(input, cancellationToken);
                     var after = await supernatural.GetAuthoritativeInputsFingerprintAsync(id, cancellationToken);
-                    if (before != after || after is null)
+                    // A first supernatural acquisition can occur during an
+                    // ordinary baseline calculation. Suppress that stale
+                    // primary-only projection rather than showing it as the
+                    // current effective character.
+                    var latest = await supernatural.GetAsync(id, cancellationToken);
+                    supernaturalChanged = !SameSupernaturalSnapshot(persisted, latest);
+                    if (supernaturalChanged)
+                        issues.Add("supernatural-state-changed-during-resolution");
+                    else if (before != after || after is null)
                         issues.Add("authoritative-inputs-changed-during-resolution");
                     else if (response["contractVersion"]?.GetValue<int>() != 1 ||
                         response["supportedScope"]?.GetValue<string>() != "primary-only" ||
@@ -242,9 +260,30 @@ public sealed class CharacterEffectiveStateService(
             id, build.View.ReadOnly || state.View.ReadOnly || origin.ReadOnly,
             projection is null ? "unresolved" : "partial",
             ruleset, fingerprint, origin.SavedState?.Revision,
-            persisted?.Revision, persisted?.LedgerRevision ?? 0,
+            supernaturalChanged ? null : persisted?.Revision,
+            supernaturalChanged ? 0 : persisted?.LedgerRevision ?? 0,
             effectiveSheetId, activeManifestationId, false, projection, issues));
     }
+
+    /// <summary>
+    /// Optimistic second check after the delegated native read. The primary
+    /// input fingerprint intentionally excludes the supernatural journal, so
+    /// it can not detect concurrent form transitions. The store guarantees
+    /// revision increments for every authorized supernatural write. Comparing
+    /// both revisions and catalog pins is sufficient to reject a superseded
+    /// snapshot; this is not an assertion of a long-lived database lock.
+    /// </summary>
+    private static bool SameSupernaturalSnapshot(
+        CharacterSupernaturalState? before, CharacterSupernaturalState? after) =>
+        before is null ? after is null :
+        after is not null &&
+        before.CharacterId == after.CharacterId &&
+        before.ContractVersion == after.ContractVersion &&
+        before.Revision == after.Revision &&
+        before.LedgerRevision == after.LedgerRevision &&
+        before.RulesetId == after.RulesetId &&
+        before.Fingerprint == after.Fingerprint &&
+        before.DependencyFingerprint == after.DependencyFingerprint;
 
     private static bool VerifySelectedManifestation(
         string effectiveSheetId, JsonNode? effective,
