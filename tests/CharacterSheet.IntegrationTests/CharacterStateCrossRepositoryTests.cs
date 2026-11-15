@@ -9,6 +9,7 @@ using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
+using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -446,6 +447,17 @@ public sealed class CharacterStateCrossRepositoryTests
                     x.Key, out var score) || x.Value != score))
                 return null;
 
+            var classRows = await db.CharacterAdvancementEntries.AsNoTracking()
+                .Where(x => x.CharacterId == characterId &&
+                    x.Kind == CharacterAdvancementKind.Class).ToArrayAsync(ct);
+            if (classRows.Length != state.PrimaryMechanics.Advancements.Count ||
+                state.PrimaryMechanics.Advancements.Any(x =>
+                    !classRows.Any(savedClass =>
+                        savedClass.Id.ToString("D") == x.OccurrenceId &&
+                        savedClass.RuleConceptKey == x.ClassId &&
+                        savedClass.Level == x.Level)))
+                return null;
+
             return new SyntheticAuthority(state, current, transition,
                 receipts.Select(x => x.EventId).ToHashSet(StringComparer.Ordinal));
         }
@@ -606,6 +618,22 @@ public sealed class CharacterStateCrossRepositoryTests
         foreach (var pair in state.PrimaryMechanics.AbilityScores)
             await build.SetBaseAbilityScoreInputAsync(id, pair.Key, pair.Value, DateTimeOffset.UtcNow);
 
+        var updatedBuild = await build.SetStartingClassAsync(
+            id, "class.barbarian", DateTimeOffset.UtcNow);
+        var barbarian = Assert.Single(updatedBuild!.AdvancementEntries,
+            x => x.Kind == CharacterAdvancementKind.Class);
+        state = state with
+        {
+            PrimaryMechanics = state.PrimaryMechanics with
+            {
+                Advancements =
+                [
+                    new NativeAdvancement("class.barbarian", 1,
+                        barbarian.Id.ToString("D"))
+                ]
+            }
+        };
+
         var store = new PostgresCharacterSupernaturalStateStore(db);
         var inputDigest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
         Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
@@ -645,6 +673,8 @@ public sealed class CharacterStateCrossRepositoryTests
         // are used when resolving a later reversion.
         await build.SetBaseAbilityScoreInputAsync(id, "constitution", 15,
             DateTimeOffset.UtcNow.AddMinutes(1));
+        await build.SetAdvancementLevelAsync(id, barbarian.Id, 2,
+            DateTimeOffset.UtcNow.AddMinutes(1));
         var latestScores = state.PrimaryMechanics.AbilityScores
             .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
         latestScores["constitution"] = 15;
@@ -652,12 +682,18 @@ public sealed class CharacterStateCrossRepositoryTests
         {
             PrimaryMechanics = state.PrimaryMechanics with
             {
-                AbilityScores = latestScores
+                AbilityScores = latestScores,
+                Advancements =
+                [
+                    new NativeAdvancement("class.barbarian", 2,
+                        barbarian.Id.ToString("D"))
+                ]
             }
         };
         source.Current = state;
         var reverted = await Execute("revert:wolf");
         Assert.Equal(15, reverted.EffectiveMechanics!.AbilityScores["constitution"]);
+        Assert.Equal(2, Assert.Single(reverted.EffectiveMechanics.Advancements).Level);
         Assert.Equal("@primary", reverted.EffectiveSheetId);
         Assert.Equal(10, reverted.EffectiveMechanics!.AbilityScores["strength"]);
 
@@ -668,6 +704,7 @@ public sealed class CharacterStateCrossRepositoryTests
         var hybrid = await Execute("switch:hybrid");
         Assert.Equal("hybrid", hybrid.EffectiveSheetId);
         Assert.Equal(16, hybrid.EffectiveMechanics!.AbilityScores["dexterity"]);
+        Assert.Equal(2, Assert.Single(hybrid.EffectiveMechanics.Advancements).Level);
         Assert.DoesNotContain(hybrid.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
         Assert.Contains(hybrid.SheetGrants, x => x.Entitlement.Id == "grant.shared");
 

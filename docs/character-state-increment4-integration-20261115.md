@@ -131,7 +131,8 @@ character may read but does not gain mutation rights.
   policy** plus independently checking Core host provider, real Core
   manifestation planning, and Character Sheet's internal transactional
   application service. It verifies acquired Werewolf/Wolf/Hybrid ownership,
-  Wolf activation, reversion using the latest primary mechanics, reentry,
+  Wolf activation, reversion using the latest primary Class level and
+  ability scores, reentry,
   atomic switching, preserved grant provenance, reload and event history,
   and denial when the host verifier is absent or the user is archived.
   This is a synthetic validation slice, not playable first-party rules.
