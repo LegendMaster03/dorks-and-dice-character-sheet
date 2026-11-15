@@ -20,18 +20,25 @@ public sealed class CharacterEffectiveStateReadTests
 
     private sealed class SiteAccess(Guid allowedId,
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
-        SiteCharacterAccessStatus status = SiteCharacterAccessStatus.Authorized)
+        SiteCharacterAccessStatus status = SiteCharacterAccessStatus.Authorized,
+        Func<int, Task>? beforeAuthorizedRead = null)
         : ISiteCharacterAccessGateway
     {
-        public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
-            Guid id, CancellationToken cancellationToken = default) =>
-            Task.FromResult(status == SiteCharacterAccessStatus.Authorized && id == allowedId
+        private int readCount;
+
+        public async Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
+            Guid id, CancellationToken cancellationToken = default)
+        {
+            if (beforeAuthorizedRead is not null)
+                await beforeAuthorizedRead(Interlocked.Increment(ref readCount));
+            return status == SiteCharacterAccessStatus.Authorized && id == allowedId
                 ? SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
                     id, "Test", lifecycle,
                     lifecycle == SiteCharacterLifecycleState.Archived
                         ? DateTimeOffset.UtcNow : null, []))
                 : new SiteCharacterAccessResult(status == SiteCharacterAccessStatus.Authorized
-                    ? SiteCharacterAccessStatus.NotFoundOrNotOwned : status));
+                    ? SiteCharacterAccessStatus.NotFoundOrNotOwned : status);
+        }
     }
 
     private sealed class NativeGateway : INativeRulesCoreGateway
@@ -102,9 +109,10 @@ public sealed class CharacterEffectiveStateReadTests
     private static CharacterEffectiveStateService Service(CharacterSheetDbContext db,
         Guid id, NativeGateway native,
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
-        SiteCharacterAccessStatus status = SiteCharacterAccessStatus.Authorized)
+        SiteCharacterAccessStatus status = SiteCharacterAccessStatus.Authorized,
+        Func<int, Task>? beforeAuthorizedRead = null)
     {
-        var site = new SiteAccess(id, lifecycle, status);
+        var site = new SiteAccess(id, lifecycle, status, beforeAuthorizedRead);
         var buildStore = new PostgresCharacterBuildStore(db);
         return new CharacterEffectiveStateService(
             new CharacterBuildService(site, buildStore, TimeProvider.System),
@@ -220,6 +228,44 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Null(result.View.NativeProjection);
         Assert.Contains("authoritative-inputs-changed-during-resolution",
             result.View.Unresolved);
+    }
+
+    [Fact]
+    public async Task PrimaryProgressionChangedBetweenAuthorizationAndAssemblyFailsClosed()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        await build.SetBaseAbilityScoreInputAsync(id, "strength", 10,
+            DateTimeOffset.UtcNow);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var oldFingerprint = await store.GetAuthoritativeInputsFingerprintAsync(id);
+
+        // Build authorization happens first; the second Site check is the
+        // post-fingerprint Build reload. Under the earlier ordering this
+        // update happened before the first digest, leaving a stale Build
+        // view that looked fresh after a successful native calculation.
+        var native = new NativeGateway();
+        var result = await Service(db, id, native,
+            beforeAuthorizedRead: async read =>
+            {
+                if (read == 2)
+                    await build.SetBaseAbilityScoreInputAsync(id, "strength", 13,
+                        DateTimeOffset.UtcNow.AddSeconds(1));
+            }).GetAsync(id);
+
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+        Assert.Equal("unresolved", result.View!.Status);
+        Assert.Null(result.View.NativeProjection);
+        Assert.Contains("authoritative-inputs-changed-during-resolution",
+            result.View.Unresolved);
+        Assert.Equal(1, native.Calls);
+        Assert.NotEqual(oldFingerprint,
+            await store.GetAuthoritativeInputsFingerprintAsync(id));
+        Assert.Null(await store.GetAsync(id));
     }
 
     [Fact]
