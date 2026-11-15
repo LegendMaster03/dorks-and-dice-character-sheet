@@ -79,6 +79,34 @@ public sealed class CharacterEffectiveStateService(
             // native/DM acquisition and replay-safe transition service must be
             // in place before projecting the saved supernatural state.
             issues.Add("supernatural-acquisition-authority-unavailable");
+            try
+            {
+                // A persisted ruleset identity is a pin, not proof that the
+                // native catalog still contains the same definitions. Report
+                // mismatch even though source authority is not yet installed.
+                var metadata = await core.GetNativeRulesetAsync(cancellationToken);
+                var nativeRuleset = metadata["rulesetId"]?.GetValue<string>();
+                var nativeFingerprint = metadata["fingerprint"]?.GetValue<string>();
+                if (metadata["contractVersion"]?.GetValue<int>() != 1 ||
+                    string.IsNullOrWhiteSpace(nativeRuleset) ||
+                    string.IsNullOrWhiteSpace(nativeFingerprint))
+                    issues.Add("native-ruleset-unavailable");
+                else
+                {
+                    if (persisted.RulesetId != nativeRuleset ||
+                        persisted.Fingerprint != nativeFingerprint)
+                        issues.Add("supernatural-native-content-changed");
+                    if (origin.SavedState is { } originState &&
+                        (originState.RulesetId != nativeRuleset ||
+                         originState.Fingerprint != nativeFingerprint))
+                        issues.Add("authorized-origin-native-content-changed");
+                }
+            }
+            catch (Exception error) when (error is RulesCoreGatewayException or
+                JsonException or InvalidOperationException or FormatException)
+            {
+                issues.Add("native-ruleset-unavailable");
+            }
         }
         else
         {
@@ -107,6 +135,10 @@ public sealed class CharacterEffectiveStateService(
                     string.IsNullOrWhiteSpace(fingerprint) ||
                     metadata["contractVersion"]?.GetValue<int>() != 1)
                     issues.Add("native-ruleset-unavailable");
+                else if (origin.SavedState is { } savedOrigin &&
+                    (savedOrigin.RulesetId != ruleset ||
+                     savedOrigin.Fingerprint != fingerprint))
+                    issues.Add("authorized-origin-native-content-changed");
                 else
                 {
                     // All primary fields here come from authenticated Character

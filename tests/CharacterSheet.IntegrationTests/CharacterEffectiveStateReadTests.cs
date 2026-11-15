@@ -388,4 +388,64 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(7, pool.GetProperty("maximum").GetInt32());
         Assert.Single(await saved.GetEventsAsync(id));
     }
+
+    [Fact]
+    public async Task OriginPinnedToObsoleteNativeCatalogIsExplicitlyUnresolved()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        // Controlled historical Origin row. Its source was authorized in an
+        // older native catalog; the latest native fingerprint differs.
+        db.AuthorizedOrigins.Add(new CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState(
+            id, Ruleset, new string('b', 64), "{}", null, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        var native = new NativeGateway();
+        var read = await Service(db, id, native).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, read.Status);
+        Assert.Equal("unresolved", read.View!.Status);
+        Assert.Null(read.View.NativeProjection);
+        Assert.False(read.View.EffectiveMechanicsReady);
+        Assert.Equal(1, read.View.OriginRevision);
+        Assert.Contains("authorized-origin-native-content-changed", read.View.Unresolved);
+        Assert.Equal(0, native.Calls);
+    }
+
+    [Fact]
+    public async Task PersistedSupernaturalStatePinnedToObsoleteCatalogIsReportedAsStale()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var ledger = JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision = 0,
+            instances = Array.Empty<object>(), resources = Array.Empty<object>(),
+            processedEventIds = Array.Empty<string>()
+        });
+        var oldFingerprint = new string('b', 64);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, Ruleset, oldFingerprint, "[]", "[]", ledger,
+                0, 0, 0, digest, "fixture:old-acquisition",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        var native = new NativeGateway();
+        var read = await Service(db, id, native).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, read.Status);
+        Assert.Equal("unresolved", read.View!.Status);
+        Assert.Equal(oldFingerprint, read.View.Fingerprint);
+        Assert.Null(read.View.NativeProjection);
+        Assert.Contains("supernatural-native-content-changed", read.View.Unresolved);
+        Assert.Equal(0, native.Calls);
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+    }
 }
