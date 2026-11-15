@@ -132,6 +132,16 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             db.ChangeTracker.Clear();
             return new(CharacterSupernaturalWriteStatus.RevisionConflict);
         }
+        catch (InvalidOperationException error) when (
+            error.InnerException is PostgresException pg &&
+            pg.SqlState is PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.UniqueViolation)
+        {
+            // EF's Npgsql execution strategy wraps a concurrent serialization
+            // failure during FOR UPDATE before this method reaches SaveChanges.
+            // The losing request must receive a stable conflict, not HTTP 500.
+            db.ChangeTracker.Clear();
+            return new(CharacterSupernaturalWriteStatus.RevisionConflict);
+        }
         catch (DbUpdateException error) when (error.InnerException is PostgresException pg &&
             pg.SqlState is PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.UniqueViolation)
         {
