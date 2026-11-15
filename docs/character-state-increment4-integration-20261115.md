@@ -232,7 +232,8 @@ An archived character may read but does not gain mutation rights.
   and the authorized Build reload, proving that the primary digest
   brackets the full source assembly, not only the Rules Core call.
 * The real Core/PostgreSQL tests verify that an independently owned
-  Background selection and current HP each block manifestation mutation
+  Background selection, current HP, nonzero death saves and an
+  unequipped inventory occurrence each block manifestation mutation
   without writing a transition or receipt. Removing those unsupported
   inputs restores the deliberately source-free synthetic test path.
   Unit tests independently cover legacy Species, Background, deity,

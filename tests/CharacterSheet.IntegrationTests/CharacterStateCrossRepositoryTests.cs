@@ -1073,6 +1073,20 @@ public sealed class CharacterStateCrossRepositoryTests
         await AssertRefused();
 
         await routine.SetCurrentHitPointsAsync(id, null, DateTimeOffset.UtcNow);
+        await routine.SetDeathSavesAsync(id, 1, 0, DateTimeOffset.UtcNow);
+        await AssertRefused();
+
+        await routine.SetDeathSavesAsync(id, 0, 0, DateTimeOffset.UtcNow);
+        var inventoryOwner = await routine.AddInventoryItemOccurrenceAsync(
+            id, "item.synthetic.unverified", DateTimeOffset.UtcNow);
+        var item = Assert.Single(inventoryOwner!.InventoryItemOccurrences);
+        Assert.False(item.IsEquipped);
+        await AssertRefused();
+        await routine.RemoveInventoryItemOccurrenceAsync(
+            id, item.Id, DateTimeOffset.UtcNow);
+
+        // Once these individually owned unsupported facts are absent,
+        // the existing test-only source-free primary subset may be planned.
         var allowed = await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf");
         Assert.Equal(CharacterManifestationApplyStatus.Applied, allowed.Status);
         Assert.Equal(2, (await store.GetAsync(id))!.Revision);
