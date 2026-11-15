@@ -48,6 +48,12 @@ public sealed class DelegatedRulesCoreGateway(
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/characters/project",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    public Task<JsonNode> EvaluatePrimaryStateBaselineAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post,
+            "/api/mechanics/v1/characters/effective-state-baseline",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     /// <summary>
     /// Forward only user-scoped Site delegation, never a browser-provided
     /// upstream token or a synthetic campaign/DM authority.

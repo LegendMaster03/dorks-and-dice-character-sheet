@@ -19,6 +19,15 @@ public interface INativeRulesCoreGateway
         JsonElement request, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Authenticated server-owned primary character effective-state evaluation.
+    /// Rejects all supernatural entitlements until independently verified.
+    /// </summary>
+    Task<JsonNode> EvaluatePrimaryStateBaselineAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Primary-state evaluation is unsupported by this gateway."));
+
+    /// <summary>
     /// Stateless origin construction preview. This does not authorize a DM ruling
     /// or commit character-owned selections to persistent storage.
     /// </summary>

@@ -116,6 +116,7 @@ builder.Services.AddScoped<CharacterOriginMixedActivationService>();
 builder.Services.AddScoped<CharacterOriginMixedReviewService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
+builder.Services.AddScoped<CharacterEffectiveStateService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
@@ -181,6 +182,7 @@ app.MapGet("/api", () => Results.Ok(new
 
 app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
 app.MapCharacterStateEndpoints();
+app.MapCharacterEffectiveStateEndpoints();
 app.MapCharacterStartingEquipmentEndpoints();
 app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
