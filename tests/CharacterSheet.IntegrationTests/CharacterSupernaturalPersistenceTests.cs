@@ -234,6 +234,22 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Throws<ArgumentException>(() => store.CommitVerifiedAsync(
             valid with { TransitionRequestJson = SyntheticTransitionAudit(
                 id, 5, "enter:wolf") }).GetAwaiter().GetResult());
+        Assert.Throws<ArgumentException>(() => store.CommitVerifiedAsync(
+            valid with
+            {
+                TransitionRequestJson = valid.TransitionRequestJson!.Replace(
+                    "\"eventId\":\"enter:wolf\"",
+                    "\"eventId\":\"enter:wolf\",\"eventId\":\"enter:wolf\"",
+                    StringComparison.Ordinal)
+            }).GetAwaiter().GetResult());
+        Assert.Throws<ArgumentException>(() => store.CommitVerifiedAsync(
+            valid with
+            {
+                TransitionRequestJson = valid.TransitionRequestJson!.Replace(
+                    "\"occurrencePath\":\"actions.fixture\"",
+                    "\"occurrencePath\":\"\"",
+                    StringComparison.Ordinal)
+            }).GetAwaiter().GetResult());
 
         Assert.Equal(1, (await store.GetAsync(id))!.Revision);
         Assert.Single(await store.GetEventsAsync(id));

@@ -183,6 +183,7 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             JsonValueKind.Object, "transitionRequest");
         using var document = JsonDocument.Parse(json);
         var request = document.RootElement;
+        RejectDuplicateJsonKeys(request);
         if (!request.TryGetProperty("characterId", out var character) ||
             character.ValueKind != JsonValueKind.String ||
             character.GetString() != command.CharacterId.ToString("D") ||
@@ -209,13 +210,45 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 string.IsNullOrWhiteSpace(target.GetString()) ||
                 !step.TryGetProperty("ruleOccurrence", out var rule) ||
                 rule.ValueKind != JsonValueKind.Object ||
+                !rule.TryGetProperty("occurrencePath", out var path) ||
+                path.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(path.GetString()) ||
+                !rule.TryGetProperty("source", out var source) ||
+                source.ValueKind != JsonValueKind.Object ||
+                !source.TryGetProperty("id", out var sourceId) ||
+                sourceId.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(sourceId.GetString()) ||
+                !source.TryGetProperty("kind", out var sourceKind) ||
+                sourceKind.ValueKind is not (JsonValueKind.Number or JsonValueKind.String) ||
                 !step.TryGetProperty("basis", out var basis) ||
                 basis.ValueKind != JsonValueKind.Object ||
+                !basis.TryGetProperty("adjudication", out var adjudication) ||
+                adjudication.ValueKind is not (JsonValueKind.Number or JsonValueKind.String) ||
                 !step.TryGetProperty("authorizationEvidenceId", out var evidence) ||
                 evidence.ValueKind != JsonValueKind.String ||
                 string.IsNullOrWhiteSpace(evidence.GetString()))
                 throw new ArgumentException(
                     "A committed manifestation audit must retain every authorized step.");
+        }
+    }
+
+    private static void RejectDuplicateJsonKeys(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+                RejectDuplicateJsonKeys(item);
+        }
+        else if (element.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!names.Add(property.Name))
+                    throw new ArgumentException(
+                        "The verified transition audit contains ambiguous duplicate JSON keys.");
+                RejectDuplicateJsonKeys(property.Value);
+            }
         }
     }
 
