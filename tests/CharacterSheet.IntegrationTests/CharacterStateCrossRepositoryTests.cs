@@ -831,5 +831,54 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(0, (await store.GetAsync(id))!.LedgerRevision);
         Assert.Single(await store.GetEventsAsync(id));
     }
+
+    [Fact]
+    public async Task NativeCatalogChangeRejectsPreviouslyAcquiredStateBeforeAnyTransitionCommit()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var core = await CoreHost.StartAsync();
+        var gateway = new RealGateway(core.Client);
+        var activeFingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var oldFingerprint = new string('b', 64);
+        Assert.NotEqual(activeFingerprint, oldFingerprint);
+        var oldState = TestCharacter(id, oldFingerprint, TestOwnedForms());
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var pair in oldState.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(id, pair.Key, pair.Value,
+                DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var ledger = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", oldFingerprint,
+                JsonSerializer.Serialize(oldState.AlternateSheets, Wire),
+                "[]", JsonSerializer.Serialize(ledger, Wire),
+                0, 0, 0, digest, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        // Core compares pinned catalog identity before consulting a source
+        // authority. It must not plan against the newer definitions.
+        var actions = new SyntheticTrustedSource(oldState);
+        var service = new CharacterManifestationTransitionService(
+            new OwnerAccess(id), store, gateway, actions);
+        var refused = await service.ApplyAsync(id, 1, 0,
+            "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.NativeContentChanged, refused.Status);
+        Assert.Equal(1, actions.Calls);
+        var persisted = (await store.GetAsync(id))!;
+        Assert.Equal(1, persisted.Revision);
+        Assert.Equal(0, persisted.LedgerRevision);
+        Assert.Single(await store.GetEventsAsync(id));
+        using var savedLedger = JsonDocument.Parse(persisted.LedgerJson);
+        Assert.Empty(savedLedger.RootElement.GetProperty("processedEventIds").EnumerateArray());
+    }
 }
 #endif

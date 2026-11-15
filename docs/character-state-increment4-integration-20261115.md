@@ -142,8 +142,14 @@ character may read but does not gain mutation rights.
   and denial when the host verifier is absent or the user is archived.
   A deliberately invalid two-step Wolf switch verifies that a successful
   End step is not persisted when a later Activate is rejected. Character
-  Sheet classifies deterministic Core HTTP 400/409/422 plan refusals as
-  unresolved plans rather than as transport outages.
+  Sheet recognizes only bounded, protocol-defined Rules Core error codes.
+  Native-content mismatch maps to `NativeContentChanged`, missing or denied
+  source authority maps to `SourceUnauthorized`, and an upstream ledger
+  conflict maps to `LedgerRevisionConflict`; other deterministic 400/409/422
+  rejections remain `PlanUnresolved` rather than transport outages.
+  A separate real Core HTTP/PostgreSQL test verifies that a persisted form
+  pinned to obsolete native content can not transition, returns
+  `NativeContentChanged`, and leaves revision and event history intact.
   This is a synthetic validation slice, not playable first-party rules.
 * Additional PostgreSQL tests exercise immutable activation receipts,
   reversion history, duplicate/reordered events, attempted progression
