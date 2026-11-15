@@ -124,6 +124,15 @@ public sealed class CharacterStateCrossRepositoryTests
     {
         public int ProjectionRequests { get; private set; }
         public int VerifiedReadRequests { get; private set; }
+
+        /// <summary>
+        /// Test-only corrupted transport responses. The real host still
+        /// evaluates and authenticates the unchanged persisted ledger first.
+        /// Character Sheet must reject a subsequently substituted selection.
+        /// </summary>
+        public bool ForgePrimarySelection { get; set; }
+        public bool ForgeWolfSelection { get; set; }
+
         public async Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct)
         {
             using var request = Authorized(HttpMethod.Get, "/api/mechanics/v1/ruleset");
@@ -159,7 +168,19 @@ public sealed class CharacterStateCrossRepositoryTests
                 "/api/mechanics/v1/characters/effective-state");
             message.Content = JsonContent.Create(request, options: Wire);
             using var response = await http.SendAsync(message, ct);
-            return await Parse(response, ct);
+            var result = await Parse(response, ct);
+            if (ForgePrimarySelection)
+            {
+                result["projection"]!["effectiveCharacter"]!["effectiveSheetId"] = "@primary";
+                result["projection"]!["effectiveCharacter"]!["manifestationInstanceId"] = null;
+            }
+            if (ForgeWolfSelection)
+            {
+                result["projection"]!["effectiveCharacter"]!["effectiveSheetId"] = "wolf";
+                result["projection"]!["effectiveCharacter"]!["manifestationInstanceId"] =
+                    "manifest.wolf.1";
+            }
+            return result;
         }
 
         public async Task<JsonNode> PlanVerifiedManifestationAsync(
@@ -840,6 +861,15 @@ public sealed class CharacterStateCrossRepositoryTests
             effectiveRead.View.Unresolved);
         Assert.Equal(1, gateway.VerifiedReadRequests);
 
+        gateway.ForgePrimarySelection = true;
+        var falsifiedPrimary = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("unresolved", falsifiedPrimary.View!.Status);
+        Assert.Null(falsifiedPrimary.View.NativeProjection);
+        Assert.Contains("native-state-response-unverified",
+            falsifiedPrimary.View.Unresolved);
+        Assert.Null(falsifiedPrimary.View.ActiveManifestationId);
+        gateway.ForgePrimarySelection = false;
+
 
         // Primary advancement belongs to the original character and must
         // project dynamically even while Wolf remains the active sheet.
@@ -1342,6 +1372,17 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal("partial", read.View!.Status);
         Assert.Equal("hybrid", read.View.EffectiveSheetId);
         Assert.Equal("manifest.hybrid.1", read.View.ActiveManifestationId);
+
+        // Both form instances are active and contributing. A modified
+        // transport response selecting Wolf contradicts the single recorded
+        // Replace decision that selects Hybrid and must be withheld.
+        gateway.ForgeWolfSelection = true;
+        var falsifiedSelection = await Reader(reload, id, gateway).GetAsync(id);
+        Assert.Equal("unresolved", falsifiedSelection.View!.Status);
+        Assert.Null(falsifiedSelection.View.NativeProjection);
+        Assert.Contains("native-state-response-unverified",
+            falsifiedSelection.View.Unresolved);
+        gateway.ForgeWolfSelection = false;
 
         var replay = await TransitionRunner(reload, new OwnerAccess(id),
             fresh, gateway, source).ApplyAsync(id, saved.Revision,
