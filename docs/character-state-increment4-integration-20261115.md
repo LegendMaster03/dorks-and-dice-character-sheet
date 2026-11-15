@@ -58,6 +58,18 @@ recorded transition steps. Empty and legacy-only histories can still downgrade;
 an audited database needs a separate data-preserving recovery procedure rather
 than silent destruction of immutable source evidence.
 
+The PostgreSQL history guard now also binds each ordered step to the
+resulting instance and resource changes. An audited Activate must contain
+the exact newly committed instance, and every minted manifestation-owned
+resource must match a NewResources entry on that activation, including
+its owner, source, evidence, quantity and maximum. End, Suppress and
+Restore must produce only the matching authorized lifecycle/contribution
+delta, with the event recorded as LastEventId. Duplicate step targets,
+unexpectedly changed existing instances, unlisted new instances, unlisted
+resources and mismatched activation captures fail before commit. The
+tests use actual synthetic instance deltas rather than allowing an event
+ID to be appended as an otherwise empty transition.
+
 Interaction decisions are also bound to the ordered transition
 audit. When the request does not include a replacement interaction set, the
 persisted set must remain unchanged. When it does, the proposed ledger must
@@ -213,6 +225,11 @@ An archived character may read but does not gain mutation rights.
 * The PostgreSQL history guard tests reject unauthorized interaction
   replacement or removal and confirm that the recorded replacement set,
   when independently verified, remains in the same transition receipt.
+  New step-to-ledger tests reject missing, duplicated, forged or changed
+  activation resources; altered activation captures; mismatched End and
+  Suppress actions; duplicate steps; and an extra committed instance not
+  named in the audit. Positive activation and ending retain exact
+  ordered evidence after a fresh database context.
 * Core host tests cover delegated baseline, missing/wrong ticket,
   content mismatch and forged event ledger refusal.
 
