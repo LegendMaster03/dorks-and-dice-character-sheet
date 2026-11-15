@@ -23,9 +23,18 @@ contract*, not a source of playable grants or acquisition evidence.
 Current serialized state holds independently owned alternate sheets, locally
 owned progression, influences, their grants/evidence, manifestation instances,
 per-owner resource quantities, interaction decisions, and processed event IDs.
-The event table retains event IDs, state/ledger revisions, event kind, and
-authority-evidence reference. Complete event-step auditing is not yet
-implemented; a referenced string is not its own proof.
+The event table retains event IDs, state/ledger revisions, event kind,
+authority-evidence reference and, for new transitions, the full ordered
+source-verified transition request. The additive migration
+`20261115020000_AddSupernaturalTransitionRequestAudit` adds nullable
+`TransitionRequestJson` (JSONB). New transition commits must include
+matching character, prior ledger revision and event identity, with nonempty
+ordered steps retaining each action, target, rule occurrence, adjudication
+basis, authorization evidence and any replacement interactions. Acquisitions
+can not supply a transition audit. Existing receipts remain null rather than
+fabricating missing historical steps. **A persisted audit is not itself
+cryptographic or independent proof of native/DM authorization:** the trusted
+source provider and Rules Core host must verify those facts before writing.
 
 ### Transaction boundary
 
@@ -38,6 +47,12 @@ condition, inventory and other relevant input rows, compares supernatural
 state and ledger revisions, writes the new state, inserts the unique event
 receipt and commits. PostgreSQL serialization failures are returned as
 conflicts, including exceptions wrapped by EF Core.
+
+The ordered transition audit is written inside the same serializable
+transaction as the proposed ledger and immutable event receipt. A missing
+or mismatched audit rejects the entire write before changing the character.
+Old pre-audit event receipts can still load; absent steps can not be inferred
+from a processed event ID or a post-transition snapshot.
 
 The database now additionally enforces historical continuity. A first
 acquisition can not fabricate an already-active manifestation. A form
@@ -166,6 +181,12 @@ An archived character may read but does not gain mutation rights.
   pinned to obsolete native content can not transition, returns
   `NativeContentChanged`, and leaves revision and event history intact.
   This is a synthetic validation slice, not playable first-party rules.
+* New PostgreSQL audit tests verify that a source-verified ordered
+  transition request survives service/context reload, malformed or mismatched
+  step audits leave no partial write, and acquisition cannot impersonate a
+  transition event. The real Rules Core integration asserts that the
+  Wolf-to-Hybrid switch persists its exact End and Activate steps, source
+  occurrence and per-step evidence in one receipt.
 * Additional PostgreSQL tests exercise immutable activation receipts,
   reversion history, duplicate/reordered events, attempted progression
   replacement, unauthorized resource mutation and separate acquisition.
@@ -218,9 +239,11 @@ authenticated Werewolf/Wolf/Hybrid acquisition and transition tests.
    for both transition planning and effective-state reads. The transport
    endpoints are implemented and fail closed, but the host has no production
    source-of-truth verifier or DM acquisition policy.
-4. Connect the authorized complete plan to `CommitVerifiedAsync`, proving
-   exact provenance, source versions, effects, interaction decisions and
-   resource ownership; persist complete transition-step audit data.
+4. Connect future independently authorized production acquisition and
+   transition operations to the existing complete-plan commit path. New
+   transitions now retain ordered step audits; audit persistence alone does
+   not prove receipt validity, revocation, source entitlement, DM scope or
+   form-specific effects. Those must come from trusted production verifiers.
 5. Extend the now-shared primary adapter to revalidate the latest
    `NativeOriginProfile.Underlying`, independently owned Class/Background/
    Upbringing entitlements, trained skills, inventory and resource facts.
