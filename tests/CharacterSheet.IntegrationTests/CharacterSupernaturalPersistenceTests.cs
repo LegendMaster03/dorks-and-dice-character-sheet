@@ -378,4 +378,72 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Null(await store.GetAsync(id));
         Assert.Empty(await store.GetEventsAsync(id));
     }
+
+    private static string InitialOwnerResourceLedger(Guid id, int ownerKind, string ownerId) =>
+        JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision = 0,
+            instances = Array.Empty<object>(), processedEventIds = Array.Empty<string>(),
+            resources = new[]
+            {
+                new
+                {
+                    id = "resource.initial",
+                    definitionId = "resource.definition.initial",
+                    sourceOccurrence = new
+                    {
+                        source = new { kind = 0, id = "test.lycanthropy", version = "v1" },
+                        occurrencePath = "resources.initial"
+                    },
+                    evidenceId = "fixture:resource-acquired",
+                    ownerKind, ownerId, current = 2, maximum = 5
+                }
+            }
+        });
+
+    [Theory]
+    [InlineData(0, "@primary", false)]
+    [InlineData(1, "wolf", false)]
+    [InlineData(2, "curse", true)]
+    public async Task FirstAcquisitionCanPersistSourceQualifiedPrimarySheetOrInfluenceResource(
+        int ownerKind, string ownerId, bool influenceOwner)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var command = Write(id, digest,
+            ledger: InitialOwnerResourceLedger(id, ownerKind, ownerId));
+        if (influenceOwner)
+            command = command with { PersistentInfluencesJson = """[{"id":"curse"}]""" };
+        var result = await store.CommitVerifiedAsync(command);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied, result.Status);
+
+        var saved = (await store.GetAsync(id))!;
+        using var journal = JsonDocument.Parse(saved.LedgerJson);
+        var pool = Assert.Single(journal.RootElement.GetProperty("resources").EnumerateArray());
+        Assert.Equal(ownerKind, pool.GetProperty("ownerKind").GetInt32());
+        Assert.Equal(ownerId, pool.GetProperty("ownerId").GetString());
+        Assert.Equal(2, pool.GetProperty("current").GetInt32());
+        Assert.Equal(5, pool.GetProperty("maximum").GetInt32());
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Single(await store.GetEventsAsync(id));
+    }
+
+    [Theory]
+    [InlineData(3, "manifest.wolf")]
+    [InlineData(1, "foreign-sheet")]
+    [InlineData(2, "foreign-influence")]
+    public async Task FirstAcquisitionRejectsUnownedOrActivationOnlyResource(
+        int ownerKind, string ownerId)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, ledger: InitialOwnerResourceLedger(id, ownerKind, ownerId))));
+        Assert.Null(await store.GetAsync(id));
+        Assert.Empty(await store.GetEventsAsync(id));
+    }
 }

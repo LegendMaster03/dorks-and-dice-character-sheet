@@ -47,7 +47,12 @@ unchanged, and preserve existing resource quantities. Any new transition
 resource must belong to a newly activated manifestation. A separate
 acquisition can append ownership/progression, but it can not delete or
 rewrite earlier evidence or modify the manifestation journal without
-an explicit ledger event. These are defense-in-depth invariants, not
+an explicit ledger event. First acquisition can also initialize an
+independently source-qualified Primary-, Sheet- or Influence-owned
+resource pool, never a Manifestation-owned pool before an activation
+exists. Adding pools to an existing character after the first
+acquisition still requires a future explicitly revisioned resource
+operation; it is not silently implemented as a ledger edit. These are defense-in-depth invariants, not
 substitutes for verified gameplay authority.
 
 The application must obtain its digest from the current authoritative rows,
