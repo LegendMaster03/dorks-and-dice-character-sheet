@@ -49,6 +49,26 @@ public sealed class CharacterEffectiveStateService(
                 CharacterBuildAccessStatus.SheetNotInitialized => CharacterEffectiveStateStatus.SheetNotInitialized,
                 _ => CharacterEffectiveStateStatus.ProjectionUnavailable
             });
+
+        // The first Build fetch proves Site ownership. Its values are not
+        // used for native mechanics until a primary dependency fingerprint has
+        // been captured. Reload Build inside that window so an advancement
+        // update between the first authorization read and other Character
+        // stores can never be certified against a digest taken afterward.
+        var baselineInputs = await supernatural.GetAuthoritativeInputsFingerprintAsync(
+            id, cancellationToken);
+        if (baselineInputs is null)
+            return new(CharacterEffectiveStateStatus.SheetNotInitialized);
+        build = await builds.GetAsync(id, cancellationToken);
+        if (build.Status != CharacterBuildAccessStatus.Ready || build.View is null)
+            return new(build.Status switch
+            {
+                CharacterBuildAccessStatus.Unauthenticated => CharacterEffectiveStateStatus.Unauthenticated,
+                CharacterBuildAccessStatus.NotFoundOrNotOwned => CharacterEffectiveStateStatus.NotFoundOrNotOwned,
+                CharacterBuildAccessStatus.SheetNotInitialized => CharacterEffectiveStateStatus.SheetNotInitialized,
+                _ => CharacterEffectiveStateStatus.ProjectionUnavailable
+            });
+
         var state = await routine.GetAsync(id, cancellationToken);
         if (state.Status != CharacterStateAccessStatus.Ready || state.View is null)
             return new(state.Status switch
@@ -86,8 +106,7 @@ public sealed class CharacterEffectiveStateService(
             issues.Add("supernatural-acquisition-authority-unavailable");
             try
             {
-                var before = await supernatural.GetAuthoritativeInputsFingerprintAsync(
-                    id, cancellationToken);
+                var before = baselineInputs;
                 var metadata = await core.GetNativeRulesetAsync(cancellationToken);
                 var nativeRuleset = metadata["rulesetId"]?.GetValue<string>();
                 var nativeFingerprint = metadata["fingerprint"]?.GetValue<string>();
@@ -181,7 +200,7 @@ public sealed class CharacterEffectiveStateService(
         {
             try
             {
-                var before = await supernatural.GetAuthoritativeInputsFingerprintAsync(id, cancellationToken);
+                var before = baselineInputs;
                 var metadata = await core.GetNativeRulesetAsync(cancellationToken);
                 ruleset = metadata["rulesetId"]?.GetValue<string>();
                 fingerprint = metadata["fingerprint"]?.GetValue<string>();
