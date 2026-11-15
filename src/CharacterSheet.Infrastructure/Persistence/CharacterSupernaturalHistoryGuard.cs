@@ -27,8 +27,15 @@ internal static class CharacterSupernaturalHistoryGuard
             if (command.IsTransition || command.ExpectedRevision != 0 ||
                 command.ExpectedLedgerRevision != 0 || command.NextLedgerRevision != 0 ||
                 nextEvents.Length != 0 || HasItems(next, "instances") ||
-                HasItems(next, "resources") || HasItems(next, "interactions"))
+                HasItems(next, "interactions"))
                 throw new ArgumentException("First acquisition can not silently create an activated manifestation.");
+
+            // A newly acquired sheet or influence may own a new resource
+            // pool before any form manifests. The first record has no prior
+            // ledger to compare; validate ownership, source receipt, and
+            // quantity instead of incorrectly requiring zero resource pools.
+            ValidateInitialResources(next, command.AlternateSheetsJson,
+                command.PersistentInfluencesJson);
             return;
         }
 
@@ -65,6 +72,85 @@ internal static class CharacterSupernaturalHistoryGuard
                 "alternate sheets", ["parentId", "definitionId", "definitionSource", "acquisitionEvidenceId"]);
             PreserveAcquiredOwners(existing.PersistentInfluencesJson, command.PersistentInfluencesJson,
                 "persistent influences", ["definitionId", "definitionSource", "acquisitionEvidenceId"]);
+        }
+    }
+
+    private static void ValidateInitialResources(JsonElement ledger,
+        string sheetsJson, string influencesJson)
+    {
+        using var sheets = JsonDocument.Parse(sheetsJson);
+        using var influences = JsonDocument.Parse(influencesJson);
+        var sheetIds = ById(sheets.RootElement, "initial sheets");
+        var influenceIds = ById(influences.RootElement, "initial influences");
+        var resources = ById(ledger.GetProperty("resources"), "initial resources");
+        if (resources.Count > 4096)
+            throw new ArgumentException("Too many independently owned initial resource pools.");
+
+        foreach (var resource in resources.Values)
+        {
+            string Text(string key)
+            {
+                if (!resource.TryGetProperty(key, out var value) ||
+                    value.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(value.GetString()))
+                    throw new ArgumentException("Incomplete initial resource source or ownership.");
+                return value.GetString()!;
+            }
+            int Number(string key)
+            {
+                if (!resource.TryGetProperty(key, out var value) ||
+                    value.ValueKind != JsonValueKind.Number ||
+                    !value.TryGetInt32(out var result))
+                    throw new ArgumentException("Invalid initial resource quantity.");
+                return result;
+            }
+
+            var ownerId = Text("ownerId");
+            _ = Text("definitionId");
+            _ = Text("evidenceId");
+            var current = Number("current");
+            var maximum = Number("maximum");
+            if (current < 0 || maximum is < 0 or > 1_000_000 ||
+                current > maximum ||
+                !resource.TryGetProperty("sourceOccurrence", out var occurrence) ||
+                occurrence.ValueKind != JsonValueKind.Object ||
+                !occurrence.TryGetProperty("occurrencePath", out var sourcePath) ||
+                sourcePath.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(sourcePath.GetString()) ||
+                !occurrence.TryGetProperty("source", out var source) ||
+                source.ValueKind != JsonValueKind.Object ||
+                !source.TryGetProperty("id", out var sourceId) ||
+                sourceId.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(sourceId.GetString()) ||
+                !source.TryGetProperty("version", out var version) ||
+                version.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(version.GetString()) ||
+                !source.TryGetProperty("kind", out var sourceKind) ||
+                sourceKind.ValueKind is not (JsonValueKind.Number or JsonValueKind.String))
+                throw new ArgumentException("An initial resource requires a valid acquired source and quantity.");
+
+            if (!resource.TryGetProperty("ownerKind", out var ownerKind))
+                throw new ArgumentException("Initial resources require an explicit owner.");
+            var kind = ownerKind.ValueKind switch
+            {
+                JsonValueKind.Number when ownerKind.TryGetInt32(out var n) => n,
+                JsonValueKind.String => ownerKind.GetString() switch
+                {
+                    "Primary" => 0,
+                    "Sheet" => 1,
+                    "Influence" => 2,
+                    _ => -1
+                },
+                _ => -1
+            };
+            if (kind switch
+            {
+                0 => ownerId != "@primary",
+                1 => !sheetIds.ContainsKey(ownerId),
+                2 => !influenceIds.ContainsKey(ownerId),
+                _ => true
+            })
+                throw new ArgumentException("Initial resource owner must be the primary, an acquired sheet, or an acquired influence.");
         }
     }
 
