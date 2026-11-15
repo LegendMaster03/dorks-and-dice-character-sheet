@@ -147,6 +147,8 @@ public sealed class CharacterEffectiveStateService(
                         response["supportedScope"]?.GetValue<string>() != "primary-only" ||
                         response["rulesetId"]?.GetValue<string>() != ruleset ||
                         response["fingerprint"]?.GetValue<string>() != fingerprint ||
+                        response["status"]?.GetValue<string>() is not "partial" ||
+                        response["projection"]?["status"]?.GetValue<string>() == "invalid" ||
                         response["effectiveMechanicsReady"]?.GetValue<bool>() != false ||
                         response["projection"] is not JsonObject native)
                         issues.Add("native-state-response-unverified");
