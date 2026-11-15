@@ -20,6 +20,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RulesCore.Mechanics;
 using CoreAuthorityProvider = CoreHost::RulesCore.Host.INativeManifestationHostAuthorityProvider;
+using CoreReadAuthorityProvider = CoreHost::RulesCore.Host.INativeManifestationHostReadAuthorityProvider;
 using CoreApplication = CoreHost::RulesCore.Host.RulesCoreApplication;
 using CoreTicketValidator = CoreHost::RulesCore.Host.CharacterSheetMechanicsTicketValidator;
 
@@ -66,7 +67,8 @@ public sealed class CharacterStateCrossRepositoryTests
         public HttpClient Client { get; } = client;
 
         public static async Task<CoreHost> StartAsync(
-            CoreAuthorityProvider? verifiedSourceProvider = null)
+            CoreAuthorityProvider? verifiedSourceProvider = null,
+            CoreReadAuthorityProvider? verifiedReadProvider = null)
         {
             var root = Environment.GetEnvironmentVariable("RULES_CORE_CONTENT_ROOT");
             if (root is null || !Directory.Exists(Path.Combine(root, "first-party-001", "native")))
@@ -88,6 +90,8 @@ public sealed class CharacterStateCrossRepositoryTests
                     .ConfigurePrimaryHttpMessageHandler(() => new SiteTicketHandler());
                 if (verifiedSourceProvider is not null)
                     services.AddSingleton(verifiedSourceProvider);
+                if (verifiedReadProvider is not null)
+                    services.AddSingleton(verifiedReadProvider);
             });
             await app.StartAsync();
             var server = app.Services.GetRequiredService<IServer>();
@@ -119,6 +123,7 @@ public sealed class CharacterStateCrossRepositoryTests
     private sealed class RealGateway(HttpClient http) : INativeRulesCoreGateway
     {
         public int ProjectionRequests { get; private set; }
+        public int VerifiedReadRequests { get; private set; }
         public async Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct)
         {
             using var request = Authorized(HttpMethod.Get, "/api/mechanics/v1/ruleset");
@@ -144,6 +149,17 @@ public sealed class CharacterStateCrossRepositoryTests
                 "/api/mechanics/v1/characters/effective-state-baseline");
             message.Content = JsonContent.Create(request, options: Wire);
             return await http.SendAsync(message, ct);
+        }
+
+        public async Task<JsonNode> EvaluateVerifiedManifestationStateAsync(
+            JsonElement request, CancellationToken ct)
+        {
+            VerifiedReadRequests++;
+            using var message = Authorized(HttpMethod.Post,
+                "/api/mechanics/v1/characters/effective-state");
+            message.Content = JsonContent.Create(request, options: Wire);
+            using var response = await http.SendAsync(message, ct);
+            return await Parse(response, ct);
         }
 
         public async Task<JsonNode> PlanVerifiedManifestationAsync(
@@ -432,8 +448,18 @@ public sealed class CharacterStateCrossRepositoryTests
 
     private sealed class PostgresSyntheticAuthorityProvider(
         DbContextOptions<CharacterSheetDbContext> databaseOptions,
-        Guid characterId) : CoreAuthorityProvider
+        Guid characterId) : CoreAuthorityProvider, CoreReadAuthorityProvider
     {
+        // Read authorization is not implied by a delegated Site ticket.
+        // Reuse the same independent PostgreSQL source and primary row checks;
+        // no transition action is trusted or executed by this read.
+        Task<INativeCharacterManifestationAuthority?> CoreReadAuthorityProvider.VerifyAsync(
+            Guid actor, NativeCharacterState state, NativeManifestationLedger current,
+            CancellationToken ct) =>
+            VerifyAsync(actor, state, current,
+                new NativeManifestationTransitionRequest(
+                    state.CharacterId, current.Revision, "fixture:read", []), ct);
+
         public async Task<INativeCharacterManifestationAuthority?> VerifyAsync(
             Guid actor, NativeCharacterState state, NativeManifestationLedger current,
             NativeManifestationTransitionRequest transition, CancellationToken ct)
@@ -629,7 +655,7 @@ public sealed class CharacterStateCrossRepositoryTests
         await using var database = await PostgresTestDatabase.CreateAsync();
         var id = Guid.NewGuid();
         var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
-        await using var core = await CoreHost.StartAsync(provider);
+        await using var core = await CoreHost.StartAsync(provider, provider);
         var gateway = new RealGateway(core.Client);
         var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
             ["fingerprint"]!.GetValue<string>();
@@ -716,6 +742,20 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(17, wolf.EffectiveMechanics!.AbilityScores["strength"]);
         Assert.Contains(wolf.SheetGrants, x => x.Entitlement.Id == "grant.shared");
         Assert.Contains(wolf.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
+        // The same persisted activation is now returned through the real
+        // authenticated Core HTTP read endpoint, guarded by PostgreSQL
+        // authority revalidation rather than the prior transition preview.
+        var effectiveRead = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, effectiveRead.Status);
+        Assert.Equal("partial", effectiveRead.View!.Status);
+        Assert.Equal("wolf", effectiveRead.View.EffectiveSheetId);
+        Assert.Equal("manifest.wolf.1", effectiveRead.View.ActiveManifestationId);
+        Assert.NotNull(effectiveRead.View.NativeProjection);
+        Assert.False(effectiveRead.View.EffectiveMechanicsReady);
+        Assert.DoesNotContain("supernatural-acquisition-authority-unavailable",
+            effectiveRead.View.Unresolved);
+        Assert.Equal(1, gateway.VerifiedReadRequests);
+
 
         // The latest primary values, not the activation-time snapshot,
         // are used when resolving a later reversion.
@@ -744,6 +784,11 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(2, Assert.Single(reverted.EffectiveMechanics.Advancements).Level);
         Assert.Equal("@primary", reverted.EffectiveSheetId);
         Assert.Equal(10, reverted.EffectiveMechanics!.AbilityScores["strength"]);
+        var normalRead = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", normalRead.View!.Status);
+        Assert.Equal("@primary", normalRead.View.EffectiveSheetId);
+        Assert.Null(normalRead.View.ActiveManifestationId);
+
 
         var reentered = await Execute("reenter:wolf");
         Assert.Equal("wolf", reentered.EffectiveSheetId);
@@ -781,6 +826,14 @@ public sealed class CharacterStateCrossRepositoryTests
         using var journal = JsonDocument.Parse(saved.LedgerJson);
         Assert.Equal(3, journal.RootElement.GetProperty("instances").GetArrayLength());
         Assert.Equal(4, journal.RootElement.GetProperty("processedEventIds").GetArrayLength());
+        // Fresh Context simulates service reinitialization. The host verifier
+        // reads the current persisted ledger, not the original service's state.
+        var restartedRead = await Reader(reloaded, id, gateway).GetAsync(id);
+        Assert.Equal("partial", restartedRead.View!.Status);
+        Assert.Equal("hybrid", restartedRead.View.EffectiveSheetId);
+        Assert.Equal("manifest.hybrid.1", restartedRead.View.ActiveManifestationId);
+        Assert.NotNull(restartedRead.View.NativeProjection);
+
         Assert.Equal(6, source.Calls);
 
         // A replay through the application boundary can not append an
@@ -834,7 +887,15 @@ public sealed class CharacterStateCrossRepositoryTests
             "enter:wolf", "enter:wolf");
         Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized,
             missingAuthority.Status);
-        Assert.Equal(1, actions.Calls);
+        // Even saved and structurally correct supernatural state is not
+        // playable through the read endpoint without an independent provider.
+        var unverifiedRead = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("unresolved", unverifiedRead.View!.Status);
+        Assert.Equal("@primary", unverifiedRead.View.EffectiveSheetId);
+        Assert.Null(unverifiedRead.View.NativeProjection);
+        Assert.Contains("supernatural-acquisition-authority-unavailable",
+            unverifiedRead.View.Unresolved);
+        Assert.Equal(1, gateway.VerifiedReadRequests);
 
         var unsupported = await active.ApplyAsync(id, 1, 0,
             "invented:unapproved-form", "invented:unapproved-form");
