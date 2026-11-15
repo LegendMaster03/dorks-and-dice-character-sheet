@@ -176,6 +176,17 @@ fresh-context reload dynamically resolve the current primary character
 instead of restoring an old activation snapshot. Reads do not commit ledger
 events or consume resources.
 
+The Character Sheet host additionally verifies the selected effective
+manifestation against **all** persisted active and contributing instances.
+It rejects an apparent primary sheet while any activation contributes.
+When multiple instances contribute, the selected form must match the
+unique persisted suppression/replacement interaction covering exactly
+those instances; a selected instance merely existing in the journal is
+insufficient. Malformed instance identities, duplicate interaction
+participants, or contradictory native response selections fail closed. The
+Rules Core source/DM authority provider remains responsible for verifying
+the interaction itself.
+
 An archived character may read but does not gain mutation rights.
 
 ## Verification
@@ -209,6 +220,21 @@ An archived character may read but does not gain mutation rights.
   runs the actual Core HTTP host and Character Sheet PostgreSQL together.
   It verifies read-only primary evaluation, Site owner enforcement, and
   fail-closed rejection of forged forms and unverified transition planning.
+* The cross-repository tests also cover source-verified Suppress and
+  Restore operations: one activation switches contribution off and on
+  without changing its owner, event of origin, resource quantity or
+  activation identity. An unlisted ending condition fails unless its
+  source independently authorizes it; an End makes subsequent Restore
+  invalid. All operations are stored through real PostgreSQL.
+* A separate dual-activation test attempts simultaneously contributing
+  Wolf and Hybrid forms. The unadjudicated overlap fails atomically,
+  as does a forged interaction. A precisely authorized, test-only
+  Replace decision selects Hybrid and preserves both activation records
+  plus the exact decision and two ordered steps in one receipt.
+  Fresh-context verified reads confirm Hybrid. Tests also tamper with
+  Core's returned effective selection: claiming an active alternate form
+  is Primary or selecting Wolf contrary to the persisted Replace
+  decision must yield `unresolved` and no published native projection.
 * The integration test now executes a **test-only authenticated source
   policy** plus independently checking Core host provider, real Core
   manifestation planning, and Character Sheet's internal transactional
