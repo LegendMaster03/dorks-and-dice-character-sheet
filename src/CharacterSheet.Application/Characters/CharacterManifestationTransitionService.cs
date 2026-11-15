@@ -148,6 +148,13 @@ public sealed class CharacterManifestationTransitionService(
         {
             response = await rules.PlanVerifiedManifestationAsync(request, cancellationToken);
         }
+        catch (RulesCoreGatewayException error) when (error.StatusCode is 400 or 409 or 422)
+        {
+            // Rules Core answered with a deterministic rejection. Neither an
+            // invalid mechanical plan nor missing acquisition authority means
+            // that its service was unavailable. No state has been committed.
+            return new(CharacterManifestationApplyStatus.PlanUnresolved);
+        }
         catch (Exception error) when (error is RulesCoreGatewayException or JsonException
             or InvalidOperationException)
         {

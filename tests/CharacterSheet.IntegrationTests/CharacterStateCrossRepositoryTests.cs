@@ -177,7 +177,8 @@ public sealed class CharacterStateCrossRepositoryTests
             var payload = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
                 throw new RulesCoreGatewayException(
-                    $"Real Core HTTP {(int)response.StatusCode}: {payload}");
+                    $"Real Core HTTP {(int)response.StatusCode}: {payload}",
+                    statusCode: (int)response.StatusCode);
             return JsonNode.Parse(payload) ??
                 throw new RulesCoreGatewayException("Real Core returned empty JSON.");
         }
@@ -582,6 +583,13 @@ public sealed class CharacterStateCrossRepositoryTests
                     End("manifest.wolf.2", eventId),
                     Enter(characterId, "hybrid", "manifest.hybrid.1", eventId)
                 ],
+                "switch:invalid" =>
+                [
+                    End("manifest.wolf.2", eventId),
+                    // The first step is legitimate, but this target was never
+                    // acquired. The entire proposed switch must be discarded.
+                    Enter(characterId, "not-acquired", "manifest.invalid.1", eventId)
+                ],
                 _ => []
             };
             if (steps.Length == 0)
@@ -701,6 +709,21 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal("wolf", reentered.EffectiveSheetId);
         Assert.Contains(reentered.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
 
+        // A two-step End+Activate must not publish the first End when the
+        // destination sheet fails Rules Core validation.
+        var beforeFailedSwitch = (await store.GetAsync(id))!;
+        var eventsBeforeFailedSwitch = (await store.GetEventsAsync(id)).Count;
+        var rejectedSwitch = await service.ApplyAsync(id,
+            beforeFailedSwitch.Revision, beforeFailedSwitch.LedgerRevision,
+            "switch:invalid", "switch:invalid");
+        Assert.Equal(CharacterManifestationApplyStatus.PlanUnresolved,
+            rejectedSwitch.Status);
+        var afterFailedSwitch = (await store.GetAsync(id))!;
+        Assert.Equal(beforeFailedSwitch.Revision, afterFailedSwitch.Revision);
+        Assert.Equal(beforeFailedSwitch.LedgerRevision, afterFailedSwitch.LedgerRevision);
+        Assert.Equal(beforeFailedSwitch.LedgerJson, afterFailedSwitch.LedgerJson);
+        Assert.Equal(eventsBeforeFailedSwitch, (await store.GetEventsAsync(id)).Count);
+
         var hybrid = await Execute("switch:hybrid");
         Assert.Equal("hybrid", hybrid.EffectiveSheetId);
         Assert.Equal(16, hybrid.EffectiveMechanics!.AbilityScores["dexterity"]);
@@ -718,7 +741,7 @@ public sealed class CharacterStateCrossRepositoryTests
         using var journal = JsonDocument.Parse(saved.LedgerJson);
         Assert.Equal(3, journal.RootElement.GetProperty("instances").GetArrayLength());
         Assert.Equal(4, journal.RootElement.GetProperty("processedEventIds").GetArrayLength());
-        Assert.Equal(4, source.Calls);
+        Assert.Equal(5, source.Calls);
 
         // A replay through the application boundary can not append an
         // already-committed event or silently reconstruct a prior snapshot.
@@ -764,7 +787,7 @@ public sealed class CharacterStateCrossRepositoryTests
 
         var missingAuthority = await active.ApplyAsync(id, 1, 0,
             "enter:wolf", "enter:wolf");
-        Assert.Equal(CharacterManifestationApplyStatus.RulesCoreUnavailable,
+        Assert.Equal(CharacterManifestationApplyStatus.PlanUnresolved,
             missingAuthority.Status);
         Assert.Equal(1, actions.Calls);
 
