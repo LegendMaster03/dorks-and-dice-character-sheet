@@ -190,4 +190,192 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Null(await store.GetAsync(id));
         Assert.Empty(await store.GetEventsAsync(id));
     }
+
+    private static string ActivationLedger(Guid id, long revision,
+        string[] events, object[] instances, object[]? resources = null) =>
+        JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision, instances,
+            resources = resources ?? Array.Empty<object>(),
+            processedEventIds = events
+        });
+
+    private static object Instance(Guid id, string lastEvent, int lifecycle = 0,
+        int capture = 9) => new
+    {
+        characterId = id.ToString("D"),
+        id = "manifest.wolf", sheetId = "wolf",
+        activationEventId = "enter:wolf", lastEventId = lastEvent,
+        activationEvidenceId = "receipt:activation",
+        lifecycle, contribution = 0,
+        activationCaptures = new { amount = capture },
+        definitionId = "form.test.wolf"
+    };
+
+    private static object Resource(int current = 4, int ownerKind = 3) => new
+    {
+        id = "resource.wolf", ownerId = "manifest.wolf", ownerKind,
+        current, maximum = 10, evidenceId = "receipt:resource"
+    };
+
+    [Fact]
+    public async Task ActivationAndReversionPreserveImmutableOwnersAndPriorEventsAcrossReload()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        string digest;
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var (store, inputDigest) = await InitializeAsync(db, id);
+            digest = inputDigest;
+            Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+                (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+            var active = ActivationLedger(id, 1, ["enter:wolf"], [Instance(id, "enter:wolf")],
+                [Resource()]);
+            Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+                (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 1,
+                    "enter:wolf", transition: true, ledger: active))).Status);
+
+            var ended = ActivationLedger(id, 2,
+                ["enter:wolf", "revert:wolf"], [Instance(id, "revert:wolf", 1)], [Resource()]);
+            Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+                (await store.CommitVerifiedAsync(Write(id, digest, 2, 1, 2,
+                    "revert:wolf", transition: true, ledger: ended))).Status);
+        }
+
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var persisted = new PostgresCharacterSupernaturalStateStore(reloaded);
+        var state = (await persisted.GetAsync(id))!;
+        Assert.Equal(3, state.Revision);
+        Assert.Equal(2, state.LedgerRevision);
+        Assert.Contains("wolf-progression", state.AlternateSheetsJson);
+        using var journal = JsonDocument.Parse(state.LedgerJson);
+        Assert.Equal(new[] { "enter:wolf", "revert:wolf" },
+            journal.RootElement.GetProperty("processedEventIds")
+                .EnumerateArray().Select(x => x.GetString()));
+        Assert.Equal(1, journal.RootElement.GetProperty("instances")[0]
+            .GetProperty("lifecycle").GetInt32());
+        Assert.Equal(3, (await persisted.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task TransitionCanNotRewriteSheetOrLoseOrReorderPastManifestationEvents()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 1,
+                "enter:wolf", transition: true,
+                ledger: ActivationLedger(id, 1, ["enter:wolf"],
+                    [Instance(id, "enter:wolf")])))).Status);
+
+        var droppedEvents = ActivationLedger(id, 2, ["revert:wolf"],
+            [Instance(id, "revert:wolf", 1)]);
+        var reordersEvents = ActivationLedger(id, 2,
+            ["revert:wolf", "enter:wolf"], [Instance(id, "revert:wolf", 1)]);
+        var forgedCapture = ActivationLedger(id, 2,
+            ["enter:wolf", "revert:wolf"], [Instance(id, "revert:wolf", 1, capture: 100)]);
+        foreach (var journal in new[] { droppedEvents, reordersEvents, forgedCapture })
+            await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+                Write(id, digest, 2, 1, 2, "revert:wolf", transition: true, ledger: journal)));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 2, 1, 2, "revert:wolf", transition: true,
+                ledger: ActivationLedger(id, 2,
+                    ["enter:wolf", "revert:wolf"], [Instance(id, "revert:wolf", 1)]),
+                alternate: WolfSheet.Replace("wolf-progression", "fabricated-grant",
+                    StringComparison.Ordinal))));
+
+        Assert.Equal(2, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task AcquisitionPreservesPreviouslyEarnedProgressionAndExistingLedger()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 1, 0, 0, "acquire:second",
+                alternate: WolfSheet.Replace("wolf-progression", "replacement",
+                    StringComparison.Ordinal))));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 1, 0, 0, "acquire:second", alternate: "[]")));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 1, 0, 0, "acquire:second",
+                ledger: Ledger(id, 0, "invented-event"))));
+
+        // Adding a distinct owned sheet can be an acquisition without
+        // activating either form or reassigning the original advancement.
+        var prior = WolfSheet.TrimEnd();
+        var additional = prior[..^1] +
+            """,{"id":"hybrid","parentId":"wolf","definitionId":"test.hybrid"}]""";
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 0,
+                "acquire:hybrid", alternate: additional))).Status);
+        var updated = (await store.GetAsync(id))!;
+        Assert.Contains("wolf-progression", updated.AlternateSheetsJson);
+        Assert.Contains("hybrid", updated.AlternateSheetsJson);
+        Assert.Equal(0, updated.LedgerRevision);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task FormSwitchCanNotModifyExistingResourceQuantityOrMintPrimaryPool()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+        var active = ActivationLedger(id, 1, ["enter:wolf"],
+            [Instance(id, "enter:wolf")], [Resource()]);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 1,
+                "enter:wolf", transition: true, ledger: active))).Status);
+
+        var altered = ActivationLedger(id, 2,
+            ["enter:wolf", "revert:wolf"], [Instance(id, "revert:wolf", 1)],
+            [Resource(current: 5)]);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 2, 1, 2, "revert:wolf",
+                transition: true, ledger: altered)));
+        var inventedPrimary = ActivationLedger(id, 2,
+            ["enter:wolf", "revert:wolf"], [Instance(id, "revert:wolf", 1)],
+            [Resource(), new
+            {
+                id = "resource.cheat", ownerKind = 0, ownerId = "@primary",
+                current = 9, maximum = 9
+            }]);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 2, 1, 2, "revert:wolf",
+                transition: true, ledger: inventedPrimary)));
+        Assert.Equal(2, (await store.GetAsync(id))!.Revision);
+    }
+
+    [Fact]
+    public async Task FirstAcquisitionCannotHideAnExistingManifestationOrForgedPastEvent()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 0, 0, 1, "enter:wolf", transition: true)));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, ledger: Ledger(id, 0, "claimed:old-event"))));
+        Assert.Null(await store.GetAsync(id));
+        Assert.Empty(await store.GetEventsAsync(id));
+    }
 }
