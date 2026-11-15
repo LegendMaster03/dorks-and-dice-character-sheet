@@ -446,6 +446,28 @@ public sealed class CharacterStateCrossRepositoryTests
             "receipt.transition." + eventId,
             EndingConditionId: "rule.synthetic.revert");
 
+    private static NativeManifestationResourceState ControlledWolfResource() =>
+        new("resource.wolf.1", "resource.definition.wolf",
+            Occurrence("resources.wolf"), "receipt.resource.wolf.1",
+            NativeManifestationResourceOwner.Manifestation, "manifest.wolf.1",
+            3, 5);
+
+    private static NativeManifestationResourcePolicy ControlledWolfResourcePolicy() =>
+        new("resource.wolf.1", NativeManifestationResourceMode.Separate);
+
+    private static NativeManifestationTransitionStep EnterWithResource(
+        Guid characterId, string eventId) =>
+        new(NativeManifestationTransitionAction.Activate, "manifest.wolf.1",
+            Occurrence("actions.activate"), SyntheticRule(),
+            "receipt.transition." + eventId,
+            TestInstance(characterId, "wolf", "manifest.wolf.1", eventId) with
+            {
+                ResourcePolicies = [ControlledWolfResourcePolicy()]
+            },
+            [ControlledWolfResource()]);
+
+
+
     private sealed class PostgresSyntheticAuthorityProvider(
         DbContextOptions<CharacterSheetDbContext> databaseOptions,
         Guid characterId) : CoreAuthorityProvider, CoreReadAuthorityProvider
@@ -577,9 +599,14 @@ public sealed class CharacterStateCrossRepositoryTests
         public bool AuthorizesUnlistedEnding(string id, NativeManifestationLedger current,
             NativeManifestationInstance instance,
             NativeManifestationTransitionStep step) => false;
-        public bool AuthorizesResource(string id, NativeManifestationResourceState resource) => false;
+        // One exact test-only acquired pool and its separately proven policy.
+        // Other IDs, quantities, owners and effects remain unauthorized.
+        public bool AuthorizesResource(string id, NativeManifestationResourceState resource) =>
+            Character(id) && resource == ControlledWolfResource();
         public bool AuthorizesResourcePolicy(string id, NativeManifestationInstance instance,
-            NativeManifestationResourcePolicy policy) => false;
+            NativeManifestationResourcePolicy policy) =>
+            Character(id) && instance.Id == "manifest.wolf.1" &&
+            policy == ControlledWolfResourcePolicy();
         public bool AuthorizesInteraction(string id, NativeManifestationInteractionDecision decision) => false;
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) => false;
         public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) => false;
@@ -621,7 +648,9 @@ public sealed class CharacterStateCrossRepositoryTests
             {
                 "enter:wolf" => [Enter(characterId, "wolf",
                     "manifest.wolf.1", eventId)],
+                "enter:resource-wolf" => [EnterWithResource(characterId, eventId)],
                 "revert:wolf" => [End("manifest.wolf.1", eventId)],
+                "revert:resource-wolf" => [End("manifest.wolf.1", eventId)],
                 "reenter:wolf" => [Enter(characterId, "wolf",
                     "manifest.wolf.2", eventId)],
                 "switch:hybrid" =>
@@ -897,6 +926,109 @@ public sealed class CharacterStateCrossRepositoryTests
             "enter:wolf", "enter:wolf");
         Assert.NotEqual(CharacterManifestationApplyStatus.Applied, replay.Status);
         Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task OwnedResourceSurvivesReversionWithoutLeakingToLaterWolfActivation()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(provider, provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms());
+        var ledger = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var score in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(id, score.Key, score.Value,
+                DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire), "[]",
+                JsonSerializer.Serialize(ledger, Wire),
+                0, 0, 0, digest, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+        var source = new SyntheticTrustedSource(state);
+        var service = TransitionRunner(db, new OwnerAccess(id), store, gateway, source);
+
+        async Task<NativeManifestationEffectiveCharacter> Execute(string eventId)
+        {
+            var current = (await store.GetAsync(id))!;
+            var applied = await service.ApplyAsync(id, current.Revision,
+                current.LedgerRevision, eventId, eventId);
+            Assert.Equal(CharacterManifestationApplyStatus.Applied, applied.Status);
+            Assert.NotNull(applied.EffectivePreview);
+            return JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+                applied.EffectivePreview!.ToJsonString(), Wire)!;
+        }
+
+        var wolf = await Execute("enter:resource-wolf");
+        Assert.Equal("wolf", wolf.EffectiveSheetId);
+        var pool = Assert.Single(wolf.Resources);
+        Assert.Equal("resource.wolf.1", pool.Id);
+        Assert.Equal(NativeManifestationResourceOwner.Manifestation, pool.OwnerKind);
+        Assert.Equal("manifest.wolf.1", pool.OwnerId);
+        Assert.Equal(NativeManifestationResourceMode.Separate, pool.Policy);
+        Assert.Equal(3, pool.Current);
+        Assert.Equal(5, pool.RecordedMaximum);
+        Assert.Equal(5, pool.EffectiveMaximum);
+
+        var beforeRead = (await store.GetAsync(id))!;
+        var verified = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", verified.View!.Status);
+        Assert.Equal("wolf", verified.View.EffectiveSheetId);
+        Assert.Equal(3, verified.View.NativeProjection!["effectiveCharacter"]?
+            ["resources"]?[0]?["current"]?.GetValue<int>());
+        Assert.Equal(beforeRead.Revision, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(beforeRead.LedgerJson, (await store.GetAsync(id))!.LedgerJson);
+
+        var reverted = await Execute("revert:resource-wolf");
+        Assert.Equal("@primary", reverted.EffectiveSheetId);
+        Assert.Empty(reverted.Resources);
+        var next = await Execute("reenter:wolf");
+        Assert.Equal("wolf", next.EffectiveSheetId);
+        Assert.Empty(next.Resources);
+
+        await using var fresh = new CharacterSheetDbContext(database.CreateOptions());
+        var recovered = new PostgresCharacterSupernaturalStateStore(fresh);
+        var saved = (await recovered.GetAsync(id))!;
+        Assert.Equal(4, saved.Revision);
+        Assert.Equal(3, saved.LedgerRevision);
+        using var document = JsonDocument.Parse(saved.LedgerJson);
+        var resource = Assert.Single(document.RootElement.GetProperty("resources")
+            .EnumerateArray());
+        Assert.Equal("manifest.wolf.1",
+            resource.GetProperty("ownerId").GetString());
+        Assert.Equal(3, resource.GetProperty("current").GetInt32());
+        Assert.Equal(5, resource.GetProperty("maximum").GetInt32());
+        Assert.Equal(2, document.RootElement.GetProperty("instances")
+            .GetArrayLength());
+        var eventReceipts = await recovered.GetEventsAsync(id);
+        Assert.Equal(4, eventReceipts.Count);
+        var activated = Assert.Single(eventReceipts,
+            entry => entry.EventId == "enter:resource-wolf");
+        using var audit = JsonDocument.Parse(activated.TransitionRequestJson!);
+        Assert.Equal("resource.wolf.1",
+            audit.RootElement.GetProperty("steps")[0]
+                .GetProperty("newResources")[0].GetProperty("id").GetString());
+
+        var unchanged = (await recovered.GetAsync(id))!;
+        var denied = await TransitionRunner(fresh, new OwnerAccess(id), recovered,
+            gateway, source).ApplyAsync(id, unchanged.Revision,
+            unchanged.LedgerRevision, "enter:resource-wolf", "enter:resource-wolf");
+        Assert.NotEqual(CharacterManifestationApplyStatus.Applied, denied.Status);
+        Assert.Equal(unchanged.Revision, (await recovered.GetAsync(id))!.Revision);
+        Assert.Equal(4, (await recovered.GetEventsAsync(id)).Count);
     }
 
     [Fact]
