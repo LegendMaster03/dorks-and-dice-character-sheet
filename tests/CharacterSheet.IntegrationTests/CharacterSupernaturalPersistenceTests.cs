@@ -50,7 +50,32 @@ public sealed class CharacterSupernaturalPersistenceTests
             ledger ?? (transition ? Ledger(id, nextLedgerRevision, eventId)
                 : Ledger(id, nextLedgerRevision)),
             expectedRevision, ledgerRevision, nextLedgerRevision, digest,
-            eventId, "fixture:verified-source", transition, Now);
+            eventId, "fixture:verified-source", transition, Now,
+            transition ? SyntheticTransitionAudit(id, ledgerRevision, eventId) : null);
+
+    private static string SyntheticTransitionAudit(Guid id, long previousRevision, string eventId) =>
+        JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), expectedRevision = previousRevision,
+            eventId,
+            steps = new[]
+            {
+                new
+                {
+                    action = 0, targetInstanceId = "fixture.instance",
+                    ruleOccurrence = new
+                    {
+                        source = new
+                        {
+                            kind = 0, id = "rule.synthetic.fixture", version = "test-v1"
+                        },
+                        occurrencePath = "actions.fixture"
+                    },
+                    basis = new { adjudication = 3, nativeRuleReference = "rule.synthetic.fixture" },
+                    authorizationEvidenceId = "fixture:verified-source"
+                }
+            }
+        });
 
     [Fact]
     public async Task OrdinaryCharacterNeedsNoSyntheticStateAndExistingDataSurvivesMigration()
@@ -120,6 +145,62 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Equal(1, state.LedgerRevision);
         Assert.Contains("enter:wolf", state.LedgerJson);
         Assert.Equal(2, (await storeAgain.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task TransitionStepAuditSurvivesReloadAndRejectsMissingOrMismatchedEvents()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+        var valid = Write(id, digest, 1, 0, 1, "enter:wolf", transition: true);
+        Assert.Throws<ArgumentException>(() => store.CommitVerifiedAsync(
+            valid with { TransitionRequestJson = null }).GetAwaiter().GetResult());
+        Assert.Throws<ArgumentException>(() => store.CommitVerifiedAsync(
+            valid with { TransitionRequestJson = SyntheticTransitionAudit(
+                id, 0, "wrong:event") }).GetAwaiter().GetResult());
+        Assert.Throws<ArgumentException>(() => store.CommitVerifiedAsync(
+            valid with { TransitionRequestJson = SyntheticTransitionAudit(
+                id, 5, "enter:wolf") }).GetAwaiter().GetResult());
+
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(valid)).Status);
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var verified = new PostgresCharacterSupernaturalStateStore(reload);
+        var receipts = await verified.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        Assert.Null(receipts[0].TransitionRequestJson);
+        Assert.NotNull(receipts[1].TransitionRequestJson);
+        using var expected = JsonDocument.Parse(valid.TransitionRequestJson!);
+        using var actual = JsonDocument.Parse(receipts[1].TransitionRequestJson!);
+        Assert.True(JsonElement.DeepEquals(expected.RootElement, actual.RootElement));
+        Assert.Equal("enter:wolf", actual.RootElement.GetProperty("eventId").GetString());
+        Assert.Equal(0, actual.RootElement.GetProperty("expectedRevision").GetInt64());
+        Assert.Single(actual.RootElement.GetProperty("steps").EnumerateArray());
+        Assert.Equal(2, (await verified.GetAsync(id))!.Revision);
+    }
+
+    [Fact]
+    public async Task AcquisitionRejectsForgedTransitionStepsWithoutCreatingNewReceipt()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var forged = Write(id, digest) with
+        {
+            TransitionRequestJson = SyntheticTransitionAudit(id, 0, "acquire:wolf")
+        };
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(forged));
+        Assert.Null(await store.GetAsync(id));
+        Assert.Empty(await store.GetEventsAsync(id));
     }
 
     [Fact]

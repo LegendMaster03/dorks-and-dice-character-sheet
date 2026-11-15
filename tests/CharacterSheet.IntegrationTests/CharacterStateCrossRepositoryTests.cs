@@ -822,7 +822,33 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(5, saved.Revision);
         Assert.Equal(4, saved.LedgerRevision);
         Assert.Contains("progress.wolf", saved.AlternateSheetsJson);
-        Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
+        var committedEvents = await durable.GetEventsAsync(id);
+        Assert.Equal(5, committedEvents.Count);
+        var switchReceipt = Assert.Single(committedEvents,
+            x => x.EventId == "switch:hybrid");
+        Assert.Equal("transition", switchReceipt.Kind);
+        Assert.Equal(saved.Revision, switchReceipt.CommittedRevision);
+        Assert.Equal(saved.LedgerRevision, switchReceipt.LedgerRevision);
+        using (var orderedAudit = JsonDocument.Parse(switchReceipt.TransitionRequestJson!))
+        {
+            var request = orderedAudit.RootElement;
+            Assert.Equal(id.ToString("D"),
+                request.GetProperty("characterId").GetString());
+            Assert.Equal("switch:hybrid",
+                request.GetProperty("eventId").GetString());
+            Assert.Equal(3, request.GetProperty("expectedRevision").GetInt64());
+            var steps = request.GetProperty("steps").EnumerateArray().ToArray();
+            Assert.Equal(2, steps.Length);
+            Assert.Equal(1, steps[0].GetProperty("action").GetInt32());
+            Assert.Equal("manifest.wolf.2",
+                steps[0].GetProperty("targetInstanceId").GetString());
+            Assert.Equal(0, steps[1].GetProperty("action").GetInt32());
+            Assert.Equal("manifest.hybrid.1",
+                steps[1].GetProperty("targetInstanceId").GetString());
+            Assert.Equal("receipt.transition.switch:hybrid",
+                steps[1].GetProperty("authorizationEvidenceId").GetString());
+            Assert.True(steps[1].TryGetProperty("newInstance", out _));
+        }
         using var journal = JsonDocument.Parse(saved.LedgerJson);
         Assert.Equal(3, journal.RootElement.GetProperty("instances").GetArrayLength());
         Assert.Equal(4, journal.RootElement.GetProperty("processedEventIds").GetArrayLength());
