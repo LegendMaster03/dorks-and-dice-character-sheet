@@ -553,6 +553,88 @@ public sealed class CharacterSupernaturalPersistenceTests
     };
 
     [Fact]
+    public async Task OrderedStepAuditMustMatchEachCommittedInstanceLifecycleDelta()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+        var activated = ActivationLedger(id, 1, ["enter:wolf"],
+            [Instance(id, "enter:wolf")]);
+        var validActivation = Write(id, digest, 1, 0, 1, "enter:wolf",
+            transition: true, ledger: activated);
+        using (var actual = JsonDocument.Parse(validActivation.TransitionRequestJson!))
+        {
+            Assert.Equal("manifest.wolf",
+                actual.RootElement.GetProperty("steps")[0]
+                    .GetProperty("newInstance").GetProperty("id").GetString());
+        }
+
+        var alteredInstance = JsonNode.Parse(validActivation.TransitionRequestJson!)!.AsObject();
+        alteredInstance["steps"]![0]!["newInstance"]!["activationCaptures"]!["amount"] = 100;
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            validActivation with { TransitionRequestJson = alteredInstance.ToJsonString() }));
+
+        var conflictingAction = JsonNode.Parse(validActivation.TransitionRequestJson!)!.AsObject();
+        conflictingAction["steps"]![0]!["action"] = 1;
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            validActivation with { TransitionRequestJson = conflictingAction.ToJsonString() }));
+
+        var duplicateStep = JsonNode.Parse(validActivation.TransitionRequestJson!)!.AsObject();
+        duplicateStep["steps"]!.AsArray().Add(duplicateStep["steps"]![0]!.DeepClone());
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            validActivation with { TransitionRequestJson = duplicateStep.ToJsonString() }));
+
+        var addedInstance = JsonNode.Parse(activated)!.AsObject();
+        var invented = addedInstance["instances"]![0]!.DeepClone();
+        invented["id"] = "manifest.extra";
+        addedInstance["instances"]!.AsArray().Add(invented);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            validActivation with { LedgerJson = addedInstance.ToJsonString() }));
+
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(validActivation)).Status);
+
+        var ended = ActivationLedger(id, 2, ["enter:wolf", "revert:wolf"],
+            [Instance(id, "revert:wolf", 1)]);
+        var validEnd = Write(id, digest, 2, 1, 2, "revert:wolf",
+            transition: true, ledger: ended);
+        var falseSuppression = JsonNode.Parse(validEnd.TransitionRequestJson!)!.AsObject();
+        falseSuppression["steps"]![0]!["action"] = 2;
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            validEnd with { TransitionRequestJson = falseSuppression.ToJsonString() }));
+
+        var wrongTarget = JsonNode.Parse(validEnd.TransitionRequestJson!)!.AsObject();
+        wrongTarget["steps"]![0]!["targetInstanceId"] = "manifest.missing";
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            validEnd with { TransitionRequestJson = wrongTarget.ToJsonString() }));
+
+        var unrecordedEnd = JsonNode.Parse(ended)!.AsObject();
+        unrecordedEnd["instances"]![0]!["lastEventId"] = "enter:wolf";
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            validEnd with { LedgerJson = unrecordedEnd.ToJsonString() }));
+
+        Assert.Equal(2, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(validEnd)).Status);
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var durable = new PostgresCharacterSupernaturalStateStore(reload);
+        Assert.Equal(3, (await durable.GetAsync(id))!.Revision);
+        var receipts = await durable.GetEventsAsync(id);
+        Assert.Equal(new[] { "acquire:wolf", "enter:wolf", "revert:wolf" },
+            receipts.Select(x => x.EventId));
+        using var endAudit = JsonDocument.Parse(receipts[2].TransitionRequestJson!);
+        Assert.Equal(1, endAudit.RootElement.GetProperty("steps")[0]
+            .GetProperty("action").GetInt32());
+    }
+
+    [Fact]
     public async Task ActivationAndReversionPreserveImmutableOwnersAndPriorEventsAcrossReload()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
