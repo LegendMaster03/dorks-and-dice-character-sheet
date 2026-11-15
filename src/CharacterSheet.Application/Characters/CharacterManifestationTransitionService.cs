@@ -62,7 +62,8 @@ public sealed class CharacterManifestationTransitionService(
         string intentId, string eventId, CancellationToken cancellationToken = default)
     {
         if (characterId == Guid.Empty || expectedStateRevision < 1 ||
-            expectedLedgerRevision < 0 || string.IsNullOrWhiteSpace(intentId) ||
+            expectedLedgerRevision < 0 || expectedLedgerRevision == long.MaxValue ||
+            string.IsNullOrWhiteSpace(intentId) ||
             intentId.Length > 160 || string.IsNullOrWhiteSpace(eventId) ||
             eventId.Length > 160)
             return new(CharacterManifestationApplyStatus.InvalidRequest);

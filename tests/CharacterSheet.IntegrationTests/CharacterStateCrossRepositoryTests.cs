@@ -101,7 +101,8 @@ public sealed class CharacterStateCrossRepositoryTests
         }
     }
 
-    private sealed class OwnerAccess(Guid ownedId, bool authorize = true)
+    private sealed class OwnerAccess(Guid ownedId, bool authorize = true,
+        SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active)
         : ISiteCharacterAccessGateway
     {
         public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
@@ -109,7 +110,8 @@ public sealed class CharacterStateCrossRepositoryTests
             Task.FromResult(authorize && characterId == ownedId
                 ? SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
                     ownedId, "Cross-repository fixture",
-                    SiteCharacterLifecycleState.Active, null, []))
+                    lifecycle, lifecycle == SiteCharacterLifecycleState.Archived
+                        ? DateTimeOffset.UtcNow : null, []))
                 : new SiteCharacterAccessResult(SiteCharacterAccessStatus.NotFoundOrNotOwned));
     }
 
@@ -484,6 +486,7 @@ public sealed class CharacterStateCrossRepositoryTests
         public bool AuthorizesProgression(string id, string owner,
             NativeSheetEarnedProgression progression) =>
             Character(id) && Award(progression.SourceOccurrence) &&
+            progression.Id.StartsWith("progress.", StringComparison.Ordinal) &&
             progression.AcquisitionEvidenceId == "receipt.progress." +
                 progression.Id["progress.".Length..];
         public bool AuthorizesGrant(string id, string owner,
@@ -686,6 +689,77 @@ public sealed class CharacterStateCrossRepositoryTests
             "enter:wolf", "enter:wolf");
         Assert.NotEqual(CharacterManifestationApplyStatus.Applied, replay.Status);
         Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task AbsentHostAuthorityStaleRevisionAndArchivedActorNeverCommitTransition()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        // No production supernatural authority provider is installed.
+        await using var core = await CoreHost.StartAsync();
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms());
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var pair in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(id, pair.Key, pair.Value, DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var ledger = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire),
+                "[]", JsonSerializer.Serialize(ledger, Wire), 0, 0, 0, digest,
+                "fixture:acquire-werewolf", "fixture:verified-source",
+                false, DateTimeOffset.UtcNow))).Status);
+
+        var actions = new SyntheticTrustedSource(state);
+        var active = new CharacterManifestationTransitionService(
+            new OwnerAccess(id), store, gateway, actions);
+
+        var missingAuthority = await active.ApplyAsync(id, 1, 0,
+            "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.RulesCoreUnavailable,
+            missingAuthority.Status);
+        Assert.Equal(1, actions.Calls);
+
+        var unsupported = await active.ApplyAsync(id, 1, 0,
+            "invented:unapproved-form", "invented:unapproved-form");
+        Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized,
+            unsupported.Status);
+        Assert.Equal(2, actions.Calls);
+
+        var staleState = await active.ApplyAsync(id, 2, 0,
+            "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.StateRevisionConflict,
+            staleState.Status);
+        var staleLedger = await active.ApplyAsync(id, 1, 1,
+            "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.LedgerRevisionConflict,
+            staleLedger.Status);
+        Assert.Equal(2, actions.Calls);
+
+        var archived = new CharacterManifestationTransitionService(
+            new OwnerAccess(id, lifecycle: SiteCharacterLifecycleState.Archived),
+            store, gateway, actions);
+        Assert.Equal(CharacterManifestationApplyStatus.ArchivedReadOnly,
+            (await archived.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
+        var notOwned = new CharacterManifestationTransitionService(
+            new OwnerAccess(id, authorize: false), store, gateway, actions);
+        Assert.Equal(CharacterManifestationApplyStatus.NotFoundOrNotOwned,
+            (await notOwned.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
+        Assert.Equal(2, actions.Calls);
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(0, (await store.GetAsync(id))!.LedgerRevision);
+        Assert.Single(await store.GetEventsAsync(id));
     }
 }
 #endif

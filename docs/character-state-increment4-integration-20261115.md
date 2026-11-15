@@ -73,9 +73,14 @@ claimed `DefinitionOccurrence` or fabricated receipt.
 
 A provider may return the Core authority interface only after independently
 verifying source records. A successful Core plan is detached, carries
-`committed: false`, and is not a database mutation. Character Sheet has
-a delegated gateway method for this endpoint, but no user-facing
-activation or reversion service exists yet.
+`committed: false`, and is not a database mutation. Character Sheet also has an internal
+`CharacterManifestationTransitionService` that checks current Site ownership,
+loads the authoritative owned record, delegates source-verified intent
+construction, calls this Core planner, rechecks primary input freshness, and
+performs the one-event PostgreSQL CAS. Its
+`ITrustedCharacterManifestationTransitionSource` policy is deliberately
+unregistered in production and no browser mutation endpoint is mapped.
+Only the test implementation emits synthetic Wolf/Hybrid transitions.
 
 ### Read-only transport
 
@@ -122,6 +127,14 @@ character may read but does not gain mutation rights.
   runs the actual Core HTTP host and Character Sheet PostgreSQL together.
   It verifies read-only primary evaluation, Site owner enforcement, and
   fail-closed rejection of forged forms and unverified transition planning.
+* The integration test now executes a **test-only authenticated source
+  policy** plus independently checking Core host provider, real Core
+  manifestation planning, and Character Sheet's internal transactional
+  application service. It verifies acquired Werewolf/Wolf/Hybrid ownership,
+  Wolf activation, reversion using the latest primary mechanics, reentry,
+  atomic switching, preserved grant provenance, reload and event history,
+  and denial when the host verifier is absent or the user is archived.
+  This is a synthetic validation slice, not playable first-party rules.
 * Additional PostgreSQL tests exercise immutable activation receipts,
   reversion history, duplicate/reordered events, attempted progression
   replacement, unauthorized resource mutation and separate acquisition.
