@@ -188,6 +188,15 @@ fresh-context reload dynamically resolve the current primary character
 instead of restoring an old activation snapshot. Reads do not commit ledger
 events or consume resources.
 
+The bounded canonical primary adapter also classifies owned legacy
+Species/Subspecies selections, independent Background/Upbringing and other
+foundational selections as unresolved sources of form-relevant grants.
+Stored inventory is not assumed irrelevant simply because an item is not
+equipped or attuned. Nonzero death saves and existing current HP remain
+blocked until explicit form-interaction policies exist. These records
+continue to appear in read-only partial primary projections; they do not
+become usable transformation entitlements.
+
 The Character Sheet host additionally verifies the selected effective
 manifestation against **all** persisted active and contributing instances.
 It rejects an apparent primary sheet while any activation contributes.
@@ -222,6 +231,13 @@ An archived character may read but does not gain mutation rights.
   test mutates a primary ability between the first Site ownership check
   and the authorized Build reload, proving that the primary digest
   brackets the full source assembly, not only the Rules Core call.
+* The real Core/PostgreSQL tests verify that an independently owned
+  Background selection and current HP each block manifestation mutation
+  without writing a transition or receipt. Removing those unsupported
+  inputs restores the deliberately source-free synthetic test path.
+  Unit tests independently cover legacy Species, Background, deity,
+  unequipped inventory and nonzero death saves.
+
 * The PostgreSQL history guard tests reject unauthorized interaction
   replacement or removal and confirm that the recorded replacement set,
   when independently verified, remains in the same transition receipt.

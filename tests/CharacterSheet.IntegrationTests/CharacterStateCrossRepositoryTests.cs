@@ -1014,6 +1014,72 @@ public sealed class CharacterStateCrossRepositoryTests
     }
 
     [Fact]
+    public async Task CanonicalBackgroundAndHitPointsBlockUnverifiedFormTransition()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(provider, provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms());
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var (key, score) in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, key, score, DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var ledger = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire), "[]",
+                JsonSerializer.Serialize(ledger, Wire), 0, 0, 0, digest,
+                "fixture:acquire-werewolf", "fixture:verified-source",
+                false, DateTimeOffset.UtcNow))).Status);
+
+        var source = new SyntheticTrustedSource(state);
+        var service = TransitionRunner(db, new OwnerAccess(id), store, gateway, source);
+
+        async Task AssertRefused()
+        {
+            var saved = (await store.GetAsync(id))!;
+            var beforeReceipts = (await store.GetEventsAsync(id)).Count;
+            var result = await service.ApplyAsync(id, saved.Revision,
+                saved.LedgerRevision, "enter:wolf", "enter:wolf");
+            Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized, result.Status);
+            Assert.Equal(saved.LedgerJson, (await store.GetAsync(id))!.LedgerJson);
+            Assert.Equal(saved.Revision, (await store.GetAsync(id))!.Revision);
+            Assert.Equal(beforeReceipts, (await store.GetEventsAsync(id)).Count);
+        }
+
+        await build.SetFoundationalSelectionAsync(id,
+            CharacterFoundationalSelectionCategory.Background,
+            "background.synthetic", DateTimeOffset.UtcNow);
+        await AssertRefused();
+
+        // Removing an unverified Background does not authorize HP changes:
+        // these are independently owned canonical Character Sheet values.
+        await build.ClearFoundationalSelectionAsync(id,
+            CharacterFoundationalSelectionCategory.Background, DateTimeOffset.UtcNow);
+        var routine = new PostgresCharacterStateStore(db);
+        await routine.SetCurrentHitPointsAsync(id, 7, DateTimeOffset.UtcNow);
+        await AssertRefused();
+
+        await routine.SetCurrentHitPointsAsync(id, null, DateTimeOffset.UtcNow);
+        var allowed = await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, allowed.Status);
+        Assert.Equal(2, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
     public async Task OwnedResourceSurvivesReversionWithoutLeakingToLaterWolfActivation()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();

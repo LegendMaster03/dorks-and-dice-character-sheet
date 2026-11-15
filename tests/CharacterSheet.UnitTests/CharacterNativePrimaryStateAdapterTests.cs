@@ -105,6 +105,67 @@ public sealed class CharacterNativePrimaryStateAdapterTests
     }
 
     [Fact]
+    public void UnverifiedFoundationalOriginsAndBackgroundsRemainPartialAndBlockTransitions()
+    {
+        var id = Guid.NewGuid();
+        var (build, state) = Fixture(id);
+        var selections = new[]
+        {
+            new FoundationalRuleSelectionView(Guid.NewGuid(), "species",
+                "species.synthetic", Now, Now),
+            new FoundationalRuleSelectionView(Guid.NewGuid(), "background",
+                "background.synthetic", Now, Now),
+            new FoundationalRuleSelectionView(Guid.NewGuid(), "deity",
+                "deity.synthetic", Now, Now)
+        };
+        var snapshot = CharacterNativePrimaryStateAdapter.Assemble(
+            id, build with { FoundationalSelections = selections },
+            state, null, Ruleset, Fingerprint);
+        Assert.NotNull(snapshot.Mechanics);
+        Assert.False(snapshot.TransitionInputsVerified);
+        Assert.Contains("legacy-species-origin-selection-unverified", snapshot.Issues);
+        Assert.Contains("background-upbringing-grants-unverified", snapshot.Issues);
+        Assert.Contains("foundational-selection-effects-unverified", snapshot.Issues);
+        Assert.False(CharacterNativePrimaryStateAdapter.Matches(
+            snapshot.Mechanics.Value, snapshot));
+
+        var legacy = CharacterNativePrimaryStateAdapter.Assemble(
+            id, build with
+            {
+                FoundationalSelections =
+                [
+                    new FoundationalRuleSelectionView(Guid.NewGuid(), "raceSpecies",
+                        "race.synthetic", Now, Now)
+                ]
+            }, state, null, Ruleset, Fingerprint);
+        Assert.Contains("legacy-species-origin-selection-unverified", legacy.Issues);
+        Assert.False(legacy.TransitionInputsVerified);
+    }
+
+    [Fact]
+    public void UnequippedInventoryAndDeathSavesDoNotGrantUnmodeledFormPolicies()
+    {
+        var id = Guid.NewGuid();
+        var (build, state) = Fixture(id);
+        var inventory = new CharacterInventoryItemOccurrenceView(
+            Guid.NewGuid(), "item.synthetic", Now,
+            IsCarried: false, IsEquipped: false, IsAttuned: false);
+        var snapshot = CharacterNativePrimaryStateAdapter.Assemble(
+            id, build, state with
+            {
+                InventoryItemOccurrences = [inventory],
+                DeathSaves = new CharacterDeathSavesView(1, 0)
+            }, null, Ruleset, Fingerprint);
+        Assert.NotNull(snapshot.Mechanics);
+        Assert.False(snapshot.TransitionInputsVerified);
+        Assert.Contains("inventory-form-interaction-unverified", snapshot.Issues);
+        Assert.Contains("death-saves-form-policy-unverified", snapshot.Issues);
+        Assert.DoesNotContain("equipped-item-effects-unverified", snapshot.Issues);
+        Assert.False(CharacterNativePrimaryStateAdapter.Matches(
+            snapshot.Mechanics.Value, snapshot));
+    }
+
+    [Fact]
     public void InvalidAbilityOwnershipAndCharacterMismatchFailClosed()
     {
         var id = Guid.NewGuid();

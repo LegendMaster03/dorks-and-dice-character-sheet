@@ -77,6 +77,33 @@ public static class CharacterNativePrimaryStateAdapter
 
         if (origin is not null)
             issues.Add("origin-underlying-grants-not-yet-revalidated");
+
+        // Legacy builder selections remain canonical owned input but do not
+        // establish independent Origin, Background, Upbringing or deity grants.
+        // The native Class/ability baseline may still be projected as partial;
+        // an active form transition can not silently ignore these entitlements.
+        foreach (var selection in build.FoundationalSelections)
+        {
+            if (selection.Category is CharacterBuildSelectionCategories.Species
+                or CharacterBuildSelectionCategories.Subspecies or "raceSpecies")
+            {
+                if (!issues.Contains("legacy-species-origin-selection-unverified"))
+                    issues.Add("legacy-species-origin-selection-unverified");
+            }
+            else if (selection.Category == CharacterBuildSelectionCategories.Background)
+            {
+                if (!issues.Contains("background-upbringing-grants-unverified"))
+                    issues.Add("background-upbringing-grants-unverified");
+            }
+            else if (!issues.Contains("foundational-selection-effects-unverified"))
+                issues.Add("foundational-selection-effects-unverified");
+        }
+
+        // An item need not be equipped to be subject to a transformation's
+        // carry, storage, containment or equipment policy. Do not quietly
+        // treat it as unaffected merely because its modifiers are inactive.
+        if (state.InventoryItemOccurrences.Count > 0)
+            issues.Add("inventory-form-interaction-unverified");
         if (state.InventoryItemOccurrences.Any(item => item.IsEquipped || item.IsAttuned))
             issues.Add("equipped-item-effects-unverified");
         if (state.Conditions.Count > 0 || state.RulesInputs?.Any(x =>
@@ -84,6 +111,8 @@ public static class CharacterNativePrimaryStateAdapter
             issues.Add("additional-primary-mechanics-unverified");
         if (state.CurrentHitPoints is not null || state.HitPointGains?.Count > 0)
             issues.Add("current-hit-points-and-gains-form-policy-unverified");
+        if (state.DeathSaves.Successes != 0 || state.DeathSaves.Failures != 0)
+            issues.Add("death-saves-form-policy-unverified");
 
         var mechanics = JsonSerializer.SerializeToElement(new
         {
