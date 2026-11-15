@@ -138,6 +138,15 @@ public sealed class CharacterStateCrossRepositoryTests
             return await http.SendAsync(message, ct);
         }
 
+        public async Task<HttpResponseMessage> SendManifestationPlanAsync(
+            JsonElement request, CancellationToken ct = default)
+        {
+            using var message = Authorized(HttpMethod.Post,
+                "/api/mechanics/v1/characters/manifestations/plan");
+            message.Content = JsonContent.Create(request, options: Wire);
+            return await http.SendAsync(message, ct);
+        }
+
         private static HttpRequestMessage Authorized(HttpMethod method, string path)
         {
             var message = new HttpRequestMessage(method, path);
@@ -269,6 +278,25 @@ public sealed class CharacterStateCrossRepositoryTests
             Assert.Equal(HttpStatusCode.UnprocessableEntity, forbidden.StatusCode);
             Assert.Contains("supernatural_authority_unavailable",
                 await forbidden.Content.ReadAsStringAsync());
+        }
+
+        // Even the exact delegated character-sheet ticket must not make an
+        // unverified SourceOccurrence and claimed receipt an executable plan.
+        var deniedPlanRequest = JsonSerializer.SerializeToElement(new
+        {
+            state = fakeRequest.GetProperty("state"),
+            ledger = fakeRequest.GetProperty("ledger"),
+            transition = new
+            {
+                characterId = id.ToString("D"), expectedRevision = 0,
+                eventId = "forged:activate", steps = Array.Empty<object>()
+            }
+        }, Wire);
+        using (var deniedPlan = await gateway.SendManifestationPlanAsync(deniedPlanRequest))
+        {
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, deniedPlan.StatusCode);
+            Assert.Contains("supernatural_authority_unavailable",
+                await deniedPlan.Content.ReadAsStringAsync());
         }
 
         var store = new PostgresCharacterSupernaturalStateStore(db);

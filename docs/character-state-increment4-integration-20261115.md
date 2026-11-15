@@ -39,6 +39,17 @@ state and ledger revisions, writes the new state, inserts the unique event
 receipt and commits. PostgreSQL serialization failures are returned as
 conflicts, including exceptions wrapped by EF Core.
 
+The database now additionally enforces historical continuity. A first
+acquisition can not fabricate an already-active manifestation. A form
+transition must append exactly one processed event, retain previously
+acquired sheets and influences, keep activation identity and captures
+unchanged, and preserve existing resource quantities. Any new transition
+resource must belong to a newly activated manifestation. A separate
+acquisition can append ownership/progression, but it can not delete or
+rewrite earlier evidence or modify the manifestation journal without
+an explicit ledger event. These are defense-in-depth invariants, not
+substitutes for verified gameplay authority.
+
 The application must obtain its digest from the current authoritative rows,
 run native planning using the verified values, then commit with exactly that
 digest. The DB transition has atomicity, CAS and durable idempotency
@@ -46,6 +57,25 @@ constraints. This does **not** establish that the proposed result was
 mechanically valid or independently authorized. A production transition
 service must prove both before calling this store. Any new material
 dependency must be added to the digest before enabling live transitions.
+
+### Delegated transition planning (authority-gated)
+
+Rules Core now includes
+`POST /api/mechanics/v1/characters/manifestations/plan`.
+This is a read-only host adapter over the existing native transition
+planner. The authenticated delegate must supply a current ledger and
+transition, but the endpoint requires an independently configured
+`INativeManifestationHostAuthorityProvider` to revalidate source
+acquisition, event evidence, DM scope, character ownership and revision.
+**No production provider is registered.** The endpoint consequently
+returns `supernatural_authority_unavailable` rather than accepting a
+claimed `DefinitionOccurrence` or fabricated receipt.
+
+A provider may return the Core authority interface only after independently
+verifying source records. A successful Core plan is detached, carries
+`committed: false`, and is not a database mutation. Character Sheet has
+a delegated gateway method for this endpoint, but no user-facing
+activation or reversion service exists yet.
 
 ### Read-only transport
 
@@ -87,6 +117,14 @@ character may read but does not gain mutation rights.
   concurrent input mutation and read-only projection.
 * Core host tests cover delegated baseline, missing/wrong ticket,
   content mismatch and forged event ledger refusal.
+
+* The branch-scoped `character-state-increment4-cross-repo.yml`
+  runs the actual Core HTTP host and Character Sheet PostgreSQL together.
+  It verifies read-only primary evaluation, Site owner enforcement, and
+  fail-closed rejection of forged forms and unverified transition planning.
+* Additional PostgreSQL tests exercise immutable activation receipts,
+  reversion history, duplicate/reordered events, attempted progression
+  replacement, unauthorized resource mutation and separate acquisition.
 
 These tests do **not** substitute for the requested real end-to-end
 authenticated Werewolf/Wolf/Hybrid acquisition and transition tests.
