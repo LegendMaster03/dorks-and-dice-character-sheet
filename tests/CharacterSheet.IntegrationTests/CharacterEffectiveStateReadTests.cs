@@ -214,4 +214,67 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Null(result.View.NativeProjection);
         Assert.Contains("native-state-response-unverified", result.View.Unresolved);
     }
+
+    [Fact]
+    public async Task DormantAlternateSheetCanBeInspectedWithoutBeingDeclaredManifested()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var ledger = JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision = 0,
+            instances = Array.Empty<object>(), resources = Array.Empty<object>(),
+            processedEventIds = Array.Empty<string>()
+        });
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, Ruleset, Fingerprint, """[{"id":"wolf","parentId":"werewolf"}]""",
+                "[]", ledger, 0, 0, 0, digest, "fixture:acquisition",
+                "fixture:authorized", false, DateTimeOffset.UtcNow))).Status);
+
+        var builds = new PostgresCharacterBuildStore(db);
+        var reader = new CharacterSupernaturalInspectionService(
+            new CharacterBuildService(new SiteAccess(id), builds, TimeProvider.System), store);
+        var view = await reader.GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, view.Status);
+        Assert.Equal("stored-unverified", view.View!.Status);
+        Assert.False(view.View.EffectiveMechanicsVerified);
+        Assert.Equal("wolf", view.View.AlternateSheets[0]!["id"]!.GetValue<string>());
+        Assert.Single(view.View.CompletedEvents);
+        Assert.Equal(0, view.View.ManifestationRevision);
+
+        var unauthorized = new CharacterSupernaturalInspectionService(
+            new CharacterBuildService(new SiteAccess(id,
+                status: SiteCharacterAccessStatus.NotFoundOrNotOwned),
+                builds, TimeProvider.System), store);
+        Assert.Equal(CharacterEffectiveStateStatus.NotFoundOrNotOwned,
+            (await unauthorized.GetAsync(id)).Status);
+    }
+
+    [Fact]
+    public async Task OrdinaryCharacterInspectionDoesNotCreateSupernaturalRecords()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var reader = new CharacterSupernaturalInspectionService(
+            new CharacterBuildService(new SiteAccess(id,
+                SiteCharacterLifecycleState.Archived),
+                new PostgresCharacterBuildStore(db), TimeProvider.System),
+            new PostgresCharacterSupernaturalStateStore(db));
+        var view = await reader.GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, view.Status);
+        Assert.Equal("unconfigured", view.View!.Status);
+        Assert.True(view.View.ReadOnly);
+        Assert.Empty(view.View.AlternateSheets.AsArray());
+        Assert.Empty(await db.SupernaturalStates.ToArrayAsync());
+    }
 }
