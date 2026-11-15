@@ -63,6 +63,7 @@ internal static class CharacterSupernaturalHistoryGuard
 
             PreserveResources(old, next);
             PreserveInstances(old, next, command);
+            PreserveAuditedInstanceActions(old, next, command);
             PreserveAuditedActivationResources(old, next, command.TransitionRequestJson!);
             PreserveInteractionDecisions(old, next, command.TransitionRequestJson!);
         }
@@ -215,6 +216,102 @@ internal static class CharacterSupernaturalHistoryGuard
                 oldInstances.ContainsKey(owner.GetString()!))
                 throw new ArgumentException("A new transition resource must belong to a new manifestation instance.");
         }
+    }
+
+    /// <summary>
+    /// Reconcile every ordered transition step with the exact persisted
+    /// instance delta. An audited activation must be the new instance that
+    /// was actually committed. End, Suppress and Restore can change only the
+    /// lifecycle/contribution of their named existing instance. A command
+    /// can not create, modify or omit additional instances behind the audit.
+    /// This never replaces the Rules Core legality and host-source checks.
+    /// </summary>
+    private static void PreserveAuditedInstanceActions(
+        JsonElement previous, JsonElement proposed, VerifiedSupernaturalStateWrite command)
+    {
+        var oldInstances = ById(previous.GetProperty("instances"), "previous instances");
+        var newInstances = ById(proposed.GetProperty("instances"), "proposed instances");
+        using var audited = JsonDocument.Parse(command.TransitionRequestJson!);
+        var touched = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var step in audited.RootElement.GetProperty("steps").EnumerateArray())
+        {
+            var target = step.GetProperty("targetInstanceId").GetString()!;
+            if (!touched.Add(target))
+                throw new ArgumentException(
+                    "The ordered transition can not change one manifestation instance twice.");
+            var action = StepAction(step.GetProperty("action"));
+            if (action == 0)
+            {
+                if (oldInstances.ContainsKey(target) ||
+                    !newInstances.TryGetValue(target, out var created) ||
+                    !step.TryGetProperty("newInstance", out var declared) ||
+                    declared.ValueKind != JsonValueKind.Object ||
+                    !JsonElement.DeepEquals(declared, created))
+                    throw new ArgumentException(
+                        "An audited Activate must exactly match its newly committed instance.");
+                continue;
+            }
+
+            if (step.TryGetProperty("newInstance", out var unexpected) &&
+                unexpected.ValueKind != JsonValueKind.Null ||
+                !oldInstances.TryGetValue(target, out var before) ||
+                !newInstances.TryGetValue(target, out var after))
+                throw new ArgumentException(
+                    "A non-activation step must target an existing manifestation.");
+
+            var oldLifecycle = EnumValue(before, "lifecycle", "Active", "Ended");
+            var newLifecycle = EnumValue(after, "lifecycle", "Active", "Ended");
+            var oldContribution = EnumValue(before, "contribution", "Contributing", "Suppressed");
+            var newContribution = EnumValue(after, "contribution", "Contributing", "Suppressed");
+            var valid = action switch
+            {
+                1 => oldLifecycle == 0 && newLifecycle == 1 &&
+                    oldContribution == newContribution,
+                2 => oldLifecycle == 0 && newLifecycle == 0 &&
+                    oldContribution == 0 && newContribution == 1,
+                3 => oldLifecycle == 0 && newLifecycle == 0 &&
+                    oldContribution == 1 && newContribution == 0,
+                _ => false
+            };
+            if (!valid || !after.TryGetProperty("lastEventId", out var last) ||
+                last.ValueKind != JsonValueKind.String ||
+                last.GetString() != command.EventId)
+                throw new ArgumentException(
+                    "The committed manifestation lifecycle does not match its audited action.");
+        }
+
+        foreach (var (id, prior) in oldInstances)
+            if (!touched.Contains(id) &&
+                (!newInstances.TryGetValue(id, out var retained) ||
+                 !JsonElement.DeepEquals(prior, retained)))
+                throw new ArgumentException(
+                    "An untouched manifestation may not change during a transition.");
+        foreach (var id in newInstances.Keys)
+            if (!oldInstances.ContainsKey(id) && !touched.Contains(id))
+                throw new ArgumentException(
+                    "Every newly created manifestation needs an audited Activate step.");
+    }
+
+    private static int StepAction(JsonElement action) =>
+        action.ValueKind == JsonValueKind.Number && action.TryGetInt32(out var number)
+            ? number : action.GetString() switch
+            {
+                "Activate" => 0, "End" => 1, "Suppress" => 2,
+                "Restore" => 3, _ => -1
+            };
+
+    private static int EnumValue(
+        JsonElement parent, string property, string zero, string one)
+    {
+        if (!parent.TryGetProperty(property, out var value)) return -1;
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var number) &&
+                number is 0 or 1 => number,
+            JsonValueKind.String when value.GetString() == zero => 0,
+            JsonValueKind.String when value.GetString() == one => 1,
+            _ => -1
+        };
     }
 
     /// <summary>

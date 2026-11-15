@@ -50,7 +50,7 @@ public sealed class CharacterSupernaturalPersistenceTests
         string? ledger = null, string? alternate = null)
     {
         var candidate = ledger ?? (transition
-            ? Ledger(id, nextLedgerRevision, eventId)
+            ? DefaultTransitionLedger(id, nextLedgerRevision, eventId)
             : Ledger(id, nextLedgerRevision));
         return new(id, "first-party-001", "test-native-catalog",
             alternate ?? WolfSheet, "[]", candidate,
@@ -58,6 +58,28 @@ public sealed class CharacterSupernaturalPersistenceTests
             eventId, "fixture:verified-source", transition, Now,
             transition ? SyntheticTransitionAudit(id, ledgerRevision, eventId, candidate) : null);
     }
+
+    private static string DefaultTransitionLedger(
+        Guid id, long revision, string eventId) =>
+        JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision,
+            instances = new[]
+            {
+                new
+                {
+                    characterId = id.ToString("D"),
+                    id = "fixture.instance." + eventId,
+                    sheetId = "wolf", definitionId = "form.test.wolf",
+                    activationEventId = eventId, lastEventId = eventId,
+                    activationEvidenceId = "fixture:verified-source",
+                    lifecycle = 0, contribution = 0,
+                    activationCaptures = new { amount = 9 }
+                }
+            },
+            resources = Array.Empty<object>(),
+            processedEventIds = new[] { eventId }
+        });
 
     private static string SyntheticTransitionAudit(
         Guid id, long previousRevision, string eventId, string? candidateLedger = null)
@@ -82,7 +104,16 @@ public sealed class CharacterSupernaturalPersistenceTests
                 }
 
         var target = newInstance is JsonElement activation
-            ? activation.GetProperty("id").GetString()! : "fixture.instance";
+            ? activation.GetProperty("id").GetString()!
+            : root is { } currentWithInstances &&
+                currentWithInstances.TryGetProperty("instances", out var existing) &&
+                existing.GetArrayLength() > 0
+                ? existing[0].GetProperty("id").GetString()!
+                : "fixture.instance";
+        var action = newInstance is not null ? 0 :
+            eventId.StartsWith("revert:", StringComparison.Ordinal) ? 1 :
+            eventId.StartsWith("suppress:", StringComparison.Ordinal) ? 2 :
+            eventId.StartsWith("restore:", StringComparison.Ordinal) ? 3 : 0;
         var newResources = new List<JsonElement>();
         if (newInstance is not null && root is { } state &&
             state.TryGetProperty("resources", out var resources))
@@ -101,7 +132,9 @@ public sealed class CharacterSupernaturalPersistenceTests
             {
                 new
                 {
-                    action = 0, targetInstanceId = target,
+                    action, targetInstanceId = target,
+                    newInstance, endingConditionId = action == 1
+                        ? "rule.synthetic.revert" : null,
                     ruleOccurrence = new
                     {
                         source = new
@@ -614,7 +647,8 @@ public sealed class CharacterSupernaturalPersistenceTests
               "basis":{"adjudication":3,"nativeRuleReference":"rule.synthetic.fixture"},
               "authorizationEvidenceId":"fixture:rule-decision"}]
             """;
-        var firstLedger = JsonNode.Parse(Ledger(id, 1, "enter:wolf"))!.AsObject();
+        var firstLedger = JsonNode.Parse(ActivationLedger(id, 1,
+            ["enter:wolf"], [Instance(id, "enter:wolf")]))!.AsObject();
         firstLedger["interactions"] = JsonNode.Parse(interaction);
         var unapproved = Write(id, digest, 1, 0, 1, "enter:wolf",
             transition: true, ledger: firstLedger.ToJsonString());
