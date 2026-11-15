@@ -69,9 +69,9 @@ internal static class CharacterSupernaturalHistoryGuard
             if (!JsonElement.DeepEquals(old, next))
                 throw new ArgumentException("An acquisition can not mutate manifestation state without a ledger revision.");
             PreserveAcquiredOwners(existing.AlternateSheetsJson, command.AlternateSheetsJson,
-                "alternate sheets", ["parentId", "definitionId", "definitionSource", "acquisitionEvidenceId"]);
+                "alternate sheets");
             PreserveAcquiredOwners(existing.PersistentInfluencesJson, command.PersistentInfluencesJson,
-                "persistent influences", ["definitionId", "definitionSource", "acquisitionEvidenceId"]);
+                "persistent influences");
         }
     }
 
@@ -226,7 +226,7 @@ internal static class CharacterSupernaturalHistoryGuard
     }
 
     private static void PreserveAcquiredOwners(string previousJson, string proposedJson,
-        string kind, IReadOnlyList<string> immutableFields)
+        string kind)
     {
         using var previousDoc = JsonDocument.Parse(previousJson);
         using var nextDoc = JsonDocument.Parse(proposedJson);
@@ -236,14 +236,29 @@ internal static class CharacterSupernaturalHistoryGuard
         {
             if (!next.TryGetValue(id, out var candidate))
                 throw new ArgumentException("An acquisition can not erase an existing " + kind + " owner.");
-            foreach (var field in immutableFields)
-                if (!SameOptionalField(oldOwner, candidate, field))
-                    throw new ArgumentException("An acquisition can not rebind existing " + kind + " evidence.");
+
+            // Only separately earned progression may be appended to an
+            // existing owner in an acquisition event. Retain parent/source,
+            // overrides, decisions, expression state, source-qualified
+            // effects and all future contract fields unchanged. Those fields
+            // require their own explicitly authorized transition contract.
+            foreach (var field in oldOwner.EnumerateObject())
+            {
+                if (field.NameEquals("progression")) continue;
+                if (!candidate.TryGetProperty(field.Name, out var value) ||
+                    !JsonElement.DeepEquals(field.Value, value))
+                    throw new ArgumentException(
+                        "An acquisition can not rewrite existing " + kind + " state.");
+            }
+            foreach (var field in candidate.EnumerateObject())
+            {
+                if (field.NameEquals("progression")) continue;
+                if (!oldOwner.TryGetProperty(field.Name, out var value) ||
+                    !JsonElement.DeepEquals(field.Value, value))
+                    throw new ArgumentException(
+                        "An acquisition can not introduce unverified changes to existing " + kind + " state.");
+            }
             PreserveRecords(oldOwner, candidate, "progression", "earned progression");
-            // Influence effects may be augmented as expression progresses,
-            // but an already-authored effect ID may not change semantics.
-            if (kind == "persistent influences")
-                PreserveRecords(oldOwner, candidate, "effects", "influence effects");
         }
     }
 
@@ -261,13 +276,6 @@ internal static class CharacterSupernaturalHistoryGuard
             if (!proposed.TryGetValue(id, out var next) ||
                 !JsonElement.DeepEquals(record, next))
                 throw new ArgumentException("An acquisition can not rewrite an earlier " + label + ".");
-    }
-
-    private static bool SameOptionalField(JsonElement left, JsonElement right, string field)
-    {
-        var a = left.TryGetProperty(field, out var valueA);
-        var b = right.TryGetProperty(field, out var valueB);
-        return a == b && (!a || JsonElement.DeepEquals(valueA, valueB));
     }
 
     private static Dictionary<string, JsonElement> ById(JsonElement values, string label)
