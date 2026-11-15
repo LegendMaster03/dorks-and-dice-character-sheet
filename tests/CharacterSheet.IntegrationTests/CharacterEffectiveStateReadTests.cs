@@ -37,7 +37,9 @@ public sealed class CharacterEffectiveStateReadTests
     private sealed class NativeGateway : INativeRulesCoreGateway
     {
         public int Calls { get; private set; }
+        public int VerifiedReadCalls { get; private set; }
         public Func<Task>? BeforeReply { get; set; }
+        public Func<Task>? BeforeVerifiedReply { get; set; }
         public bool ReturnInvalid { get; set; }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct) =>
@@ -64,6 +66,27 @@ public sealed class CharacterEffectiveStateReadTests
                 effectiveMechanicsReady = false,
                 status = ReturnInvalid ? "invalid" : "partial",
                 projection = new { status = ReturnInvalid ? "invalid" : "partial" }
+            }))!;
+        }
+
+        public async Task<JsonNode> EvaluateVerifiedManifestationStateAsync(
+            JsonElement request, CancellationToken ct)
+        {
+            VerifiedReadCalls++;
+            if (BeforeVerifiedReply is not null) await BeforeVerifiedReply();
+            return JsonNode.Parse(JsonSerializer.Serialize(new
+            {
+                contractVersion = 1, rulesetId = Ruleset,
+                fingerprint = Fingerprint, supportedScope = "verified-manifestations",
+                effectiveMechanicsReady = false, status = "partial",
+                projection = new
+                {
+                    effectiveCharacter = new
+                    {
+                        effectiveSheetId = "@primary",
+                        manifestationInstanceId = (string?)null
+                    }
+                }
             }))!;
         }
 
@@ -197,6 +220,108 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Null(result.View.NativeProjection);
         Assert.Contains("authoritative-inputs-changed-during-resolution",
             result.View.Unresolved);
+    }
+
+    [Fact]
+    public async Task AcquisitionDuringOrdinaryProjectionNeverReturnsStalePrimaryOnlyState()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var initialLedger = JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision = 0,
+            instances = Array.Empty<object>(), resources = Array.Empty<object>(),
+            processedEventIds = Array.Empty<string>()
+        });
+        var native = new NativeGateway
+        {
+            BeforeReply = async () =>
+            {
+                var applied = await store.CommitVerifiedAsync(
+                    new VerifiedSupernaturalStateWrite(id, Ruleset, Fingerprint,
+                        """[{"id":"wolf","parentId":"@primary"}]""",
+                        "[]", initialLedger, 0, 0, 0, digest,
+                        "fixture:acquired-during-read", "fixture:controlled",
+                        false, DateTimeOffset.UtcNow));
+                Assert.Equal(CharacterSupernaturalWriteStatus.Applied, applied.Status);
+            }
+        };
+        var result = await Service(db, id, native).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+        Assert.Equal("unresolved", result.View!.Status);
+        Assert.Null(result.View.NativeProjection);
+        Assert.Contains("supernatural-state-changed-during-resolution",
+            result.View.Unresolved);
+        Assert.Null(result.View.SupernaturalRevision);
+        Assert.Equal(1, native.Calls);
+        Assert.Equal(digest, await store.GetAuthoritativeInputsFingerprintAsync(id));
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task ConcurrentAcquisitionInvalidatesOtherwiseVerifiedSupernaturalRead()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var key in new[]
+        {
+            "strength", "dexterity", "constitution",
+            "intelligence", "wisdom", "charisma"
+        })
+            await build.SetBaseAbilityScoreInputAsync(id, key, 12,
+                DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var ledger = JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision = 0,
+            instances = Array.Empty<object>(), resources = Array.Empty<object>(),
+            processedEventIds = Array.Empty<string>()
+        });
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, Ruleset, Fingerprint,
+                """[{"id":"wolf","parentId":"@primary"}]""",
+                "[]", ledger, 0, 0, 0, digest, "fixture:first-acquisition",
+                "fixture:controlled", false, DateTimeOffset.UtcNow))).Status);
+
+        var native = new NativeGateway
+        {
+            BeforeVerifiedReply = async () =>
+            {
+                var applied = await store.CommitVerifiedAsync(
+                    new VerifiedSupernaturalStateWrite(id, Ruleset, Fingerprint,
+                        """
+                        [{"id":"wolf","parentId":"@primary"},
+                         {"id":"hybrid","parentId":"wolf"}]
+                        """,
+                        "[]", ledger, 1, 0, 0, digest, "fixture:second-acquisition",
+                        "fixture:controlled", false, DateTimeOffset.UtcNow));
+                Assert.Equal(CharacterSupernaturalWriteStatus.Applied, applied.Status);
+            }
+        };
+        var result = await Service(db, id, native).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+        Assert.Equal("unresolved", result.View!.Status);
+        Assert.Null(result.View.NativeProjection);
+        Assert.Null(result.View.SupernaturalRevision);
+        Assert.Contains("supernatural-state-changed-during-resolution",
+            result.View.Unresolved);
+        Assert.Equal(1, native.VerifiedReadCalls);
+        Assert.Equal(2, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+        Assert.Equal(digest, await store.GetAuthoritativeInputsFingerprintAsync(id));
     }
 
     [Fact]
