@@ -94,6 +94,9 @@ builder.Services.AddScoped<ICharacterOriginDraftStore, PostgresCharacterOriginDr
 // Internal-only authorized Origin storage; there is deliberately no direct
 // controller or browser endpoint capable of calling CommitVerifiedAsync.
 builder.Services.AddScoped<ICharacterAuthorizedOriginStore, PostgresCharacterAuthorizedOriginStore>();
+ // Supernatural writes are internal-only and require separately verified
+ // acquisition or transition plans; no browser route invokes this store.
+builder.Services.AddScoped<ICharacterSupernaturalStateStore, PostgresCharacterSupernaturalStateStore>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
 builder.Services.AddScoped<ICharacterStartingEquipmentInventoryStore, PostgresCharacterStartingEquipmentInventoryStore>();
 builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();

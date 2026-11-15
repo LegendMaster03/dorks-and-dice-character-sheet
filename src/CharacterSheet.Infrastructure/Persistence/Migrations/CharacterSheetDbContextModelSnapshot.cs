@@ -395,6 +395,47 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_authorized_origins");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSupernaturalState", b =>
+        {
+            b.Property<Guid>("CharacterId").HasColumnType("uuid");
+            b.Property<int>("ContractVersion").HasColumnType("integer");
+            b.Property<string>("RulesetId").IsRequired()
+                .HasMaxLength(160).HasColumnType("character varying(160)");
+            b.Property<string>("Fingerprint").IsRequired()
+                .HasMaxLength(200).HasColumnType("character varying(200)");
+            b.Property<string>("AlternateSheetsJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("PersistentInfluencesJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("LedgerJson").IsRequired().HasColumnType("jsonb");
+            b.Property<long>("LedgerRevision").HasColumnType("bigint");
+            b.Property<string>("DependencyFingerprint").IsRequired()
+                .HasMaxLength(64).HasColumnType("character varying(64)");
+            b.Property<long>("Revision").HasColumnType("bigint");
+            b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+            b.Property<DateTimeOffset>("UpdatedAt").HasColumnType("timestamp with time zone");
+            b.HasKey("CharacterId");
+            b.ToTable("character_supernatural_states", t =>
+                t.HasCheckConstraint("CK_character_supernatural_states_Revision",
+                    """ "Revision" >= 1 AND "LedgerRevision" >= 0 AND "ContractVersion" = 1 """));
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSupernaturalEventReceipt", b =>
+        {
+            b.Property<Guid>("CharacterId").HasColumnType("uuid");
+            b.Property<string>("EventId").IsRequired()
+                .HasMaxLength(160).HasColumnType("character varying(160)");
+            b.Property<long>("CommittedRevision").HasColumnType("bigint");
+            b.Property<long>("LedgerRevision").HasColumnType("bigint");
+            b.Property<string>("Kind").IsRequired()
+                .HasMaxLength(32).HasColumnType("character varying(32)");
+            b.Property<string>("AuthorizationEvidenceId").IsRequired()
+                .HasMaxLength(320).HasColumnType("character varying(320)");
+            b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+            b.HasKey("CharacterId", "EventId");
+            b.HasIndex("CharacterId", "CommittedRevision")
+                .IsUnique().HasDatabaseName("UX_character_supernatural_event_receipts_Revision");
+            b.ToTable("character_supernatural_event_receipts");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginEventReceipt", b =>
         {
             b.Property<Guid>("CharacterId").HasColumnType("uuid");
@@ -712,6 +753,22 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
                 .WithOne()
                 .HasForeignKey("CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState", "CharacterId")
+                .OnDelete(DeleteBehavior.Cascade).IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSupernaturalState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSheetRoot", null)
+                .WithOne()
+                .HasForeignKey("CharacterSheet.Domain.Characters.CharacterSupernaturalState", "CharacterId")
+                .OnDelete(DeleteBehavior.Cascade).IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSupernaturalEventReceipt", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterSupernaturalState", null)
+                .WithMany()
+                .HasForeignKey("CharacterId")
                 .OnDelete(DeleteBehavior.Cascade).IsRequired();
         });
 
