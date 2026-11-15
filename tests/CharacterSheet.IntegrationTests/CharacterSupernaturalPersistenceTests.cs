@@ -145,7 +145,7 @@ public sealed class CharacterSupernaturalPersistenceTests
                     },
                     basis = new { adjudication = 3, nativeRuleReference = "rule.synthetic.fixture" },
                     authorizationEvidenceId = "fixture:verified-source",
-                    newResources
+                    newResources = action == 0 ? newResources : null
                 }
             }
         });
