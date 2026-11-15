@@ -323,9 +323,18 @@ public sealed class CharacterEffectiveStateService(
                 id.GetString() == effectiveSheetId))
             return false;
 
+        // A claimed primary projection is not current if any independently
+        // recorded activation still contributes. Suppressed and ended instances
+        // remain in history but do not make an alternate sheet effective.
+        var contributing = instances.EnumerateArray().Where(item =>
+            item.ValueKind == JsonValueKind.Object &&
+            item.TryGetProperty("lifecycle", out var lifecycle) &&
+            item.TryGetProperty("contribution", out var participation) &&
+            EnumIsActive(lifecycle) && EnumIsContributing(participation)).ToArray();
+
         var value = effective["manifestationInstanceId"];
         if (value is null)
-            return effectiveSheetId == "@primary";
+            return effectiveSheetId == "@primary" && contributing.Length == 0;
         if (value is not JsonValue selected ||
             !selected.TryGetValue<string>(out var idValue) ||
             string.IsNullOrWhiteSpace(idValue))
@@ -345,11 +354,59 @@ public sealed class CharacterEffectiveStateService(
         var instance = matching[0];
         if (!instance.TryGetProperty("lifecycle", out var life) ||
             !instance.TryGetProperty("contribution", out var contribution) ||
-            !EnumIsActive(life) || !EnumIsContributing(contribution))
+            !EnumIsActive(life) || !EnumIsContributing(contribution) ||
+            contributing.Length == 0)
             return false;
+
+        // A single contributing activation selects itself. With multiple
+        // contributors, Rules Core selects only when exactly one authorized
+        // suppression/replacement interaction covers the entire contributing
+        // set. Recheck that decision against persisted IDs, independently of
+        // the returned effective-character fields.
+        if (contributing.Length > 1 &&
+            !MatchesContributingSelection(ledger, contributing, idValue))
+            return false;
+
         instanceId = idValue;
         return true;
     }
+
+    private static bool MatchesContributingSelection(
+        JsonElement ledger, JsonElement[] contributing, string instanceId)
+    {
+        if (!ledger.TryGetProperty("interactions", out var interactions) ||
+            interactions.ValueKind != JsonValueKind.Array)
+            return false;
+
+        var activeIds = contributing.Select(item =>
+            item.GetProperty("id").GetString()).ToHashSet(StringComparer.Ordinal);
+        if (activeIds.Count != contributing.Length || activeIds.Contains(null))
+            return false;
+
+        var matching = interactions.EnumerateArray().Where(decision =>
+            decision.ValueKind == JsonValueKind.Object &&
+            decision.TryGetProperty("instanceIds", out var ids) &&
+            ids.ValueKind == JsonValueKind.Array &&
+            ids.GetArrayLength() == activeIds.Count &&
+            ids.EnumerateArray().All(item =>
+                item.ValueKind == JsonValueKind.String &&
+                activeIds.Contains(item.GetString()))).Take(2).ToArray();
+        if (matching.Length != 1 ||
+            !matching[0].TryGetProperty("kind", out var kind) ||
+            !IsSelectionInteraction(kind) ||
+            !matching[0].TryGetProperty("selectedInstanceId", out var selected) ||
+            selected.ValueKind != JsonValueKind.String ||
+            selected.GetString() != instanceId)
+            return false;
+
+        return true;
+    }
+
+    private static bool IsSelectionInteraction(JsonElement kind) =>
+        kind.ValueKind == JsonValueKind.Number &&
+            kind.TryGetInt32(out var ordinal) && ordinal is 1 or 2 ||
+        kind.ValueKind == JsonValueKind.String &&
+            kind.GetString() is "Suppress" or "Replace";
 
     private static bool EnumIsActive(JsonElement value) =>
         value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n) && n == 0 ||
