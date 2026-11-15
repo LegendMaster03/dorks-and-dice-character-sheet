@@ -369,7 +369,7 @@ public sealed class CharacterStateCrossRepositoryTests
         new("hybrid", "werewolf", "form.hybrid", SyntheticSource(),
             "receipt.acquire.hybrid",
             Overrides: new(AbilityScores: new(false,
-                new Dictionary<string, int> { ["dexterity"] = 16 }))
+                new Dictionary<string, int> { ["dexterity"] = 16 })))
     ];
 
     private static NativeCharacterState TestCharacter(Guid id, string fingerprint,
