@@ -473,6 +473,16 @@ public sealed class CharacterStateCrossRepositoryTests
             },
             [ControlledWolfResource()]);
 
+    private static NativeManifestationInteractionDecision AuthorizedOverlap() =>
+        new("interaction.synthetic.overlap",
+            NativeManifestationInteractionKind.Replace,
+            ["manifest.wolf.1", "manifest.hybrid.1"], "manifest.hybrid.1",
+            Occurrence("interactions.replace"), SyntheticRule(),
+            "receipt.interaction.overlap");
+
+    private static NativeManifestationInteractionDecision UnapprovedOverlap() =>
+        AuthorizedOverlap() with { AuthorizationEvidenceId = "receipt.interaction.forged" };
+
 
 
     private sealed class PostgresSyntheticAuthorityProvider(
@@ -614,7 +624,17 @@ public sealed class CharacterStateCrossRepositoryTests
             NativeManifestationResourcePolicy policy) =>
             Character(id) && instance.Id == "manifest.wolf.1" &&
             policy == ControlledWolfResourcePolicy();
-        public bool AuthorizesInteraction(string id, NativeManifestationInteractionDecision decision) => false;
+        public bool AuthorizesInteraction(string id,
+            NativeManifestationInteractionDecision decision) =>
+            Character(id) && decision.Id == "interaction.synthetic.overlap" &&
+            decision.Kind == NativeManifestationInteractionKind.Replace &&
+            decision.InstanceIds.SequenceEqual(
+                new[] { "manifest.wolf.1", "manifest.hybrid.1" },
+                StringComparer.Ordinal) &&
+            decision.SelectedInstanceId == "manifest.hybrid.1" &&
+            decision.DefinitionOccurrence == Occurrence("interactions.replace") &&
+            decision.Basis == SyntheticRule() &&
+            decision.AuthorizationEvidenceId == "receipt.interaction.overlap";
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) => false;
         public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) => false;
         public bool AuthorizesEffect(string id, string influenceId,
@@ -666,6 +686,11 @@ public sealed class CharacterStateCrossRepositoryTests
                     "manifest.wolf.1", eventId)],
                 "reenter:wolf" => [Enter(characterId, "wolf",
                     "manifest.wolf.2", eventId)],
+                "overlap:unresolved" or "overlap:unapproved" or "overlap:authorized" =>
+                [
+                    Enter(characterId, "wolf", "manifest.wolf.1", eventId),
+                    Enter(characterId, "hybrid", "manifest.hybrid.1", eventId)
+                ],
                 "switch:hybrid" =>
                 [
                     End("manifest.wolf.2", eventId),
@@ -682,8 +707,17 @@ public sealed class CharacterStateCrossRepositoryTests
             };
             if (steps.Length == 0)
                 return Task.FromResult<TrustedManifestationTransitionMaterial?>(null);
+            var replacement = intentId switch
+            {
+                "overlap:authorized" =>
+                    new[] { AuthorizedOverlap() },
+                "overlap:unapproved" =>
+                    new[] { UnapprovedOverlap() },
+                _ => null
+            };
             var transition = new NativeManifestationTransitionRequest(
-                characterId.ToString("D"), existing.LedgerRevision, eventId, steps);
+                characterId.ToString("D"), existing.LedgerRevision, eventId, steps,
+                replacement);
             return Task.FromResult<TrustedManifestationTransitionMaterial?>(
                 new(JsonSerializer.SerializeToElement(Current.PrimaryMechanics, Wire),
                     JsonSerializer.SerializeToElement(transition, Wire),
@@ -1181,6 +1215,125 @@ public sealed class CharacterStateCrossRepositoryTests
             forbidden.Status);
         Assert.Equal(5, (await fresh.GetEventsAsync(id)).Count);
         Assert.Equal(ended.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
+    }
+
+    [Fact]
+    public async Task OverlappingManifestationsRequireIndependentInteractionAuthorityAndAtomicSelection()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(provider, provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms());
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var (key, score) in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, key, score, DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var empty = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire), "[]",
+                JsonSerializer.Serialize(empty, Wire), 0, 0, 0, digest,
+                "fixture:acquire-werewolf", "fixture:verified-source",
+                false, DateTimeOffset.UtcNow))).Status);
+
+        var source = new SyntheticTrustedSource(state);
+        var service = TransitionRunner(db, new OwnerAccess(id), store, gateway, source);
+        var prior = (await store.GetAsync(id))!;
+        var priorEvents = await store.GetEventsAsync(id);
+
+        // Core must not infer which of two concurrently contributing forms
+        // wins merely from creation order or from their own species rules.
+        var ambiguous = await service.ApplyAsync(id, prior.Revision,
+            prior.LedgerRevision, "overlap:unresolved", "overlap:unresolved");
+        Assert.Equal(CharacterManifestationApplyStatus.PlanUnresolved,
+            ambiguous.Status);
+        var deniedRuling = await service.ApplyAsync(id, prior.Revision,
+            prior.LedgerRevision, "overlap:unapproved", "overlap:unapproved");
+        Assert.Equal(CharacterManifestationApplyStatus.PlanUnresolved,
+            deniedRuling.Status);
+        var unchanged = (await store.GetAsync(id))!;
+        Assert.Equal(prior.Revision, unchanged.Revision);
+        Assert.Equal(prior.LedgerJson, unchanged.LedgerJson);
+        Assert.Equal(priorEvents.Count, (await store.GetEventsAsync(id)).Count);
+
+        // An exact test-only host source authorizes the replacement
+        // interaction, selecting Hybrid while preserving both distinct
+        // acquired manifestations and their individual activation receipts.
+        var allowed = await service.ApplyAsync(id, prior.Revision,
+            prior.LedgerRevision, "overlap:authorized", "overlap:authorized");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, allowed.Status);
+        Assert.NotNull(allowed.EffectivePreview);
+        var selected = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+            allowed.EffectivePreview!.ToJsonString(), Wire)!;
+        Assert.Equal("hybrid", selected.EffectiveSheetId);
+        Assert.Equal("manifest.hybrid.1", selected.ManifestationInstanceId);
+        Assert.Equal(16, selected.EffectiveMechanics!.AbilityScores["dexterity"]);
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(reload);
+        var saved = (await fresh.GetAsync(id))!;
+        Assert.Equal(2, saved.Revision);
+        Assert.Equal(1, saved.LedgerRevision);
+        using (var journal = JsonDocument.Parse(saved.LedgerJson))
+        {
+            var instances = journal.RootElement.GetProperty("instances")
+                .EnumerateArray().ToArray();
+            Assert.Equal(2, instances.Length);
+            Assert.All(instances, entry =>
+            {
+                Assert.Equal(0, entry.GetProperty("lifecycle").GetInt32());
+                Assert.Equal(0, entry.GetProperty("contribution").GetInt32());
+            });
+            var choice = Assert.Single(journal.RootElement.GetProperty("interactions")
+                .EnumerateArray());
+            Assert.Equal("manifest.hybrid.1",
+                choice.GetProperty("selectedInstanceId").GetString());
+            Assert.Equal("receipt.interaction.overlap",
+                choice.GetProperty("authorizationEvidenceId").GetString());
+        }
+        var receipts = await fresh.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        using (var audit = JsonDocument.Parse(receipts[1].TransitionRequestJson!))
+        {
+            var request = audit.RootElement;
+            Assert.Equal("overlap:authorized",
+                request.GetProperty("eventId").GetString());
+            Assert.Equal(2, request.GetProperty("steps").GetArrayLength());
+            Assert.Equal("manifest.wolf.1",
+                request.GetProperty("steps")[0]
+                    .GetProperty("targetInstanceId").GetString());
+            Assert.Equal("manifest.hybrid.1",
+                request.GetProperty("steps")[1]
+                    .GetProperty("targetInstanceId").GetString());
+            var interaction = Assert.Single(request.GetProperty("replacementInteractions")
+                .EnumerateArray());
+            Assert.Equal("receipt.interaction.overlap",
+                interaction.GetProperty("authorizationEvidenceId").GetString());
+        }
+        var read = await Reader(reload, id, gateway).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, read.Status);
+        Assert.Equal("partial", read.View!.Status);
+        Assert.Equal("hybrid", read.View.EffectiveSheetId);
+        Assert.Equal("manifest.hybrid.1", read.View.ActiveManifestationId);
+
+        var replay = await TransitionRunner(reload, new OwnerAccess(id),
+            fresh, gateway, source).ApplyAsync(id, saved.Revision,
+                saved.LedgerRevision, "overlap:authorized", "overlap:authorized");
+        Assert.NotEqual(CharacterManifestationApplyStatus.Applied, replay.Status);
+        Assert.Equal(2, (await fresh.GetEventsAsync(id)).Count);
+        Assert.Equal(saved.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
     }
 
     [Fact]
