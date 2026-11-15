@@ -902,7 +902,7 @@ public sealed class CharacterStateCrossRepositoryTests
         // Core compares pinned catalog identity before consulting a source
         // authority. It must not plan against the newer definitions.
         var actions = new SyntheticTrustedSource(oldState);
-        var service = new CharacterManifestationTransitionService(
+        var service = TransitionRunner(db,
             new OwnerAccess(id), store, gateway, actions);
         var refused = await service.ApplyAsync(id, 1, 0,
             "enter:wolf", "enter:wolf");
