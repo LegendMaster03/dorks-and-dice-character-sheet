@@ -326,11 +326,18 @@ public sealed class CharacterEffectiveStateService(
         // A claimed primary projection is not current if any independently
         // recorded activation still contributes. Suppressed and ended instances
         // remain in history but do not make an alternate sheet effective.
-        var contributing = instances.EnumerateArray().Where(item =>
-            item.ValueKind == JsonValueKind.Object &&
-            item.TryGetProperty("lifecycle", out var lifecycle) &&
-            item.TryGetProperty("contribution", out var participation) &&
-            EnumIsActive(lifecycle) && EnumIsContributing(participation)).ToArray();
+        var recorded = instances.EnumerateArray().ToArray();
+        if (recorded.Any(item =>
+            item.ValueKind != JsonValueKind.Object ||
+            !item.TryGetProperty("id", out var id) ||
+            id.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(id.GetString()) ||
+            !item.TryGetProperty("lifecycle", out _) ||
+            !item.TryGetProperty("contribution", out _)))
+            return false;
+        var contributing = recorded.Where(item =>
+            EnumIsActive(item.GetProperty("lifecycle")) &&
+            EnumIsContributing(item.GetProperty("contribution"))).ToArray();
 
         var value = effective["manifestationInstanceId"];
         if (value is null)
@@ -390,7 +397,10 @@ public sealed class CharacterEffectiveStateService(
             ids.GetArrayLength() == activeIds.Count &&
             ids.EnumerateArray().All(item =>
                 item.ValueKind == JsonValueKind.String &&
-                activeIds.Contains(item.GetString()))).Take(2).ToArray();
+                activeIds.Contains(item.GetString())) &&
+            ids.EnumerateArray().Select(item => item.GetString())
+                .Distinct(StringComparer.Ordinal).Count() == activeIds.Count)
+            .Take(2).ToArray();
         if (matching.Length != 1 ||
             !matching[0].TryGetProperty("kind", out var kind) ||
             !IsSelectionInteraction(kind) ||
