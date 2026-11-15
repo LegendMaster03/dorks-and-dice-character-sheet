@@ -137,6 +137,14 @@ manifestation.
 After Core responds, Character Sheet compares the current primary dependency
 fingerprint, the exact native catalog pin, the response contract, the returned
 sheet identity and any selected active instance against persisted ownership.
+After the first Site-authorized Build access, the application obtains
+the authoritative primary dependency digest **before** loading the Build
+state used for projection, then reloads Build and reads routine State and
+the latest authorized Origin. It compares the same digest after the remote
+mechanics request. This explicitly catches updates occurring between the
+first Build authorization read and the later State/Origin assembly; a
+digest first taken after those reads would not detect that window.
+
 A delegated read also reloads the supernatural record after Core returns.
 A concurrent acquisition or form transition may leave all primary Class,
 Origin, inventory and HP inputs unchanged; the primary input digest alone
@@ -174,7 +182,10 @@ An archived character may read but does not gain mutation rights.
   concurrent input mutation and read-only projection. It also tests
   acquisition during a primary-only evaluation and a second acquisition
   during an independently verified supernatural read; both suppress stale
-  projected mechanics while preserving the committed state.
+  projected mechanics while preserving the committed state. A separate
+  test mutates a primary ability between the first Site ownership check
+  and the authorized Build reload, proving that the primary digest
+  brackets the full source assembly, not only the Rules Core call.
 * The PostgreSQL history guard tests reject unauthorized interaction
   replacement or removal and confirm that the recorded replacement set,
   when independently verified, remains in the same transition receipt.
