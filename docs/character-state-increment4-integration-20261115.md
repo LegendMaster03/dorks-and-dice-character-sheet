@@ -54,6 +54,14 @@ or mismatched audit rejects the entire write before changing the character.
 Old pre-audit event receipts can still load; absent steps can not be inferred
 from a processed event ID or a post-transition snapshot.
 
+Interaction decisions are also bound to the ordered transition
+audit. When the request does not include a replacement interaction set, the
+persisted set must remain unchanged. When it does, the proposed ledger must
+contain exactly the recorded replacement set. A normal form change does not
+implicitly approve a new coexistence, suppression or replacement ruling.
+As with the rest of the history guard, this protects the commit boundary
+without authorizing a native or DM decision on its own.
+
 The database now additionally enforces historical continuity. A first
 acquisition can not fabricate an already-active manifestation. A form
 transition must append exactly one processed event, retain previously
@@ -129,6 +137,15 @@ manifestation.
 After Core responds, Character Sheet compares the current primary dependency
 fingerprint, the exact native catalog pin, the response contract, the returned
 sheet identity and any selected active instance against persisted ownership.
+A delegated read also reloads the supernatural record after Core returns.
+A concurrent acquisition or form transition may leave all primary Class,
+Origin, inventory and HP inputs unchanged; the primary input digest alone
+can not detect it. If supernatural ownership or its revision changed during
+the remote call, the read is marked `unresolved`, the outdated projection is
+withheld, and the snapshot revision is not represented as current. Both
+ordinary baseline reads and authorized alternate-form reads enforce this
+optimistic freshness check. It does not claim a long-lived database lock.
+
 The result remains `partial` and
 `effectiveMechanicsReady: false` even when verified: this endpoint has not
 completed form-specific Class, Origin, equipment, HP or resource-policy
@@ -154,7 +171,13 @@ An archived character may read but does not gain mutation rights.
   input changes and malformed records.
 * `CharacterEffectiveStateReadTests` exercises owner gating, archived
   read-only behavior, unmodeled form refusal, invalid native response,
-  concurrent input mutation and read-only projection.
+  concurrent input mutation and read-only projection. It also tests
+  acquisition during a primary-only evaluation and a second acquisition
+  during an independently verified supernatural read; both suppress stale
+  projected mechanics while preserving the committed state.
+* The PostgreSQL history guard tests reject unauthorized interaction
+  replacement or removal and confirm that the recorded replacement set,
+  when independently verified, remains in the same transition receipt.
 * Core host tests cover delegated baseline, missing/wrong ticket,
   content mismatch and forged event ledger refusal.
 
@@ -170,6 +193,9 @@ An archived character may read but does not gain mutation rights.
   ability scores, reentry,
   atomic switching, preserved grant provenance, reload and event history,
   and denial when the host verifier is absent or the user is archived.
+  A verified active-Wolf read after primary Class advancement confirms that
+  current primary Level and ability scores inherit dynamically, without
+  rewriting persistent Wolf progression or the active manifestation ledger.
   A deliberately invalid two-step Wolf switch verifies that a successful
   End step is not persisted when a later Activate is rejected. Character
   Sheet recognizes only bounded, protocol-defined Rules Core error codes.

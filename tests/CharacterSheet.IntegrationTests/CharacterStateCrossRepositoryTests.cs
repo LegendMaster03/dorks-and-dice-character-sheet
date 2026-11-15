@@ -757,8 +757,10 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(1, gateway.VerifiedReadRequests);
 
 
-        // The latest primary values, not the activation-time snapshot,
-        // are used when resolving a later reversion.
+        // Primary advancement belongs to the original character and must
+        // project dynamically even while Wolf remains the active sheet.
+        // No owned supernatural progression or activation row is rewritten.
+        var wolfOwnershipBeforeAdvancement = (await store.GetAsync(id))!;
         await build.SetBaseAbilityScoreInputAsync(id, "constitution", 15,
             DateTimeOffset.UtcNow.AddMinutes(1));
         await build.SetAdvancementLevelAsync(id, barbarian.Id, 2,
@@ -779,6 +781,28 @@ public sealed class CharacterStateCrossRepositoryTests
             }
         };
         source.Current = state;
+        var advancedWolfRead = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", advancedWolfRead.View!.Status);
+        Assert.Equal("wolf", advancedWolfRead.View.EffectiveSheetId);
+        Assert.Equal("manifest.wolf.1", advancedWolfRead.View.ActiveManifestationId);
+        Assert.NotNull(advancedWolfRead.View.NativeProjection);
+        Assert.Equal(15, advancedWolfRead.View.NativeProjection!["effectiveCharacter"]?
+            ["effectiveMechanics"]?["abilityScores"]?["constitution"]?.GetValue<int>());
+        Assert.Equal(2, advancedWolfRead.View.NativeProjection!["effectiveCharacter"]?
+            ["effectiveMechanics"]?["advancements"]?[0]?["level"]?.GetValue<int>());
+        var wolfOwnershipAfterAdvancement = (await store.GetAsync(id))!;
+        Assert.Equal(wolfOwnershipBeforeAdvancement.Revision, wolfOwnershipAfterAdvancement.Revision);
+        Assert.Equal(wolfOwnershipBeforeAdvancement.LedgerRevision,
+            wolfOwnershipAfterAdvancement.LedgerRevision);
+        Assert.Equal(wolfOwnershipBeforeAdvancement.AlternateSheetsJson,
+            wolfOwnershipAfterAdvancement.AlternateSheetsJson);
+        Assert.Equal(wolfOwnershipBeforeAdvancement.LedgerJson,
+            wolfOwnershipAfterAdvancement.LedgerJson);
+        Assert.Equal("enter:wolf",
+            (await store.GetEventsAsync(id))[1].EventId);
+
+        // The same current Class/Origin inputs govern reversion. No snapshot
+        // from the activation event is restored over the owner's progression.
         var reverted = await Execute("revert:wolf");
         Assert.Equal(15, reverted.EffectiveMechanics!.AbilityScores["constitution"]);
         Assert.Equal(2, Assert.Single(reverted.EffectiveMechanics.Advancements).Level);
