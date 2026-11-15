@@ -54,6 +54,12 @@ public sealed class DelegatedRulesCoreGateway(
             "/api/mechanics/v1/characters/manifestations/plan",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    public Task<JsonNode> EvaluateVerifiedManifestationStateAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post,
+            "/api/mechanics/v1/characters/effective-state",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> EvaluatePrimaryStateBaselineAsync(
         JsonElement request, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Post,
@@ -360,6 +366,8 @@ public sealed class DelegatedRulesCoreGateway(
     {
         if (targetPath.EndsWith("/characters/manifestations/plan", StringComparison.Ordinal))
             return "native-manifestation-plan";
+        if (targetPath.EndsWith("/characters/effective-state", StringComparison.Ordinal))
+            return "native-verified-effective-state";
         if (targetPath.EndsWith("/characters/effective-state-baseline", StringComparison.Ordinal))
             return "native-effective-state-baseline";
         if (targetPath.EndsWith("/characters/project", StringComparison.Ordinal))

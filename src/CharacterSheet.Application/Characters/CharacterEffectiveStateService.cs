@@ -22,9 +22,10 @@ public sealed record CharacterEffectiveStateResult(
     CharacterEffectiveStateStatus Status, CharacterEffectiveStateView? View = null);
 
 /// <summary>
-/// Read-only Site-authenticated character-state assembly. The native adapter
-/// currently accepts only ordinary primary sheets. It never infers acquired
-/// grants from stored names, evidence strings, or unverified Origin snapshots.
+/// Read-only Site-authenticated character-state assembly. Ordinary primary
+/// sheets use the bounded native primary projection; stored supernatural
+/// sheets use the full native projector only when an independent host verifier
+/// accepts the exact current owner record and provenance.
 /// </summary>
 public sealed class CharacterEffectiveStateService(
     CharacterBuildService builds,
@@ -70,20 +71,21 @@ public sealed class CharacterEffectiveStateService(
             ? "authorized-origin-unavailable"
             : "origin-underlying-grants-not-yet-revalidated");
         JsonNode? projection = null;
+        string effectiveSheetId = "@primary";
+        string? activeManifestationId = null;
         string? ruleset = persisted?.RulesetId;
         string? fingerprint = persisted?.Fingerprint;
 
         if (persisted is not null)
         {
-            // The persistence store is an owner, not an authorizer. A verified
-            // native/DM acquisition and replay-safe transition service must be
-            // in place before projecting the saved supernatural state.
+            // A persisted acquisition is ownership, not entitlement. The
+            // second host reads the authoritative record independently before
+            // accepting any form or source receipt.
             issues.Add("supernatural-acquisition-authority-unavailable");
             try
             {
-                // A persisted ruleset identity is a pin, not proof that the
-                // native catalog still contains the same definitions. Report
-                // mismatch even though source authority is not yet installed.
+                var before = await supernatural.GetAuthoritativeInputsFingerprintAsync(
+                    id, cancellationToken);
                 var metadata = await core.GetNativeRulesetAsync(cancellationToken);
                 var nativeRuleset = metadata["rulesetId"]?.GetValue<string>();
                 var nativeFingerprint = metadata["fingerprint"]?.GetValue<string>();
@@ -91,21 +93,78 @@ public sealed class CharacterEffectiveStateService(
                     string.IsNullOrWhiteSpace(nativeRuleset) ||
                     string.IsNullOrWhiteSpace(nativeFingerprint))
                     issues.Add("native-ruleset-unavailable");
+                else if (persisted.RulesetId != nativeRuleset ||
+                    persisted.Fingerprint != nativeFingerprint)
+                    issues.Add("supernatural-native-content-changed");
+                else if (origin.SavedState is { } originState &&
+                    (originState.RulesetId != nativeRuleset ||
+                     originState.Fingerprint != nativeFingerprint))
+                    issues.Add("authorized-origin-native-content-changed");
                 else
                 {
-                    if (persisted.RulesetId != nativeRuleset ||
-                        persisted.Fingerprint != nativeFingerprint)
-                        issues.Add("supernatural-native-content-changed");
-                    if (origin.SavedState is { } originState &&
-                        (originState.RulesetId != nativeRuleset ||
-                         originState.Fingerprint != nativeFingerprint))
-                        issues.Add("authorized-origin-native-content-changed");
+                    var primary = CharacterNativePrimaryStateAdapter.Assemble(
+                        id, build.View, state.View, origin.SavedState,
+                        nativeRuleset, nativeFingerprint);
+                    issues.AddRange(primary.Issues);
+                    if (before is null || !primary.TransitionInputsVerified ||
+                        primary.Mechanics is null)
+                        issues.Add("verified-primary-state-unavailable");
+                    else
+                    {
+                        using var sheets = JsonDocument.Parse(persisted.AlternateSheetsJson);
+                        using var influences = JsonDocument.Parse(persisted.PersistentInfluencesJson);
+                        using var ledger = JsonDocument.Parse(persisted.LedgerJson);
+                        var request = JsonSerializer.SerializeToElement(new
+                        {
+                            state = new
+                            {
+                                characterId = id.ToString("D"),
+                                primaryMechanics = primary.Mechanics.Value,
+                                alternateSheets = sheets.RootElement,
+                                persistentInfluences = influences.RootElement
+                            },
+                            ledger = ledger.RootElement
+                        }, Wire);
+                        var response = await core.EvaluateVerifiedManifestationStateAsync(
+                            request, cancellationToken);
+                        var after = await supernatural.GetAuthoritativeInputsFingerprintAsync(
+                            id, cancellationToken);
+                        if (after is null || before != after)
+                            issues.Add("authoritative-inputs-changed-during-resolution");
+                        else if (response["contractVersion"]?.GetValue<int>() != 1 ||
+                            response["supportedScope"]?.GetValue<string>() !=
+                                "verified-manifestations" ||
+                            response["rulesetId"]?.GetValue<string>() != nativeRuleset ||
+                            response["fingerprint"]?.GetValue<string>() != nativeFingerprint ||
+                            response["effectiveMechanicsReady"]?.GetValue<bool>() != false ||
+                            response["status"]?.GetValue<string>() is not "partial" ||
+                            response["projection"] is not JsonObject native ||
+                            native["effectiveCharacter"]?["effectiveSheetId"] is not JsonValue selected ||
+                            !selected.TryGetValue<string>(out var sheetId) ||
+                            !VerifySelectedManifestation(sheetId, native["effectiveCharacter"],
+                                sheets.RootElement, ledger.RootElement, out var instanceId))
+                            issues.Add("native-state-response-unverified");
+                        else
+                        {
+                            // This is an independently authorized effective
+                            // read, but Class features, Origin applicability,
+                            // equipment and mutable HP policies are still partial.
+                            projection = native.DeepClone();
+                            effectiveSheetId = sheetId;
+                            activeManifestationId = instanceId;
+                            issues.Remove("supernatural-acquisition-authority-unavailable");
+                        }
+                    }
                 }
             }
-            catch (Exception error) when (error is RulesCoreGatewayException or
-                JsonException or InvalidOperationException or FormatException)
+            catch (RulesCoreGatewayException)
             {
-                issues.Add("native-ruleset-unavailable");
+                issues.Add("verified-manifestation-read-unavailable");
+            }
+            catch (Exception error) when (error is JsonException or
+                InvalidOperationException or FormatException or ArgumentException)
+            {
+                issues.Add("native-state-response-unverified");
             }
         }
         else
@@ -184,6 +243,61 @@ public sealed class CharacterEffectiveStateService(
             projection is null ? "unresolved" : "partial",
             ruleset, fingerprint, origin.SavedState?.Revision,
             persisted?.Revision, persisted?.LedgerRevision ?? 0,
-            "@primary", null, false, projection, issues));
+            effectiveSheetId, activeManifestationId, false, projection, issues));
     }
+
+    private static bool VerifySelectedManifestation(
+        string effectiveSheetId, JsonNode? effective,
+        JsonElement sheets, JsonElement ledger, out string? instanceId)
+    {
+        instanceId = null;
+        if (effective is not JsonObject || sheets.ValueKind != JsonValueKind.Array ||
+            ledger.ValueKind != JsonValueKind.Object ||
+            !ledger.TryGetProperty("instances", out var instances) ||
+            instances.ValueKind != JsonValueKind.Array)
+            return false;
+
+        if (effectiveSheetId != "@primary" &&
+            !sheets.EnumerateArray().Any(sheet =>
+                sheet.ValueKind == JsonValueKind.Object &&
+                sheet.TryGetProperty("id", out var id) &&
+                id.ValueKind == JsonValueKind.String &&
+                id.GetString() == effectiveSheetId))
+            return false;
+
+        var value = effective["manifestationInstanceId"];
+        if (value is null)
+            return effectiveSheetId == "@primary";
+        if (value is not JsonValue selected ||
+            !selected.TryGetValue<string>(out var idValue) ||
+            string.IsNullOrWhiteSpace(idValue))
+            return false;
+
+        // The response's active form must refer to an actually persisted,
+        // active and contributing instance of the selected acquired sheet.
+        var matching = instances.EnumerateArray().Where(item =>
+            item.ValueKind == JsonValueKind.Object &&
+            item.TryGetProperty("id", out var id) &&
+            id.ValueKind == JsonValueKind.String && id.GetString() == idValue &&
+            item.TryGetProperty("sheetId", out var sheet) &&
+            sheet.ValueKind == JsonValueKind.String &&
+            sheet.GetString() == effectiveSheetId).ToArray();
+        if (matching.Length != 1 || effectiveSheetId == "@primary")
+            return false;
+        var instance = matching[0];
+        if (!instance.TryGetProperty("lifecycle", out var life) ||
+            !instance.TryGetProperty("contribution", out var contribution) ||
+            !EnumIsActive(life) || !EnumIsContributing(contribution))
+            return false;
+        instanceId = idValue;
+        return true;
+    }
+
+    private static bool EnumIsActive(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n) && n == 0 ||
+        value.ValueKind == JsonValueKind.String && value.GetString() == "Active";
+
+    private static bool EnumIsContributing(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n) && n == 0 ||
+        value.ValueKind == JsonValueKind.String && value.GetString() == "Contributing";
 }

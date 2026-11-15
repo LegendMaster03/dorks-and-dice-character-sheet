@@ -29,6 +29,16 @@ public interface INativeRulesCoreGateway
             "Verified manifestation planning is unsupported by this gateway."));
 
     /// <summary>
+    /// Authenticated read of persistent manifestations. Rules Core requires a
+    /// separate independently verifying host source provider. Without it, a
+    /// stored form or an echoed receipt must never become playable mechanics.
+    /// </summary>
+    Task<JsonNode> EvaluateVerifiedManifestationStateAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Verified manifestation reads are unsupported by this gateway."));
+
+    /// <summary>
     /// Authenticated server-owned primary character effective-state evaluation.
     /// Rejects all supernatural entitlements until independently verified.
     /// </summary>
