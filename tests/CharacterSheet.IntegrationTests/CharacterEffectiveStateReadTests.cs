@@ -379,7 +379,12 @@ public sealed class CharacterEffectiveStateReadTests
         var persisted = (await saved.GetAsync(id))!;
         Assert.Equal(1, persisted.Revision);
         Assert.Equal(0, persisted.LedgerRevision);
-        Assert.Equal(committedLedger, persisted.LedgerJson);
+        // PostgreSQL JSONB canonicalizes property order/spacing on storage.
+        // Compare the actual ledger data, not its original wire formatting.
+        using var expectedLedger = JsonDocument.Parse(committedLedger);
+        using var actualLedger = JsonDocument.Parse(persisted.LedgerJson);
+        Assert.True(JsonElement.DeepEquals(expectedLedger.RootElement,
+            actualLedger.RootElement));
         using var ledger = JsonDocument.Parse(persisted.LedgerJson);
         var pool = Assert.Single(ledger.RootElement.GetProperty("resources").EnumerateArray());
         Assert.Equal(0, pool.GetProperty("ownerKind").GetInt32());
