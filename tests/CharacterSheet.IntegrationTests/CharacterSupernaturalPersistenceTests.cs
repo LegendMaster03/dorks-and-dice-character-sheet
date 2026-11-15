@@ -146,6 +146,44 @@ public sealed class CharacterSupernaturalPersistenceTests
     }
 
     [Fact]
+    public async Task DowngradingAfterAuditedTransitionCannotSilentlyDiscardStepHistory()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+        var command = Write(id, digest, 1, 0, 1, "enter:wolf", transition: true);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(command)).Status);
+
+        var migrator = db.Database.GetService<IMigrator>();
+        var beforeAudit = "20261115010000_AddCharacterSupernaturalState";
+        var auditMigration = "20261115020000_AddSupernaturalTransitionRequestAudit";
+        var downgrade = await Record.ExceptionAsync(
+            () => migrator.MigrateAsync(beforeAudit));
+        Assert.NotNull(downgrade);
+        Assert.Contains("Cannot downgrade supernatural transition audit",
+            downgrade.ToString(), StringComparison.Ordinal);
+        Assert.Contains(auditMigration, await db.Database.GetAppliedMigrationsAsync());
+
+        // A rejected schema downgrade must not damage the originally
+        // committed ledger, event identities or the JSONB transition audit.
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var persisted = new PostgresCharacterSupernaturalStateStore(reload);
+        var state = (await persisted.GetAsync(id))!;
+        Assert.Equal(2, state.Revision);
+        Assert.Equal(1, state.LedgerRevision);
+        var receipts = await persisted.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        Assert.Null(receipts[0].TransitionRequestJson);
+        using var actual = JsonDocument.Parse(receipts[1].TransitionRequestJson!);
+        using var expected = JsonDocument.Parse(command.TransitionRequestJson!);
+        Assert.True(JsonElement.DeepEquals(expected.RootElement, actual.RootElement));
+    }
+
+    [Fact]
     public async Task OrdinaryCharacterNeedsNoSyntheticStateAndExistingDataSurvivesMigration()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();

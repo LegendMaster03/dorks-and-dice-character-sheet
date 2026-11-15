@@ -25,6 +25,25 @@ public partial class AddSupernaturalTransitionRequestAudit : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        // Once an audited transition has committed, dropping this column would
+        // silently erase the only durable record of its ordered, source-verified
+        // actions. Allow rollback on empty/legacy-only databases, but require an
+        // explicit data-preserving migration plan for real audited histories.
+        migrationBuilder.Sql(
+            """
+            DO $guard$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM character_supernatural_event_receipts
+                    WHERE "TransitionRequestJson" IS NOT NULL
+                ) THEN
+                    RAISE EXCEPTION
+                        'Cannot downgrade supernatural transition audit: verified event steps would be lost';
+                END IF;
+            END
+            $guard$;
+            """);
+
         migrationBuilder.DropColumn(
             name: "TransitionRequestJson",
             table: "character_supernatural_event_receipts");
