@@ -44,15 +44,19 @@ ledger character ID and revision, duplicate owned IDs and event identity.
 Inside a PostgreSQL serializable transaction it locks the canonical character
 root, compares a digest of authoritative Class, Origin, ability, rules, HP,
 condition, inventory and other relevant input rows, compares supernatural
-state and ledger revisions, writes the new state, inserts the unique event
-receipt and commits. PostgreSQL serialization failures are returned as
+state and ledger revisions, validates previous receipts against the committed
+ledger, writes the new state, inserts the unique event receipt and commits. PostgreSQL serialization failures are returned as
 conflicts, including exceptions wrapped by EF Core.
 
 The ordered transition audit is written inside the same serializable
 transaction as the proposed ledger and immutable event receipt. A missing
 or mismatched audit rejects the entire write before changing the character.
 Old pre-audit event receipts can still load; absent steps can not be inferred
-from a processed event ID or a post-transition snapshot.
+from a processed event ID or a post-transition snapshot. The migration's Down
+operation refuses to drop its JSONB audit column once any receipt contains
+recorded transition steps. Empty and legacy-only histories can still downgrade;
+an audited database needs a separate data-preserving recovery procedure rather
+than silent destruction of immutable source evidence.
 
 Interaction decisions are also bound to the ordered transition
 audit. When the request does not include a replacement interaction set, the
@@ -61,6 +65,15 @@ contain exactly the recorded replacement set. A normal form change does not
 implicitly approve a new coexistence, suppression or replacement ruling.
 As with the rest of the history guard, this protects the commit boundary
 without authorizing a native or DM decision on its own.
+
+The database also checks historical receipt and ledger continuity before
+any new acquisition or transition. Existing receipts must have one
+contiguous state revision each; transition receipts alone advance the ledger
+revision, and their event IDs must exactly match the ordered
+`processedEventIds` journal. Corrupted event kind, revision, missing receipt
+or reordered history rejects the new command under the canonical character
+lock. This remains structural evidence integrity, not independent acquisition
+or DM authorization.
 
 The database now additionally enforces historical continuity. A first
 acquisition can not fabricate an already-active manifestation. A form
@@ -207,6 +220,13 @@ An archived character may read but does not gain mutation rights.
   A verified active-Wolf read after primary Class advancement confirms that
   current primary Level and ability scores inherit dynamically, without
   rewriting persistent Wolf progression or the active manifestation ledger.
+  An additional controlled test runs a source-verified manifestation-owned
+  resource pool through real Core planning, atomic PostgreSQL activation,
+  effective-state read, reversion, and later reentry. It verifies separate
+  owner identity, current/recorded/effective maximum, no balance transfer to a
+  new activation, unchanged read-only ledger and receipt durability after
+  service restart. The resource authority exists only in the synthetic
+  fixture; no production resource grant is being inferred.
   A deliberately invalid two-step Wolf switch verifies that a successful
   End step is not persisted when a later Activate is rejected. Character
   Sheet recognizes only bounded, protocol-defined Rules Core error codes.
@@ -221,7 +241,10 @@ An archived character may read but does not gain mutation rights.
 * New PostgreSQL audit tests verify that a source-verified ordered
   transition request survives service/context reload, malformed or mismatched
   step audits leave no partial write, and acquisition cannot impersonate a
-  transition event. The real Rules Core integration asserts that the
+  transition event. Additive migration tests cover upgrade, legacy-only
+  rollback and rejection of an audit-destroying downgrade. Corruption tests
+  change historical receipt kinds and revisions directly in PostgreSQL;
+  subsequent writes fail until the original journal history is restored. The real Rules Core integration asserts that the
   Wolf-to-Hybrid switch persists its exact End and Activate steps, source
   occurrence and per-step evidence in one receipt.
 * Additional PostgreSQL tests exercise immutable activation receipts,
