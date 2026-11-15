@@ -117,19 +117,11 @@ public sealed class CharacterEffectiveStateService(
                 ruleset = metadata["rulesetId"]?.GetValue<string>();
                 fingerprint = metadata["fingerprint"]?.GetValue<string>();
 
-                var classes = build.View.ProgressionEntries
-                    .Where(x => x.Kind == CharacterBuildAdvancementKinds.Class &&
-                        x.Level is > 0 &&
-                        x.RuleConceptKey.StartsWith("class.", StringComparison.Ordinal))
-                    .ToArray();
-                var abilities = build.View.BaseAbilityScoreInputs
-                    .GroupBy(x => x.AbilityKey, StringComparer.Ordinal)
-                    .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.UpdatedAt).First().Score,
-                        StringComparer.Ordinal);
-                var choices = NativeCharacterOptionSelections.FromState(state.View);
-                if (classes.Length != build.View.ProgressionEntries.Count ||
-                    abilities.Count != build.View.BaseAbilityScoreInputs.Count ||
-                    choices.HasUnmappedChoices)
+                var primary = CharacterNativePrimaryStateAdapter.Assemble(
+                    id, build.View, state.View, origin.SavedState,
+                    ruleset ?? "", fingerprint ?? "");
+                issues.AddRange(primary.Issues);
+                if (primary.Mechanics is null)
                     issues.Add("native-primary-inputs-unresolved");
                 else if (before is null || string.IsNullOrWhiteSpace(ruleset) ||
                     string.IsNullOrWhiteSpace(fingerprint) ||
@@ -141,25 +133,15 @@ public sealed class CharacterEffectiveStateService(
                     issues.Add("authorized-origin-native-content-changed");
                 else
                 {
-                    // All primary fields here come from authenticated Character
-                    // Sheet stores. Omit unsupported resources and Origin-derived
-                    // grants rather than representing them as free entitlements.
+                    // Unsupported independent progression and equipment effects
+                    // remain visible in Unresolved while the supported Class
+                    // subset is projected by the actual native kernel.
                     var input = JsonSerializer.SerializeToElement(new
                     {
                         state = new
                         {
                             characterId = id.ToString("D"),
-                            primaryMechanics = new
-                            {
-                                rulesetId = ruleset, fingerprint, abilityScores = abilities,
-                                advancements = classes.Select(x => new
-                                {
-                                    classId = x.RuleConceptKey,
-                                    level = x.Level!.Value,
-                                    occurrenceId = x.Id.ToString("D")
-                                }).ToArray(),
-                                selectedOptions = choices.Ids
-                            },
+                            primaryMechanics = primary.Mechanics.Value,
                             alternateSheets = Array.Empty<object>(),
                             persistentInfluences = Array.Empty<object>()
                         },

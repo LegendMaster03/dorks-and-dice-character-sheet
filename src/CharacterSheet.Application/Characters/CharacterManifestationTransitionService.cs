@@ -53,7 +53,10 @@ public sealed class CharacterManifestationTransitionService(
     ISiteCharacterAccessGateway site,
     ICharacterSupernaturalStateStore store,
     INativeRulesCoreGateway rules,
-    ITrustedCharacterManifestationTransitionSource source)
+    ITrustedCharacterManifestationTransitionSource source,
+    CharacterBuildService builds,
+    CharacterStateService routine,
+    CharacterOriginStateService origins)
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
 
@@ -113,6 +116,24 @@ public sealed class CharacterManifestationTransitionService(
             string.IsNullOrWhiteSpace(verified.AuthorizationEvidenceId) ||
             verified.AuthorizationEvidenceId.Length > 320 ||
             !MatchesVerifiedMaterial(verified, saved, characterId, expectedLedgerRevision, eventId))
+            return new(CharacterManifestationApplyStatus.SourceUnauthorized);
+
+        // A trusted supernatural source does not own the primary Character.
+        // Independently reconstruct its exact supported mechanics from the
+        // Character Sheet owner stores before forwarding any planning input.
+        // Do not permit a source to inject Class levels, abilities, resources,
+        // HP values, or an unverified Origin via a matching catalog pin.
+        var build = await builds.GetAsync(characterId, cancellationToken);
+        var routineState = await routine.GetAsync(characterId, cancellationToken);
+        var origin = await origins.GetAsync(characterId, cancellationToken);
+        if (build.Status != CharacterBuildAccessStatus.Ready || build.View is null ||
+            routineState.Status != CharacterStateAccessStatus.Ready ||
+            routineState.View is null || origin.Status != CharacterOriginReadStatus.Ready)
+            return new(CharacterManifestationApplyStatus.SourceUnauthorized);
+        var primary = CharacterNativePrimaryStateAdapter.Assemble(
+            characterId, build.View, routineState.View, origin.SavedState,
+            saved.RulesetId, saved.Fingerprint);
+        if (!CharacterNativePrimaryStateAdapter.Matches(verified.PrimaryMechanics, primary))
             return new(CharacterManifestationApplyStatus.SourceUnauthorized);
 
         // Build the planner input from the current authoritative owner record.
