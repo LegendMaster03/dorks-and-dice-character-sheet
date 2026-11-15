@@ -277,4 +277,115 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Empty(view.View.AlternateSheets.AsArray());
         Assert.Empty(await db.SupernaturalStates.ToArrayAsync());
     }
+
+    [Fact]
+    public async Task ConcurrentPrimaryEffectiveReadsRemainReadOnlyAndIndependent()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using (var setup = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(id);
+        }
+
+        await using var first = new CharacterSheetDbContext(database.CreateOptions());
+        await using var second = new CharacterSheetDbContext(database.CreateOptions());
+        var firstCore = new NativeGateway();
+        var secondCore = new NativeGateway();
+        var before = await new PostgresCharacterSupernaturalStateStore(first)
+            .GetAuthoritativeInputsFingerprintAsync(id);
+
+        var a = Service(first, id, firstCore).GetAsync(id);
+        var b = Service(second, id, secondCore).GetAsync(id);
+        await Task.WhenAll(a, b);
+        foreach (var read in new[] { await a, await b })
+        {
+            Assert.Equal(CharacterEffectiveStateStatus.Ready, read.Status);
+            Assert.Equal("partial", read.View!.Status);
+            Assert.False(read.View.EffectiveMechanicsReady);
+            Assert.Equal("@primary", read.View.EffectiveSheetId);
+        }
+        Assert.Equal(1, firstCore.Calls);
+        Assert.Equal(1, secondCore.Calls);
+        await using var afterContext = new CharacterSheetDbContext(database.CreateOptions());
+        var after = new PostgresCharacterSupernaturalStateStore(afterContext);
+        Assert.Equal(before, await after.GetAuthoritativeInputsFingerprintAsync(id));
+        Assert.Null(await after.GetAsync(id));
+        Assert.Empty(await after.GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task ConcurrentSupernaturalEffectiveReadsDoNotAlterResourceOwnershipOrReceipts()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        string committedLedger;
+        await using (var setup = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(id);
+            var store = new PostgresCharacterSupernaturalStateStore(setup);
+            var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+            committedLedger = JsonSerializer.Serialize(new
+            {
+                characterId = id.ToString("D"), revision = 0,
+                instances = Array.Empty<object>(),
+                processedEventIds = Array.Empty<string>(),
+                resources = new[]
+                {
+                    new
+                    {
+                        id = "pool.primary", definitionId = "pool.synthetic",
+                        sourceOccurrence = new
+                        {
+                            source = new { kind = 0, id = "synthetic.resource", version = "test-v1" },
+                            occurrencePath = "resources.primary"
+                        },
+                        evidenceId = "fixture:source-resource",
+                        ownerKind = 0, ownerId = "@primary", current = 3, maximum = 7
+                    }
+                }
+            });
+            Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+                (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                    id, Ruleset, Fingerprint, "[]", "[]", committedLedger,
+                    0, 0, 0, digest, "fixture:acquire-pool",
+                    "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+        }
+
+        await using var first = new CharacterSheetDbContext(database.CreateOptions());
+        await using var second = new CharacterSheetDbContext(database.CreateOptions());
+        var firstCore = new NativeGateway();
+        var secondCore = new NativeGateway();
+        var a = Service(first, id, firstCore).GetAsync(id);
+        var b = Service(second, id, secondCore).GetAsync(id);
+        await Task.WhenAll(a, b);
+        foreach (var read in new[] { await a, await b })
+        {
+            Assert.Equal(CharacterEffectiveStateStatus.Ready, read.Status);
+            Assert.Equal("unresolved", read.View!.Status);
+            Assert.False(read.View.EffectiveMechanicsReady);
+            Assert.Equal(1, read.View.SupernaturalRevision);
+            Assert.Null(read.View.ActiveManifestationId);
+        }
+        // Read-only paths do not invoke the primary-only adapter for stored
+        // supernatural ownership because acquisition is not yet reverified.
+        Assert.Equal(0, firstCore.Calls);
+        Assert.Equal(0, secondCore.Calls);
+
+        await using var afterContext = new CharacterSheetDbContext(database.CreateOptions());
+        var saved = new PostgresCharacterSupernaturalStateStore(afterContext);
+        var persisted = (await saved.GetAsync(id))!;
+        Assert.Equal(1, persisted.Revision);
+        Assert.Equal(0, persisted.LedgerRevision);
+        Assert.Equal(committedLedger, persisted.LedgerJson);
+        using var ledger = JsonDocument.Parse(persisted.LedgerJson);
+        var pool = Assert.Single(ledger.RootElement.GetProperty("resources").EnumerateArray());
+        Assert.Equal(0, pool.GetProperty("ownerKind").GetInt32());
+        Assert.Equal("@primary", pool.GetProperty("ownerId").GetString());
+        Assert.Equal(3, pool.GetProperty("current").GetInt32());
+        Assert.Equal(7, pool.GetProperty("maximum").GetInt32());
+        Assert.Single(await saved.GetEventsAsync(id));
+    }
 }

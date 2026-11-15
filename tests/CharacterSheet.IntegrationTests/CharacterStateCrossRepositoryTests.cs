@@ -745,7 +745,12 @@ public sealed class CharacterStateCrossRepositoryTests
 
         // A replay through the application boundary can not append an
         // already-committed event or silently reconstruct a prior snapshot.
-        var replay = await service.ApplyAsync(id, saved.Revision, saved.LedgerRevision,
+        // Reconstruct the Character Sheet application service and PostgreSQL
+        // store in a fresh scope. The prior activation is recovered from the
+        // database, never from the former service instance's memory.
+        var resumedService = new CharacterManifestationTransitionService(
+            new OwnerAccess(id), durable, gateway, source);
+        var replay = await resumedService.ApplyAsync(id, saved.Revision, saved.LedgerRevision,
             "enter:wolf", "enter:wolf");
         Assert.NotEqual(CharacterManifestationApplyStatus.Applied, replay.Status);
         Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
