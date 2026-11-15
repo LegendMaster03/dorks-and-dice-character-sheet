@@ -4,6 +4,8 @@ using CharacterSheet.Application.Persistence;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CharacterSheet.IntegrationTests;
 
@@ -76,6 +78,72 @@ public sealed class CharacterSupernaturalPersistenceTests
                 }
             }
         });
+
+
+    [Fact]
+    public async Task AdditiveAuditMigrationPreservesUnauditedHistoryAndSupportsRollback()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var migrator = db.Database.GetService<IMigrator>();
+        var beforeAudit = "20261115010000_AddCharacterSupernaturalState";
+        var auditMigration = "20261115020000_AddSupernaturalTransitionRequestAudit";
+        await migrator.MigrateAsync(beforeAudit);
+        var id = Guid.NewGuid();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+
+        // Seed the original schema using SQL. The current EF receipt model
+        // necessarily includes the added column and must not write into the
+        // pre-migration table. These are real old-format persisted receipts.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO character_supernatural_states (
+                "CharacterId", "ContractVersion", "RulesetId", "Fingerprint",
+                "AlternateSheetsJson", "PersistentInfluencesJson", "LedgerJson",
+                "LedgerRevision", "DependencyFingerprint", "Revision",
+                "CreatedAt", "UpdatedAt")
+            VALUES (
+                {id}, {1}, {"first-party-001"}, {"test-native-catalog"},
+                CAST({"[]"} AS jsonb), CAST({"[]"} AS jsonb),
+                CAST({Ledger(id, 1, "enter:legacy")} AS jsonb),
+                {1L}, {new string('a', 64)}, {2L}, {Now}, {Now})
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO character_supernatural_event_receipts (
+                "CharacterId", "EventId", "CommittedRevision",
+                "LedgerRevision", "Kind", "AuthorizationEvidenceId",
+                "CreatedAt")
+            VALUES ({id}, {"acquire:legacy"}, {1L}, {0L},
+                {"acquisition"}, {"fixture:legacy-source"}, {Now}),
+                ({id}, {"enter:legacy"}, {2L}, {1L},
+                {"transition"}, {"fixture:legacy-source"}, {Now})
+            """);
+        Assert.DoesNotContain(auditMigration,
+            await db.Database.GetAppliedMigrationsAsync());
+
+        await migrator.MigrateAsync();
+        Assert.Contains(auditMigration, await db.Database.GetAppliedMigrationsAsync());
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var receipts = await store.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        Assert.All(receipts, x => Assert.Null(x.TransitionRequestJson));
+        Assert.Equal("transition", receipts[1].Kind);
+        Assert.Equal("enter:legacy", receipts[1].EventId);
+        Assert.Equal(2, (await store.GetAsync(id))!.Revision);
+
+        // Rollback removes only the additive column; no prior character
+        // identity, ledger or receipt may be removed or rewritten.
+        await migrator.MigrateAsync(beforeAudit);
+        Assert.DoesNotContain(auditMigration,
+            await db.Database.GetAppliedMigrationsAsync());
+        await migrator.MigrateAsync();
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var after = new PostgresCharacterSupernaturalStateStore(reload);
+        Assert.Equal(2, (await after.GetAsync(id))!.Revision);
+        var restored = await after.GetEventsAsync(id);
+        Assert.Equal(new[] { "acquire:legacy", "enter:legacy" },
+            restored.Select(x => x.EventId));
+        Assert.All(restored, x => Assert.Null(x.TransitionRequestJson));
+    }
 
     [Fact]
     public async Task OrdinaryCharacterNeedsNoSyntheticStateAndExistingDataSurvivesMigration()
