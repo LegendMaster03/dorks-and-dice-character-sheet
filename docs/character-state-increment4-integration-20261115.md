@@ -140,10 +140,25 @@ character may read but does not gain mutation rights.
   ability scores, reentry,
   atomic switching, preserved grant provenance, reload and event history,
   and denial when the host verifier is absent or the user is archived.
+  A deliberately invalid two-step Wolf switch verifies that a successful
+  End step is not persisted when a later Activate is rejected. Character
+  Sheet classifies deterministic Core HTTP 400/409/422 plan refusals as
+  unresolved plans rather than as transport outages.
   This is a synthetic validation slice, not playable first-party rules.
 * Additional PostgreSQL tests exercise immutable activation receipts,
   reversion history, duplicate/reordered events, attempted progression
   replacement, unauthorized resource mutation and separate acquisition.
+* Effective-state concurrency tests run two independent application contexts
+  against real PostgreSQL, verifying that ordinary reads neither create state
+  nor alter primary inputs and that concurrent reads of stored supernatural
+  resources do not change resource quantities, owners, revisions or receipts.
+* Fresh-context construction of the transition service verifies that a prior
+  manifestation remains stored after the former application service instance
+  is replaced; it is not reconstructed from in-memory activation state.
+* A saved Origin or supernatural record pinned to an older native catalog
+  fingerprint is reported as `authorized-origin-native-content-changed` or
+  `supernatural-native-content-changed`. Such reads remain unresolved and
+  can not elevate stored evidence into current mechanical authority.
 
 These tests do **not** substitute for the requested real end-to-end
 authenticated Werewolf/Wolf/Hybrid acquisition and transition tests.
