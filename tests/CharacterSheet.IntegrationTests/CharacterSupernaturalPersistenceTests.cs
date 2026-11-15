@@ -378,6 +378,64 @@ public sealed class CharacterSupernaturalPersistenceTests
     }
 
     [Fact]
+    public async Task CorruptHistoricalReceiptsCannotAuthorizeAnotherSupernaturalCommit()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 1,
+                "enter:wolf", transition: true))).Status);
+        var before = (await store.GetAsync(id))!;
+        var next = Write(id, digest, 2, 1, 1, "acquire:later",
+            ledger: before.LedgerJson);
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE character_supernatural_event_receipts
+            SET "Kind" = {"acquisition"}
+            WHERE "CharacterId" = {id} AND "EventId" = {"enter:wolf"}
+            """);
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CommitVerifiedAsync(next));
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE character_supernatural_event_receipts
+            SET "Kind" = {"transition"}, "LedgerRevision" = {0L}
+            WHERE "CharacterId" = {id} AND "EventId" = {"enter:wolf"}
+            """);
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CommitVerifiedAsync(next));
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE character_supernatural_event_receipts
+            SET "LedgerRevision" = {1L}, "CommittedRevision" = {4L}
+            WHERE "CharacterId" = {id} AND "EventId" = {"enter:wolf"}
+            """);
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CommitVerifiedAsync(next));
+
+        // Failed writes never changed the authoritative state or journal.
+        Assert.Equal(before.Revision, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(before.LedgerJson, (await store.GetAsync(id))!.LedgerJson);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE character_supernatural_event_receipts
+            SET "CommittedRevision" = {2L}
+            WHERE "CharacterId" = {id} AND "EventId" = {"enter:wolf"}
+            """);
+        var applied = await store.CommitVerifiedAsync(next);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied, applied.Status);
+        Assert.Equal(3, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(1, (await store.GetAsync(id))!.LedgerRevision);
+        Assert.Equal(new[] { "acquire:wolf", "enter:wolf", "acquire:later" },
+            (await store.GetEventsAsync(id)).Select(x => x.EventId));
+    }
+
+    [Fact]
     public async Task MalformedAndDuplicateOwnerRecordsDoNotWriteAnyRows()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();

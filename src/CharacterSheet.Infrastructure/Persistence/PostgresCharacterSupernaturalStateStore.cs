@@ -93,6 +93,16 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 return new(CharacterSupernaturalWriteStatus.LedgerRevisionConflict,
                     existing?.Revision, existing?.LedgerRevision);
 
+            // Even a matching ledger revision does not prove that the stored
+            // processed-event history matches the immutable database receipts.
+            // Validate both source-of-truth records under the character lock
+            // before permitting another acquisition or form transition.
+            var previousReceipts = await db.SupernaturalEventReceipts.AsNoTracking()
+                .Where(x => x.CharacterId == command.CharacterId)
+                .OrderBy(x => x.CommittedRevision)
+                .ToArrayAsync(cancellationToken);
+            ValidateCommittedReceiptHistory(existing, previousReceipts);
+
             // Compare the proposed snapshot to what is actually persisted under
             // the same lock. Revision checks alone can not detect rewritten
             // acquisition history or dropped manifestation event identities.
@@ -158,6 +168,85 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
         }
     }
 
+
+    /// <summary>
+    /// Ensures that immutable event receipts are an exact history of the
+    /// previously committed ledger, including acquisition-only revisions.
+    /// This is deliberately limited to structural continuity. It does not
+    /// turn a receipt or a stored evidence string into an acquisition or DM
+    /// entitlement, which still requires an independent source verifier.
+    /// </summary>
+    private static void ValidateCommittedReceiptHistory(
+        CharacterSupernaturalState? existing,
+        IReadOnlyList<CharacterSupernaturalEventReceipt> receipts)
+    {
+        if (existing is null)
+        {
+            if (receipts.Count != 0)
+                throw new ArgumentException(
+                    "A missing supernatural owner has orphaned event receipts.");
+            return;
+        }
+
+        if (existing.Revision != receipts.Count)
+            throw new ArgumentException(
+                "Supernatural state revisions do not match immutable event receipts.");
+
+        var transitionEvents = new List<string>();
+        long ledgerRevision = 0;
+        for (var index = 0; index < receipts.Count; index++)
+        {
+            var receipt = receipts[index];
+            if (receipt.CharacterId != existing.CharacterId ||
+                receipt.CommittedRevision != index + 1)
+                throw new ArgumentException(
+                    "Supernatural event receipt revisions are noncontiguous.");
+
+            switch (receipt.Kind)
+            {
+                case "transition":
+                    if (ledgerRevision == long.MaxValue)
+                        throw new ArgumentException(
+                            "Supernatural ledger revision overflow.");
+                    ledgerRevision++;
+                    transitionEvents.Add(receipt.EventId);
+                    break;
+                case "acquisition":
+                    if (receipt.TransitionRequestJson is not null)
+                        throw new ArgumentException(
+                            "An acquisition receipt can not contain a transition step audit.");
+                    break;
+                default:
+                    throw new ArgumentException(
+                        "The supernatural receipt has an unknown event kind.");
+            }
+
+            if (receipt.LedgerRevision != ledgerRevision)
+                throw new ArgumentException(
+                    "Supernatural event receipt ledger revisions are not sequential.");
+        }
+
+        if (ledgerRevision != existing.LedgerRevision)
+            throw new ArgumentException(
+                "Supernatural ledger revision conflicts with committed event history.");
+
+        using var document = JsonDocument.Parse(existing.LedgerJson);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("characterId", out var owner) ||
+            owner.ValueKind != JsonValueKind.String ||
+            owner.GetString() != existing.CharacterId.ToString("D") ||
+            !root.TryGetProperty("revision", out var storedRevision) ||
+            storedRevision.ValueKind != JsonValueKind.Number ||
+            !storedRevision.TryGetInt64(out var revision) ||
+            revision != ledgerRevision ||
+            !root.TryGetProperty("processedEventIds", out var journal) ||
+            journal.ValueKind != JsonValueKind.Array ||
+            !journal.EnumerateArray().Select(x => x.ValueKind == JsonValueKind.String
+                ? x.GetString() : null).SequenceEqual(transitionEvents, StringComparer.Ordinal))
+            throw new ArgumentException(
+                "The supernatural ledger does not match its immutable transition receipts.");
+    }
 
     /// <summary>
     /// Validate the complete source-verified transition request supplied by the
