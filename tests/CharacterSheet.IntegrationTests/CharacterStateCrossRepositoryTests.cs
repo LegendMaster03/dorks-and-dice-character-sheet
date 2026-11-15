@@ -211,6 +211,21 @@ public sealed class CharacterStateCrossRepositoryTests
             new PostgresCharacterSupernaturalStateStore(db), gateway);
     }
 
+
+    private static CharacterManifestationTransitionService TransitionRunner(
+        CharacterSheetDbContext db, ISiteCharacterAccessGateway site,
+        ICharacterSupernaturalStateStore store, RealGateway gateway,
+        ITrustedCharacterManifestationTransitionSource source)
+    {
+        var buildStore = new PostgresCharacterBuildStore(db);
+        return new CharacterManifestationTransitionService(site, store, gateway, source,
+            new CharacterBuildService(site, buildStore, TimeProvider.System),
+            new CharacterStateService(site, new PostgresCharacterStateStore(db),
+                TimeProvider.System),
+            new CharacterOriginStateService(site, buildStore,
+                new PostgresCharacterAuthorizedOriginStore(db)));
+    }
+
     [Fact]
     public async Task OwnedPrimaryCharacterUsesRealNativeHttpAndPostgresWithoutMutatingState()
     {
@@ -657,7 +672,7 @@ public sealed class CharacterStateCrossRepositoryTests
                 false, DateTimeOffset.UtcNow))).Status);
 
         var source = new SyntheticTrustedSource(state);
-        var service = new CharacterManifestationTransitionService(
+        var service = TransitionRunner(db,
             new OwnerAccess(id), store, gateway, source);
 
         async Task<NativeManifestationEffectiveCharacter> Execute(string eventId)
@@ -675,6 +690,26 @@ public sealed class CharacterStateCrossRepositoryTests
                 (await store.GetAsync(id))!.LedgerJson, Wire)!;
             return effective;
         }
+
+
+        // Even a policy that the host normally trusts may not rewrite primary
+        // ability scores. Character Sheet reconstructs them from its own rows.
+        var forgedScores = state.PrimaryMechanics.AbilityScores
+            .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
+        forgedScores["strength"] = 99;
+        source.Current = state with
+        {
+            PrimaryMechanics = state.PrimaryMechanics with
+            {
+                AbilityScores = forgedScores
+            }
+        };
+        var forged = await service.ApplyAsync(id, 1, 0,
+            "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized, forged.Status);
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+        source.Current = state;
 
         var wolf = await Execute("enter:wolf");
         Assert.Equal("wolf", wolf.EffectiveSheetId);
@@ -746,14 +781,14 @@ public sealed class CharacterStateCrossRepositoryTests
         using var journal = JsonDocument.Parse(saved.LedgerJson);
         Assert.Equal(3, journal.RootElement.GetProperty("instances").GetArrayLength());
         Assert.Equal(4, journal.RootElement.GetProperty("processedEventIds").GetArrayLength());
-        Assert.Equal(5, source.Calls);
+        Assert.Equal(6, source.Calls);
 
         // A replay through the application boundary can not append an
         // already-committed event or silently reconstruct a prior snapshot.
         // Reconstruct the Character Sheet application service and PostgreSQL
         // store in a fresh scope. The prior activation is recovered from the
         // database, never from the former service instance's memory.
-        var resumedService = new CharacterManifestationTransitionService(
+        var resumedService = TransitionRunner(reloaded,
             new OwnerAccess(id), durable, gateway, source);
         var replay = await resumedService.ApplyAsync(id, saved.Revision, saved.LedgerRevision,
             "enter:wolf", "enter:wolf");
@@ -792,7 +827,7 @@ public sealed class CharacterStateCrossRepositoryTests
                 false, DateTimeOffset.UtcNow))).Status);
 
         var actions = new SyntheticTrustedSource(state);
-        var active = new CharacterManifestationTransitionService(
+        var active = TransitionRunner(db,
             new OwnerAccess(id), store, gateway, actions);
 
         var missingAuthority = await active.ApplyAsync(id, 1, 0,
@@ -817,12 +852,12 @@ public sealed class CharacterStateCrossRepositoryTests
             staleLedger.Status);
         Assert.Equal(2, actions.Calls);
 
-        var archived = new CharacterManifestationTransitionService(
+        var archived = TransitionRunner(db,
             new OwnerAccess(id, lifecycle: SiteCharacterLifecycleState.Archived),
             store, gateway, actions);
         Assert.Equal(CharacterManifestationApplyStatus.ArchivedReadOnly,
             (await archived.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
-        var notOwned = new CharacterManifestationTransitionService(
+        var notOwned = TransitionRunner(db,
             new OwnerAccess(id, authorize: false), store, gateway, actions);
         Assert.Equal(CharacterManifestationApplyStatus.NotFoundOrNotOwned,
             (await notOwned.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);

@@ -453,4 +453,33 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(1, (await store.GetAsync(id))!.Revision);
         Assert.Single(await store.GetEventsAsync(id));
     }
+
+    [Fact]
+    public async Task IndependentFeatDoesNotEraseSupportedClassProjection()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        var cls = (await build.SetStartingClassAsync(id, "class.barbarian",
+            DateTimeOffset.UtcNow))!;
+        var occurrence = Assert.Single(cls.AdvancementEntries,
+            x => x.Kind == CharacterSheet.Domain.Characters.CharacterAdvancementKind.Class);
+        await build.SetAdvancementLevelAsync(id, occurrence.Id, 2,
+            DateTimeOffset.UtcNow);
+        await build.AddFeatOccurrenceAsync(id, "feat.fixture",
+            DateTimeOffset.UtcNow);
+
+        var native = new NativeGateway();
+        var result = await Service(db, id, native).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+        Assert.Equal("partial", result.View!.Status);
+        Assert.NotNull(result.View.NativeProjection);
+        Assert.False(result.View.EffectiveMechanicsReady);
+        Assert.Contains("nonclass-advancement-effects-unverified", result.View.Unresolved);
+        Assert.Equal(1, native.Calls);
+    }
+
 }
