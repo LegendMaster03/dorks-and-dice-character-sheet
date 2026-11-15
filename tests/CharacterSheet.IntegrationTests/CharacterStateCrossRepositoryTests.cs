@@ -446,6 +446,13 @@ public sealed class CharacterStateCrossRepositoryTests
             "receipt.transition." + eventId,
             EndingConditionId: "rule.synthetic.revert");
 
+    private static NativeManifestationTransitionStep Contribution(
+        NativeManifestationTransitionAction action, string instanceId,
+        string eventId) =>
+        new(action, instanceId, Occurrence("actions.contribution"),
+            SyntheticRule(), "receipt.transition." + eventId);
+
+
     private static NativeManifestationResourceState ControlledWolfResource() =>
         new("resource.wolf.1", "resource.definition.wolf",
             Occurrence("resources.wolf"), "receipt.resource.wolf.1",
@@ -651,6 +658,12 @@ public sealed class CharacterStateCrossRepositoryTests
                 "enter:resource-wolf" => [EnterWithResource(characterId, eventId)],
                 "revert:wolf" => [End("manifest.wolf.1", eventId)],
                 "revert:resource-wolf" => [End("manifest.wolf.1", eventId)],
+                "suppress:wolf" => [Contribution(
+                    NativeManifestationTransitionAction.Suppress,
+                    "manifest.wolf.1", eventId)],
+                "restore:wolf" => [Contribution(
+                    NativeManifestationTransitionAction.Restore,
+                    "manifest.wolf.1", eventId)],
                 "reenter:wolf" => [Enter(characterId, "wolf",
                     "manifest.wolf.2", eventId)],
                 "switch:hybrid" =>
@@ -1029,6 +1042,145 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.NotEqual(CharacterManifestationApplyStatus.Applied, denied.Status);
         Assert.Equal(unchanged.Revision, (await recovered.GetAsync(id))!.Revision);
         Assert.Equal(4, (await recovered.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task SuppressionAndRestorationPreserveResourceOwnershipWithoutNewActivation()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(provider, provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms());
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var (key, score) in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, key, score, DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var emptyLedger = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire), "[]",
+                JsonSerializer.Serialize(emptyLedger, Wire),
+                0, 0, 0, digest, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        var source = new SyntheticTrustedSource(state);
+        var service = TransitionRunner(db, new OwnerAccess(id), store, gateway, source);
+
+        async Task<(NativeManifestationEffectiveCharacter View,
+            CharacterSheet.Domain.Characters.CharacterSupernaturalState Snapshot)>
+            Execute(string eventId, bool shouldApply = true)
+        {
+            var before = (await store.GetAsync(id))!;
+            var response = await service.ApplyAsync(id, before.Revision,
+                before.LedgerRevision, eventId, eventId);
+            if (!shouldApply)
+            {
+                Assert.NotEqual(CharacterManifestationApplyStatus.Applied, response.Status);
+                var unchanged = (await store.GetAsync(id))!;
+                Assert.Equal(before.Revision, unchanged.Revision);
+                Assert.Equal(before.LedgerJson, unchanged.LedgerJson);
+                return (null!, unchanged);
+            }
+
+            Assert.Equal(CharacterManifestationApplyStatus.Applied, response.Status);
+            Assert.NotNull(response.EffectivePreview);
+            var current = (await store.GetAsync(id))!;
+            return (JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+                response.EffectivePreview!.ToJsonString(), Wire)!, current);
+        }
+
+        var activated = await Execute("enter:resource-wolf");
+        Assert.Equal("wolf", activated.View.EffectiveSheetId);
+        Assert.Single(activated.View.Resources);
+        Assert.Equal(3, activated.View.Resources[0].Current);
+        Assert.Equal(1, activated.Snapshot.LedgerRevision);
+
+        // Suppress changes contribution but does not end or recreate the
+        // activation. Resource balances and owner identity remain durable.
+        var suppressed = await Execute("suppress:wolf");
+        Assert.Equal("@primary", suppressed.View.EffectiveSheetId);
+        Assert.Empty(suppressed.View.Resources);
+        using (var journal = JsonDocument.Parse(suppressed.Snapshot.LedgerJson))
+        {
+            var instance = Assert.Single(journal.RootElement
+                .GetProperty("instances").EnumerateArray());
+            Assert.Equal(0, instance.GetProperty("lifecycle").GetInt32());
+            Assert.Equal(1, instance.GetProperty("contribution").GetInt32());
+            Assert.Equal("suppress:wolf",
+                instance.GetProperty("lastEventId").GetString());
+            var pool = Assert.Single(journal.RootElement
+                .GetProperty("resources").EnumerateArray());
+            Assert.Equal("manifest.wolf.1",
+                pool.GetProperty("ownerId").GetString());
+            Assert.Equal(3, pool.GetProperty("current").GetInt32());
+        }
+
+        await Execute("suppress:wolf", shouldApply: false);
+        var restored = await Execute("restore:wolf");
+        Assert.Equal("wolf", restored.View.EffectiveSheetId);
+        Assert.Equal("manifest.wolf.1", restored.View.ManifestationInstanceId);
+        Assert.Equal("manifest.wolf.1", Assert.Single(restored.View.Resources).OwnerId);
+        Assert.Equal(3, Assert.Single(restored.View.Resources).Current);
+        Assert.Equal(5, Assert.Single(restored.View.Resources).EffectiveMaximum);
+        await Execute("restore:wolf", shouldApply: false);
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(reload);
+        var committed = (await fresh.GetAsync(id))!;
+        Assert.Equal(4, committed.Revision);
+        Assert.Equal(3, committed.LedgerRevision);
+        var events = await fresh.GetEventsAsync(id);
+        Assert.Equal(new[]
+        {
+            "fixture:acquire-werewolf", "enter:resource-wolf",
+            "suppress:wolf", "restore:wolf"
+        }, events.Select(x => x.EventId));
+        foreach (var item in events.Skip(1))
+        {
+            using var audit = JsonDocument.Parse(item.TransitionRequestJson!);
+            Assert.Equal(item.EventId,
+                audit.RootElement.GetProperty("eventId").GetString());
+        }
+
+        var verified = await Reader(reload, id, gateway).GetAsync(id);
+        Assert.Equal("partial", verified.View!.Status);
+        Assert.Equal("wolf", verified.View.EffectiveSheetId);
+        Assert.Equal("manifest.wolf.1", verified.View.ActiveManifestationId);
+        Assert.Equal(3, verified.View.NativeProjection!["effectiveCharacter"]?
+            ["resources"]?[0]?["current"]?.GetValue<int>());
+
+        // The recorded ending condition, not a Suppress/Restore event,
+        // permanently ends this activation. Its pool stays stored, not
+        // transferable to a later activation.
+        var endedService = TransitionRunner(reload,
+            new OwnerAccess(id), fresh, gateway, source);
+        var beforeEnding = (await fresh.GetAsync(id))!;
+        var ending = await endedService.ApplyAsync(id, beforeEnding.Revision,
+            beforeEnding.LedgerRevision, "revert:resource-wolf",
+            "revert:resource-wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, ending.Status);
+        var ended = (await fresh.GetAsync(id))!;
+        Assert.Equal(5, ended.Revision);
+        Assert.Equal(4, ended.LedgerRevision);
+
+        var forbidden = await endedService.ApplyAsync(id, ended.Revision,
+            ended.LedgerRevision, "restore:wolf", "restore:wolf");
+        Assert.NotEqual(CharacterManifestationApplyStatus.Applied,
+            forbidden.Status);
+        Assert.Equal(5, (await fresh.GetEventsAsync(id)).Count);
+        Assert.Equal(ended.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
     }
 
     [Fact]
