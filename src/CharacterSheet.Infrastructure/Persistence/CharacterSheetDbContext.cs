@@ -23,6 +23,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterOriginDraftState> CharacterOriginDrafts => Set<CharacterOriginDraftState>();
     public DbSet<CharacterAuthorizedOriginState> AuthorizedOrigins => Set<CharacterAuthorizedOriginState>();
     public DbSet<CharacterOriginEventReceipt> OriginEventReceipts => Set<CharacterOriginEventReceipt>();
+    public DbSet<CharacterSupernaturalState> SupernaturalStates => Set<CharacterSupernaturalState>();
+    public DbSet<CharacterSupernaturalEventReceipt> SupernaturalEventReceipts => Set<CharacterSupernaturalEventReceipt>();
     public DbSet<CharacterCurrencyBalance> CharacterCurrencyBalances => Set<CharacterCurrencyBalance>();
     public DbSet<CharacterArtAsset> CharacterArtAssets => Set<CharacterArtAsset>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
@@ -405,6 +407,46 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         originEvent.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
             .HasDatabaseName("UX_character_origin_event_receipts_Revision").IsUnique();
         originEvent.HasOne<CharacterAuthorizedOriginState>().WithMany()
+            .HasForeignKey(value => value.CharacterId).OnDelete(DeleteBehavior.Cascade);
+
+
+        // Server-verified character-owned state uses bounded versioned JSONB
+        // documents. Transactional CAS and unique event identities live in
+        // PostgreSQL; a JSON field is never independent acquisition proof.
+        var supernatural = modelBuilder.Entity<CharacterSupernaturalState>();
+        supernatural.ToTable("character_supernatural_states", table =>
+            table.HasCheckConstraint("CK_character_supernatural_states_Revision",
+                """ "Revision" >= 1 AND "LedgerRevision" >= 0 AND "ContractVersion" = 1 """));
+        supernatural.HasKey(value => value.CharacterId);
+        supernatural.Property(value => value.CharacterId).ValueGeneratedNever();
+        supernatural.Property(value => value.ContractVersion).IsRequired();
+        supernatural.Property(value => value.RulesetId).HasMaxLength(160).IsRequired();
+        supernatural.Property(value => value.Fingerprint).HasMaxLength(200).IsRequired();
+        supernatural.Property(value => value.AlternateSheetsJson).HasColumnType("jsonb").IsRequired();
+        supernatural.Property(value => value.PersistentInfluencesJson).HasColumnType("jsonb").IsRequired();
+        supernatural.Property(value => value.LedgerJson).HasColumnType("jsonb").IsRequired();
+        supernatural.Property(value => value.LedgerRevision).IsRequired();
+        supernatural.Property(value => value.DependencyFingerprint).HasMaxLength(64).IsRequired();
+        supernatural.Property(value => value.Revision).IsRequired();
+        supernatural.Property(value => value.CreatedAt).IsRequired();
+        supernatural.Property(value => value.UpdatedAt).IsRequired();
+        supernatural.HasOne<CharacterSheetRoot>().WithOne()
+            .HasForeignKey<CharacterSupernaturalState>(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var supernaturalReceipt = modelBuilder.Entity<CharacterSupernaturalEventReceipt>();
+        supernaturalReceipt.ToTable("character_supernatural_event_receipts");
+        supernaturalReceipt.HasKey(value => new { value.CharacterId, value.EventId });
+        supernaturalReceipt.Property(value => value.CharacterId).ValueGeneratedNever();
+        supernaturalReceipt.Property(value => value.EventId).HasMaxLength(160).IsRequired();
+        supernaturalReceipt.Property(value => value.CommittedRevision).IsRequired();
+        supernaturalReceipt.Property(value => value.LedgerRevision).IsRequired();
+        supernaturalReceipt.Property(value => value.Kind).HasMaxLength(32).IsRequired();
+        supernaturalReceipt.Property(value => value.AuthorizationEvidenceId).HasMaxLength(320).IsRequired();
+        supernaturalReceipt.Property(value => value.CreatedAt).IsRequired();
+        supernaturalReceipt.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
+            .HasDatabaseName("UX_character_supernatural_event_receipts_Revision").IsUnique();
+        supernaturalReceipt.HasOne<CharacterSupernaturalState>().WithMany()
             .HasForeignKey(value => value.CharacterId).OnDelete(DeleteBehavior.Cascade);
 
         var art = modelBuilder.Entity<CharacterArtAsset>();
