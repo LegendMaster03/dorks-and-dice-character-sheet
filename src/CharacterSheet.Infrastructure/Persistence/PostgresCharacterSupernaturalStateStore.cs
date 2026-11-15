@@ -54,8 +54,10 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
         _ = new CharacterSupernaturalEventReceipt(command.CharacterId,
             command.EventId, command.ExpectedRevision + 1,
             command.NextLedgerRevision, command.IsTransition ? "transition" : "acquisition",
-            command.AuthorizationEvidenceId, command.RecordedAt);
+            command.AuthorizationEvidenceId, command.RecordedAt,
+            command.TransitionRequestJson);
         ValidateLedger(command);
+        ValidateTransitionAudit(command);
 
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
@@ -124,7 +126,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             db.SupernaturalEventReceipts.Add(new CharacterSupernaturalEventReceipt(
                 command.CharacterId, command.EventId, command.ExpectedRevision + 1,
                 command.NextLedgerRevision, command.IsTransition ? "transition" : "acquisition",
-                command.AuthorizationEvidenceId, command.RecordedAt));
+                command.AuthorizationEvidenceId, command.RecordedAt,
+                command.TransitionRequestJson));
 
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -154,6 +157,73 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             return new(CharacterSupernaturalWriteStatus.RevisionConflict);
         }
     }
+
+
+    /// <summary>
+    /// Validate the complete source-verified transition request supplied by the
+    /// application after successful Core planning. This is durable event-step
+    /// auditing, not a second implementation of native transition legality.
+    /// Historical receipts stay nullable because their steps can not be
+    /// reconstructed from an event ID or a final ledger alone.
+    /// </summary>
+    private static void ValidateTransitionAudit(VerifiedSupernaturalStateWrite command)
+    {
+        if (!command.IsTransition)
+        {
+            if (command.TransitionRequestJson is not null)
+                throw new ArgumentException(
+                    "An acquisition can not masquerade as a manifestation transition.");
+            return;
+        }
+
+        if (command.TransitionRequestJson is null)
+            throw new ArgumentException(
+                "A new manifestation transition requires its verified ordered step audit.");
+        var json = CharacterSupernaturalState.CheckJson(command.TransitionRequestJson,
+            JsonValueKind.Object, "transitionRequest");
+        using var document = JsonDocument.Parse(json);
+        var request = document.RootElement;
+        if (!request.TryGetProperty("characterId", out var character) ||
+            character.ValueKind != JsonValueKind.String ||
+            character.GetString() != command.CharacterId.ToString("D") ||
+            !request.TryGetProperty("expectedRevision", out var revision) ||
+            revision.ValueKind != JsonValueKind.Number ||
+            !revision.TryGetInt64(out var oldRevision) ||
+            oldRevision != command.ExpectedLedgerRevision ||
+            !request.TryGetProperty("eventId", out var eventId) ||
+            eventId.ValueKind != JsonValueKind.String ||
+            eventId.GetString() != command.EventId ||
+            !request.TryGetProperty("steps", out var steps) ||
+            steps.ValueKind != JsonValueKind.Array ||
+            steps.GetArrayLength() is < 1 or > 512)
+            throw new ArgumentException(
+                "A committed manifestation audit must match its character, event and prior ledger revision.");
+
+        foreach (var step in steps.EnumerateArray())
+        {
+            if (step.ValueKind != JsonValueKind.Object ||
+                !step.TryGetProperty("action", out var action) ||
+                !KnownAction(action) ||
+                !step.TryGetProperty("targetInstanceId", out var target) ||
+                target.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(target.GetString()) ||
+                !step.TryGetProperty("ruleOccurrence", out var rule) ||
+                rule.ValueKind != JsonValueKind.Object ||
+                !step.TryGetProperty("basis", out var basis) ||
+                basis.ValueKind != JsonValueKind.Object ||
+                !step.TryGetProperty("authorizationEvidenceId", out var evidence) ||
+                evidence.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(evidence.GetString()))
+                throw new ArgumentException(
+                    "A committed manifestation audit must retain every authorized step.");
+        }
+    }
+
+    private static bool KnownAction(JsonElement action) =>
+        action.ValueKind == JsonValueKind.Number &&
+            action.TryGetInt32(out var number) && number is >= 0 and <= 3 ||
+        action.ValueKind == JsonValueKind.String &&
+            action.GetString() is "Activate" or "End" or "Suppress" or "Restore";
 
     private static void ValidateLedger(VerifiedSupernaturalStateWrite command)
     {

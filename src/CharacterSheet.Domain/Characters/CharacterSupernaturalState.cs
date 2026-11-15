@@ -102,7 +102,8 @@ public sealed class CharacterSupernaturalEventReceipt
 
     public CharacterSupernaturalEventReceipt(Guid characterId, string eventId,
         long committedRevision, long ledgerRevision, string kind,
-        string authorizationEvidenceId, DateTimeOffset createdAt)
+        string authorizationEvidenceId, DateTimeOffset createdAt,
+        string? transitionRequestJson = null)
     {
         if (characterId == Guid.Empty || committedRevision < 1 || ledgerRevision < 0 ||
             string.IsNullOrWhiteSpace(eventId) || eventId.Length > 160 ||
@@ -116,6 +117,9 @@ public sealed class CharacterSupernaturalEventReceipt
         LedgerRevision = ledgerRevision;
         Kind = kind;
         AuthorizationEvidenceId = authorizationEvidenceId;
+        TransitionRequestJson = transitionRequestJson is null ? null :
+            CharacterSupernaturalState.CheckJson(transitionRequestJson,
+                JsonValueKind.Object, "transitionRequest");
         CreatedAt = createdAt;
     }
 
@@ -125,5 +129,13 @@ public sealed class CharacterSupernaturalEventReceipt
     public long LedgerRevision { get; private set; }
     public string Kind { get; private set; } = string.Empty;
     public string AuthorizationEvidenceId { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Exact verified transition request, including ordered steps, per-step
+    /// authority evidence and optional interaction replacements. Null for
+    /// acquisition and historical receipts predating the additive audit
+    /// migration. Persistence is not independent proof of authorization.
+    /// </summary>
+    public string? TransitionRequestJson { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 }

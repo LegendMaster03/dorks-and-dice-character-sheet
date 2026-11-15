@@ -245,7 +245,8 @@ public sealed class CharacterManifestationTransitionService(
                 proposed.ToJsonString(Wire),
                 expectedStateRevision, expectedLedgerRevision,
                 expectedLedgerRevision + 1, before, eventId,
-                verified.AuthorizationEvidenceId, true, DateTimeOffset.UtcNow),
+                verified.AuthorizationEvidenceId, true, DateTimeOffset.UtcNow,
+                verified.Transition.GetRawText()),
                 cancellationToken);
         }
         catch (Exception error) when (error is JsonException or ArgumentException

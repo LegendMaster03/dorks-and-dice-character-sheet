@@ -429,6 +429,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasMaxLength(32).HasColumnType("character varying(32)");
             b.Property<string>("AuthorizationEvidenceId").IsRequired()
                 .HasMaxLength(320).HasColumnType("character varying(320)");
+            b.Property<string>("TransitionRequestJson").HasColumnType("jsonb");
             b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
             b.HasKey("CharacterId", "EventId");
             b.HasIndex("CharacterId", "CommittedRevision")

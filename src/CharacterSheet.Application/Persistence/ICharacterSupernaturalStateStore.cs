@@ -19,7 +19,8 @@ public sealed record VerifiedSupernaturalStateWrite(
     string AlternateSheetsJson, string PersistentInfluencesJson, string LedgerJson,
     long ExpectedRevision, long ExpectedLedgerRevision, long NextLedgerRevision,
     string ExpectedDependencyFingerprint, string EventId,
-    string AuthorizationEvidenceId, bool IsTransition, DateTimeOffset RecordedAt);
+    string AuthorizationEvidenceId, bool IsTransition, DateTimeOffset RecordedAt,
+    string? TransitionRequestJson = null);
 
 public sealed record CharacterSupernaturalWriteResult(
     CharacterSupernaturalWriteStatus Status, long? Revision = null,
