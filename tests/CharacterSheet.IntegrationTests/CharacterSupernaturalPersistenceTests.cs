@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
@@ -445,5 +446,98 @@ public sealed class CharacterSupernaturalPersistenceTests
             Write(id, digest, ledger: InitialOwnerResourceLedger(id, ownerKind, ownerId))));
         Assert.Null(await store.GetAsync(id));
         Assert.Empty(await store.GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task SeparateAcquisitionCanNotRewriteExistingSheetOverridesOrApplicability()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+
+        var original = JsonNode.Parse(WolfSheet)!.AsArray();
+        original[0]!["overrides"] = JsonNode.Parse("""
+            {"abilityScores":{"replace":false,"entries":{"strength":17}}}
+            """);
+        original[0]!["grantApplicability"] = JsonNode.Parse("""
+            [{"grantId":"grant.test","state":1}]
+            """);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest,
+                alternate: original.ToJsonString()))).Status);
+
+        foreach (var change in new Action<JsonArray>[]
+        {
+            sheet => sheet[0]!["overrides"]!["abilityScores"]!["entries"]!["strength"] = 99,
+            sheet => sheet[0]!["grantApplicability"]![0]!["state"] = 0,
+            sheet => sheet[0]!["newCapability"] = "forged",
+            sheet => sheet[0]!.AsObject().Remove("overrides")
+        })
+        {
+            var changed = JsonNode.Parse(original.ToJsonString())!.AsArray();
+            change(changed);
+            await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+                Write(id, digest, 1, 0, 0, "acquire:extra",
+                    alternate: changed.ToJsonString())));
+        }
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task SeparateAcquisitionCanAppendProgressionButNotRewriteInfluenceExpression()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        const string initial = """
+            [{"id":"curse","definitionId":"test.curse",
+              "definitionSource":{"kind":0,"id":"source.curse","version":"v1"},
+              "acquisitionEvidenceId":"receipt.acquire.curse",
+              "expressionEvidenceId":"receipt.expression.zero",
+              "expression":{"intensity":"0"},"effects":[]}]
+            """;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest) with
+            {
+                PersistentInfluencesJson = initial
+            })).Status);
+
+        var changed = JsonNode.Parse(initial)!.AsArray();
+        changed[0]!["expression"]!["intensity"] = "3";
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 1, 0, 0, "acquire:extra") with
+            {
+                PersistentInfluencesJson = changed.ToJsonString()
+            }));
+
+        changed = JsonNode.Parse(initial)!.AsArray();
+        changed[0]!["effects"] = JsonNode.Parse("""
+            [{"id":"effect.forged","definitionId":"test.effect"}]
+            """);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            Write(id, digest, 1, 0, 0, "acquire:extra") with
+            {
+                PersistentInfluencesJson = changed.ToJsonString()
+            }));
+
+        // An existing sheet can earn a new independent progression occurrence
+        // without replacing its prior progression/definition.
+        var augmentedSheets = JsonNode.Parse(WolfSheet)!.AsArray();
+        augmentedSheets[0]!["progression"]!.AsArray().Add(JsonNode.Parse("""
+            {"id":"wolf-progress-extra","definitionId":"test.extra",
+             "acquisitionEvidenceId":"receipt.progress.extra","grants":[]}
+            """));
+        var result = await store.CommitVerifiedAsync(
+            Write(id, digest, 1, 0, 0, "acquire:extra",
+                alternate: augmentedSheets.ToJsonString()) with
+            {
+                PersistentInfluencesJson = initial
+            });
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied, result.Status);
+        Assert.Contains("wolf-progress-extra", (await store.GetAsync(id))!.AlternateSheetsJson);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
     }
 }
