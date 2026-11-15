@@ -105,8 +105,8 @@ public sealed class DelegatedRulesCoreGatewayTests
             new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
             {
                 Content = new StringContent(
-                    "{\\"error\\":\\"native_content_changed\\",\\"padding\\":\\"" +
-                    new string('x', 6000) + "\\"}")
+                    "{\"error\":\"native_content_changed\",\"padding\":\"" +
+                    new string('x', 6000) + "\"}")
             }
         };
         foreach (var response in handlers)
