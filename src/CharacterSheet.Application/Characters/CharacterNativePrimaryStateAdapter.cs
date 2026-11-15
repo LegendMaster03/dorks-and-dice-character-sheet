@@ -111,8 +111,13 @@ public static class CharacterNativePrimaryStateAdapter
             submitted.ValueKind != JsonValueKind.Object)
             return false;
 
+        var seenFields = new HashSet<string>(StringComparer.Ordinal);
         foreach (var field in submitted.EnumerateObject())
         {
+            // JSON permits duplicate object property names, but model binding
+            // can take the last value. Reject that ambiguity before Core sees it.
+            if (!seenFields.Add(field.Name))
+                return false;
             if (OptionalFields.Contains(field.Name))
             {
                 if (field.Value.ValueKind != JsonValueKind.Null) return false;
