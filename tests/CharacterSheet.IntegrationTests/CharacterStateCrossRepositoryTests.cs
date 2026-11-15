@@ -531,6 +531,55 @@ public sealed class CharacterStateCrossRepositoryTests
             NativeInfluenceGrantApplicability decision) => false;
     }
 
+
+    /// <summary>
+    /// Server-side, synthetic action policy. It does not accept source JSON
+    /// from the caller and is not registered in Character Sheet production.
+    /// The separate Core host authority provider checks the persisted record.
+    /// </summary>
+    private sealed class SyntheticTrustedSource(NativeCharacterState state)
+        : ITrustedCharacterManifestationTransitionSource
+    {
+        public NativeCharacterState Current { get; set; } = state;
+        public int Calls { get; private set; }
+
+        public Task<TrustedManifestationTransitionMaterial?> PrepareAsync(
+            Guid characterId, SiteCharacterProjection authorizedCharacter,
+            CharacterSheet.Domain.Characters.CharacterSupernaturalState existing,
+            string intentId, string eventId, CancellationToken ct)
+        {
+            Calls++;
+            if (authorizedCharacter.CharacterId != characterId ||
+                !authorizedCharacter.AllowsOrdinaryEditingByLifecycle ||
+                Current.CharacterId != characterId.ToString("D") ||
+                intentId != eventId)
+                return Task.FromResult<TrustedManifestationTransitionMaterial?>(null);
+
+            NativeManifestationTransitionStep[] steps = intentId switch
+            {
+                "enter:wolf" => [Enter(characterId, "wolf",
+                    "manifest.wolf.1", eventId)],
+                "revert:wolf" => [End("manifest.wolf.1", eventId)],
+                "reenter:wolf" => [Enter(characterId, "wolf",
+                    "manifest.wolf.2", eventId)],
+                "switch:hybrid" =>
+                [
+                    End("manifest.wolf.2", eventId),
+                    Enter(characterId, "hybrid", "manifest.hybrid.1", eventId)
+                ],
+                _ => []
+            };
+            if (steps.Length == 0)
+                return Task.FromResult<TrustedManifestationTransitionMaterial?>(null);
+            var transition = new NativeManifestationTransitionRequest(
+                characterId.ToString("D"), existing.LedgerRevision, eventId, steps);
+            return Task.FromResult<TrustedManifestationTransitionMaterial?>(
+                new(JsonSerializer.SerializeToElement(Current.PrimaryMechanics, Wire),
+                    JsonSerializer.SerializeToElement(transition, Wire),
+                    "fixture:verified-source"));
+        }
+    }
+
     [Fact]
     public async Task StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore()
     {
@@ -563,59 +612,57 @@ public sealed class CharacterStateCrossRepositoryTests
                 "fixture:acquire-werewolf", "fixture:verified-source",
                 false, DateTimeOffset.UtcNow))).Status);
 
-        async Task<NativeManifestationEffectiveCharacter> Execute(
-            string eventId, params NativeManifestationTransitionStep[] steps)
+        var source = new SyntheticTrustedSource(state);
+        var service = new CharacterManifestationTransitionService(
+            new OwnerAccess(id), store, gateway, source);
+
+        async Task<NativeManifestationEffectiveCharacter> Execute(string eventId)
         {
-            var request = new NativeManifestationTransitionRequest(
-                id.ToString("D"), ledger.Revision, eventId, steps);
-            var payload = JsonSerializer.SerializeToElement(new
-            {
-                state, ledger, transition = request
-            }, Wire);
-            var answer = await gateway.PlanVerifiedManifestationAsync(
-                payload, CancellationToken.None);
-            Assert.Equal("planned", answer["status"]!.GetValue<string>());
-            Assert.False(answer["committed"]!.GetValue<bool>());
-            Assert.False(answer["effectiveMechanicsReady"]!.GetValue<bool>());
-            var plan = answer["plan"] ?? throw new InvalidOperationException(
-                "Core omitted planned state.");
-            Assert.Equal("planned", plan["status"]!.GetValue<string>());
-            var proposed = JsonSerializer.Deserialize<NativeManifestationLedger>(
-                plan["proposed"]!.ToJsonString(), Wire)!;
-            var effective = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
-                plan["proposedEffective"]!.ToJsonString(), Wire)!;
-            Assert.Equal(ledger.Revision + 1, proposed.Revision);
             var revision = (await store.GetAsync(id))!.Revision;
-            var committed = await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
-                id, "first-party-001", fingerprint, storedForms, "[]",
-                JsonSerializer.Serialize(proposed, Wire), revision,
-                ledger.Revision, proposed.Revision, inputDigest,
-                eventId, "fixture:verified-source", true, DateTimeOffset.UtcNow));
-            Assert.Equal(CharacterSupernaturalWriteStatus.Applied, committed.Status);
-            ledger = proposed;
+            var result = await service.ApplyAsync(id, revision, ledger.Revision,
+                eventId, eventId);
+            Assert.Equal(CharacterManifestationApplyStatus.Applied, result.Status);
+            Assert.Equal(revision + 1, result.StateRevision);
+            Assert.Equal(ledger.Revision + 1, result.LedgerRevision);
+            Assert.NotNull(result.EffectivePreview);
+            var effective = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+                result.EffectivePreview!.ToJsonString(), Wire)!;
+            ledger = JsonSerializer.Deserialize<NativeManifestationLedger>(
+                (await store.GetAsync(id))!.LedgerJson, Wire)!;
             return effective;
         }
 
-        var wolf = await Execute("enter:wolf",
-            Enter(id, "wolf", "manifest.wolf.1", "enter:wolf"));
+        var wolf = await Execute("enter:wolf");
         Assert.Equal("wolf", wolf.EffectiveSheetId);
         Assert.Equal(17, wolf.EffectiveMechanics!.AbilityScores["strength"]);
         Assert.Contains(wolf.SheetGrants, x => x.Entitlement.Id == "grant.shared");
         Assert.Contains(wolf.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
 
-        var reverted = await Execute("revert:wolf",
-            End("manifest.wolf.1", "revert:wolf"));
+        // The latest primary values, not the activation-time snapshot,
+        // are used when resolving a later reversion.
+        await build.SetBaseAbilityScoreInputAsync(id, "constitution", 15,
+            DateTimeOffset.UtcNow.AddMinutes(1));
+        var latestScores = state.PrimaryMechanics.AbilityScores
+            .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
+        latestScores["constitution"] = 15;
+        state = state with
+        {
+            PrimaryMechanics = state.PrimaryMechanics with
+            {
+                AbilityScores = latestScores
+            }
+        };
+        source.Current = state;
+        var reverted = await Execute("revert:wolf");
+        Assert.Equal(15, reverted.EffectiveMechanics!.AbilityScores["constitution"]);
         Assert.Equal("@primary", reverted.EffectiveSheetId);
         Assert.Equal(10, reverted.EffectiveMechanics!.AbilityScores["strength"]);
 
-        var reentered = await Execute("reenter:wolf",
-            Enter(id, "wolf", "manifest.wolf.2", "reenter:wolf"));
+        var reentered = await Execute("reenter:wolf");
         Assert.Equal("wolf", reentered.EffectiveSheetId);
         Assert.Contains(reentered.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
 
-        var hybrid = await Execute("switch:hybrid",
-            End("manifest.wolf.2", "switch:hybrid"),
-            Enter(id, "hybrid", "manifest.hybrid.1", "switch:hybrid"));
+        var hybrid = await Execute("switch:hybrid");
         Assert.Equal("hybrid", hybrid.EffectiveSheetId);
         Assert.Equal(16, hybrid.EffectiveMechanics!.AbilityScores["dexterity"]);
         Assert.DoesNotContain(hybrid.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
@@ -631,6 +678,14 @@ public sealed class CharacterStateCrossRepositoryTests
         using var journal = JsonDocument.Parse(saved.LedgerJson);
         Assert.Equal(3, journal.RootElement.GetProperty("instances").GetArrayLength());
         Assert.Equal(4, journal.RootElement.GetProperty("processedEventIds").GetArrayLength());
+        Assert.Equal(4, source.Calls);
+
+        // A replay through the application boundary can not append an
+        // already-committed event or silently reconstruct a prior snapshot.
+        var replay = await service.ApplyAsync(id, saved.Revision, saved.LedgerRevision,
+            "enter:wolf", "enter:wolf");
+        Assert.NotEqual(CharacterManifestationApplyStatus.Applied, replay.Status);
+        Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
     }
 }
 #endif
