@@ -161,6 +161,20 @@ character may read but does not gain mutation rights.
 * Fresh-context construction of the transition service verifies that a prior
   manifestation remains stored after the former application service instance
   is replaced; it is not reconstructed from in-memory activation state.
+* A shared `CharacterNativePrimaryStateAdapter` now reconstructs supported
+  primary Class advancement occurrences, ability scores and native selections
+  from Site-authorized Character Sheet Build/State views. Independently owned
+  Feats, Subclasses, equipment, Origin, HP and non-native rules inputs remain
+  explicitly unresolved, but no longer suppress supported Class progression in
+  a read-only primary projection. This is not a substitute for full primary
+  entitlement evaluation.
+* Internal manifestation transitions independently reload that same primary
+  snapshot and compare all source-supplied primary fields before contacting
+  Rules Core. Supplied primary levels, scores, choices, resources or duplicate
+  JSON property names can not override Character Sheet's own state. Transitions
+  with unmatched or presently unsupported primary policies fail closed.
+  Synthetic end-to-end tests include a forged primary score rejection;
+  isolated unit tests exercise source injection and incomplete mechanics.
 * A saved Origin or supernatural record pinned to an older native catalog
   fingerprint is reported as `authorized-origin-native-content-changed` or
   `supernatural-native-content-changed`. Such reads remain unresolved and
@@ -185,10 +199,11 @@ authenticated Werewolf/Wolf/Hybrid acquisition and transition tests.
 4. Connect the authorized complete plan to `CommitVerifiedAsync`, proving
    exact provenance, source versions, effects, interaction decisions and
    resource ownership; persist complete transition-step audit data.
-5. Build a proper primary state assembler from the verified latest
+5. Extend the now-shared primary adapter to revalidate the latest
    `NativeOriginProfile.Underlying`, independently owned Class/Background/
    Upbringing entitlements, trained skills, inventory and resource facts.
-   Distinguish unresolved support from playable numerical mechanics.
+   The current bounded Class/ability/option subset is intentionally not a
+   complete primary or form-specific entitlement verifier.
 6. Add real PostgreSQL and Core HTTP integration for all 32 scenarios in
    the user acceptance specification, including Wolf/Hybrid switching,
    progression persistence across reversion, simultaneous conflicting
