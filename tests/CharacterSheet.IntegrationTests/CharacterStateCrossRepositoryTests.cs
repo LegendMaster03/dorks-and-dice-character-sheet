@@ -17,6 +17,8 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using RulesCore.Mechanics;
+using CoreAuthorityProvider = CoreHost::RulesCore.Host.INativeManifestationHostAuthorityProvider;
 using CoreApplication = CoreHost::RulesCore.Host.RulesCoreApplication;
 using CoreTicketValidator = CoreHost::RulesCore.Host.CharacterSheetMechanicsTicketValidator;
 
@@ -62,7 +64,8 @@ public sealed class CharacterStateCrossRepositoryTests
     {
         public HttpClient Client { get; } = client;
 
-        public static async Task<CoreHost> StartAsync()
+        public static async Task<CoreHost> StartAsync(
+            CoreAuthorityProvider? verifiedSourceProvider = null)
         {
             var root = Environment.GetEnvironmentVariable("RULES_CORE_CONTENT_ROOT");
             if (root is null || !Directory.Exists(Path.Combine(root, "first-party-001", "native")))
@@ -82,6 +85,8 @@ public sealed class CharacterStateCrossRepositoryTests
             {
                 services.AddHttpClient<CoreTicketValidator>()
                     .ConfigurePrimaryHttpMessageHandler(() => new SiteTicketHandler());
+                if (verifiedSourceProvider is not null)
+                    services.AddSingleton(verifiedSourceProvider);
             });
             await app.StartAsync();
             var server = app.Services.GetRequiredService<IServer>();
@@ -136,6 +141,13 @@ public sealed class CharacterStateCrossRepositoryTests
                 "/api/mechanics/v1/characters/effective-state-baseline");
             message.Content = JsonContent.Create(request, options: Wire);
             return await http.SendAsync(message, ct);
+        }
+
+        public async Task<JsonNode> PlanVerifiedManifestationAsync(
+            JsonElement request, CancellationToken ct)
+        {
+            using var response = await SendManifestationPlanAsync(request, ct);
+            return await Parse(response, ct);
         }
 
         public async Task<HttpResponseMessage> SendManifestationPlanAsync(
@@ -323,6 +335,302 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Null(result.View.NativeProjection);
         Assert.False(result.View.EffectiveMechanicsReady);
         Assert.Equal(0, gateway.ProjectionRequests);
+    }
+
+    private static NativeOriginSourceReference SyntheticSource() =>
+        new(NativeOriginSourceKind.Native, "synthetic.werewolf", "test-v1");
+
+    private static NativeOriginSourceOccurrence Occurrence(string path) =>
+        new(SyntheticSource(), path);
+
+    private static NativeOriginDecisionBasis SyntheticRule() =>
+        new(NativeOriginAdjudication.Supported, NativeRuleReference: "rule.synthetic.forms");
+
+    private static NativeSheetEarnedProgression Earned(string id) =>
+        new("progress." + id, "progress.definition." + id,
+            Occurrence("progress." + id), "receipt.progress." + id,
+            [new NativeSheetEarnedGrant("grant." + id, "grant.definition." + id,
+                Occurrence("grants." + id), "receipt.grant." + id)]);
+
+    private static NativePersistentCharacterSheet[] TestOwnedForms() =>
+    [
+        new("werewolf", "@primary", "form.werewolf", SyntheticSource(),
+            "receipt.acquire.werewolf",
+            Progression: [Earned("shared")],
+            GrantApplicability: [new("grant.shared",
+                NativeOriginGrantApplicabilityState.Applicable, SyntheticRule())]),
+        new("wolf", "werewolf", "form.wolf", SyntheticSource(),
+            "receipt.acquire.wolf",
+            Overrides: new(AbilityScores: new(false,
+                new Dictionary<string, int> { ["strength"] = 17 })),
+            Progression: [Earned("wolf")],
+            GrantApplicability: [new("grant.wolf",
+                NativeOriginGrantApplicabilityState.Applicable, SyntheticRule())]),
+        new("hybrid", "werewolf", "form.hybrid", SyntheticSource(),
+            "receipt.acquire.hybrid",
+            Overrides: new(AbilityScores: new(false,
+                new Dictionary<string, int> { ["dexterity"] = 16 }))
+    ];
+
+    private static NativeCharacterState TestCharacter(Guid id, string fingerprint,
+        NativePersistentCharacterSheet[] forms) =>
+        new(id.ToString("D"), new NativeCharacterRequest("first-party-001",
+            fingerprint, new Dictionary<string, int>
+            {
+                ["strength"] = 10, ["dexterity"] = 12,
+                ["constitution"] = 13, ["intelligence"] = 11,
+                ["wisdom"] = 12, ["charisma"] = 10
+            }, []), forms, []);
+
+    private static NativeManifestationInstance TestInstance(Guid id,
+        string form, string instanceId, string eventId) =>
+        new(id.ToString("D"), instanceId, form, "form." + form,
+            Occurrence("forms." + form), null, eventId,
+            "receipt.activate." + eventId, SyntheticRule(),
+            NativeManifestationLifecycle.Active,
+            NativeManifestationContribution.Contributing,
+            new Dictionary<string, int>(), ["rule.synthetic.revert"],
+            [], eventId);
+
+    private static NativeManifestationTransitionStep Enter(Guid id,
+        string form, string instanceId, string eventId) =>
+        new(NativeManifestationTransitionAction.Activate, instanceId,
+            Occurrence("actions.activate"), SyntheticRule(),
+            "receipt.transition." + eventId,
+            TestInstance(id, form, instanceId, eventId));
+
+    private static NativeManifestationTransitionStep End(
+        string instanceId, string eventId) =>
+        new(NativeManifestationTransitionAction.End, instanceId,
+            Occurrence("actions.end"), SyntheticRule(),
+            "receipt.transition." + eventId,
+            EndingConditionId: "rule.synthetic.revert");
+
+    private sealed class PostgresSyntheticAuthorityProvider(
+        DbContextOptions<CharacterSheetDbContext> databaseOptions,
+        Guid characterId) : CoreAuthorityProvider
+    {
+        public async Task<INativeCharacterManifestationAuthority?> VerifyAsync(
+            Guid actor, NativeCharacterState state, NativeManifestationLedger current,
+            NativeManifestationTransitionRequest transition, CancellationToken ct)
+        {
+            if (actor != Actor || state.CharacterId != characterId.ToString("D") ||
+                current.CharacterId != state.CharacterId ||
+                transition.CharacterId != state.CharacterId)
+                return null;
+
+            await using var db = new CharacterSheetDbContext(databaseOptions);
+            var store = new PostgresCharacterSupernaturalStateStore(db);
+            var owner = await store.GetAsync(characterId, ct);
+            if (owner is null || owner.LedgerRevision != current.Revision ||
+                owner.Fingerprint != state.PrimaryMechanics.Fingerprint ||
+                owner.RulesetId != state.PrimaryMechanics.RulesetId ||
+                !SameJson(owner.AlternateSheetsJson, JsonSerializer.Serialize(
+                    state.AlternateSheets, Wire)) ||
+                !SameJson(owner.PersistentInfluencesJson, JsonSerializer.Serialize(
+                    state.PersistentInfluences ?? [], Wire)) ||
+                !SameJson(owner.LedgerJson, JsonSerializer.Serialize(current, Wire)))
+                return null;
+
+            var receipts = await store.GetEventsAsync(characterId, ct);
+            if (!receipts.Any(x => x.EventId == "fixture:acquire-werewolf" &&
+                x.AuthorizationEvidenceId == "fixture:verified-source"))
+                return null;
+            var scores = await db.BaseAbilityScoreInputs.AsNoTracking()
+                .Where(x => x.CharacterId == characterId)
+                .ToDictionaryAsync(x => x.AbilityKey, x => x.Score, ct);
+            if (scores.Count != state.PrimaryMechanics.AbilityScores.Count ||
+                scores.Any(x => !state.PrimaryMechanics.AbilityScores.TryGetValue(
+                    x.Key, out var score) || x.Value != score))
+                return null;
+
+            return new SyntheticAuthority(state, current, transition,
+                receipts.Select(x => x.EventId).ToHashSet(StringComparer.Ordinal));
+        }
+
+        private static bool SameJson(string a, string b)
+        {
+            using var left = JsonDocument.Parse(a);
+            using var right = JsonDocument.Parse(b);
+            return JsonElement.DeepEquals(left.RootElement, right.RootElement);
+        }
+    }
+
+    /// <summary>
+    /// A strictly synthetic, test-owned provider. No production registration,
+    /// catalog entitlement or DM source is inferred from the fixture receipts.
+    /// </summary>
+    private sealed class SyntheticAuthority(
+        NativeCharacterState state,
+        NativeManifestationLedger committed,
+        NativeManifestationTransitionRequest submitted,
+        IReadOnlySet<string> recordedEvents) : INativeCharacterManifestationAuthority
+    {
+        private bool Character(string id) => id == state.CharacterId;
+        private static bool Source(NativeOriginSourceReference source) =>
+            source == SyntheticSource();
+        private static bool Award(NativeOriginSourceOccurrence occurrence) =>
+            Source(occurrence.Source);
+        private static bool Basis(NativeOriginDecisionBasis basis) =>
+            basis == SyntheticRule();
+
+        public bool AuthorizesPrimary(string id, NativeCharacterRequest primary) =>
+            Character(id) && ReferenceEquals(primary, state.PrimaryMechanics);
+        public bool AuthorizesSheet(string id, NativePersistentCharacterSheet sheet) =>
+            Character(id) &&
+            state.AlternateSheets.Contains(sheet) &&
+            Source(sheet.DefinitionSource) &&
+            sheet.AcquisitionEvidenceId == "receipt.acquire." + sheet.Id;
+        public bool AuthorizesProgression(string id, string owner,
+            NativeSheetEarnedProgression progression) =>
+            Character(id) && Award(progression.SourceOccurrence) &&
+            progression.AcquisitionEvidenceId == "receipt.progress." +
+                progression.Id["progress.".Length..];
+        public bool AuthorizesGrant(string id, string owner,
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
+            AuthorizesProgression(id, owner, progression) &&
+            Award(grant.SourceOccurrence) &&
+            grant.AcquisitionEvidenceId == "receipt." + grant.Id;
+        public bool AuthorizesApplicability(string id, string sheet,
+            NativeSheetGrantApplicability decision) =>
+            Character(id) && Basis(decision.Basis);
+        public bool AuthorizesLedger(string id, NativeManifestationLedger ledger) =>
+            Character(id) && ReferenceEquals(ledger, committed);
+        public bool AuthorizesInstance(string id, NativeManifestationInstance instance,
+            NativePersistentCharacterSheet sheet) =>
+            Character(id) && instance.CharacterId == id &&
+            instance.SheetId == sheet.Id && Award(instance.DefinitionOccurrence) &&
+            instance.ActivationEvidenceId == "receipt.activate." + instance.ActivationEventId &&
+            (recordedEvents.Contains(instance.ActivationEventId) ||
+                instance.ActivationEventId == submitted.EventId) &&
+            Basis(instance.ActivationBasis);
+        public bool AuthorizesTransition(string id, NativeManifestationLedger current,
+            NativeManifestationTransitionRequest request,
+            NativeManifestationTransitionStep step) =>
+            Character(id) && ReferenceEquals(current, committed) &&
+            ReferenceEquals(request, submitted) &&
+            request.ExpectedRevision == current.Revision &&
+            Award(step.RuleOccurrence) && Basis(step.Basis) &&
+            step.AuthorizationEvidenceId == "receipt.transition." + request.EventId;
+        public bool AuthorizesUnlistedEnding(string id, NativeManifestationLedger current,
+            NativeManifestationInstance instance,
+            NativeManifestationTransitionStep step) => false;
+        public bool AuthorizesResource(string id, NativeManifestationResourceState resource) => false;
+        public bool AuthorizesResourcePolicy(string id, NativeManifestationInstance instance,
+            NativeManifestationResourcePolicy policy) => false;
+        public bool AuthorizesInteraction(string id, NativeManifestationInteractionDecision decision) => false;
+        public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) => false;
+        public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) => false;
+        public bool AuthorizesEffect(string id, string influenceId,
+            NativeCharacterInfluenceEffect effect) => false;
+        public bool AuthorizesInfluenceProgression(string id, string influenceId,
+            NativeSheetEarnedProgression progression) => false;
+        public bool AuthorizesInfluenceGrant(string id, string influenceId,
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+        public bool AuthorizesInfluenceApplicability(string id, string influenceId,
+            NativeInfluenceGrantApplicability decision) => false;
+    }
+
+    [Fact]
+    public async Task StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+
+        var forms = TestOwnedForms();
+        var state = TestCharacter(id, fingerprint, forms);
+        var ledger = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+        string storedForms = JsonSerializer.Serialize(forms, Wire);
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var pair in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(id, pair.Key, pair.Value, DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var inputDigest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint, storedForms, "[]",
+                JsonSerializer.Serialize(ledger, Wire), 0, 0, 0, inputDigest,
+                "fixture:acquire-werewolf", "fixture:verified-source",
+                false, DateTimeOffset.UtcNow))).Status);
+
+        async Task<NativeManifestationEffectiveCharacter> Execute(
+            string eventId, params NativeManifestationTransitionStep[] steps)
+        {
+            var request = new NativeManifestationTransitionRequest(
+                id.ToString("D"), ledger.Revision, eventId, steps);
+            var payload = JsonSerializer.SerializeToElement(new
+            {
+                state, ledger, transition = request
+            }, Wire);
+            var answer = await gateway.PlanVerifiedManifestationAsync(
+                payload, CancellationToken.None);
+            Assert.Equal("planned", answer["status"]!.GetValue<string>());
+            Assert.False(answer["committed"]!.GetValue<bool>());
+            Assert.False(answer["effectiveMechanicsReady"]!.GetValue<bool>());
+            var plan = answer["plan"] ?? throw new InvalidOperationException(
+                "Core omitted planned state.");
+            Assert.Equal("planned", plan["status"]!.GetValue<string>());
+            var proposed = JsonSerializer.Deserialize<NativeManifestationLedger>(
+                plan["proposed"]!.ToJsonString(), Wire)!;
+            var effective = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+                plan["proposedEffective"]!.ToJsonString(), Wire)!;
+            Assert.Equal(ledger.Revision + 1, proposed.Revision);
+            var revision = (await store.GetAsync(id))!.Revision;
+            var committed = await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint, storedForms, "[]",
+                JsonSerializer.Serialize(proposed, Wire), revision,
+                ledger.Revision, proposed.Revision, inputDigest,
+                eventId, "fixture:verified-source", true, DateTimeOffset.UtcNow));
+            Assert.Equal(CharacterSupernaturalWriteStatus.Applied, committed.Status);
+            ledger = proposed;
+            return effective;
+        }
+
+        var wolf = await Execute("enter:wolf",
+            Enter(id, "wolf", "manifest.wolf.1", "enter:wolf"));
+        Assert.Equal("wolf", wolf.EffectiveSheetId);
+        Assert.Equal(17, wolf.EffectiveMechanics!.AbilityScores["strength"]);
+        Assert.Contains(wolf.SheetGrants, x => x.Entitlement.Id == "grant.shared");
+        Assert.Contains(wolf.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
+
+        var reverted = await Execute("revert:wolf",
+            End("manifest.wolf.1", "revert:wolf"));
+        Assert.Equal("@primary", reverted.EffectiveSheetId);
+        Assert.Equal(10, reverted.EffectiveMechanics!.AbilityScores["strength"]);
+
+        var reentered = await Execute("reenter:wolf",
+            Enter(id, "wolf", "manifest.wolf.2", "reenter:wolf"));
+        Assert.Equal("wolf", reentered.EffectiveSheetId);
+        Assert.Contains(reentered.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
+
+        var hybrid = await Execute("switch:hybrid",
+            End("manifest.wolf.2", "switch:hybrid"),
+            Enter(id, "hybrid", "manifest.hybrid.1", "switch:hybrid"));
+        Assert.Equal("hybrid", hybrid.EffectiveSheetId);
+        Assert.Equal(16, hybrid.EffectiveMechanics!.AbilityScores["dexterity"]);
+        Assert.DoesNotContain(hybrid.SheetGrants, x => x.Entitlement.Id == "grant.wolf");
+        Assert.Contains(hybrid.SheetGrants, x => x.Entitlement.Id == "grant.shared");
+
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var durable = new PostgresCharacterSupernaturalStateStore(reloaded);
+        var saved = (await durable.GetAsync(id))!;
+        Assert.Equal(5, saved.Revision);
+        Assert.Equal(4, saved.LedgerRevision);
+        Assert.Contains("progress.wolf", saved.AlternateSheetsJson);
+        Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
+        using var journal = JsonDocument.Parse(saved.LedgerJson);
+        Assert.Equal(3, journal.RootElement.GetProperty("instances").GetArrayLength());
+        Assert.Equal(4, journal.RootElement.GetProperty("processedEventIds").GetArrayLength());
     }
 }
 #endif
