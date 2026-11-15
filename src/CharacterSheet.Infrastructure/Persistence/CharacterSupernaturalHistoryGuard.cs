@@ -63,6 +63,7 @@ internal static class CharacterSupernaturalHistoryGuard
 
             PreserveResources(old, next);
             PreserveInstances(old, next, command);
+            PreserveInteractionDecisions(old, next, command.TransitionRequestJson!);
         }
         else
         {
@@ -73,6 +74,41 @@ internal static class CharacterSupernaturalHistoryGuard
             PreserveAcquiredOwners(existing.PersistentInfluencesJson, command.PersistentInfluencesJson,
                 "persistent influences");
         }
+    }
+
+    /// <summary>
+    /// Core's planner either inherits every existing interaction unchanged or
+    /// replaces the entire interaction set with the explicitly authorized
+    /// request list. Compare the resulting ledger to the independently retained
+    /// transition audit so an unrelated interaction cannot be introduced or
+    /// silently discarded within a legitimate form change.
+    /// </summary>
+    private static void PreserveInteractionDecisions(
+        JsonElement previous, JsonElement proposed, string transitionRequestJson)
+    {
+        using var audited = JsonDocument.Parse(transitionRequestJson);
+        var request = audited.RootElement;
+        var replaces = request.TryGetProperty("replacementInteractions", out var replacements) &&
+            replacements.ValueKind != JsonValueKind.Null;
+        if (replaces && replacements.ValueKind != JsonValueKind.Array)
+            throw new ArgumentException("Interaction replacement must be an audited array.");
+
+        var expected = replaces
+            ? replacements
+            : previous.TryGetProperty("interactions", out var inherited)
+                ? inherited : default;
+        var actual = proposed.TryGetProperty("interactions", out var committed)
+            ? committed : default;
+
+        // Native's optional null and omitted interaction collections mean the
+        // same empty policy. Explicit [] remains distinct from a null policy.
+        static bool IsMissing(JsonElement element) =>
+            element.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null;
+        if (!(IsMissing(expected) && IsMissing(actual)) &&
+            (IsMissing(expected) || IsMissing(actual) ||
+             !JsonElement.DeepEquals(expected, actual)))
+            throw new ArgumentException(
+                "Manifestation interactions must match the authorized transition's replacement decisions.");
     }
 
     private static void ValidateInitialResources(JsonElement ledger,

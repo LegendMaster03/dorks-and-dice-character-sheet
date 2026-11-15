@@ -461,6 +461,62 @@ public sealed class CharacterSupernaturalPersistenceTests
     }
 
     [Fact]
+    public async Task TransitionCanNotChangeInteractionsWithoutAuditedReplacement()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+        const string interaction = """
+            [{"id":"fixture.interaction","kind":1,
+              "instanceIds":["manifest.wolf"],"selectedInstanceId":"manifest.wolf",
+              "definitionOccurrence":{
+                "source":{"kind":0,"id":"rule.synthetic.fixture","version":"test-v1"},
+                "occurrencePath":"interaction.fixture"},
+              "basis":{"adjudication":3,"nativeRuleReference":"rule.synthetic.fixture"},
+              "authorizationEvidenceId":"fixture:rule-decision"}]
+            """;
+        var firstLedger = JsonNode.Parse(Ledger(id, 1, "enter:wolf"))!.AsObject();
+        firstLedger["interactions"] = JsonNode.Parse(interaction);
+        var unapproved = Write(id, digest, 1, 0, 1, "enter:wolf",
+            transition: true, ledger: firstLedger.ToJsonString());
+
+        // A valid event and per-step audit do not grant permission to rewrite
+        // the separately authorized simultaneous-form interaction decisions.
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CommitVerifiedAsync(unapproved));
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+
+        var authorizedRequest = JsonNode.Parse(unapproved.TransitionRequestJson!)!.AsObject();
+        authorizedRequest["replacementInteractions"] = JsonNode.Parse(interaction);
+        var approvedFixture = unapproved with
+        {
+            TransitionRequestJson = authorizedRequest.ToJsonString()
+        };
+        // The internal store trusts the already-verified command: only a
+        // real Core planner plus independently validating DM/native authority
+        // may create the audited replacement on the production path.
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(approvedFixture)).Status);
+        using var recorded = JsonDocument.Parse(
+            (await store.GetEventsAsync(id))[1].TransitionRequestJson!);
+        Assert.True(recorded.RootElement.TryGetProperty("replacementInteractions", out _));
+
+        var nextLedger = JsonNode.Parse(Ledger(id, 2, "enter:wolf", "revert:wolf"))!.AsObject();
+        // Omitting the previously active interaction without a replacement is
+        // equally unauthorized, even if an End step happens in the event.
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.CommitVerifiedAsync(Write(id, digest, 2, 1, 2,
+                "revert:wolf", transition: true, ledger: nextLedger.ToJsonString())));
+        Assert.Equal(2, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
     public async Task AcquisitionPreservesPreviouslyEarnedProgressionAndExistingLedger()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
