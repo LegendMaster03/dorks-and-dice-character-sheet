@@ -92,7 +92,7 @@ public sealed class ToolHostFreshCharacterAccessGateway(
             return new(SiteCharacterAccessStatus.ProjectionUnavailable);
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException
-            or NotSupportedException or InvalidOperationException)
+            or NotSupportedException or InvalidOperationException or IOException)
         {
             return new(SiteCharacterAccessStatus.ProjectionUnavailable);
         }

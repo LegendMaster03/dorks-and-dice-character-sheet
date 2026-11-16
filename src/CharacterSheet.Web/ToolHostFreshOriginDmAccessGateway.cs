@@ -82,7 +82,7 @@ public sealed class ToolHostFreshOriginDmAccessGateway(
             return new(SiteOriginDmAccessStatus.ProjectionUnavailable);
         }
         catch (Exception error) when (error is HttpRequestException or JsonException
-            or NotSupportedException or InvalidOperationException)
+            or NotSupportedException or InvalidOperationException or IOException)
         {
             return new(SiteOriginDmAccessStatus.ProjectionUnavailable);
         }

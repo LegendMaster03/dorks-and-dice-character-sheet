@@ -14,6 +14,22 @@ namespace CharacterSheet.IntegrationTests;
 /// </summary>
 public sealed class ToolHostFreshOriginDmAccessGatewayTests
 {
+
+    private sealed class InterruptedContent : HttpContent
+    {
+        // Simulates a Site response that reports HTTP 200 but disconnects
+        // during body buffering, rather than a response-status failure.
+        protected override Task SerializeToStreamAsync(
+            Stream stream, TransportContext? context) =>
+            Task.FromException(new IOException("Backend Site response interrupted"));
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
     private static readonly Guid Actor =
         Guid.Parse("b8fe820c-8e4d-47d4-b687-8c77e983f9d3");
     private static readonly Guid Campaign =
@@ -129,6 +145,24 @@ public sealed class ToolHostFreshOriginDmAccessGatewayTests
         var denied = await gateway.CheckFreshAsync(Campaign, Character);
         Assert.Equal(SiteOriginDmAccessStatus.ProjectionUnavailable, denied.Status);
         Assert.Null(denied.ActorUserId);
+        Assert.Equal(1, handler.Requests);
+    }
+
+
+    [Fact]
+    public async Task BackendDmBodyIoFailureIsUnavailableNotCachedAuthorization()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new InterruptedContent()
+        });
+        var gateway = new ToolHostFreshOriginDmAccessGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.test") },
+            new HttpContextAccessor { HttpContext = await ContextAsync(true) });
+
+        var result = await gateway.CheckFreshAsync(Campaign, Character);
+        Assert.Equal(SiteOriginDmAccessStatus.ProjectionUnavailable, result.Status);
+        Assert.Null(result.ActorUserId);
         Assert.Equal(1, handler.Requests);
     }
 

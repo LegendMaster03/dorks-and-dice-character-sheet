@@ -44,6 +44,22 @@ public sealed class ToolHostFreshCharacterAccessGatewayTests
         }
     }
 
+
+    private sealed class InterruptedContent : HttpContent
+    {
+        // Simulates a Site response that reports HTTP 200 but disconnects
+        // during body buffering, rather than a response-status failure.
+        protected override Task SerializeToStreamAsync(
+            Stream stream, TransportContext? context) =>
+            Task.FromException(new IOException("Backend Site response interrupted"));
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
     private static readonly Guid Actor =
         Guid.Parse("aad2a27f-e596-4f67-b2fc-7b40b68043b9");
     private static readonly Guid Character =
@@ -137,6 +153,24 @@ public sealed class ToolHostFreshCharacterAccessGatewayTests
         var denied = await gateway.GetFreshAuthorizedCharacterAsync(Character);
         Assert.Equal(SiteCharacterAccessStatus.ProjectionUnavailable, denied.Status);
         Assert.Null(denied.Character);
+        Assert.Equal(1, handler.Requests);
+    }
+
+
+    [Fact]
+    public async Task BackendBodyIoFailureIsUnavailableNotCachedAuthorization()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new InterruptedContent()
+        });
+        var gateway = new ToolHostFreshCharacterAccessGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.test") },
+            new HttpContextAccessor { HttpContext = await ContextAsync(true) });
+
+        var result = await gateway.GetFreshAuthorizedCharacterAsync(Character);
+        Assert.Equal(SiteCharacterAccessStatus.ProjectionUnavailable, result.Status);
+        Assert.Null(result.Character);
         Assert.Equal(1, handler.Requests);
     }
 
