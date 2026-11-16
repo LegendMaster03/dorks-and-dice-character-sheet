@@ -40,11 +40,13 @@ public sealed class NativeDirectInnateSpellLedgerEvaluator(
 
         var origin = input.CommittedOrigin;
         var draft = await drafts.GetAsync(input.CharacterId, cancellationToken);
+        // The original draft fingerprint is an audit hint: initial native
+        // activation deliberately allows that hint to be stale and commits
+        // the re-evaluated latest catalog fingerprint. The *committed* Origin
+        // fingerprint is the authoritative source for this new calculation.
         if (draft is null || draft.CharacterId != input.CharacterId ||
             draft.Revision != origin.SourceDraftRevision ||
-            draft.RulesetId != origin.RulesetId ||
-            (draft.Fingerprint is not null &&
-             draft.Fingerprint != origin.Fingerprint))
+            draft.RulesetId != origin.RulesetId)
             return null;
 
         using var proposal = JsonDocument.Parse(draft.ProposalJson);
