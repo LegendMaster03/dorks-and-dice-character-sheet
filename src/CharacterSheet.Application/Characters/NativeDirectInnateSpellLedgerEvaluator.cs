@@ -19,7 +19,8 @@ public sealed class NativeDirectInnateSpellLedgerEvaluator(
     ICharacterOriginDraftStore drafts,
     CharacterBuildService builds,
     CharacterStateService characterStates,
-    INativeRulesCoreGateway core) : ITrustedInnateSpellLedgerEvaluator
+    INativeRulesCoreGateway core,
+    ICharacterMutationRevisionReader mutationRevisions) : ITrustedInnateSpellLedgerEvaluator
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
     private static readonly string[] Abilities =
@@ -36,6 +37,15 @@ public sealed class NativeDirectInnateSpellLedgerEvaluator(
             input.SiteActorId == Guid.Empty ||
             input.CommittedOrigin.CharacterId != input.CharacterId ||
             input.CommittedOrigin.SourceDraftRevision is not > 0)
+            return null;
+
+        // Capture BEFORE any build/state read or delegated native call. The
+        // subsequent PostgreSQL CAS checks this exact root revision while
+        // holding FOR UPDATE, preventing a concurrent score/class/option
+        // mutation from publishing a ledger based on stale inputs.
+        var expectedMutationRevision = await mutationRevisions.GetRevisionAsync(
+            input.CharacterId, cancellationToken);
+        if (expectedMutationRevision is not >= 0)
             return null;
 
         var origin = input.CommittedOrigin;
@@ -179,7 +189,8 @@ public sealed class NativeDirectInnateSpellLedgerEvaluator(
         }
         return new TrustedInnateSpellLedgerCandidate(ledgerJson,
             "origin:" + proposalId, proposalId,
-            "native-direct:" + origin.Fingerprint);
+            "native-direct:" + origin.Fingerprint,
+            ExpectedCharacterMutationRevision: expectedMutationRevision.Value);
     }
 
     private static string? ReadText(JsonNode? node, string key) =>
