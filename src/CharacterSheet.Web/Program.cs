@@ -72,6 +72,19 @@ builder.Services
         AllowAutoRedirect = false,
         UseCookies = false
     });
+// DM adjudication must recheck current Site campaign membership and active
+// character association, independently of the original Tool Host ticket.
+builder.Services
+    .AddHttpClient<ISiteFreshOriginDmAccessGateway, ToolHostFreshOriginDmAccessGateway>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(3);
+        client.BaseAddress = toolHostBaseUri;
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
 builder.Services
     .AddHttpClient<IToolLifecycleIntrospectionClient, DorksAndDiceToolLifecycleIntrospectionClient>(client =>
     {
