@@ -371,9 +371,9 @@ authenticated Werewolf/Wolf/Hybrid acquisition and transition tests.
    complete primary or form-specific entitlement verifier.
 6. Close the incomplete cases in the now-recovered 32-scenario checklist
    below, particularly real supernatural acquisition and DM authorization,
-   authenticated Origin reconstruction, resource policies, Site revocation
-   and an actual host-process restart. Do not confuse synthetic coverage
-   with production entitlement.
+   authenticated Origin reconstruction, resource policies and Site
+   revocation. Literal host-process restart now has test-only Site delegation
+   coverage in scenario 32, but that is not production entitlement.
 7. Verify no regression to existing initial-Origin verification, mixed
    Origin DM approval, older content compatibility, and ordinary character
    API behavior. Do not migrate old source-occurrence IDs into canonical
