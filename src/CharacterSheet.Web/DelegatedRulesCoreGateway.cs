@@ -315,7 +315,15 @@ public sealed class DelegatedRulesCoreGateway(
 
                 try
                 {
-                    var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, deadline.Token);
+                    // ReadFromJsonAsync may materialize a custom HttpContent
+                    // stream without observing a later cancellation. Buffer
+                    // with the deadline-aware copy path first, then parse an
+                    // already completed, size-bounded response.
+                    const long maxJsonResponseBytes = 32L * 1024 * 1024;
+                    await response.Content.LoadIntoBufferAsync(
+                        maxJsonResponseBytes, deadline.Token);
+                    var value = await response.Content.ReadFromJsonAsync<T>(
+                        JsonOptions, deadline.Token);
                     if (value is null)
                     {
                         timingOutcome = "invalid-response";
@@ -327,7 +335,8 @@ public sealed class DelegatedRulesCoreGateway(
                 }
                 catch (Exception exception) when (exception is JsonException
                     or NotSupportedException
-                    or HttpRequestException)
+                    or HttpRequestException
+                    or IOException)
                 {
                     timingOutcome = "invalid-response";
                     logger.LogWarning(exception, "Rules Core returned an unreadable projection response.");
@@ -363,6 +372,10 @@ public sealed class DelegatedRulesCoreGateway(
         if (response.Content.Headers.ContentLength is > maximum) return null;
         try
         {
+            // The stream API can defer custom-content materialization. Force
+            // a cancellation-aware, 4 KiB bounded copy before parsing error
+            // bodies, exactly as for successful responses.
+            await response.Content.LoadIntoBufferAsync(maximum, cancellationToken);
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             var buffer = new byte[maximum + 1];
             var length = 0;

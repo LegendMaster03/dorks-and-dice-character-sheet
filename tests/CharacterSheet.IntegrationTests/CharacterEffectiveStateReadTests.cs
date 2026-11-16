@@ -39,12 +39,17 @@ public sealed class CharacterEffectiveStateReadTests
                 await BeforeFreshRead(Interlocked.Increment(ref freshReadCount));
             if (!FreshAllowed)
                 return new(SiteCharacterAccessStatus.NotFoundOrNotOwned);
-            if (FreshLifecycle is { } liveLifecycle && characterId == allowedId)
-                return SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
-                    characterId, "Live Site character", liveLifecycle,
-                    liveLifecycle == SiteCharacterLifecycleState.Archived
-                        ? DateTimeOffset.UnixEpoch : null, []));
-            return await GetAuthorizedCharacterAsync(characterId, cancellationToken);
+            if (status != SiteCharacterAccessStatus.Authorized)
+                return new(status);
+            if (characterId != allowedId)
+                return new(SiteCharacterAccessStatus.NotFoundOrNotOwned);
+            // This models a separate Site backend lookup. It must not invoke
+            // the cached introspection hook or change Build reload ordering.
+            var liveLifecycle = FreshLifecycle ?? lifecycle;
+            return SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
+                characterId, "Live Site character", liveLifecycle,
+                liveLifecycle == SiteCharacterLifecycleState.Archived
+                    ? archivedAt : null, []));
         }
 
         public async Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
