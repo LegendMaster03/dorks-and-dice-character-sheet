@@ -41,6 +41,15 @@ public sealed class CharacterSheetRoot
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// Monotonic revision of every aggregate mutation, including changes to
+    /// child mechanics rows. Unlike UpdatedAt, it advances when a caller's
+    /// timestamp is equal to or earlier than the previous timestamp.
+    /// Native ledger evaluation captures this token and the ledger store
+    /// compares it under the same character-root lock as its CAS commit.
+    /// </summary>
+    public long MutationRevision { get; private set; }
+
     public int? CurrentHitPoints { get; private set; }
 
     public int? AdvancementProgress { get; private set; }
@@ -1194,6 +1203,7 @@ public sealed class CharacterSheetRoot
 
     private void Touch(DateTimeOffset changedAt)
     {
+        MutationRevision = checked(MutationRevision + 1);
         if (changedAt > UpdatedAt)
         {
             UpdatedAt = changedAt;
