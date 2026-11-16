@@ -56,8 +56,14 @@ public static class VerifiedOriginVisionReader
                 identity.ValueKind != JsonValueKind.Object ||
                 !identity.TryGetProperty("kind", out var kind) ||
                 !EnumIs(kind, "Trait", 1) ||
-                !StringIs(identity, "mechanicalDefinitionId",
-                    sourceId + "#trait:low-light-vision") ||
+                // Catalog normalization assigns independent canonical IDs
+                // while preserving source occurrence and the authored payload.
+                // Accept only this exact shared definition or the legacy
+                // source-local identity; never infer equivalence by suffix.
+                (!StringIs(identity, "mechanicalDefinitionId",
+                    "trait.shared.low-light-vision") &&
+                 !StringIs(identity, "mechanicalDefinitionId",
+                    sourceId + "#trait:low-light-vision")) ||
                 !identity.TryGetProperty("occurrence", out var occurrence) ||
                 occurrence.ValueKind != JsonValueKind.Object ||
                 !StringIs(occurrence, "occurrencePath", path!) ||
