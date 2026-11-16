@@ -6,6 +6,7 @@ using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.IntegrationTests;
 
