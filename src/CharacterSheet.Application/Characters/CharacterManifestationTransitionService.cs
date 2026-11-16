@@ -51,6 +51,7 @@ public interface ITrustedCharacterManifestationTransitionSource
 /// </summary>
 public sealed class CharacterManifestationTransitionService(
     ISiteCharacterAccessGateway site,
+    ISiteFreshCharacterAccessGateway freshSite,
     ICharacterSupernaturalStateStore store,
     INativeRulesCoreGateway rules,
     ITrustedCharacterManifestationTransitionSource source,
@@ -71,8 +72,17 @@ public sealed class CharacterManifestationTransitionService(
             eventId.Length > 160)
             return new(CharacterManifestationApplyStatus.InvalidRequest);
 
-        // Character-owned data is not inspected before Site confirms current
-        // account ownership and character lifecycle.
+        // Site's request-scoped introspection is not a live authorization
+        // check. Reload owner, lifecycle and campaign links directly from Site
+        // before inspecting any Character Sheet source or transition state.
+        var initialLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (initialLive.Status != SiteCharacterAccessStatus.Authorized ||
+            initialLive.Character?.CharacterId != characterId)
+            return new(FromSiteStatus(initialLive.Status));
+        if (!initialLive.Character.AllowsOrdinaryEditingByLifecycle)
+            return new(CharacterManifestationApplyStatus.ArchivedReadOnly);
+
         var access = await site.GetAuthorizedCharacterAsync(characterId, cancellationToken);
         if (access.Status != SiteCharacterAccessStatus.Authorized ||
             access.Character?.CharacterId != characterId)
@@ -84,6 +94,8 @@ public sealed class CharacterManifestationTransitionService(
             });
         if (!access.Character.AllowsOrdinaryEditingByLifecycle)
             return new(CharacterManifestationApplyStatus.ArchivedReadOnly);
+        if (!SameSiteScope(initialLive.Character, access.Character))
+            return new(CharacterManifestationApplyStatus.SourceUnauthorized);
 
         var saved = await store.GetAsync(characterId, cancellationToken);
         if (saved is null)
@@ -240,13 +252,19 @@ public sealed class CharacterManifestationTransitionService(
         if (before != after || after is null)
             return new(CharacterManifestationApplyStatus.AuthoritativeInputsChanged);
 
-        // Site identity and lifecycle are external to the Character Sheet
-        // transaction. Recheck after the remote Core plan, immediately before
-        // committing: an owner may lose access or the character may be archived
-        // while Core verifies mechanics. A changed campaign association also
-        // invalidates the scope in which the source policy made its decision.
-        // This narrows, but can not eliminate, the cross-service revocation
-        // window until Site exposes a commit-bound authorization contract.
+        // The second check must reload Site-owned state, not replay its
+        // original Tool Host introspection. This still does not establish a
+        // cross-database commit fence or eliminate the final race.
+        var finalLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (finalLive.Status != SiteCharacterAccessStatus.Authorized ||
+            finalLive.Character?.CharacterId != characterId)
+            return new(FromSiteStatus(finalLive.Status));
+        if (!finalLive.Character.AllowsOrdinaryEditingByLifecycle)
+            return new(CharacterManifestationApplyStatus.ArchivedReadOnly);
+        if (!SameSiteScope(initialLive.Character, finalLive.Character))
+            return new(CharacterManifestationApplyStatus.SourceUnauthorized);
+
         var latestAccess = await site.GetAuthorizedCharacterAsync(
             characterId, cancellationToken);
         if (latestAccess.Status != SiteCharacterAccessStatus.Authorized ||
@@ -261,8 +279,8 @@ public sealed class CharacterManifestationTransitionService(
             });
         if (!latestAccess.Character.AllowsOrdinaryEditingByLifecycle)
             return new(CharacterManifestationApplyStatus.ArchivedReadOnly);
-        if (!access.Character.CampaignIds.ToHashSet().SetEquals(
-                latestAccess.Character.CampaignIds))
+        if (!SameSiteScope(finalLive.Character, latestAccess.Character) ||
+            !SameSiteScope(access.Character, latestAccess.Character))
             return new(CharacterManifestationApplyStatus.SourceUnauthorized);
 
         CharacterSupernaturalWriteResult commit;
@@ -335,4 +353,22 @@ public sealed class CharacterManifestationTransitionService(
             return false;
         }
     }
+    private static CharacterManifestationApplyStatus FromSiteStatus(
+        SiteCharacterAccessStatus status) => status switch
+    {
+        SiteCharacterAccessStatus.Unauthenticated =>
+            CharacterManifestationApplyStatus.Unauthenticated,
+        SiteCharacterAccessStatus.NotFoundOrNotOwned =>
+            CharacterManifestationApplyStatus.NotFoundOrNotOwned,
+        _ => CharacterManifestationApplyStatus.ProjectionUnavailable
+    };
+
+    private static bool SameSiteScope(
+        SiteCharacterProjection expected, SiteCharacterProjection actual) =>
+        expected.CharacterId == actual.CharacterId &&
+        expected.LifecycleState == actual.LifecycleState &&
+        expected.CampaignIds.Count == expected.CampaignIds.Distinct().Count() &&
+        actual.CampaignIds.Count == actual.CampaignIds.Distinct().Count() &&
+        expected.CampaignIds.ToHashSet().SetEquals(actual.CampaignIds);
+
 }
