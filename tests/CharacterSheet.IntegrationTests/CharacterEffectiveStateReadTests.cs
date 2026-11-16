@@ -759,27 +759,21 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(1, native.OriginVerificationCalls);
 
 
-        // A saved JSON profile can pass TryGetProperty despite duplicate
-        // source/configuration keys. Reject the ambiguous stored candidate
-        // before any delegated Core call, with no receipt or revision writes.
-        const string duplicateRoot = """
-            {"id":"origin:current","underlying":{"speciesId":"species.elf","inherentGrants":[]},"underlying":{"speciesId":"species.human","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
-            """;
-        const string duplicateConfiguration = """
-            {"id":"origin:current","underlying":{"speciesId":"species.human","speciesId":"species.elf","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
-            """;
-        const string differentlyCasedUnderlying = """
-            {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"Underlying":{"speciesId":"species.elf","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
-            """;
-        const string duplicatedNestedEvidence = """
-            {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[{"source":{"occurrenceId":"first","occurrenceId":"forged"}}]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
-            """;
-        const string missingCurrent = """
+        // PostgreSQL jsonb canonicalizes duplicate keys during storage, so
+        // raw duplicate-property ambiguity is covered by the adapter unit
+        // tests. These malformed configuration shapes survive a jsonb
+        // round-trip and must be rejected BEFORE delegated Core verification.
+        const string absentCurrent = """
             {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
             """;
+        const string nullCurrent = """
+            {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"current":null,"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
+        const string arrayUnderlying = """
+            {"id":"origin:current","underlying":[],"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
         foreach (var malformed in new[]
-                 { duplicateRoot, differentlyCasedUnderlying, duplicateConfiguration,
-                   duplicatedNestedEvidence, missingCurrent })
+                 { absentCurrent, nullCurrent, arrayUnderlying })
         {
             await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
                 .ExecuteUpdateAsync(update => update.SetProperty(
