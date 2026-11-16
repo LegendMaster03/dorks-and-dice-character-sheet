@@ -239,6 +239,16 @@ public sealed class CharacterStateCrossRepositoryTests
             return result;
         }
 
+        public async Task<JsonNode> VerifyNativeOriginUnderlyingAsync(
+            JsonElement request, CancellationToken ct)
+        {
+            using var message = Authorized(HttpMethod.Post,
+                "/api/mechanics/v1/origins/underlying/verify");
+            message.Content = JsonContent.Create(request, options: Wire);
+            using var response = await http.SendAsync(message, ct);
+            return await Parse(response, ct);
+        }
+
         public async Task<JsonNode> PlanVerifiedManifestationAsync(
             JsonElement request, CancellationToken ct)
         {
@@ -437,6 +447,40 @@ public sealed class CharacterStateCrossRepositoryTests
         var restored = await Review(profile);
         Assert.Equal(HttpStatusCode.OK, restored.Status);
         Assert.True(JsonNode.DeepEquals(original.Body, restored.Body));
+        // Exercise Character Sheet's production read coordinator against the
+        // independently sourced real Core HTTP endpoint, not only direct
+        // test-client requests.
+        await using (var owned = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var site = new OwnerAccess(id);
+            var build = new PostgresCharacterBuildStore(owned);
+            var verified = new CharacterVerifiedOriginUnderlyingService(
+                new CharacterOriginStateService(site, build,
+                    new PostgresCharacterAuthorizedOriginStore(owned)),
+                new PostgresCharacterSupernaturalStateStore(owned),
+                new RealGateway(core.Client));
+            var partial = await verified.GetAsync(id);
+            Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial,
+                partial.Status);
+            Assert.Equal(1, partial.OriginRevision);
+            Assert.Equal("species.human",
+                partial.Underlying!["speciesId"]!.GetValue<string>());
+            Assert.Equal("species.human",
+                partial.Current!["speciesId"]!.GetValue<string>());
+        }
+        await using (var unauthorized = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var site = new OwnerAccess(id, authorize: false);
+            var build = new PostgresCharacterBuildStore(unauthorized);
+            var verified = new CharacterVerifiedOriginUnderlyingService(
+                new CharacterOriginStateService(site, build,
+                    new PostgresCharacterAuthorizedOriginStore(unauthorized)),
+                new PostgresCharacterSupernaturalStateStore(unauthorized),
+                new RealGateway(core.Client));
+            Assert.Equal(
+                CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+                (await verified.GetAsync(id)).Status);
+        }
         await using var finalDb = new CharacterSheetDbContext(database.CreateOptions());
         Assert.Empty(await finalDb.SupernaturalStates.ToArrayAsync());
         Assert.Empty(await finalDb.SupernaturalEventReceipts.ToArrayAsync());
