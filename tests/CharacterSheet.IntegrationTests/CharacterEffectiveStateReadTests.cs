@@ -768,6 +768,9 @@ public sealed class CharacterEffectiveStateReadTests
         const string duplicateConfiguration = """
             {"id":"origin:current","underlying":{"speciesId":"species.human","speciesId":"species.elf","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
             """;
+        const string differentlyCasedUnderlying = """
+            {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"Underlying":{"speciesId":"species.elf","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
         const string duplicatedNestedEvidence = """
             {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[{"source":{"occurrenceId":"first","occurrenceId":"forged"}}]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
             """;
@@ -775,7 +778,8 @@ public sealed class CharacterEffectiveStateReadTests
             {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
             """;
         foreach (var malformed in new[]
-                 { duplicateRoot, duplicateConfiguration, duplicatedNestedEvidence, missingCurrent })
+                 { duplicateRoot, differentlyCasedUnderlying, duplicateConfiguration,
+                   duplicatedNestedEvidence, missingCurrent })
         {
             await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
                 .ExecuteUpdateAsync(update => update.SetProperty(

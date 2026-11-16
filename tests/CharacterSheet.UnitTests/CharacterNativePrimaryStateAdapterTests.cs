@@ -233,6 +233,7 @@ public sealed class CharacterNativePrimaryStateAdapterTests
             """{"underlying":{"speciesId":"species.human","speciesId":"species.forged"},"current":{}}""",
             """{"underlying":{},"current":{"ancestryId":"ancestry.elf","ancestryId":"ancestry.forged"}}""",
             """{"id":"one","id":"two","underlying":{},"current":{}}""",
+            """{"underlying":{},"Underlying":{"speciesId":"species.forged"},"current":{}}""",
             """{"underlying":{"inherentGrants":[{"source":{"occurrenceId":"first","occurrenceId":"second"}}]},"current":{}}""",
             """{"underlying":{},"current":{},"history":[{"evidenceId":"one","evidenceId":"two"}]}""",
             """{"underlying":{},"current":{},"adjudication":{"adjudication":"supported","adjudication":"other"}}"""

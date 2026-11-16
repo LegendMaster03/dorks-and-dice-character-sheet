@@ -204,7 +204,10 @@ public static class CharacterNativePrimaryStateAdapter
         if (value.ValueKind != JsonValueKind.Object)
             return true;
 
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        // Native profile model binding uses case-insensitive Web JSON
+        // property names. Two spellings differing only by case can still
+        // override one another at deserialization time.
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in value.EnumerateObject())
             if (!names.Add(property.Name) || !HasUniqueJsonKeys(property.Value))
                 return false;
