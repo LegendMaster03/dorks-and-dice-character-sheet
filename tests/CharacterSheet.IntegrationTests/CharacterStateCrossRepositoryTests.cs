@@ -1119,6 +1119,34 @@ public sealed class CharacterStateCrossRepositoryTests
         await routine.RemoveInventoryItemOccurrenceAsync(
             id, item.Id, DateTimeOffset.UtcNow);
 
+        await routine.SetRulesInputAsync(id,
+            CharacterRulesInputKind.Training, "skill.athletics",
+            null, null, null, DateTimeOffset.UtcNow);
+        await AssertRefused();
+        await routine.RemoveRulesInputAsync(id,
+            CharacterRulesInputKind.Training, "skill.athletics", DateTimeOffset.UtcNow);
+
+        await routine.SetRulesInputAsync(id,
+            CharacterRulesInputKind.Choice, "starting-equipment.choice",
+            null, null, "custom-kit", DateTimeOffset.UtcNow);
+        await AssertRefused();
+        await routine.RemoveRulesInputAsync(id,
+            CharacterRulesInputKind.Choice, "starting-equipment.choice", DateTimeOffset.UtcNow);
+
+        await routine.SetRulesInputAsync(id,
+            CharacterRulesInputKind.Resource, "resource.synthetic",
+            3, null, null, DateTimeOffset.UtcNow);
+        await AssertRefused();
+        await routine.RemoveRulesInputAsync(id,
+            CharacterRulesInputKind.Resource, "resource.synthetic", DateTimeOffset.UtcNow);
+
+        var beforeCurrency = await store.GetAuthoritativeInputsFingerprintAsync(id);
+        await routine.SetCurrencyBalanceAsync(id, "gold", 25, DateTimeOffset.UtcNow);
+        Assert.NotEqual(beforeCurrency,
+            await store.GetAuthoritativeInputsFingerprintAsync(id));
+        await AssertRefused();
+        await routine.RemoveCurrencyBalanceAsync(id, "gold", DateTimeOffset.UtcNow);
+
         // Once these individually owned unsupported facts are absent,
         // the existing test-only source-free primary subset may be planned.
         var allowed = await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf");

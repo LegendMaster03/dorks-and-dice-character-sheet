@@ -433,6 +433,10 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             .Select(x => new { x.Id, x.RuleConceptKey, x.CustomName, x.Quantity,
                 x.IsCarried, x.IsEquipped, x.IsAttuned, x.ContainerOccurrenceId,
                 x.UpdatedAt }).ToArrayAsync(ct);
+        var currency = await db.CharacterCurrencyBalances.AsNoTracking()
+            .Where(x => x.CharacterId == id).OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.CurrencyKey, x.Amount, x.UpdatedAt })
+            .ToArrayAsync(ct);
         var origin = await db.AuthorizedOrigins.AsNoTracking()
             .Where(x => x.CharacterId == id)
             .Select(x => new { x.RulesetId, x.Fingerprint, x.ProfileJson,
@@ -443,7 +447,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 x.AuthorizationEvidenceId, x.ApprovedDecisionsJson }).ToArrayAsync(ct);
 
         var canonical = JsonSerializer.Serialize(new {
-            root, classes, selections, abilities, rules, conditions, hpGains, items, origin, originEvents
+            root, classes, selections, abilities, rules, conditions, hpGains, items, currency,
+            origin, originEvents
         });
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
             .ToLowerInvariant();

@@ -166,6 +166,46 @@ public sealed class CharacterNativePrimaryStateAdapterTests
     }
 
     [Fact]
+    public void NonNativeChoicesTrainedSkillsAndOwnedResourcesBlockTransitionsWithoutHidingClass()
+    {
+        var id = Guid.NewGuid();
+        var (build, state) = Fixture(id);
+        var updated = state with
+        {
+            RulesInputs =
+            [
+                new CharacterRulesInputStateView(Guid.NewGuid(),
+                    CharacterRulesInputKinds.Choice, "starting-equipment.choice",
+                    null, null, "custom-kit", Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(),
+                    CharacterRulesInputKinds.Training, "skill.athletics",
+                    null, null, null, Now, Now),
+                new CharacterRulesInputStateView(Guid.NewGuid(),
+                    CharacterRulesInputKinds.Resource, "resource.synthetic",
+                    3, null, null, Now, Now)
+            ],
+            CurrencyBalances =
+            [
+                new CharacterCurrencyBalanceView(Guid.NewGuid(),
+                    "gold", 25, Now, Now)
+            ],
+            AdvancementProgress = 2
+        };
+        var snapshot = CharacterNativePrimaryStateAdapter.Assemble(
+            id, build, updated, null, Ruleset, Fingerprint);
+        Assert.NotNull(snapshot.Mechanics);
+        Assert.Single(snapshot.Mechanics.Value.GetProperty("advancements").EnumerateArray());
+        Assert.False(snapshot.TransitionInputsVerified);
+        Assert.Contains("non-native-choice-effects-unverified", snapshot.Issues);
+        Assert.Contains("skill-competency-grants-unverified", snapshot.Issues);
+        Assert.Contains("primary-resource-balance-policy-unverified", snapshot.Issues);
+        Assert.Contains("currency-form-interaction-unverified", snapshot.Issues);
+        Assert.Contains("advancement-progress-form-policy-unverified", snapshot.Issues);
+        Assert.False(CharacterNativePrimaryStateAdapter.Matches(
+            snapshot.Mechanics.Value, snapshot));
+    }
+
+    [Fact]
     public void InvalidAbilityOwnershipAndCharacterMismatchFailClosed()
     {
         var id = Guid.NewGuid();

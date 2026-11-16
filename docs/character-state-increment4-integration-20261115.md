@@ -419,3 +419,20 @@ conflict handling, reload and trusted transport, but not production supernatural
 acquisition. The seven outstanding requirements in the preceding section
 remain the implementation reconciliation checklist until the original
 numbered specification is available.
+
+## Additional primary owner-input coverage
+
+The primary adapter now explicitly marks non-native Character Sheet choices,
+trained skills/competencies, persisted resource inputs, currency balances, and
+advancement progress as unresolved for manifestation transitions. It preserves
+the supported Class/ability native projection for read-only use and does not
+grant any of those unsupported effects. Currency rows are now part of the
+authoritative primary dependency fingerprint, preventing a remote plan from
+being committed over a concurrent currency change.
+
+A unit test verifies the independent issue classifications and retained Class
+projection. The existing real Rules Core HTTP/PostgreSQL case now exercises
+trained skills, non-native choices, resource inputs, and currency in addition
+to its prior Background, HP, death-save and inventory refusals. These are
+negative production-safety checks using test-only supernatural authorization,
+not new first-party transformation mechanics.

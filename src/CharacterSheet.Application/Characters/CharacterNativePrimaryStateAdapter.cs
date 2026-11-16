@@ -109,6 +109,27 @@ public static class CharacterNativePrimaryStateAdapter
         if (state.Conditions.Count > 0 || state.RulesInputs?.Any(x =>
                 x.Kind is not CharacterRulesInputKinds.Choice) == true)
             issues.Add("additional-primary-mechanics-unverified");
+        // Character-owned choices outside the native class-option namespace
+        // may carry their own entitlement or starting-equipment consequences.
+        // They remain absent from the read-only native Class projection, but
+        // must not be treated as verified inputs for a form transition.
+        if (state.RulesInputs?.Any(x =>
+                x.Kind == CharacterRulesInputKinds.Choice &&
+                !x.Key.StartsWith(NativeCharacterOptionSelections.SlotPrefix,
+                    StringComparison.Ordinal)) == true)
+            issues.Add("non-native-choice-effects-unverified");
+        if (state.RulesInputs?.Any(x => x.Kind is
+                CharacterRulesInputKinds.Training or CharacterRulesInputKinds.ClassSkill or
+                CharacterRulesInputKinds.CompetencyRank) == true)
+            issues.Add("skill-competency-grants-unverified");
+        if (state.RulesInputs?.Any(x => x.Kind == CharacterRulesInputKinds.Resource) == true)
+            issues.Add("primary-resource-balance-policy-unverified");
+        // Currency is a separately owned quantity; no transformation has an
+        // approved carry, merge, or containment rule for it yet.
+        if (state.CurrencyBalances?.Count > 0)
+            issues.Add("currency-form-interaction-unverified");
+        if (state.AdvancementProgress is not null)
+            issues.Add("advancement-progress-form-policy-unverified");
         if (state.CurrentHitPoints is not null || state.HitPointGains?.Count > 0)
             issues.Add("current-hit-points-and-gains-form-policy-unverified");
         if (state.DeathSaves.Successes != 0 || state.DeathSaves.Failures != 0)
