@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CharacterSheet.Application.Persistence;
+using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
