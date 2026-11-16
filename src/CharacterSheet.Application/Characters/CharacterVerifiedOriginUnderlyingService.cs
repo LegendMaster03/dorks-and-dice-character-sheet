@@ -72,7 +72,8 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                 _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
             });
 
-        if (!SameSiteState(liveAccess.Character!, initialAccess))
+        if (initialAccess.ReadOnly ==
+            liveAccess.Character!.AllowsOrdinaryEditingByLifecycle)
             return new(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged);
 
         // Reload inside the digest window, so an Origin change between
@@ -151,7 +152,8 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                         CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized,
                     _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
                 });
-            if (!SameSiteState(finalLive.Character!, finalAccess))
+            if (finalAccess.ReadOnly ==
+                finalLive.Character!.AllowsOrdinaryEditingByLifecycle)
                 return new(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged);
             if (finalAccess.SavedState is not { } finalOrigin ||
                 finalOrigin.Revision != saved.Revision ||
@@ -250,12 +252,6 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
             CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
         _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
     };
-
-    private static bool SameSiteState(
-        SiteCharacterProjection expected, SiteCharacterAccessResult actual) =>
-        actual.Status == SiteCharacterAccessStatus.Authorized &&
-        actual.Character is { } current &&
-        SameSiteState(expected, current);
 
     private static bool SameSiteState(
         SiteCharacterProjection expected, SiteCharacterProjection actual) =>
