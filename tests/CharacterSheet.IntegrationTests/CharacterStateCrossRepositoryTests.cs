@@ -372,7 +372,10 @@ public sealed class CharacterStateCrossRepositoryTests
             transition = new
             {
                 characterId = id.ToString("D"), expectedRevision = 0,
-                eventId = "forged:activate", steps = Array.Empty<object>()
+                eventId = "forged:activate", steps = new[]
+                {
+                    Enter(id, "wolf", "manifest.forged", "forged:activate")
+                }
             }
         }, Wire);
         using (var deniedPlan = await gateway.SendManifestationPlanAsync(deniedPlanRequest))
