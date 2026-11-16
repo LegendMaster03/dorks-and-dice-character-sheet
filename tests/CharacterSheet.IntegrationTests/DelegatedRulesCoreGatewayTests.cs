@@ -15,6 +15,88 @@ namespace CharacterSheet.IntegrationTests;
 
 public sealed class DelegatedRulesCoreGatewayTests
 {
+
+    private sealed class StreamingDelayContent(bool sendFirstByte) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(
+            Stream stream, TransportContext? context) =>
+            SerializeToStreamAsync(stream, context, CancellationToken.None);
+
+        protected override async Task SerializeToStreamAsync(
+            Stream stream, TransportContext? context, CancellationToken cancellationToken)
+        {
+            if (sendFirstByte)
+                await stream.WriteAsync(new byte[] { (byte)'{' }, cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DelegatedCoreHeadersOnlyOrErrorBodyMustNotOutliveClientDeadline(
+        bool errorBody)
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(
+            errorBody ? HttpStatusCode.UnprocessableEntity : HttpStatusCode.OK)
+        {
+            Content = new StreamingDelayContent(sendFirstByte: errorBody)
+        });
+        var context = await AuthenticatedContextAsync(withDelegation: true);
+        // HttpClient timeout alone only covers headers for ResponseHeadersRead.
+        // The gateway must apply that same budget to the response body.
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://site.example"),
+            Timeout = TimeSpan.FromMilliseconds(200)
+        };
+        var gateway = new DelegatedRulesCoreGateway(client,
+            new HttpContextAccessor { HttpContext = context },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+
+        var failure = await Assert.ThrowsAsync<RulesCoreGatewayException>(
+            async () =>
+            {
+                if (errorBody)
+                    await gateway.PlanVerifiedManifestationAsync(
+                        System.Text.Json.JsonSerializer.SerializeToElement(new { }))
+                        .WaitAsync(TimeSpan.FromSeconds(5));
+                else
+                    await gateway.GetNativeRulesetAsync()
+                        .WaitAsync(TimeSpan.FromSeconds(5));
+            });
+        Assert.Contains("unavailable", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task DelegatedCorePreservesCallerCancellationOnStreamedBody()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamingDelayContent(false)
+        });
+        var context = await AuthenticatedContextAsync(withDelegation: true);
+        var client = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://site.example"),
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+        var gateway = new DelegatedRulesCoreGateway(client,
+            new HttpContextAccessor { HttpContext = context },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+        using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => gateway.GetNativeRulesetAsync(caller.Token));
+    }
+
     [Fact]
     public async Task NativeMechanicsUseCharacterSheetServerDelegationRatherThanBrowserUpstream()
     {
