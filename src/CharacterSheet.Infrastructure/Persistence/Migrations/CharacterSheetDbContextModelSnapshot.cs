@@ -631,6 +631,12 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasColumnType("integer")
                 .HasDefaultValue(0);
 
+            b.Property<long>("MutationRevision")
+                .ValueGeneratedOnAdd()
+                .IsConcurrencyToken()
+                .HasColumnType("bigint")
+                .HasDefaultValue(0L);
+
             b.Property<int>("SchemaVersion")
                 .HasColumnType("integer");
 
@@ -638,7 +644,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasColumnType("timestamp with time zone");
 
             b.HasKey("CharacterId");
-            b.ToTable("character_sheet_roots");
+            b.ToTable("character_sheet_roots", t =>
+                t.HasCheckConstraint("CK_character_mutation_revision_nonnegative",
+                    "\"MutationRevision\" >= 0"));
         });
 
         modelBuilder.Entity("CharacterSheet.Infrastructure.Persistence.ProcessedLifecycleEvent", b =>
