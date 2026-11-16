@@ -1753,6 +1753,63 @@ public sealed class CharacterStateCrossRepositoryTests
         }
         Assert.Equal(saved.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
 
+        // A matching ledger row is not enough if the independently recorded
+        // acquisition or transition receipts have been rewritten in storage.
+        var committedReceiptAudit = (await fresh.GetEventsAsync(id))
+            .Select(x => (x.EventId, x.CommittedRevision, x.AuthorizationEvidenceId,
+                x.TransitionRequestJson)).ToArray();
+        try
+        {
+            await reloaded.SupernaturalEventReceipts
+                .Where(x => x.CharacterId == id &&
+                    x.EventId == "fixture:acquire-werewolf")
+                .ExecuteUpdateAsync(change => change.SetProperty(
+                    x => x.AuthorizationEvidenceId, "receipt.forged"));
+            await using var alteredEvidenceContext =
+                new CharacterSheetDbContext(database.CreateOptions());
+            var alteredEvidence = await Reader(alteredEvidenceContext, id,
+                new RealGateway(core.Client)).GetAsync(id);
+            Assert.Equal(CharacterEffectiveStateStatus.Ready, alteredEvidence.Status);
+            Assert.NotEqual("wolf", alteredEvidence.View!.EffectiveSheetId);
+            Assert.Contains("verified-manifestation-read-unavailable",
+                alteredEvidence.View.Unresolved);
+        }
+        finally
+        {
+            await reloaded.SupernaturalEventReceipts
+                .Where(x => x.CharacterId == id &&
+                    x.EventId == "fixture:acquire-werewolf")
+                .ExecuteUpdateAsync(change => change.SetProperty(
+                    x => x.AuthorizationEvidenceId, "fixture:verified-source"));
+        }
+
+        try
+        {
+            await reloaded.SupernaturalEventReceipts
+                .Where(x => x.CharacterId == id &&
+                    x.EventId == "enter:four-owner-wolf")
+                .ExecuteUpdateAsync(change => change.SetProperty(
+                    x => x.EventId, "receipt.forged.transition"));
+            await using var alteredTransitionContext =
+                new CharacterSheetDbContext(database.CreateOptions());
+            var alteredTransition = await Reader(alteredTransitionContext, id,
+                new RealGateway(core.Client)).GetAsync(id);
+            Assert.Equal(CharacterEffectiveStateStatus.Ready, alteredTransition.Status);
+            Assert.NotEqual("wolf", alteredTransition.View!.EffectiveSheetId);
+        }
+        finally
+        {
+            await reloaded.SupernaturalEventReceipts
+                .Where(x => x.CharacterId == id &&
+                    x.EventId == "receipt.forged.transition")
+                .ExecuteUpdateAsync(change => change.SetProperty(
+                    x => x.EventId, "enter:four-owner-wolf"));
+        }
+        Assert.Equal(committedReceiptAudit,
+            (await fresh.GetEventsAsync(id))
+                .Select(x => (x.EventId, x.CommittedRevision,
+                    x.AuthorizationEvidenceId, x.TransitionRequestJson)).ToArray());
+
         // Concurrent verified reads traverse the actual Rules Core HTTP host
         // through independent PostgreSQL contexts. Their projections are not
         // authority to change ownership, balances, revisions, or receipts.
