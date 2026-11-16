@@ -82,7 +82,9 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
             return new(CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized);
         if (origin.SavedState is not { } saved)
             return new(CharacterVerifiedOriginUnderlyingStatus.OriginUnavailable);
-        if (saved.CharacterId != characterId || saved.Revision < 1)
+        if (saved.CharacterId != characterId || saved.Revision < 1 ||
+            !HasContiguousOriginReceipts(
+                characterId, saved.Revision, origin.CompletedEvents))
             return new(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified);
 
         try
@@ -182,4 +184,37 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
             return new(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified);
         }
     }
+    /// <summary>
+    /// Correlates the committed Origin row with its separately persisted
+    /// ordered receipt history. Receipt continuity is a consistency guard,
+    /// not proof that a native procedure or DM approval was authorized;
+    /// the independent Rules Core source verifier remains mandatory.
+    /// </summary>
+    private static bool HasContiguousOriginReceipts(Guid characterId,
+        long revision, IReadOnlyList<CharacterOriginEventReceipt>? receipts)
+    {
+        if (receipts is null || receipts.Count != revision)
+            return false;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < receipts.Count; index++)
+        {
+            var receipt = receipts[index];
+            if (receipt is null ||
+                receipt.CharacterId != characterId ||
+                receipt.CommittedRevision != index + 1L ||
+                string.IsNullOrWhiteSpace(receipt.EventId) ||
+                !ids.Add(receipt.EventId) ||
+                string.IsNullOrWhiteSpace(receipt.MethodRuleId) ||
+                string.IsNullOrWhiteSpace(receipt.MethodId) ||
+                string.IsNullOrWhiteSpace(receipt.AuthorizationKind) ||
+                string.IsNullOrWhiteSpace(receipt.AuthorizationEvidenceId) ||
+                receipt.ApprovalActorUserId.HasValue !=
+                    receipt.ApprovalCampaignId.HasValue ||
+                receipt.ApprovalActorUserId.HasValue !=
+                    (receipt.ApprovedDecisionsJson is not null))
+                return false;
+        }
+        return true;
+    }
+
 }
