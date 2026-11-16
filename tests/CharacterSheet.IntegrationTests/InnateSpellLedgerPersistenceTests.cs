@@ -43,14 +43,14 @@ public sealed class InnateSpellLedgerPersistenceTests
         Guid id, long? expected = null, string eventId = "ledger:init",
         int remaining = 1, long originRevision = 1,
         string originProfileId = "human", string? ledgerJson = null,
-        string? decisionIdsJson = null) =>
+        string? decisionIdsJson = null, long expectedCharacterRevision = 0) =>
         new(id, "first-party-001", "catalog-1", originProfileId,
             "proposal-human", originRevision, expected,
             ledgerJson ?? Ledger(expected is null ? 0 : expected.Value + 1,
                 remaining, originProfileId: originProfileId),
             eventId, Actor, "trusted-native-projection:test", expected is null
                 ? "initialize" : "spend-free-cast", DateTimeOffset.UtcNow,
-            decisionIdsJson);
+            decisionIdsJson, expectedCharacterRevision);
 
     private static async Task InitializeOriginAsync(
         CharacterSheetDbContext db, Guid id)
@@ -235,12 +235,90 @@ public sealed class InnateSpellLedgerPersistenceTests
             Command(id) with { ActorUserId = Guid.Empty },
             Command(id) with { EventId = "" },
             Command(id) with { AppliedDecisionIdsJson = "{}" },
-            Command(id) with { LedgerJson = Ledger(0, -1) }
+            Command(id) with { LedgerJson = Ledger(0, -1) },
+            Command(id) with { ExpectedCharacterMutationRevision = null },
+            Command(id) with { ExpectedCharacterMutationRevision = -1 }
         })
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 store.CommitVerifiedAsync(bad));
         Assert.Null(await store.GetAsync(id));
         Assert.Empty(await store.GetEventsAsync(id));
+    }
+
+    [Theory]
+    [InlineData("strength")]
+    [InlineData("dexterity")]
+    public async Task ScoreMutationAfterNativeEvaluationRejectsStaleLedgerCandidate(
+        string score)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await InitializeOriginAsync(db, id);
+        var nativeToken = (await new PostgresCharacterMutationRevisionReader(db)
+            .GetRevisionAsync(id))!.Value;
+
+        // Simulate a separate Character Sheet writer committing after the
+        // native request captured the token. A deliberately identical/older
+        // timestamp must not conceal the aggregate mutation.
+        await using (var writer = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var root = await writer.CharacterSheets.AsNoTracking()
+                .SingleAsync(x => x.CharacterId == id);
+            Assert.Equal(0, root.MutationRevision);
+            var saved = await new PostgresCharacterBuildStore(writer)
+                .SetBaseAbilityScoreInputAsync(id, score, 14, DateTimeOffset.UnixEpoch);
+            Assert.NotNull(saved);
+            Assert.Equal(root.UpdatedAt, saved!.UpdatedAt);
+            Assert.Equal(nativeToken + 1, saved.MutationRevision);
+        }
+
+        var attempted = await new PostgresCharacterInnateSpellLedgerStore(db)
+            .CommitVerifiedAsync(Command(id, expectedCharacterRevision: nativeToken));
+        Assert.Equal(InnateSpellLedgerStoreStatus.CharacterMutationConflict,
+            attempted.Status);
+        Assert.Null(await new PostgresCharacterInnateSpellLedgerStore(db).GetAsync(id));
+        Assert.Empty(await new PostgresCharacterInnateSpellLedgerStore(db)
+            .GetEventsAsync(id));
+        var latest = (await new PostgresCharacterMutationRevisionReader(db)
+            .GetRevisionAsync(id))!.Value;
+        Assert.Equal(nativeToken + 1, latest);
+
+        // Only a newly calculated native state pinned to the new aggregate
+        // revision can initialize. The storage layer does not manufacture a
+        // fresh candidate automatically from a previous snapshot.
+        var afterReevaluation = await new PostgresCharacterInnateSpellLedgerStore(db)
+            .CommitVerifiedAsync(Command(id, eventId: "ledger:recalculated",
+                expectedCharacterRevision: latest));
+        Assert.Equal(InnateSpellLedgerStoreStatus.Applied,
+            afterReevaluation.Status);
+        Assert.Equal(0, afterReevaluation.Revision);
+        Assert.Single(await new PostgresCharacterInnateSpellLedgerStore(db)
+            .GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task ClassProgressionMutationInvalidatesPreviouslyCalculatedFreeCastCourse()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await InitializeOriginAsync(db, id);
+        var before = (await new PostgresCharacterMutationRevisionReader(db)
+            .GetRevisionAsync(id))!.Value;
+        await using (var writer = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var changed = await new PostgresCharacterBuildStore(writer)
+                .ApplyClassAdvancementAsync(id, null, "class.warlock", 6,
+                    null, DateTimeOffset.UnixEpoch);
+            Assert.NotNull(changed);
+            Assert.True(changed!.MutationRevision > before);
+        }
+        var stale = await new PostgresCharacterInnateSpellLedgerStore(db)
+            .CommitVerifiedAsync(Command(id, expectedCharacterRevision: before));
+        Assert.Equal(InnateSpellLedgerStoreStatus.CharacterMutationConflict,
+            stale.Status);
+        Assert.Null(await new PostgresCharacterInnateSpellLedgerStore(db).GetAsync(id));
     }
 
     [Fact]
