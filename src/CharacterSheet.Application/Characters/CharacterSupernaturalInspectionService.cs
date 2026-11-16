@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Persistence;
+using CharacterSheet.Application.Site;
 
 namespace CharacterSheet.Application.Characters;
 
@@ -26,11 +27,21 @@ public sealed record CharacterSupernaturalInspectionResult(
 /// </summary>
 public sealed class CharacterSupernaturalInspectionService(
     CharacterBuildService builds,
-    ICharacterSupernaturalStateStore store)
+    ICharacterSupernaturalStateStore store,
+    ISiteFreshCharacterAccessGateway freshSite)
 {
     public async Task<CharacterSupernaturalInspectionResult> GetAsync(
         Guid characterId, CancellationToken cancellationToken = default)
     {
+        // Inspection exposes private influences and receipts even when Core
+        // is never contacted; refresh Site authorization before storage.
+        var firstLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (firstLive.Status != SiteCharacterAccessStatus.Authorized)
+            return new(CharacterEffectiveStateService.FromFreshStatus(firstLive.Status));
+        if (firstLive.Character?.CharacterId != characterId)
+            return new(CharacterEffectiveStateStatus.ProjectionUnavailable);
+
         var build = await builds.GetAsync(characterId, cancellationToken);
         if (build.Status != CharacterBuildAccessStatus.Ready || build.View is null)
             return new(build.Status switch
@@ -42,10 +53,10 @@ public sealed class CharacterSupernaturalInspectionService(
             });
         var saved = await store.GetAsync(characterId, cancellationToken);
         if (saved is null)
-            return new(CharacterEffectiveStateStatus.Ready, new(
-                characterId, build.View.ReadOnly, "unconfigured",
+            return await CompleteReadAsync(characterId, firstLive.Character!, new(
+                characterId, false, "unconfigured",
                 null, null, null, 0,
-                new JsonArray(), new JsonArray(), null, [], false));
+                new JsonArray(), new JsonArray(), null, [], false), cancellationToken);
         try
         {
             if (saved.ContractVersion != CharacterSheet.Domain.Characters.CharacterSupernaturalState.CurrentContractVersion)
@@ -66,15 +77,32 @@ public sealed class CharacterSupernaturalInspectionService(
                     value.EventId, value.CommittedRevision, value.LedgerRevision,
                     value.Kind, value.AuthorizationEvidenceId)).ToArray();
 
-            return new(CharacterEffectiveStateStatus.Ready, new(
-                characterId, build.View.ReadOnly, "stored-unverified",
+            return await CompleteReadAsync(characterId, firstLive.Character!, new(
+                characterId, false, "stored-unverified",
                 saved.RulesetId, saved.Fingerprint, saved.Revision,
-                saved.LedgerRevision, sheets, influences, ledger, events, false));
+                saved.LedgerRevision, sheets, influences, ledger, events, false),
+                cancellationToken);
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException
             or FormatException)
         {
             return new(CharacterEffectiveStateStatus.ProjectionUnavailable);
         }
+    }
+
+    private async Task<CharacterSupernaturalInspectionResult> CompleteReadAsync(
+        Guid characterId, SiteCharacterProjection first,
+        CharacterSupernaturalInspectionView view, CancellationToken cancellationToken)
+    {
+        var lastLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (lastLive.Status != SiteCharacterAccessStatus.Authorized)
+            return new(CharacterEffectiveStateService.FromFreshStatus(lastLive.Status));
+        if (lastLive.Character is null ||
+            !CharacterEffectiveStateService.SameSiteScope(first, lastLive.Character))
+            return new(CharacterEffectiveStateStatus.ProjectionUnavailable);
+        // An archived owner can still inspect, but never as an editable owner.
+        return new(CharacterEffectiveStateStatus.Ready,
+            view with { ReadOnly = !lastLive.Character.AllowsOrdinaryEditingByLifecycle });
     }
 }

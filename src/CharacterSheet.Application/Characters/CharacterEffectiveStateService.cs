@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
+using CharacterSheet.Application.Site;
 using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Application.Characters;
@@ -33,13 +34,22 @@ public sealed class CharacterEffectiveStateService(
     CharacterStateService routine,
     CharacterOriginStateService origins,
     ICharacterSupernaturalStateStore supernatural,
-    INativeRulesCoreGateway core)
+    INativeRulesCoreGateway core,
+    ISiteFreshCharacterAccessGateway freshSite)
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
 
     public async Task<CharacterEffectiveStateResult> GetAsync(
         Guid id, CancellationToken cancellationToken = default)
     {
+        // Cached Tool Host ownership is not sufficient for protected reads.
+        var firstLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            id, cancellationToken);
+        if (firstLive.Status != SiteCharacterAccessStatus.Authorized)
+            return new(FromFreshStatus(firstLive.Status));
+        if (firstLive.Character?.CharacterId != id)
+            return new(CharacterEffectiveStateStatus.ProjectionUnavailable);
+
         var build = await builds.GetAsync(id, cancellationToken);
         if (build.Status != CharacterBuildAccessStatus.Ready || build.View is null)
             return new(build.Status switch
@@ -273,16 +283,46 @@ public sealed class CharacterEffectiveStateService(
             }
         }
 
-        // An unverified stored manifestation is never presented as the active
-        // effective form. Keep its revision visible for future reconciliation.
+        // Recheck Site before publishing any private or native-projected data.
+        // The primary-data fingerprint does not include Site authorization.
+        var lastLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            id, cancellationToken);
+        if (lastLive.Status != SiteCharacterAccessStatus.Authorized)
+            return new(FromFreshStatus(lastLive.Status));
+        if (lastLive.Character is null ||
+            !SameSiteScope(firstLive.Character!, lastLive.Character))
+            return new(CharacterEffectiveStateStatus.ProjectionUnavailable);
+
+        // Live Site lifecycle, not a cached Build/Origin snapshot, controls
+        // whether the returned character is read-only.
         return new(CharacterEffectiveStateStatus.Ready, new(
-            id, build.View.ReadOnly || state.View.ReadOnly || origin.ReadOnly,
+            id, !lastLive.Character.AllowsOrdinaryEditingByLifecycle,
             projection is null ? "unresolved" : "partial",
             ruleset, fingerprint, origin.SavedState?.Revision,
             supernaturalChanged ? null : persisted?.Revision,
             supernaturalChanged ? 0 : persisted?.LedgerRevision ?? 0,
             effectiveSheetId, activeManifestationId, false, projection, issues));
     }
+
+    internal static CharacterEffectiveStateStatus FromFreshStatus(
+        SiteCharacterAccessStatus status) => status switch
+    {
+        SiteCharacterAccessStatus.Unauthenticated =>
+            CharacterEffectiveStateStatus.Unauthenticated,
+        SiteCharacterAccessStatus.NotFoundOrNotOwned =>
+            CharacterEffectiveStateStatus.NotFoundOrNotOwned,
+        _ => CharacterEffectiveStateStatus.ProjectionUnavailable
+    };
+
+    // Read-time Site consistency, not a cross-service commit fence.
+    internal static bool SameSiteScope(
+        SiteCharacterProjection first, SiteCharacterProjection last) =>
+        first.CharacterId == last.CharacterId &&
+        first.LifecycleState == last.LifecycleState &&
+        first.ArchivedAt == last.ArchivedAt &&
+        first.CampaignIds.Count == first.CampaignIds.Distinct().Count() &&
+        last.CampaignIds.Count == last.CampaignIds.Distinct().Count() &&
+        first.CampaignIds.ToHashSet().SetEquals(last.CampaignIds);
 
     /// <summary>
     /// Optimistic second check after the delegated native read. The primary

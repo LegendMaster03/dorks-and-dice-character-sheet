@@ -27,6 +27,7 @@ public sealed class CharacterEffectiveStateReadTests
     {
         private int readCount;
         public bool FreshAllowed { get; set; } = true;
+        public SiteCharacterLifecycleState? FreshLifecycle { get; set; }
         public Func<int, Task>? BeforeFreshRead { get; set; }
         private int freshReadCount;
 
@@ -35,9 +36,14 @@ public sealed class CharacterEffectiveStateReadTests
         {
             if (BeforeFreshRead is not null)
                 await BeforeFreshRead(Interlocked.Increment(ref freshReadCount));
-            return FreshAllowed
-                ? await GetAuthorizedCharacterAsync(characterId, cancellationToken)
-                : new(SiteCharacterAccessStatus.NotFoundOrNotOwned);
+            if (!FreshAllowed)
+                return new(SiteCharacterAccessStatus.NotFoundOrNotOwned);
+            if (FreshLifecycle is { } liveLifecycle && characterId == allowedId)
+                return SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
+                    characterId, "Live Site character", liveLifecycle,
+                    liveLifecycle == SiteCharacterLifecycleState.Archived
+                        ? DateTimeOffset.UnixEpoch : null, []));
+            return await GetAuthorizedCharacterAsync(characterId, cancellationToken);
         }
 
         public async Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
@@ -153,9 +159,11 @@ public sealed class CharacterEffectiveStateReadTests
         Guid id, NativeGateway native,
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
         SiteCharacterAccessStatus status = SiteCharacterAccessStatus.Authorized,
-        Func<int, Task>? beforeAuthorizedRead = null)
+        Func<int, Task>? beforeAuthorizedRead = null,
+        SiteAccess? suppliedSite = null)
     {
-        var site = new SiteAccess(id, lifecycle, status, beforeAuthorizedRead);
+        var site = suppliedSite ??
+            new SiteAccess(id, lifecycle, status, beforeAuthorizedRead);
         var buildStore = new PostgresCharacterBuildStore(db);
         return new CharacterEffectiveStateService(
             new CharacterBuildService(site, buildStore, TimeProvider.System),
@@ -163,7 +171,7 @@ public sealed class CharacterEffectiveStateReadTests
                 TimeProvider.System),
             new CharacterOriginStateService(site, buildStore,
                 new PostgresCharacterAuthorizedOriginStore(db)),
-            new PostgresCharacterSupernaturalStateStore(db), native);
+            new PostgresCharacterSupernaturalStateStore(db), native, site);
     }
 
     [Fact]
@@ -498,8 +506,9 @@ public sealed class CharacterEffectiveStateReadTests
                 "fixture:authorized", false, DateTimeOffset.UtcNow))).Status);
 
         var builds = new PostgresCharacterBuildStore(db);
+        var site = new SiteAccess(id);
         var reader = new CharacterSupernaturalInspectionService(
-            new CharacterBuildService(new SiteAccess(id), builds, TimeProvider.System), store);
+            new CharacterBuildService(site, builds, TimeProvider.System), store, site);
         var view = await reader.GetAsync(id);
         Assert.Equal(CharacterEffectiveStateStatus.Ready, view.Status);
         Assert.Equal("stored-unverified", view.View!.Status);
@@ -508,10 +517,11 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Single(view.View.CompletedEvents);
         Assert.Equal(0, view.View.ManifestationRevision);
 
+        var deniedSite = new SiteAccess(id,
+            status: SiteCharacterAccessStatus.NotFoundOrNotOwned);
         var unauthorized = new CharacterSupernaturalInspectionService(
-            new CharacterBuildService(new SiteAccess(id,
-                status: SiteCharacterAccessStatus.NotFoundOrNotOwned),
-                builds, TimeProvider.System), store);
+            new CharacterBuildService(deniedSite, builds, TimeProvider.System),
+            store, deniedSite);
         Assert.Equal(CharacterEffectiveStateStatus.NotFoundOrNotOwned,
             (await unauthorized.GetAsync(id)).Status);
     }
@@ -524,11 +534,11 @@ public sealed class CharacterEffectiveStateReadTests
         await using var db = new CharacterSheetDbContext(database.CreateOptions());
         await db.Database.MigrateAsync();
         await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var site = new SiteAccess(id, SiteCharacterLifecycleState.Archived);
         var reader = new CharacterSupernaturalInspectionService(
-            new CharacterBuildService(new SiteAccess(id,
-                SiteCharacterLifecycleState.Archived),
+            new CharacterBuildService(site,
                 new PostgresCharacterBuildStore(db), TimeProvider.System),
-            new PostgresCharacterSupernaturalStateStore(db));
+            new PostgresCharacterSupernaturalStateStore(db), site);
         var view = await reader.GetAsync(id);
         Assert.Equal(CharacterEffectiveStateStatus.Ready, view.Status);
         Assert.Equal("unconfigured", view.View!.Status);
