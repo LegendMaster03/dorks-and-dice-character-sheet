@@ -76,7 +76,24 @@ public static class CharacterNativePrimaryStateAdapter
             return new(null, ["native-primary-inputs-unresolved"], false);
 
         if (origin is not null)
+        {
+            // Origin is owned and stored separately from Character Build. The
+            // latest saved revision is the only candidate for a future
+            // reconstitution; an old catalog identity or malformed Underlying
+            // must never be treated as a verified primary entitlement.
+            if (origin.CharacterId != characterId ||
+                origin.Revision < 1 ||
+                origin.RulesetId != rulesetId ||
+                origin.Fingerprint != fingerprint)
+                issues.Add("authorized-origin-state-mismatch");
+            if (!HasUnderlyingAndCurrent(origin.ProfileJson))
+                issues.Add("origin-underlying-structure-unverified");
+
+            // Structural validation is not a reconstruction. Even a valid
+            // stored Underlying cannot authorize dependent traits, parent
+            // history, background grants or transformation applicability.
             issues.Add("origin-underlying-grants-not-yet-revalidated");
+        }
 
         // Legacy builder selections remain canonical owned input but do not
         // establish independent Origin, Background, Upbringing or deity grants.
@@ -148,6 +165,58 @@ public static class CharacterNativePrimaryStateAdapter
             build.ProgressionEntries.Count <= 100 &&
             advancements.Count <= 100;
         return new(mechanics, issues, transitionInputsVerified);
+    }
+
+    /// <summary>
+    /// Rejects ambiguous or incomplete stored Origin configuration structure
+    /// without assuming biological ancestry, a Species ID, or a particular
+    /// origination method. The Rules Core reconstruction and authoritative
+    /// source verifier remain separate and are not implemented here.
+    /// </summary>
+    private static bool HasUnderlyingAndCurrent(string profileJson)
+    {
+        try
+        {
+            using var profile = JsonDocument.Parse(profileJson);
+            if (profile.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var underlyingFound = false;
+            var currentFound = false;
+            foreach (var property in profile.RootElement.EnumerateObject())
+            {
+                if (!seen.Add(property.Name))
+                    return false;
+                if (property.Name == "underlying")
+                {
+                    if (property.Value.ValueKind != JsonValueKind.Object)
+                        return false;
+                    underlyingFound = UniqueConfigurationKeys(property.Value);
+                    if (!underlyingFound) return false;
+                }
+                else if (property.Name == "current")
+                {
+                    if (property.Value.ValueKind != JsonValueKind.Object)
+                        return false;
+                    currentFound = UniqueConfigurationKeys(property.Value);
+                    if (!currentFound) return false;
+                }
+            }
+            return underlyingFound && currentFound;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool UniqueConfigurationKeys(JsonElement configuration)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in configuration.EnumerateObject())
+            if (!keys.Add(property.Name))
+                return false;
+        return true;
     }
 
     /// <summary>
