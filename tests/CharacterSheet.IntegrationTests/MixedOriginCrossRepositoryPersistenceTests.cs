@@ -771,6 +771,61 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         Assert.Single(await origins.GetEventsAsync(characterId));
     }
 
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DmReviewWithholdsCandidatesWhenOriginDraftChangesDuringCorePreview(
+        bool sameRevisionRewrite)
+    {
+        // Real Core HTTP, PostgreSQL draft persistence and an independently
+        // mutable test Site DM scope. A stale offer list is not authority.
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var fingerprint = core.App.Services
+            .GetRequiredService<NativeCatalogStore>().Snapshot!.Fingerprint;
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var drafts = new PostgresCharacterOriginDraftStore(db);
+        Assert.Equal(1, (await drafts.SaveAsync(
+            characterId, "first-party-001", fingerprint, HumanElf, 0,
+            DateTimeOffset.UtcNow))?.Revision);
+        var scope = new RevocableDmScope(characterId);
+        var gateway = new HttpNativeGateway(core.Client, afterPreview: async _ =>
+        {
+            if (sameRevisionRewrite)
+            {
+                // Deliberate direct SQL corruption bypasses the ordinary
+                // draft revision CAS and must still invalidate the review.
+                await db.CharacterOriginDrafts.Where(x => x.CharacterId == characterId)
+                    .ExecuteUpdateAsync(update => update.SetProperty(
+                        x => x.ProposalJson,
+                        HumanElf.Replace("human-elf", "changed-human-elf",
+                            StringComparison.Ordinal)));
+            }
+            else
+            {
+                var revised = await drafts.SaveAsync(characterId, "first-party-001",
+                    fingerprint, HumanElf, 1, DateTimeOffset.UtcNow.AddSeconds(1));
+                Assert.Equal(2, revised?.Revision);
+            }
+        });
+        var review = new CharacterOriginMixedReviewService(
+            scope, scope, new PostgresCharacterBuildStore(db), drafts,
+            new PostgresCharacterAuthorizedOriginStore(db), gateway);
+
+        var result = await review.ReviewAsync(characterId, Campaign);
+        Assert.Equal(CharacterOriginMixedReviewStatus.DraftChangedDuringReview,
+            result.Status);
+        Assert.Null(result.Candidates);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetAsync(characterId));
+        Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetEventsAsync(characterId));
+    }
+
     [Fact]
     public async Task ChangedNativeCatalogOrMissingSelectionDoesNotCommitAProfile()
     {

@@ -170,6 +170,8 @@ public static class CharacterOriginDraftEndpoints
                 Error(409, "origin_already_committed"),
             CharacterOriginMixedReviewStatus.DraftMissing =>
                 Error(409, "origin_draft_missing"),
+            CharacterOriginMixedReviewStatus.DraftChangedDuringReview =>
+                Error(409, "origin_draft_changed_during_review"),
             CharacterOriginMixedReviewStatus.InvalidDraft =>
                 Error(422, "unsupported_mixed_origin_draft"),
             CharacterOriginMixedReviewStatus.NativeSnapshotUnpinned =>

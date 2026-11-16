@@ -15,6 +15,7 @@ public enum CharacterOriginMixedReviewStatus
     SheetNotInitialized,
     OriginAlreadyCommitted,
     DraftMissing,
+    DraftChangedDuringReview,
     InvalidDraft,
     NativeSnapshotUnpinned,
     NativeContentChanged,
@@ -169,6 +170,23 @@ public sealed class CharacterOriginMixedReviewService(
             finalSnapshot.CampaignId != campaignId ||
             finalSnapshot.CharacterId != characterId)
             return new(CharacterOriginMixedReviewStatus.NotAuthorized);
+
+        // A player may edit or replace this Origin draft while Core is
+        // evaluating its offers. Do not return candidates for a superseded
+        // proposal, even when an old revision was still valid at entry.
+        // Compare source bytes too: a direct same-revision record rewrite is
+        // not a legitimate way to preserve reviewed candidate provenance.
+        var latestDraft = await drafts.GetAsync(characterId, cancellationToken);
+        if (latestDraft is null ||
+            latestDraft.Revision != draft.Revision ||
+            latestDraft.RulesetId != draft.RulesetId ||
+            latestDraft.Fingerprint != draft.Fingerprint ||
+            !string.Equals(latestDraft.ProposalJson, draft.ProposalJson,
+                StringComparison.Ordinal))
+            return new(CharacterOriginMixedReviewStatus.DraftChangedDuringReview);
+
+        if (await origins.GetAsync(characterId, cancellationToken) is not null)
+            return new(CharacterOriginMixedReviewStatus.OriginAlreadyCommitted);
 
         return new(CharacterOriginMixedReviewStatus.Ready,
             draft.Revision, draft.RulesetId, draft.Fingerprint,
