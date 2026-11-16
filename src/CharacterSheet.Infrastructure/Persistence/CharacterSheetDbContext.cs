@@ -32,7 +32,9 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var root = modelBuilder.Entity<CharacterSheetRoot>();
-        root.ToTable("character_sheet_roots");
+        root.ToTable("character_sheet_roots", table =>
+            table.HasCheckConstraint("CK_character_mutation_revision_nonnegative",
+                "\"MutationRevision\" >= 0"));
         root.HasKey(character => character.CharacterId);
         root.Property(character => character.CharacterId)
             .ValueGeneratedNever();
