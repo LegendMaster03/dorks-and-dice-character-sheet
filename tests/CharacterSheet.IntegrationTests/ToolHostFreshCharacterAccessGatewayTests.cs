@@ -59,7 +59,10 @@ public sealed class ToolHostFreshCharacterAccessGatewayTests
         {
             if (slowDrip)
                 await stream.WriteAsync(new byte[] { (byte)'{' }, token);
-            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            // Twelve seconds is intentionally far beyond the gateway deadline,
+            // but keeps the test harness bounded if a regression ignores
+            // cancellation (so CI can report a failure instead of hanging).
+            await Task.Delay(TimeSpan.FromSeconds(12), token);
         }
 
         protected override bool TryComputeLength(out long length)
@@ -218,7 +221,8 @@ public sealed class ToolHostFreshCharacterAccessGatewayTests
         using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            gateway.GetFreshAuthorizedCharacterAsync(Character, caller.Token));
+            gateway.GetFreshAuthorizedCharacterAsync(Character, caller.Token)
+                .WaitAsync(TimeSpan.FromSeconds(8)));
     }
 
     [Fact]

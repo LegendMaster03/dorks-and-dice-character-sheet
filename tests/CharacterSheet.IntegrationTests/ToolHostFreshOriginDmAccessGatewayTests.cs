@@ -29,7 +29,10 @@ public sealed class ToolHostFreshOriginDmAccessGatewayTests
         {
             if (slowDrip)
                 await stream.WriteAsync(new byte[] { (byte)'{' }, token);
-            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            // Twelve seconds is intentionally far beyond the gateway deadline,
+            // but keeps the test harness bounded if a regression ignores
+            // cancellation (so CI can report a failure instead of hanging).
+            await Task.Delay(TimeSpan.FromSeconds(12), token);
         }
 
         protected override bool TryComputeLength(out long length)
@@ -207,7 +210,8 @@ public sealed class ToolHostFreshOriginDmAccessGatewayTests
         using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            gateway.CheckFreshAsync(Campaign, Character, caller.Token));
+            gateway.CheckFreshAsync(Campaign, Character, caller.Token)
+                .WaitAsync(TimeSpan.FromSeconds(8)));
     }
 
     [Fact]

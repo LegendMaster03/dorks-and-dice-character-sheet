@@ -27,7 +27,10 @@ public sealed class DelegatedRulesCoreGatewayTests
         {
             if (sendFirstByte)
                 await stream.WriteAsync(new byte[] { (byte)'{' }, cancellationToken);
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            // Twelve seconds is intentionally far beyond the gateway deadline,
+            // but keeps the test harness bounded if a regression ignores
+            // cancellation (so CI can report a failure instead of hanging).
+            await Task.Delay(TimeSpan.FromSeconds(12), cancellationToken);
         }
 
         protected override bool TryComputeLength(out long length)
@@ -94,7 +97,8 @@ public sealed class DelegatedRulesCoreGatewayTests
         using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => gateway.GetNativeRulesetAsync(caller.Token));
+            () => gateway.GetNativeRulesetAsync(caller.Token)
+                .WaitAsync(TimeSpan.FromSeconds(8)));
     }
 
     [Fact]
