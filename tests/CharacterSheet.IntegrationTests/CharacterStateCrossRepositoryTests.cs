@@ -1957,6 +1957,9 @@ public sealed class CharacterStateCrossRepositoryTests
             }
         }
 
+        Assert.True(freshOwnerQueries >= 4,
+            "Both process reads must independently query fresh Site authority twice.");
+
         await using var inspected = new CharacterSheetDbContext(database.CreateOptions());
         var persisted = new PostgresCharacterSupernaturalStateStore(inspected);
         var saved = (await persisted.GetAsync(id))!;
