@@ -1032,7 +1032,9 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal("manifest.hybrid.1", restartedRead.View.ActiveManifestationId);
         Assert.NotNull(restartedRead.View.NativeProjection);
 
-        Assert.Equal(6, source.Calls);
+        // The three denied post-plan Site revocations still invoked the
+        // independently verified source; no denied plan wrote an event.
+        Assert.Equal(9, source.Calls);
 
         // A replay through the application boundary can not append an
         // already-committed event or silently reconstruct a prior snapshot.
