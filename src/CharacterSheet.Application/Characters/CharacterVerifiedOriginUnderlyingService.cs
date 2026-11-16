@@ -111,6 +111,30 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                     profile = profile.RootElement
                 }, Wire), cancellationToken);
 
+            // Recheck Site authorization after the remote Core call. This
+            // narrows a revocation window when the gateway resolves current
+            // Site state; it is not a substitute for the pending Site-issued
+            // fresh authorization fence.
+            var finalAccess = await origins.GetAsync(characterId, cancellationToken);
+            if (finalAccess.Status != CharacterOriginReadStatus.Ready)
+                return new(finalAccess.Status switch
+                {
+                    CharacterOriginReadStatus.Unauthenticated =>
+                        CharacterVerifiedOriginUnderlyingStatus.Unauthenticated,
+                    CharacterOriginReadStatus.NotFoundOrNotOwned =>
+                        CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+                    CharacterOriginReadStatus.SheetNotInitialized =>
+                        CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized,
+                    _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
+                });
+            if (finalAccess.SavedState is not { } finalOrigin ||
+                finalOrigin.Revision != saved.Revision ||
+                finalOrigin.RulesetId != saved.RulesetId ||
+                finalOrigin.Fingerprint != saved.Fingerprint ||
+                !string.Equals(finalOrigin.ProfileJson, saved.ProfileJson,
+                    StringComparison.Ordinal))
+                return new(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged);
+
             // The host's verdict does not excuse a concurrent mutation or
             // inconsistent returned configuration. Compare the exact source
             // structures, not a species ID, ancestry label or display name.
@@ -144,7 +168,7 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
             return new(CharacterVerifiedOriginUnderlyingStatus.NativeContentChanged);
         }
         catch (RulesCoreGatewayException error) when (
-            error.StatusCode is 400 or 403 or 409 or 422)
+            error.StatusCode is 400 or 401 or 403 or 409 or 422)
         {
             return new(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified);
         }
