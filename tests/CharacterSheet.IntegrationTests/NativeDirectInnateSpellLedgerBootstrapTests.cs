@@ -106,13 +106,13 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
     }
 
     private static async Task PrepareAsync(CharacterSheetDbContext db, Guid id,
-        bool withScores = true)
+        bool withScores = true, string draftFingerprint = Fingerprint)
     {
         await db.Database.MigrateAsync();
         await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
         var drafts = new PostgresCharacterOriginDraftStore(db);
         Assert.NotNull(await drafts.SaveAsync(id, "first-party-001",
-            Fingerprint, Draft, 0, DateTimeOffset.UtcNow));
+            draftFingerprint, Draft, 0, DateTimeOffset.UtcNow));
         var origin = await new PostgresCharacterAuthorizedOriginStore(db)
             .CommitVerifiedAsync(new(id, "first-party-001", Fingerprint,
                 Profile, 0, 1, "origin:initial", "rule.creature-origination",
@@ -197,6 +197,27 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
         Assert.Equal(1, gateway.Calls);
         Assert.Single(await new PostgresCharacterInnateSpellLedgerStore(db)
             .GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task OutdatedDraftFingerprintDoesNotInvalidateReevaluatedCommittedOrigin()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        // Initial direct activation is allowed to re-evaluate an older draft
+        // against current first-party native content. Its committed Origin
+        // fingerprint, not the old draft hint, is the new bootstrap authority.
+        await PrepareAsync(db, id, draftFingerprint: "historical-catalog");
+        var gateway = new Native();
+        var result = await Service(db, id, gateway).ApplyAsync(id,
+            CharacterInnateSpellLedgerAction.Initialize, null, null);
+        Assert.Equal(CharacterInnateSpellLedgerStatus.Applied, result.Status);
+        Assert.Equal(1, gateway.Calls);
+        Assert.Equal(Fingerprint, gateway.LastRequest!.Value
+            .GetProperty("fingerprint").GetString());
+        Assert.Equal(Fingerprint, (await new
+            PostgresCharacterInnateSpellLedgerStore(db).GetAsync(id))!.Fingerprint);
     }
 
     [Fact]
