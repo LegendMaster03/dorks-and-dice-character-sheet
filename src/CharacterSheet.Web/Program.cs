@@ -94,6 +94,9 @@ builder.Services.AddScoped<ICharacterOriginDraftStore, PostgresCharacterOriginDr
 // Internal-only authorized Origin storage; there is deliberately no direct
 // controller or browser endpoint capable of calling CommitVerifiedAsync.
 builder.Services.AddScoped<ICharacterAuthorizedOriginStore, PostgresCharacterAuthorizedOriginStore>();
+// No public write endpoint: a later trusted character application operation
+ // must verify native entitlement and actor authority before using this store.
+builder.Services.AddScoped<ICharacterInnateSpellLedgerStore, PostgresCharacterInnateSpellLedgerStore>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
 builder.Services.AddScoped<ICharacterStartingEquipmentInventoryStore, PostgresCharacterStartingEquipmentInventoryStore>();
 builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
