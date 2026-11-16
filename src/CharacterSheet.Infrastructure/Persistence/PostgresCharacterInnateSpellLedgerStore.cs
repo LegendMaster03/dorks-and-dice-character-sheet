@@ -32,8 +32,11 @@ public sealed class PostgresCharacterInnateSpellLedgerStore(CharacterSheetDbCont
     {
         ArgumentNullException.ThrowIfNull(command);
         if (command.CharacterId == Guid.Empty || command.ExpectedOriginRevision < 1 ||
-            command.ExpectedLedgerRevision is < 0 or long.MaxValue)
-            throw new ArgumentException("Expected Origin/ledger revision is invalid.", nameof(command));
+            command.ExpectedLedgerRevision is < 0 or long.MaxValue ||
+            command.ExpectedCharacterMutationRevision is not >= 0)
+            throw new ArgumentException(
+                "Expected Origin, ledger, and character mutation revisions are required.",
+                nameof(command));
 
         // Bootstrap revision is zero and may occur only when no ledger row
         // exists. The next ledger must be exactly one revision newer.
@@ -58,6 +61,13 @@ public sealed class PostgresCharacterInnateSpellLedgerStore(CharacterSheetDbCont
             .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
         if (character is null)
             return new(InnateSpellLedgerStoreStatus.SheetNotInitialized);
+        // Compare the precise revision captured before reading the native
+        // projection inputs. EF root changes always advance this token, even
+        // if the caller reuses the same or an earlier ChangedAt timestamp.
+        // Root concurrency updates and this row lock serialize the ledger
+        // with the entire character aggregate's mutation history.
+        if (character.MutationRevision != command.ExpectedCharacterMutationRevision)
+            return new(InnateSpellLedgerStoreStatus.CharacterMutationConflict);
 
         var authorizedOrigin = await db.AuthorizedOrigins.FromSqlInterpolated(
             $"""SELECT * FROM character_authorized_origins WHERE "CharacterId" = {command.CharacterId} FOR UPDATE""")
