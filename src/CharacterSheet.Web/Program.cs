@@ -97,6 +97,7 @@ builder.Services.AddScoped<ICharacterAuthorizedOriginStore, PostgresCharacterAut
 // No public write endpoint: a later trusted character application operation
  // must verify native entitlement and actor authority before using this store.
 builder.Services.AddScoped<ICharacterInnateSpellLedgerStore, PostgresCharacterInnateSpellLedgerStore>();
+builder.Services.AddScoped<ICharacterMutationRevisionReader, PostgresCharacterMutationRevisionReader>();
 // Only the direct, still-current committed Source Draft supports a verified
 // native bootstrap candidate. Casting, resting, mixed-origin construction and
 // advancement remain unresolved in the evaluator. No ledger HTTP mutation
