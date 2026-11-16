@@ -465,8 +465,13 @@ sources, not approved Werewolf/Vampire Lord acquisition or progression rules.
   `0bf2e200e9accb3ca818efe6f6175a24b919924e`:
   [validation 43775774159](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43775774159),
   [cross-repository 43775774162](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43775774162).
-  Following changes introduced more negative cases; their current-head runs
-  must be checked independently before this continuation can claim green CI.
+  The continuation implementation at `d03ea5c1b61b68f6ea0d4dc07f853ba2607afb23`
+  has now passed [full validation 43778756141](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43778756141):
+  **134 unit tests, 205 integration tests, frontend build, Compose validation,
+  container build, and PostgreSQL smoke test**. The same head passed
+  [real Core HTTP/PostgreSQL integration 43778756140](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43778756140):
+  **9 of 9 tests**. These tests validate the synthetic authority
+  boundary; they do not authorize playable supernatural acquisitions.
 * Security findings: external Site authorization is not transactionally
   coupled to Character Sheet PostgreSQL; currency was missing from the
   authoritative primary input digest (now fixed); unrelated Character Sheet
