@@ -191,26 +191,25 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
                     : "Character Sheet does not exist for this resource mutation.");
             }
 
-            // ExecuteUpdate bypasses ChangeTracker and EF concurrency-token
-            // predicates. Increment the root revision explicitly, within the
-            // same transaction and under the lock acquired before the resource
-            // row. Without this, an earlier timestamp could conceal a change
-            // from the native spell ledger's commit-time revision check.
+            // One root UPDATE under the existing root lock. The PostgreSQL
+            // BEFORE UPDATE trigger advances MutationRevision from the locked
+            // database row, not the caller's possibly stale EF snapshot.
+            // Do not issue a second UPDATE for UpdatedAt: the trigger would
+            // correctly count it as another root revision. Preserve timestamp
+            // monotonicity within this same statement instead.
             var rooted = await dbContext.CharacterSheets
                 .Where(value => value.CharacterId == characterId &&
                     value.MutationRevision == rootLock.MutationRevision &&
                     value.MutationRevision < long.MaxValue)
                 .ExecuteUpdateAsync(update => update
                     .SetProperty(value => value.MutationRevision,
-                        value => value.MutationRevision + 1L), cancellationToken);
+                        value => value.MutationRevision + 1L)
+                    .SetProperty(value => value.UpdatedAt,
+                        value => value.UpdatedAt >= changedAt
+                            ? value.UpdatedAt : changedAt), cancellationToken);
             if (rooted != 1)
                 throw new DbUpdateConcurrencyException(
                     "Character changed during the guarded native resource mutation.");
-            await dbContext.CharacterSheets
-                .Where(value => value.CharacterId == characterId &&
-                    value.UpdatedAt < changedAt)
-                .ExecuteUpdateAsync(update => update
-                    .SetProperty(value => value.UpdatedAt, changedAt), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             // Do not return the tracked root from before the conditional UPDATE.
             return await GetAsync(characterId, cancellationToken);
