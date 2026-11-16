@@ -200,10 +200,23 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
         var id = Guid.NewGuid();
         await using var db = new CharacterSheetDbContext(database.CreateOptions());
         await PrepareAsync(db, id);
-        Assert.NotNull(await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+        // Ordinary draft edits are already blocked after Origin activation.
+        var attempted = await new PostgresCharacterOriginDraftStore(db).SaveAsync(
             id, "first-party-001", Fingerprint,
             Draft.Replace("species.human", "species.elf", StringComparison.Ordinal),
-            1, DateTimeOffset.UtcNow));
+            1, DateTimeOffset.UtcNow);
+        Assert.Null(attempted);
+
+        // Simulate a legacy/out-of-band database modification to verify that
+        // the evaluator does not treat a changed proposal as the committed
+        // Origin's source. This is not a supported application write path.
+        var changed = await db.CharacterOriginDrafts
+            .Where(x => x.CharacterId == id)
+            .ExecuteUpdateAsync(update => update
+                .SetProperty(x => x.ProposalJson, Draft.Replace(
+                    "species.human", "species.elf", StringComparison.Ordinal))
+                .SetProperty(x => x.Revision, 2));
+        Assert.Equal(1, changed);
         var gateway = new Native();
         var result = await Service(db, id, gateway).ApplyAsync(id,
             CharacterInnateSpellLedgerAction.Initialize, null, null);
