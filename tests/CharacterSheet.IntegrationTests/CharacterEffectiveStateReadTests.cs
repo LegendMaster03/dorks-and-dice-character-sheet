@@ -25,6 +25,7 @@ public sealed class CharacterEffectiveStateReadTests
         Func<int, Task>? beforeAuthorizedRead = null)
         : ISiteCharacterAccessGateway, ISiteFreshCharacterAccessGateway
     {
+        private readonly DateTimeOffset archivedAt = DateTimeOffset.UtcNow;
         private int readCount;
         public bool FreshAllowed { get; set; } = true;
         public SiteCharacterLifecycleState? FreshLifecycle { get; set; }
@@ -55,7 +56,7 @@ public sealed class CharacterEffectiveStateReadTests
                 ? SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
                     id, "Test", lifecycle,
                     lifecycle == SiteCharacterLifecycleState.Archived
-                        ? DateTimeOffset.UtcNow : null, []))
+                        ? archivedAt : null, []))
                 : new SiteCharacterAccessResult(status == SiteCharacterAccessStatus.Authorized
                     ? SiteCharacterAccessStatus.NotFoundOrNotOwned : status);
         }
