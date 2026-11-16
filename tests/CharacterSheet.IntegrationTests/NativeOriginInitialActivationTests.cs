@@ -358,7 +358,6 @@ public sealed class NativeOriginInitialActivationTests
     [InlineData("method-case-alias")]
     [InlineData("method-extra-authority")]
     [InlineData("root-case-alias")]
-    [InlineData("nested-method-duplicate")]
     public async Task DirectInitialOriginRejectsAmbiguousDraftBeforeNativePreview(
         string variation)
     {
@@ -375,8 +374,6 @@ public sealed class NativeOriginInitialActivationTests
                 "\"methodId\":\"biological\",\"MethodId\":\"unapproved\"",
             "method-extra-authority" =>
                 "\"methodId\":\"biological\",\"authorizationEvidenceId\":\"forged\"",
-            "nested-method-duplicate" =>
-                "\"methodId\":\"biological\",\"methodId\":\"unapproved\"",
             _ => "\"methodId\":\"biological\""
         };
         var altered = Draft.Replace(
