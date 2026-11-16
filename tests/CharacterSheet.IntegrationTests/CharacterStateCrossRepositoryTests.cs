@@ -23,6 +23,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RulesCore.Mechanics;
 using CoreAuthorityProvider = CoreHost::RulesCore.Host.INativeManifestationHostAuthorityProvider;
 using CoreReadAuthorityProvider = CoreHost::RulesCore.Host.INativeManifestationHostReadAuthorityProvider;
+using CoreOriginAuthorityProvider = CoreHost::RulesCore.Host.INativeOriginHostUnderlyingAuthorityProvider;
 using CoreApplication = CoreHost::RulesCore.Host.RulesCoreApplication;
 using CoreTicketValidator = CoreHost::RulesCore.Host.CharacterSheetMechanicsTicketValidator;
 
@@ -70,7 +71,8 @@ public sealed class CharacterStateCrossRepositoryTests
 
         public static async Task<CoreHost> StartAsync(
             CoreAuthorityProvider? verifiedSourceProvider = null,
-            CoreReadAuthorityProvider? verifiedReadProvider = null)
+            CoreReadAuthorityProvider? verifiedReadProvider = null,
+            CoreOriginAuthorityProvider? verifiedOriginProvider = null)
         {
             var root = Environment.GetEnvironmentVariable("RULES_CORE_CONTENT_ROOT");
             if (root is null || !Directory.Exists(Path.Combine(root, "first-party-001", "native")))
@@ -94,6 +96,8 @@ public sealed class CharacterStateCrossRepositoryTests
                     services.AddSingleton(verifiedSourceProvider);
                 if (verifiedReadProvider is not null)
                     services.AddSingleton(verifiedReadProvider);
+                if (verifiedOriginProvider is not null)
+                    services.AddSingleton(verifiedOriginProvider);
             });
             await app.StartAsync();
             var server = app.Services.GetRequiredService<IServer>();
@@ -105,6 +109,46 @@ public sealed class CharacterStateCrossRepositoryTests
         {
             Client.Dispose();
             await app.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// An intentionally test-only independent verifier. The submitted profile
+    /// and revision must equal the currently committed PostgreSQL Origin,
+    /// and the separate source receipt must still be intact. No Site or DM
+    /// entitlement is inferred from a serialized profile or delegated ticket.
+    /// </summary>
+    private sealed class PostgresSyntheticOriginAuthority(
+        DbContextOptions<CharacterSheetDbContext> options, Guid characterId,
+        string fingerprint) : CoreOriginAuthorityProvider
+    {
+        public async Task<bool> VerifyAsync(Guid actorId, Guid id, long revision,
+            NativeOriginProfile profile, CancellationToken cancellationToken)
+        {
+            if (actorId != Actor || id != characterId || revision < 1)
+                return false;
+            await using var db = new CharacterSheetDbContext(options);
+            var saved = await db.AuthorizedOrigins.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.CharacterId == id, cancellationToken);
+            if (saved is null || saved.Revision != revision ||
+                saved.RulesetId != "first-party-001" ||
+                saved.Fingerprint != fingerprint)
+                return false;
+            using var committed = JsonDocument.Parse(saved.ProfileJson);
+            var claimed = JsonSerializer.SerializeToElement(profile, Wire);
+            if (!JsonElement.DeepEquals(committed.RootElement, claimed))
+                return false;
+
+            var events = await db.OriginEventReceipts.AsNoTracking()
+                .Where(x => x.CharacterId == id)
+                .OrderBy(x => x.CommittedRevision).ToArrayAsync(cancellationToken);
+            return events.Length == revision &&
+                events.Select(x => x.CommittedRevision)
+                    .SequenceEqual(Enumerable.Range(1, events.Length).Select(n => (long)n)) &&
+                events.All(x => x.AuthorizationKind == "first-party" &&
+                    x.AuthorizationEvidenceId == "fixture:origin-source" &&
+                    x.MethodRuleId == "rule.creature-origination" &&
+                    x.MethodId == "biological");
         }
     }
 
