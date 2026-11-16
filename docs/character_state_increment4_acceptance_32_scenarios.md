@@ -122,3 +122,7 @@ duplicate keys, so tests for those belong at the raw JSON boundary;
 only persisted structures and case aliases that survive PostgreSQL
 normalization count as PostgreSQL tampering evidence. No change
 advances scenario 21/22 reconstruction or closes 26/27 commit fencing.
+
+## Latest incremental security evidence — independent review pending
+
+Character Sheet code `d322c3811c558cae6da8af26f40295cbabe94e3d` passed [136 unit + 236 integration in CI 43965325731](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325731) and [15 Character State + 17 Mixed-Origin in CI 43965325732](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325732), with no failed/skipped tests. Direct-Origin method case-alias/extra fields are rejected before Core preview; initial/mixed production commands now carry an exact saved draft identity for PostgreSQL commit validation. The guard is optional for legacy internal synthetic commands, not a Site cross-service fence. Independent WorkChat testing remains **pending**, with a scoped handoff at [character-state-increment4-workchat-independent-validation-20261116.md](character-state-increment4-workchat-independent-validation-20261116.md). The original **23 complete / 9 partial** classifications are unchanged.

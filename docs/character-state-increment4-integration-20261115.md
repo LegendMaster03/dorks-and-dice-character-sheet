@@ -879,3 +879,15 @@ The shared Pillar 2/Character State temporary self-override remains
 deferred. Infrastructure is suitable for further independent review;
 production playable supernatural content and a full Increment 4
 merge/deployment are not ready.
+
+
+### November 16 continued source-binding and WorkChat validation preparation
+
+Character Sheet code commit `d322c3811c558cae6da8af26f40295cbabe94e3d` introduced:
+- A shared case-insensitive, recursive duplicate-key guard for stored and direct-Origin JSON before native binding. The direct initial-Origin method validator also requires exactly the supported `ruleId`/`methodId` keys. `DirectInitialOriginRejectsAmbiguousDraftBeforeNativePreview` covers three PostgreSQL-persisted invalid cases. Exact byte-duplicate properties are canonicalized by PostgreSQL `jsonb`, so raw JSON ambiguity remains tested at the parser/adapter boundary, not falsely reported as a persisted duplicate.
+- Optional exact evaluated-draft identity fields (`ExpectedDraftProposalJson`, `ExpectedDraftFingerprint`) in the internal `VerifiedOriginPersistenceCommand`. Both **production initial and mixed activation services supply them**. Under the character-root and draft-row PostgreSQL locks, the commit store now rejects a mismatched saved draft proposal or fingerprint even if its revision and ruleset were unchanged. `SourceBoundOriginCommitRejectsSameRevisionDraftRewrite` covers direct SQL changes to either source component; no Origin or receipt is committed. Legacy synthetic internal fixture commands without the optional fields remain possible and must not be represented as a universally enforced invariant for arbitrary internal callers.
+- These changes do **not** establish a Site commit fence or confer native supernatural acquisition/progression policy.
+
+[Character Sheet code CI 43965325731](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325731) passed **136 unit + 236 integration**; [paired real Core/Postgres CI 43965325732](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325732) passed **15 Character State + 17 Mixed-Origin**, with zero failed/skipped tests at each. The paired job pinned Core to `0d340c43248d2ae257302fe933fa712f82b1d045`.
+
+An independent WorkChat review/test pass is **not yet executed**. The separate handoff `docs/character-state-increment4-workchat-independent-validation-20261116.md` defines the fixed branch inputs, exact acceptance cases, adversarial requirements and required signed-off evidence. This handoff is not an independent test result. The integration remains **23 complete / 9 partial**, with partial **2, 6, 7, 9, 21, 22, 24, 26, 27**. No merge or deployment was approved.
