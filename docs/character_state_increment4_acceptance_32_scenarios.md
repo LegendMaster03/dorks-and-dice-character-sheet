@@ -85,3 +85,16 @@ commit-time fence. The two new bounded-live-response tests verify a
 fail-closed transport limit, not supernatural entitlement. See the
 integration record's November 16 follow-up for the exact paired CI runs
 and the unapproved Site-owned commit-consistency contract.
+
+### Final tested revision
+
+Character Sheet `66d738f9a0a2282f148c4d961527396ac5c872f8`
+passed [full validation 43950164734](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43950164734)
+(136 unit and 231 integration; no skips) and
+[paired real Core/PostgreSQL 43950164501](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43950164501)
+(15 Character State and 13 Mixed-Origin; no skips).
+This includes unknown-length and interrupted live Site HTTP response
+fail-closed regressions. Existing scenario classifications remain unchanged.
+The commit-time revocation characterization uses synthetic Site scope
+rather than a live distributed transaction; it must not be used as
+positive authorization acceptance.
