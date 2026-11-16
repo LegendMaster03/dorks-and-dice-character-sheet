@@ -683,7 +683,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         var review = new CharacterOriginMixedReviewService(
             scope, builds, drafts, origins, native);
         var activation = new CharacterOriginMixedActivationService(
-            scope, builds, drafts, origins, native, TimeProvider.System);
+            scope, scope, builds, drafts, origins, native, TimeProvider.System);
 
         // An authorized campaign role does not authorize a different target.
         Assert.Equal(CharacterOriginMixedReviewStatus.NotAuthorized,
@@ -705,8 +705,34 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         Assert.Null(await origins.GetAsync(characterId));
         Assert.Empty(await origins.GetEventsAsync(characterId));
 
-        // A fresh eligible DM scope can make the separate approval decision.
+        // A cached DM role is insufficient when the current Site membership
+        // has been removed. This blocks before Core and does not create a
+        // persisted receipt.
         scope.Allow = true;
+        scope.FreshAllow = false;
+        Assert.Equal(CharacterOriginMixedActivationStatus.DmScopeDenied,
+            (await activation.ApplyAsync(characterId, Campaign, 1, selected)).Status);
+        Assert.Null(await origins.GetAsync(characterId));
+        Assert.Empty(await origins.GetEventsAsync(characterId));
+        scope.FreshAllow = true;
+
+        // Revocation after successful native approval is also denied. It
+        // must not reuse the original snapshot's DM role for the commit.
+        var revokedGateway = new HttpNativeGateway(core.Client, afterApproval: () =>
+        {
+            scope.FreshAllow = false;
+            return Task.CompletedTask;
+        });
+        var revokedActivation = new CharacterOriginMixedActivationService(
+            scope, scope, builds, drafts, origins, revokedGateway,
+            TimeProvider.System);
+        Assert.Equal(CharacterOriginMixedActivationStatus.DmScopeDenied,
+            (await revokedActivation.ApplyAsync(characterId, Campaign, 1, selected)).Status);
+        Assert.Null(await origins.GetAsync(characterId));
+        Assert.Empty(await origins.GetEventsAsync(characterId));
+        scope.FreshAllow = true;
+
+        // A fresh eligible DM scope can make the separate approval decision.
         Assert.Equal(CharacterOriginMixedActivationStatus.Applied,
             (await activation.ApplyAsync(characterId, Campaign, 1, selected)).Status);
         var saved = await origins.GetAsync(characterId);
@@ -879,9 +905,24 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     private sealed class RevocableDmScope(Guid allowedCharacterId)
-        : ISiteOriginDmAccessGateway
+        : ISiteOriginDmAccessGateway, ISiteFreshOriginDmAccessGateway
     {
         public bool Allow { get; set; } = true;
+        public bool FreshAllow { get; set; } = true;
+        public Guid FreshActor { get; set; } = Actor;
+        public int FreshCalls { get; private set; }
+
+        public Task<SiteOriginDmAccessResult> CheckFreshAsync(
+            Guid campaignId, Guid characterId,
+            CancellationToken cancellationToken = default)
+        {
+            FreshCalls++;
+            return Task.FromResult(FreshAllow && campaignId == Campaign &&
+                    characterId == allowedCharacterId
+                ? new SiteOriginDmAccessResult(SiteOriginDmAccessStatus.Authorized,
+                    FreshActor, campaignId, characterId)
+                : new SiteOriginDmAccessResult(SiteOriginDmAccessStatus.NotAuthorized));
+        }
 
         public Task<SiteOriginDmAccessResult> CheckAsync(
             Guid campaignId, Guid characterId,
@@ -935,7 +976,8 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     private sealed class HttpNativeGateway(HttpClient http, string? malformedReply = null,
-        Func<int, Task>? afterPreview = null) : INativeRulesCoreGateway
+        Func<int, Task>? afterPreview = null,
+        Func<Task>? afterApproval = null) : INativeRulesCoreGateway
     {
         private int _previewCount;
 
@@ -949,10 +991,16 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             return response;
         }
 
-        public Task<JsonNode> EvaluateApprovedMixedOriginAsync(
-            JsonElement request, CancellationToken cancellationToken) =>
-            SendAsync("/api/mechanics/v1/origins/evaluate-approved-mixed", request,
-                cancellationToken);
+        public async Task<JsonNode> EvaluateApprovedMixedOriginAsync(
+            JsonElement request, CancellationToken cancellationToken)
+        {
+            var response = await SendAsync(
+                "/api/mechanics/v1/origins/evaluate-approved-mixed",
+                request, cancellationToken);
+            if (afterApproval is not null)
+                await afterApproval();
+            return response;
+        }
 
         private async Task<JsonNode> SendAsync(
             string path, JsonElement request, CancellationToken cancellationToken)
