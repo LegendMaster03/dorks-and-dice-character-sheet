@@ -109,6 +109,14 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                 native["fingerprint"]?.GetValue<string>() != saved.Fingerprint)
                 return new(CharacterVerifiedOriginUnderlyingStatus.NativeContentChanged);
 
+            // Reuse the same duplicate-key and Underlying/Current structure
+            // guard used for primary reads. JsonSerializer/model binding can
+            // otherwise silently pick one of two stored configuration values
+            // before independent source verification ever sees the profile.
+            if (!CharacterNativePrimaryStateAdapter.HasUnderlyingAndCurrent(
+                    saved.ProfileJson))
+                return new(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified);
+
             using var profile = JsonDocument.Parse(saved.ProfileJson);
             if (profile.RootElement.ValueKind != JsonValueKind.Object ||
                 !profile.RootElement.TryGetProperty("underlying", out var underlying) ||

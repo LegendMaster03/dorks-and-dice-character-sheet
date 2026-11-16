@@ -173,7 +173,7 @@ public static class CharacterNativePrimaryStateAdapter
     /// origination method. The Rules Core reconstruction and authoritative
     /// source verifier remain separate and are not implemented here.
     /// </summary>
-    private static bool HasUnderlyingAndCurrent(string profileJson)
+    internal static bool HasUnderlyingAndCurrent(string profileJson)
     {
         try
         {

@@ -756,7 +756,39 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial, valid.Status);
         Assert.Equal(1, valid.OriginRevision);
         Assert.Equal("species.human", valid.Underlying!["speciesId"]!.GetValue<string>());
-        Assert.Equal(1, native.OriginVerificationCalls);
+        Assert.Equal(2, native.OriginVerificationCalls);
+
+
+        // A saved JSON profile can pass TryGetProperty despite duplicate
+        // source/configuration keys. Reject the ambiguous stored candidate
+        // before any delegated Core call, with no receipt or revision writes.
+        const string duplicateRoot = """
+            {"id":"origin:current","underlying":{"speciesId":"species.elf","inherentGrants":[]},"underlying":{"speciesId":"species.human","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
+        const string duplicateConfiguration = """
+            {"id":"origin:current","underlying":{"speciesId":"species.human","speciesId":"species.elf","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
+        const string missingCurrent = """
+            {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
+        foreach (var malformed in new[]
+                 { duplicateRoot, duplicateConfiguration, missingCurrent })
+        {
+            await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
+                .ExecuteUpdateAsync(update => update.SetProperty(
+                    x => x.ProfileJson, malformed));
+            var denied = await verifier.GetAsync(id);
+            Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified,
+                denied.Status);
+            Assert.Null(denied.Underlying);
+            Assert.Equal(1, native.OriginVerificationCalls);
+        }
+        await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
+            .ExecuteUpdateAsync(update => update.SetProperty(
+                x => x.ProfileJson, originalProfile));
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial,
+            (await verifier.GetAsync(id)).Status);
+        Assert.Equal(2, native.OriginVerificationCalls);
 
         // A matching stored profile is not sufficient without a contiguous
         // separately committed Origin event history.
@@ -766,7 +798,7 @@ public sealed class CharacterEffectiveStateReadTests
         var brokenHistory = await verifier.GetAsync(id);
         Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified,
             brokenHistory.Status);
-        Assert.Equal(1, native.OriginVerificationCalls);
+        Assert.Equal(2, native.OriginVerificationCalls);
         await db.OriginEventReceipts.Where(x => x.CharacterId == id)
             .ExecuteUpdateAsync(update => update.SetProperty(
                 x => x.CommittedRevision, 1L));
@@ -777,7 +809,7 @@ public sealed class CharacterEffectiveStateReadTests
         var revoked = await verifier.GetAsync(id);
         Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
             revoked.Status);
-        Assert.Equal(1, native.OriginVerificationCalls);
+        Assert.Equal(2, native.OriginVerificationCalls);
         site.FreshAllowed = true;
 
         // A live source-state change during the remote call is distinct
