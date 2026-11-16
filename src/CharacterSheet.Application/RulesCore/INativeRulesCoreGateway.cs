@@ -51,6 +51,16 @@ public interface INativeRulesCoreGateway
     /// Stateless origin construction preview. This does not authorize a DM ruling
     /// or commit character-owned selections to persistent storage.
     /// </summary>
+    /// <summary>
+    /// Delegated, read-only Origin Underlying verification. The Rules Core host
+    /// must independently reload the exact saved profile, revision and source
+    /// evidence. A Site ticket or a supplied profile alone is not authorization.
+    /// </summary>
+    Task<JsonNode> VerifyNativeOriginUnderlyingAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Independent native Origin verification is unsupported by this gateway."));
+
     Task<JsonNode> PreviewNativeOriginAsync(
         JsonElement request, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
