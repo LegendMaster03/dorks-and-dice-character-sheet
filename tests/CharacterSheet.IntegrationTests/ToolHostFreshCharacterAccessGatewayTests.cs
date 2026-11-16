@@ -45,6 +45,30 @@ public sealed class ToolHostFreshCharacterAccessGatewayTests
     }
 
 
+
+    private sealed class DelayedContent(bool slowDrip) : HttpContent
+    {
+        // An HTTP 200 response with complete headers can stall indefinitely
+        // after zero or one body byte without exceeding the byte budget.
+        protected override Task SerializeToStreamAsync(
+            Stream stream, TransportContext? context) =>
+            SerializeToStreamAsync(stream, context, CancellationToken.None);
+
+        protected override async Task SerializeToStreamAsync(
+            Stream stream, TransportContext? context, CancellationToken token)
+        {
+            if (slowDrip)
+                await stream.WriteAsync(new byte[] { (byte)'{' }, token);
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
     private sealed class InterruptedContent : HttpContent
     {
         // Simulates a Site response that reports HTTP 200 but disconnects
@@ -156,6 +180,46 @@ public sealed class ToolHostFreshCharacterAccessGatewayTests
         Assert.Equal(1, handler.Requests);
     }
 
+
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StalledAndSlowDripOwnerBodiesFailClosedWithinDeadline(
+        bool slowDrip)
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new DelayedContent(slowDrip)
+        });
+        // HttpClient has a long default timeout. The *gateway* deadline,
+        // including streamed body completion, must enforce the shorter limit.
+        var gateway = new ToolHostFreshCharacterAccessGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.test") },
+            new HttpContextAccessor { HttpContext = await ContextAsync(true) });
+
+        var result = await gateway.GetFreshAuthorizedCharacterAsync(Character)
+            .WaitAsync(TimeSpan.FromSeconds(8));
+        Assert.Equal(SiteCharacterAccessStatus.ProjectionUnavailable, result.Status);
+        Assert.Null(result.Character);
+        Assert.Equal(1, handler.Requests);
+    }
+
+    [Fact]
+    public async Task CallerCancellationIsNotMisreportedAsSiteUnavailability()
+    {
+        var handler = new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new DelayedContent(false)
+        });
+        var gateway = new ToolHostFreshCharacterAccessGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.test") },
+            new HttpContextAccessor { HttpContext = await ContextAsync(true) });
+        using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            gateway.GetFreshAuthorizedCharacterAsync(Character, caller.Token));
+    }
 
     [Fact]
     public async Task BackendBodyIoFailureIsUnavailableNotCachedAuthorization()
