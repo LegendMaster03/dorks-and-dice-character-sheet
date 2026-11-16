@@ -155,6 +155,10 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
         var id = Guid.NewGuid();
         await using var db = new CharacterSheetDbContext(database.CreateOptions());
         await PrepareAsync(db, id);
+        // The adapter must not impose a 30-point gameplay ceiling that the
+        // native calculation contract has not established.
+        Assert.NotNull(await new PostgresCharacterBuildStore(db)
+            .SetBaseAbilityScoreInputAsync(id, "strength", 35, DateTimeOffset.UtcNow));
         var gateway = new Native();
         var service = Service(db, id, gateway);
 
@@ -169,6 +173,8 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
             sent.GetProperty("committedProfile").GetProperty("id").GetString());
         Assert.Equal(6, sent.GetProperty("character").GetProperty("abilityScores")
             .EnumerateObject().Count());
+        Assert.Equal(35, sent.GetProperty("character").GetProperty("abilityScores")
+            .GetProperty("strength").GetInt32());
         Assert.Equal("class.warlock", sent.GetProperty("character")
             .GetProperty("advancements")[0].GetProperty("classId").GetString());
         Assert.Equal(Fingerprint, sent.GetProperty("fingerprint").GetString());
