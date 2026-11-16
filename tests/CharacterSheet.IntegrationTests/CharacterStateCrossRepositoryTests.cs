@@ -1420,6 +1420,43 @@ public sealed class CharacterStateCrossRepositoryTests
             }
         }
 
+        // An authenticated delegate cannot substitute altered ledger
+        // resource claims for the PostgreSQL-owned snapshot. Exercise each
+        // provenance dimension separately through real Core HTTP.
+        var persistedLedger = JsonSerializer.Deserialize<NativeManifestationLedger>(
+            saved.LedgerJson, Wire)!;
+        JsonElement ReadBody(NativeManifestationLedger ledger) =>
+            JsonSerializer.SerializeToElement(new { state, ledger }, Wire);
+        var accepted = await gateway.EvaluateVerifiedManifestationStateAsync(
+            ReadBody(persistedLedger), CancellationToken.None);
+        Assert.Equal("partial", accepted["status"]?.GetValue<string>());
+
+        var resourceToAttack = Assert.Single(persistedLedger.Resources,
+            resource => resource.Id == "resource.primary.1");
+        var forgedResources = new[]
+        {
+            resourceToAttack with { DefinitionId = "resource.forged" },
+            resourceToAttack with { SourceOccurrence = Occurrence("resource.forged") },
+            resourceToAttack with { EvidenceId = "receipt.forged" },
+            resourceToAttack with { OwnerKind = NativeManifestationResourceOwner.Sheet },
+            resourceToAttack with { OwnerId = "wolf" }
+        };
+        foreach (var forgedResource in forgedResources)
+        {
+            var forgedLedger = persistedLedger with
+            {
+                Resources = persistedLedger.Resources.Select(resource =>
+                    resource.Id == resourceToAttack.Id ? forgedResource : resource)
+                    .ToArray()
+            };
+            var denial = await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+                gateway.EvaluateVerifiedManifestationStateAsync(
+                    ReadBody(forgedLedger), CancellationToken.None));
+            Assert.Equal(422, denial.StatusCode);
+            Assert.Equal("supernatural_authority_unverified", denial.ErrorCode);
+        }
+        Assert.Equal(saved.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
+
         // Concurrent verified reads traverse the actual Rules Core HTTP host
         // through independent PostgreSQL contexts. Their projections are not
         // authority to change ownership, balances, revisions, or receipts.
