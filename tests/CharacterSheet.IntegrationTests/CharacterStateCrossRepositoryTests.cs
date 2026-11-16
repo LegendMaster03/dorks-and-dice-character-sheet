@@ -160,12 +160,19 @@ public sealed class CharacterStateCrossRepositoryTests
     {
         public bool Allow { get; set; } = authorize;
         public bool FreshAllow { get; set; } = authorize;
+        public IReadOnlyCollection<Guid>? OverrideFreshCampaignIds { get; set; }
 
-        public Task<SiteCharacterAccessResult> GetFreshAuthorizedCharacterAsync(
-            Guid characterId, CancellationToken ct = default) =>
-            FreshAllow ? GetAuthorizedCharacterAsync(characterId, ct)
-                : Task.FromResult(new SiteCharacterAccessResult(
-                    SiteCharacterAccessStatus.NotFoundOrNotOwned));
+        public async Task<SiteCharacterAccessResult> GetFreshAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken ct = default)
+        {
+            if (!FreshAllow)
+                return new(SiteCharacterAccessStatus.NotFoundOrNotOwned);
+            var cached = await GetAuthorizedCharacterAsync(characterId, ct);
+            return cached.Character is { } owned && OverrideFreshCampaignIds is not null
+                ? cached with { Character = owned with
+                    { CampaignIds = OverrideFreshCampaignIds } }
+                : cached;
+        }
         public SiteCharacterLifecycleState CurrentLifecycle { get; set; } = lifecycle;
         public IReadOnlyCollection<Guid> CampaignIds { get; set; } = [];
 
@@ -333,7 +340,8 @@ public sealed class CharacterStateCrossRepositoryTests
         ITrustedCharacterManifestationTransitionSource source)
     {
         var buildStore = new PostgresCharacterBuildStore(db);
-        return new CharacterManifestationTransitionService(site, store, gateway, source,
+        return new CharacterManifestationTransitionService(site,
+            (ISiteFreshCharacterAccessGateway)site, store, gateway, source,
             new CharacterBuildService(site, buildStore, TimeProvider.System),
             new CharacterStateService(site, new PostgresCharacterStateStore(db),
                 TimeProvider.System),
@@ -1167,6 +1175,21 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized,
             (await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
         owner.CampaignIds = [];
+
+        // Cached Site introspection remains authorized. Only the separately
+        // reloaded live Site access notices this owner revocation.
+        gateway.AfterVerifiedPlan = () => owner.FreshAllow = false;
+        Assert.Equal(CharacterManifestationApplyStatus.NotFoundOrNotOwned,
+            (await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
+        owner.FreshAllow = true;
+
+        // Same failure mode for a campaign association revoked at Site but
+        // still present in the original introspected Tool Host snapshot.
+        gateway.AfterVerifiedPlan = () =>
+            owner.OverrideFreshCampaignIds = [Guid.NewGuid()];
+        Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized,
+            (await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
+        owner.OverrideFreshCampaignIds = null;
         gateway.AfterVerifiedPlan = null;
 
         Assert.Equal(1, (await store.GetAsync(id))!.Revision);
