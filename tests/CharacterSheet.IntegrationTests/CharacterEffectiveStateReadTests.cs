@@ -163,7 +163,7 @@ public sealed class CharacterEffectiveStateReadTests
                 TimeProvider.System),
             new CharacterOriginStateService(site, buildStore,
                 new PostgresCharacterAuthorizedOriginStore(db)),
-            new PostgresCharacterSupernaturalStateStore(db), native, site);
+            new PostgresCharacterSupernaturalStateStore(db), native);
     }
 
     [Fact]
@@ -846,7 +846,7 @@ public sealed class CharacterEffectiveStateReadTests
         var verifier = new CharacterVerifiedOriginUnderlyingService(
             new CharacterOriginStateService(site, builds,
                 new PostgresCharacterAuthorizedOriginStore(db)),
-            new PostgresCharacterSupernaturalStateStore(db), native);
+            new PostgresCharacterSupernaturalStateStore(db), native, site);
         var denied = await verifier.GetAsync(id);
         Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
             denied.Status);
