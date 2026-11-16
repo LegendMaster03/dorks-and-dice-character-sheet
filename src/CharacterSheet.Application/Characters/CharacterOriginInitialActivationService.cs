@@ -35,6 +35,7 @@ public sealed record CharacterOriginActivationResult(
 /// </summary>
 public sealed class CharacterOriginInitialActivationService(
     ISiteCharacterAccessGateway site,
+    ISiteFreshCharacterAccessGateway freshSite,
     ICharacterBuildStore builds,
     ICharacterOriginDraftStore drafts,
     ICharacterAuthorizedOriginStore origins,
@@ -45,6 +46,18 @@ public sealed class CharacterOriginInitialActivationService(
         Guid characterId, long expectedDraftRevision,
         CancellationToken cancellationToken = default)
     {
+        // Ticket introspection is a cached Site snapshot. Before touching
+        // protected draft/Origin state, independently reload Site ownership,
+        // lifecycle and campaign associations using backend delegation.
+        var initialLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (initialLive.Status != SiteCharacterAccessStatus.Authorized)
+            return new(MapSiteStatus(initialLive.Status));
+        if (initialLive.Character?.CharacterId != characterId)
+            return new(CharacterOriginActivationStatus.ProjectionUnavailable);
+        if (!initialLive.Character.AllowsOrdinaryEditingByLifecycle)
+            return new(CharacterOriginActivationStatus.ArchivedReadOnly);
+
         var access = await site.GetAuthorizedCharacterAsync(characterId, cancellationToken);
         switch (access.Status)
         {
@@ -61,6 +74,8 @@ public sealed class CharacterOriginInitialActivationService(
             return new(CharacterOriginActivationStatus.ProjectionUnavailable);
         if (!access.Character.AllowsOrdinaryEditingByLifecycle)
             return new(CharacterOriginActivationStatus.ArchivedReadOnly);
+        if (!SameSiteScope(initialLive.Character, access.Character))
+            return new(CharacterOriginActivationStatus.ProjectionUnavailable);
         if (expectedDraftRevision < 1)
             return new(CharacterOriginActivationStatus.DraftRevisionConflict);
         if (await builds.GetAsync(characterId, cancellationToken) is null)
@@ -104,6 +119,32 @@ public sealed class CharacterOriginInitialActivationService(
             out var latestFingerprint, out var authorizedProfile))
             return new(CharacterOriginActivationStatus.NotAuthorizedByNativeRules);
 
+        // The Core preview may outlive the original actor's ownership or
+        // campaign association. A second live Site database read is required
+        // before the PostgreSQL compare-and-swap. This is a fail-closed
+        // read-time fence, NOT an atomic cross-database commit lease.
+        var finalLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (finalLive.Status != SiteCharacterAccessStatus.Authorized)
+            return new(MapSiteStatus(finalLive.Status));
+        if (finalLive.Character?.CharacterId != characterId)
+            return new(CharacterOriginActivationStatus.ProjectionUnavailable);
+        if (!finalLive.Character.AllowsOrdinaryEditingByLifecycle)
+            return new(CharacterOriginActivationStatus.ArchivedReadOnly);
+        if (!SameSiteScope(initialLive.Character, finalLive.Character))
+            return new(CharacterOriginActivationStatus.ProjectionUnavailable);
+
+        var finalAccess = await site.GetAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (finalAccess.Status != SiteCharacterAccessStatus.Authorized)
+            return new(MapSiteStatus(finalAccess.Status));
+        if (finalAccess.Character?.CharacterId != characterId)
+            return new(CharacterOriginActivationStatus.ProjectionUnavailable);
+        if (!finalAccess.Character.AllowsOrdinaryEditingByLifecycle)
+            return new(CharacterOriginActivationStatus.ArchivedReadOnly);
+        if (!SameSiteScope(finalLive.Character, finalAccess.Character))
+            return new(CharacterOriginActivationStatus.ProjectionUnavailable);
+
         // The one completed construction receipt is derived from the reviewed
         // Core response, not an event supplied by the browser. The database
         // independently checks the current draft revision, absence of a
@@ -129,6 +170,28 @@ public sealed class CharacterOriginInitialActivationService(
             _ => new(CharacterOriginActivationStatus.OriginAlreadyCommitted)
         };
     }
+
+    private static CharacterOriginActivationStatus MapSiteStatus(
+        SiteCharacterAccessStatus status) => status switch
+    {
+        SiteCharacterAccessStatus.Unauthenticated =>
+            CharacterOriginActivationStatus.Unauthenticated,
+        SiteCharacterAccessStatus.NotFoundOrNotOwned =>
+            CharacterOriginActivationStatus.NotFoundOrNotOwned,
+        _ => CharacterOriginActivationStatus.ProjectionUnavailable
+    };
+
+    // Compare the same authoritative dimensions that determine whether the
+    // existing owner is allowed to activate the Origin. This never interprets
+    // the campaign association as a DM authorization or grant source.
+    private static bool SameSiteScope(
+        SiteCharacterProjection expected, SiteCharacterProjection actual) =>
+        expected.CharacterId == actual.CharacterId &&
+        expected.LifecycleState == actual.LifecycleState &&
+        expected.ArchivedAt == actual.ArchivedAt &&
+        expected.CampaignIds.Count == expected.CampaignIds.Distinct().Count() &&
+        actual.CampaignIds.Count == actual.CampaignIds.Distinct().Count() &&
+        expected.CampaignIds.ToHashSet().SetEquals(actual.CampaignIds);
 
     internal static bool TryInitialProposal(JsonElement proposal,
         out string? id, out string? ruleId, out string? methodId,
