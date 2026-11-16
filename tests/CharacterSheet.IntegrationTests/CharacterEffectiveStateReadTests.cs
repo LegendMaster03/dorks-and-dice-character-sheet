@@ -5,6 +5,7 @@ using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Infrastructure.Persistence;
 using CharacterSheet.Application.Persistence;
+using CharacterSheet.Domain.Characters;
 using Microsoft.EntityFrameworkCore;
 
 namespace CharacterSheet.IntegrationTests;
@@ -228,6 +229,51 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Null(result.View.NativeProjection);
         Assert.Contains("authoritative-inputs-changed-during-resolution",
             result.View.Unresolved);
+    }
+
+    [Fact]
+    public async Task OriginUnderlyingChangedDuringNativeReadInvalidatesProjection()
+    {
+        // A persisted Origin is separately owned primary state, and the
+        // fingerprint must cover the exact Underlying, not only its row revision.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+
+        const string beforeProfile = """
+            {"id":"origin:fixture","underlying":{"speciesId":"species.human"},"current":{"speciesId":"species.human"}}
+            """;
+        const string alteredProfile = """
+            {"id":"origin:fixture","underlying":{"speciesId":"species.elf"},"current":{"speciesId":"species.elf"}}
+            """;
+        db.AuthorizedOrigins.Add(new CharacterAuthorizedOriginState(
+            id, Ruleset, Fingerprint, beforeProfile, null, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var before = await store.GetAuthoritativeInputsFingerprintAsync(id);
+
+        var native = new NativeGateway
+        {
+            BeforeReply = async () =>
+            {
+                await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
+                    .ExecuteUpdateAsync(update => update.SetProperty(
+                        x => x.ProfileJson, alteredProfile));
+            }
+        };
+        var result = await Service(db, id, native).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+        Assert.Equal("unresolved", result.View!.Status);
+        Assert.Null(result.View.NativeProjection);
+        Assert.Contains("authoritative-inputs-changed-during-resolution",
+            result.View.Unresolved);
+        Assert.Equal(1, native.Calls);
+        Assert.Equal(1, (await db.AuthorizedOrigins.AsNoTracking()
+            .SingleAsync(x => x.CharacterId == id)).Revision);
+        Assert.NotEqual(before, await store.GetAuthoritativeInputsFingerprintAsync(id));
+        Assert.Null(await store.GetAsync(id));
     }
 
     [Fact]
