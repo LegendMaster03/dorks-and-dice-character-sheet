@@ -842,12 +842,15 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     private static CharacterOriginMixedActivationService Service(
-        CharacterSheetDbContext db, INativeRulesCoreGateway native, bool allow) =>
-        new(new TestDmScope(allow),
+        CharacterSheetDbContext db, INativeRulesCoreGateway native, bool allow)
+    {
+        var scope = new TestDmScope(allow);
+        return new(scope, scope,
             new PostgresCharacterBuildStore(db),
             new PostgresCharacterOriginDraftStore(db),
             new PostgresCharacterAuthorizedOriginStore(db),
             native, TimeProvider.System);
+    }
 
     /// <summary>
     /// This fixture grants child+parent access only when the Site projection
@@ -934,8 +937,14 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 : new SiteOriginDmAccessResult(SiteOriginDmAccessStatus.NotAuthorized));
     }
 
-    private sealed class TestDmScope(bool allow) : ISiteOriginDmAccessGateway
+    private sealed class TestDmScope(bool allow)
+        : ISiteOriginDmAccessGateway, ISiteFreshOriginDmAccessGateway
     {
+        public Task<SiteOriginDmAccessResult> CheckFreshAsync(
+            Guid campaignId, Guid characterId,
+            CancellationToken cancellationToken = default) =>
+            CheckAsync(campaignId, characterId, cancellationToken);
+
         public Task<SiteOriginDmAccessResult> CheckAsync(
             Guid campaignId, Guid characterId,
             CancellationToken cancellationToken = default) =>
