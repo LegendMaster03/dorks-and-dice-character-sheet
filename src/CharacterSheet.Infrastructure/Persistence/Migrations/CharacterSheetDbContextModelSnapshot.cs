@@ -633,7 +633,6 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
 
             b.Property<long>("MutationRevision")
                 .ValueGeneratedOnAdd()
-                .IsConcurrencyToken()
                 .HasColumnType("bigint")
                 .HasDefaultValue(0L);
 
