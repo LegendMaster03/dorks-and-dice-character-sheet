@@ -156,9 +156,16 @@ public sealed class CharacterStateCrossRepositoryTests
 
     private sealed class OwnerAccess(Guid ownedId, bool authorize = true,
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active)
-        : ISiteCharacterAccessGateway
+        : ISiteCharacterAccessGateway, ISiteFreshCharacterAccessGateway
     {
         public bool Allow { get; set; } = authorize;
+        public bool FreshAllow { get; set; } = authorize;
+
+        public Task<SiteCharacterAccessResult> GetFreshAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken ct = default) =>
+            FreshAllow ? GetAuthorizedCharacterAsync(characterId, ct)
+                : Task.FromResult(new SiteCharacterAccessResult(
+                    SiteCharacterAccessStatus.NotFoundOrNotOwned));
         public SiteCharacterLifecycleState CurrentLifecycle { get; set; } = lifecycle;
         public IReadOnlyCollection<Guid> CampaignIds { get; set; } = [];
 
@@ -461,7 +468,7 @@ public sealed class CharacterStateCrossRepositoryTests
                 new CharacterOriginStateService(site, build,
                     new PostgresCharacterAuthorizedOriginStore(owned)),
                 new PostgresCharacterSupernaturalStateStore(owned),
-                new RealGateway(core.Client));
+                new RealGateway(core.Client), site);
             var partial = await verified.GetAsync(id);
             Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial,
                 partial.Status);
@@ -477,15 +484,15 @@ public sealed class CharacterStateCrossRepositoryTests
             var build = new PostgresCharacterBuildStore(revoked);
             var realGateway = new RealGateway(core.Client)
             {
-                // Test-only mutable gateway. Production Site introspection
-                // currently lacks an independently fresh revocation fence.
-                AfterVerifiedOriginRead = () => site.Allow = false
+                // Simulate a live Site revocation that the original
+                // cached introspection snapshot still permits.
+                AfterVerifiedOriginRead = () => site.FreshAllow = false
             };
             var verified = new CharacterVerifiedOriginUnderlyingService(
                 new CharacterOriginStateService(site, build,
                     new PostgresCharacterAuthorizedOriginStore(revoked)),
                 new PostgresCharacterSupernaturalStateStore(revoked),
-                realGateway);
+                realGateway, site);
             Assert.Equal(
                 CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
                 (await verified.GetAsync(id)).Status);
@@ -498,7 +505,7 @@ public sealed class CharacterStateCrossRepositoryTests
                 new CharacterOriginStateService(site, build,
                     new PostgresCharacterAuthorizedOriginStore(unauthorized)),
                 new PostgresCharacterSupernaturalStateStore(unauthorized),
-                new RealGateway(core.Client));
+                new RealGateway(core.Client), site);
             Assert.Equal(
                 CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
                 (await verified.GetAsync(id)).Status);
