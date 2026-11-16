@@ -387,3 +387,35 @@ those forms yet. Controlled synthetic tests can validate orchestration,
 but they must not become production entitlements.
 
 **Do not merge or deploy these branches as a complete Increment 4.**
+
+## Additional security review — post-plan Site revocation
+
+The internal transition application service now repeats the current Site
+ownership/lifecycle check after Rules Core has planned the transition and before
+it begins the PostgreSQL CAS commit. It rejects newly archived characters,
+revoked owner access, and changed campaign associations. A real Core
+HTTP/PostgreSQL test exercises all three changes **after** a successfully
+source-verified synthetic plan, verifies that no ledger revision or event receipt
+was written, then restores Site scope and completes the original Wolf flow.
+
+This is a defense-in-depth check against a concrete time-of-check/time-of-use
+window, not a distributed transaction with Site. Site may still revoke access
+between that final check and the Character Sheet commit; production activation
+requires a commit-bound trusted Site authorization or equivalently enforced
+revocation/version mechanism. No production supernatural source provider or
+new gameplay acquisition policy has been registered.
+
+## Acceptance accounting boundary
+
+The approved architecture document
+`character_state_inheritance_architecture_2026-11-14.md` defines S1–S15
+as conceptual design cases. The working integration record refers to a
+**separate original Increment 4 specification with 32 acceptance scenarios**.
+That complete numbered list is not included in these two repository branches,
+so the 32 cases must not be claimed individually completed or mapped
+one-to-one from nearby tests without retrieving the original specification.
+The existing test evidence supports synthetic orchestration, persistence,
+conflict handling, reload and trusted transport, but not production supernatural
+acquisition. The seven outstanding requirements in the preceding section
+remain the implementation reconciliation checklist until the original
+numbered specification is available.

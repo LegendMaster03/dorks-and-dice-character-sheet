@@ -110,13 +110,17 @@ public sealed class CharacterStateCrossRepositoryTests
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active)
         : ISiteCharacterAccessGateway
     {
+        public bool Allow { get; set; } = authorize;
+        public SiteCharacterLifecycleState CurrentLifecycle { get; set; } = lifecycle;
+        public IReadOnlyCollection<Guid> CampaignIds { get; set; } = [];
+
         public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
             Guid characterId, CancellationToken ct = default) =>
-            Task.FromResult(authorize && characterId == ownedId
+            Task.FromResult(Allow && characterId == ownedId
                 ? SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
                     ownedId, "Cross-repository fixture",
-                    lifecycle, lifecycle == SiteCharacterLifecycleState.Archived
-                        ? DateTimeOffset.UtcNow : null, []))
+                    CurrentLifecycle, CurrentLifecycle == SiteCharacterLifecycleState.Archived
+                        ? DateTimeOffset.UtcNow : null, CampaignIds))
                 : new SiteCharacterAccessResult(SiteCharacterAccessStatus.NotFoundOrNotOwned));
     }
 
@@ -132,6 +136,10 @@ public sealed class CharacterStateCrossRepositoryTests
         /// </summary>
         public bool ForgePrimarySelection { get; set; }
         public bool ForgeWolfSelection { get; set; }
+
+        // Simulates an independent Site authorization change at the exact
+        // boundary after a successful, real Rules Core HTTP plan.
+        public Action? AfterVerifiedPlan { get; set; }
 
         public async Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct)
         {
@@ -187,7 +195,9 @@ public sealed class CharacterStateCrossRepositoryTests
             JsonElement request, CancellationToken ct)
         {
             using var response = await SendManifestationPlanAsync(request, ct);
-            return await Parse(response, ct);
+            var plan = await Parse(response, ct);
+            AfterVerifiedPlan?.Invoke();
+            return plan;
         }
 
         public async Task<HttpResponseMessage> SendManifestationPlanAsync(
@@ -803,8 +813,8 @@ public sealed class CharacterStateCrossRepositoryTests
                 false, DateTimeOffset.UtcNow))).Status);
 
         var source = new SyntheticTrustedSource(state);
-        var service = TransitionRunner(db,
-            new OwnerAccess(id), store, gateway, source);
+        var owner = new OwnerAccess(id);
+        var service = TransitionRunner(db, owner, store, gateway, source);
 
         async Task<NativeManifestationEffectiveCharacter> Execute(string eventId)
         {
@@ -841,6 +851,30 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(1, (await store.GetAsync(id))!.Revision);
         Assert.Single(await store.GetEventsAsync(id));
         source.Current = state;
+
+        // A valid source-verified Core plan is not sufficient if the Site
+        // revokes owner access, archives the character, or changes campaign
+        // scope before PostgreSQL accepts the event.
+        gateway.AfterVerifiedPlan = () => owner.CurrentLifecycle =
+            SiteCharacterLifecycleState.Archived;
+        Assert.Equal(CharacterManifestationApplyStatus.ArchivedReadOnly,
+            (await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
+        owner.CurrentLifecycle = SiteCharacterLifecycleState.Active;
+
+        gateway.AfterVerifiedPlan = () => owner.Allow = false;
+        Assert.Equal(CharacterManifestationApplyStatus.NotFoundOrNotOwned,
+            (await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
+        owner.Allow = true;
+
+        gateway.AfterVerifiedPlan = () => owner.CampaignIds = [Guid.NewGuid()];
+        Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized,
+            (await service.ApplyAsync(id, 1, 0, "enter:wolf", "enter:wolf")).Status);
+        owner.CampaignIds = [];
+        gateway.AfterVerifiedPlan = null;
+
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Equal(0, (await store.GetAsync(id))!.LedgerRevision);
+        Assert.Single(await store.GetEventsAsync(id));
 
         var wolf = await Execute("enter:wolf");
         Assert.Equal("wolf", wolf.EffectiveSheetId);

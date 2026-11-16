@@ -236,6 +236,31 @@ public sealed class CharacterManifestationTransitionService(
         if (before != after || after is null)
             return new(CharacterManifestationApplyStatus.AuthoritativeInputsChanged);
 
+        // Site identity and lifecycle are external to the Character Sheet
+        // transaction. Recheck after the remote Core plan, immediately before
+        // committing: an owner may lose access or the character may be archived
+        // while Core verifies mechanics. A changed campaign association also
+        // invalidates the scope in which the source policy made its decision.
+        // This narrows, but can not eliminate, the cross-service revocation
+        // window until Site exposes a commit-bound authorization contract.
+        var latestAccess = await site.GetAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (latestAccess.Status != SiteCharacterAccessStatus.Authorized ||
+            latestAccess.Character?.CharacterId != characterId)
+            return new(latestAccess.Status switch
+            {
+                SiteCharacterAccessStatus.Unauthenticated =>
+                    CharacterManifestationApplyStatus.Unauthenticated,
+                SiteCharacterAccessStatus.NotFoundOrNotOwned =>
+                    CharacterManifestationApplyStatus.NotFoundOrNotOwned,
+                _ => CharacterManifestationApplyStatus.ProjectionUnavailable
+            });
+        if (!latestAccess.Character.AllowsOrdinaryEditingByLifecycle)
+            return new(CharacterManifestationApplyStatus.ArchivedReadOnly);
+        if (!access.Character.CampaignIds.ToHashSet().SetEquals(
+                latestAccess.Character.CampaignIds))
+            return new(CharacterManifestationApplyStatus.SourceUnauthorized);
+
         CharacterSupernaturalWriteResult commit;
         try
         {
