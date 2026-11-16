@@ -1710,6 +1710,46 @@ public sealed class CharacterStateCrossRepositoryTests
         }
         Assert.Equal(saved.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
 
+        // Corrupt the *persisted* owner ledger, not only a caller's HTTP
+        // representation. The test-only verifier must independently reject
+        // mutated resource provenance without deriving authority from the
+        // rewritten row, then recover after restoring exact saved JSON.
+        foreach (var (field, replacement) in new (string, JsonNode)[]
+        {
+            ("definitionId", JsonValue.Create("resource.forged")!),
+            ("evidenceId", JsonValue.Create("receipt.forged")!),
+            ("ownerKind", JsonValue.Create((int)NativeManifestationResourceOwner.Sheet)!),
+            ("ownerId", JsonValue.Create("wolf")!)
+        })
+        {
+            var damaged = JsonNode.Parse(saved.LedgerJson)!;
+            var resource = damaged["resources"]!.AsArray().Single(x =>
+                x!["id"]!.GetValue<string>() == "resource.primary.1")!;
+            resource[field] = replacement.DeepClone();
+            try
+            {
+                await reloaded.SupernaturalStates
+                    .Where(x => x.CharacterId == id)
+                    .ExecuteUpdateAsync(change => change.SetProperty(
+                        x => x.LedgerJson, damaged.ToJsonString()));
+                var refused = await Reader(
+                    new CharacterSheetDbContext(database.CreateOptions()),
+                    id, new RealGateway(core.Client)).GetAsync(id);
+                Assert.Equal(CharacterEffectiveStateStatus.Ready, refused.Status);
+                Assert.NotEqual("wolf", refused.View!.EffectiveSheetId);
+                Assert.Contains("native-state-response-unverified",
+                    refused.View.Unresolved);
+            }
+            finally
+            {
+                await reloaded.SupernaturalStates
+                    .Where(x => x.CharacterId == id)
+                    .ExecuteUpdateAsync(change => change.SetProperty(
+                        x => x.LedgerJson, saved.LedgerJson));
+            }
+        }
+        Assert.Equal(saved.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
+
         // Concurrent verified reads traverse the actual Rules Core HTTP host
         // through independent PostgreSQL contexts. Their projections are not
         // authority to change ownership, balances, revisions, or receipts.
