@@ -1034,6 +1034,16 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal("hybrid", restartedRead.View.EffectiveSheetId);
         Assert.Equal("manifest.hybrid.1", restartedRead.View.ActiveManifestationId);
         Assert.NotNull(restartedRead.View.NativeProjection);
+        // Acceptance #29: after a fresh application/DbContext scope, the
+        // independently verified Core read must reproduce the complete
+        // committed effective character, not only its selected sheet ID.
+        // This compares inherited mechanics and source-owned progression,
+        // grants, effects, resources and provenance without reactivating.
+        var reloadedEffective = restartedRead.View.NativeProjection!["effectiveCharacter"];
+        Assert.NotNull(reloadedEffective);
+        Assert.True(JsonNode.DeepEquals(
+            JsonSerializer.SerializeToNode(hybrid, Wire), reloadedEffective),
+            "Reloaded effective mechanics and provenance must match the committed plan.");
 
         // The three denied post-plan Site revocations still invoked the
         // independently verified source; no denied plan wrote an event.
