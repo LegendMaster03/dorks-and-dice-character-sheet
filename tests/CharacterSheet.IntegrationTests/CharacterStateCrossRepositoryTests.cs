@@ -1718,6 +1718,8 @@ public sealed class CharacterStateCrossRepositoryTests
         {
             ("definitionId", JsonValue.Create("resource.forged")!),
             ("evidenceId", JsonValue.Create("receipt.forged")!),
+            ("sourceOccurrence", JsonSerializer.SerializeToNode(
+                Occurrence("resource.forged"), Wire)!),
             ("ownerKind", JsonValue.Create((int)NativeManifestationResourceOwner.Sheet)!),
             ("ownerId", JsonValue.Create("wolf")!)
         })
@@ -1732,8 +1734,9 @@ public sealed class CharacterStateCrossRepositoryTests
                     .Where(x => x.CharacterId == id)
                     .ExecuteUpdateAsync(change => change.SetProperty(
                         x => x.LedgerJson, damaged.ToJsonString()));
-                var refused = await Reader(
-                    new CharacterSheetDbContext(database.CreateOptions()),
+                await using var adversarialReadContext =
+                    new CharacterSheetDbContext(database.CreateOptions());
+                var refused = await Reader(adversarialReadContext,
                     id, new RealGateway(core.Client)).GetAsync(id);
                 Assert.Equal(CharacterEffectiveStateStatus.Ready, refused.Status);
                 Assert.NotEqual("wolf", refused.View!.EffectiveSheetId);
