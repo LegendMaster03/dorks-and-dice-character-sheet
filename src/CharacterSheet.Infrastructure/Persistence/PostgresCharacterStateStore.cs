@@ -163,6 +163,16 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
                     "A native resource current value can not be negative.");
 
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            // Keep the same lock order as innate-ledger CAS: root first.
+            // All aggregate changes must increment MutationRevision, even
+            // when their caller timestamp does not advance UpdatedAt.
+            var rootLock = await dbContext.CharacterSheets.FromSqlInterpolated(
+                $"""SELECT * FROM character_sheet_roots WHERE "CharacterId" = {characterId} FOR UPDATE""")
+                .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+            if (rootLock is null)
+                throw new InvalidOperationException(
+                    "Character Sheet does not exist for this resource mutation.");
+
             var changed = await dbContext.CharacterRulesInputs
                 .Where(value => value.CharacterId == characterId &&
                     value.Kind == CharacterRulesInputKind.Resource &&
@@ -181,6 +191,21 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
                     : "Character Sheet does not exist for this resource mutation.");
             }
 
+            // ExecuteUpdate bypasses ChangeTracker and EF concurrency-token
+            // predicates. Increment the root revision explicitly, within the
+            // same transaction and under the lock acquired before the resource
+            // row. Without this, an earlier timestamp could conceal a change
+            // from the native spell ledger's commit-time revision check.
+            var rooted = await dbContext.CharacterSheets
+                .Where(value => value.CharacterId == characterId &&
+                    value.MutationRevision == rootLock.MutationRevision &&
+                    value.MutationRevision < long.MaxValue)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(value => value.MutationRevision,
+                        value => value.MutationRevision + 1L), cancellationToken);
+            if (rooted != 1)
+                throw new DbUpdateConcurrencyException(
+                    "Character changed during the guarded native resource mutation.");
             await dbContext.CharacterSheets
                 .Where(value => value.CharacterId == characterId &&
                     value.UpdatedAt < changedAt)
