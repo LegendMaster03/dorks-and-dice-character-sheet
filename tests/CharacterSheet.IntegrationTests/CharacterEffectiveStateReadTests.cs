@@ -766,6 +766,11 @@ public sealed class CharacterEffectiveStateReadTests
         const string absentCurrent = """
             {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
             """;
+        // JSONB preserves keys that differ by case, while Web model binding
+        // treats them as aliases. Reject the surviving ambiguity.
+        const string caseAliasedUnderlying = """
+            {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"Underlying":{"speciesId":"species.elf","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
         const string nullCurrent = """
             {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"current":null,"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
             """;
@@ -773,7 +778,7 @@ public sealed class CharacterEffectiveStateReadTests
             {"id":"origin:current","underlying":[],"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
             """;
         foreach (var malformed in new[]
-                 { absentCurrent, nullCurrent, arrayUnderlying })
+                 { absentCurrent, nullCurrent, arrayUnderlying, caseAliasedUnderlying })
         {
             await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
                 .ExecuteUpdateAsync(update => update.SetProperty(
