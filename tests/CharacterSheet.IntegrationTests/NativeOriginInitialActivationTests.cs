@@ -294,6 +294,47 @@ public sealed class NativeOriginInitialActivationTests
         }
     }
 
+
+    [Theory]
+    [InlineData("proposal")]
+    [InlineData("fingerprint")]
+    public async Task DirectActivationRejectsSameRevisionSourceChangeDuringNativePreview(
+        string changedField)
+    {
+        // An administrator or damaged write bypassing draft revision CAS
+        // must not let a valid response authorize a different saved draft.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, characterId);
+        var native = new FakeNativeGateway(async () =>
+        {
+            if (changedField == "proposal")
+                await db.CharacterOriginDrafts
+                    .Where(x => x.CharacterId == characterId)
+                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.ProposalJson,
+                        Draft.Replace("species.human", "species.elf",
+                            StringComparison.Ordinal)));
+            else
+                await db.CharacterOriginDrafts
+                    .Where(x => x.CharacterId == characterId)
+                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.Fingerprint,
+                        "different-source-catalog"));
+        });
+
+        var result = await Service(db, characterId, native)
+            .ApplyAsync(characterId, 1);
+        Assert.Equal(CharacterOriginActivationStatus.DraftRevisionConflict,
+            result.Status);
+        Assert.Equal(1, native.Calls);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetAsync(characterId));
+        Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db)
+            .GetEventsAsync(characterId));
+        Assert.Equal(1, (await new PostgresCharacterOriginDraftStore(db)
+            .GetAsync(characterId))!.Revision);
+    }
+
     [Fact]
     public async Task ExistingLegacySpeciesRequiresReconciliationAndCannotBeOverwritten()
     {

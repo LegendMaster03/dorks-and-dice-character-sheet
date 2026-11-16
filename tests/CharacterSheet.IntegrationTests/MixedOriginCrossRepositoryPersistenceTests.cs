@@ -884,6 +884,61 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         Assert.Empty(await origins.GetEventsAsync(characterId));
     }
 
+
+    [Theory]
+    [InlineData("proposal")]
+    [InlineData("fingerprint")]
+    public async Task MixedActivationRejectsSameRevisionSourceChangeAfterNativeApproval(
+        string changedField)
+    {
+        // This includes real authenticated Rules Core HTTP and PostgreSQL.
+        // Only an independently authorized DM and the exact evaluated saved
+        // proposal may produce an initial mixed-Origin receipt.
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var fingerprint = core.App.Services
+            .GetRequiredService<NativeCatalogStore>().Snapshot!.Fingerprint;
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        Assert.Equal(1, (await new PostgresCharacterOriginDraftStore(db)
+            .SaveAsync(characterId, "first-party-001", fingerprint,
+                HumanElf, 0, DateTimeOffset.UtcNow))?.Revision);
+        var candidateIds = await FiveNativeHumanElfOffers(
+            new HttpNativeGateway(core.Client), fingerprint);
+        var gateway = new HttpNativeGateway(core.Client, afterApproval: async () =>
+        {
+            if (changedField == "proposal")
+                await db.CharacterOriginDrafts
+                    .Where(x => x.CharacterId == characterId)
+                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.ProposalJson,
+                        HumanElf.Replace("human-elf", "replaced-human-elf",
+                            StringComparison.Ordinal)));
+            else
+                await db.CharacterOriginDrafts
+                    .Where(x => x.CharacterId == characterId)
+                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.Fingerprint,
+                        "unreviewed-native-catalog"));
+        });
+        var scope = new RevocableDmScope(characterId);
+        var result = await new CharacterOriginMixedActivationService(
+            scope, scope,
+            new PostgresCharacterBuildStore(db),
+            new PostgresCharacterOriginDraftStore(db),
+            new PostgresCharacterAuthorizedOriginStore(db),
+            gateway, TimeProvider.System)
+            .ApplyAsync(characterId, Campaign, 1, candidateIds);
+
+        Assert.Equal(CharacterOriginMixedActivationStatus.DraftRevisionConflict,
+            result.Status);
+        var origins = new PostgresCharacterAuthorizedOriginStore(db);
+        Assert.Null(await origins.GetAsync(characterId));
+        Assert.Empty(await origins.GetEventsAsync(characterId));
+        Assert.Equal(1, (await new PostgresCharacterOriginDraftStore(db)
+            .GetAsync(characterId))!.Revision);
+    }
+
     [Fact]
     public async Task ChangedNativeCatalogOrMissingSelectionDoesNotCommitAProfile()
     {
