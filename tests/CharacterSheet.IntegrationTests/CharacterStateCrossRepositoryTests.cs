@@ -721,9 +721,13 @@ public sealed class CharacterStateCrossRepositoryTests
             decision.Basis == SyntheticRule() &&
             decision.AuthorizationEvidenceId == "receipt.interaction.overlap";
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
-            Character(id) && influence == PassiveResourceInfluence();
+            Character(id) && JsonElement.DeepEquals(
+                JsonSerializer.SerializeToElement(influence, Wire),
+                JsonSerializer.SerializeToElement(PassiveResourceInfluence(), Wire));
         public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) =>
-            Character(id) && influence == PassiveResourceInfluence();
+            Character(id) && JsonElement.DeepEquals(
+                JsonSerializer.SerializeToElement(influence, Wire),
+                JsonSerializer.SerializeToElement(PassiveResourceInfluence(), Wire));
         public bool AuthorizesEffect(string id, string influenceId,
             NativeCharacterInfluenceEffect effect) => false;
         public bool AuthorizesInfluenceProgression(string id, string influenceId,
