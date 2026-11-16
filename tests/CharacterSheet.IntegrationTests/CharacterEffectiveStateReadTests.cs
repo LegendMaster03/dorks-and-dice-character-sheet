@@ -697,6 +697,14 @@ public sealed class CharacterEffectiveStateReadTests
             x => x.ApprovalCampaignId, campaign));
         Assert.Equal(initial, await store.GetAuthoritativeInputsFingerprintAsync(id));
 
+        var origin = db.AuthorizedOrigins.Where(x => x.CharacterId == id);
+        await origin.ExecuteUpdateAsync(update => update.SetProperty(
+            x => x.SourceDraftRevision, (long?)7));
+        Assert.NotEqual(initial,
+            await store.GetAuthoritativeInputsFingerprintAsync(id));
+        await origin.ExecuteUpdateAsync(update => update.SetProperty(
+            x => x.SourceDraftRevision, (long?)null));
+        Assert.Equal(initial, await store.GetAuthoritativeInputsFingerprintAsync(id));
         Assert.Equal(1, (await db.AuthorizedOrigins.AsNoTracking()
             .SingleAsync(x => x.CharacterId == id)).Revision);
     }
