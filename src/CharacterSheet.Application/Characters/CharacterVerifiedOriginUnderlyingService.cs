@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
+using CharacterSheet.Application.Site;
 using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.Application.Characters;
@@ -37,7 +38,8 @@ public sealed record CharacterVerifiedOriginUnderlyingResult(
 public sealed class CharacterVerifiedOriginUnderlyingService(
     CharacterOriginStateService origins,
     ICharacterSupernaturalStateStore ownerStore,
-    INativeRulesCoreGateway rules)
+    INativeRulesCoreGateway rules,
+    ISiteFreshCharacterAccessGateway freshSite)
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
 
@@ -47,8 +49,16 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
         if (characterId == Guid.Empty)
             return new(CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned);
 
-        // Site ownership must be established before any character-owned
-        // database fingerprint or Origin record is inspected.
+        // A per-request Tool Host snapshot can be stale. Require a separate
+        // Site database read before inspecting any protected Origin row.
+        var liveAccess = await freshSite.GetFreshAuthorizedCharacterAsync(
+            characterId, cancellationToken);
+        if (liveAccess.Status != SiteCharacterAccessStatus.Authorized ||
+            liveAccess.Character?.CharacterId != characterId)
+            return new(MapLiveStatus(liveAccess.Status));
+
+        // The cached access remains necessary to load the Character Sheet
+        // stores, but it must agree with independently refreshed Site state.
         var initialAccess = await origins.GetAsync(characterId, cancellationToken);
         if (initialAccess.Status != CharacterOriginReadStatus.Ready)
             return new(initialAccess.Status switch
@@ -61,6 +71,9 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                     CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized,
                 _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
             });
+
+        if (!SameSiteState(liveAccess.Character!, initialAccess))
+            return new(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged);
 
         // Reload inside the digest window, so an Origin change between
         // initial Site access and fingerprint acquisition is not certified.
@@ -113,10 +126,19 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                     profile = profile.RootElement
                 }, Wire), cancellationToken);
 
-            // Recheck Site authorization after the remote Core call. This
-            // narrows a revocation window when the gateway resolves current
-            // Site state; it is not a substitute for the pending Site-issued
-            // fresh authorization fence.
+            // Requery Site's live ownership/lifecycle DB after the remote
+            // Core evaluation. Unlike re-reading the same introspection
+            // snapshot, this notices an archive, campaign disconnect or
+            // changed owner between the two service requests. This remains
+            // a read-time check, not an atomic cross-service commit fence.
+            var finalLive = await freshSite.GetFreshAuthorizedCharacterAsync(
+                characterId, cancellationToken);
+            if (finalLive.Status != SiteCharacterAccessStatus.Authorized ||
+                finalLive.Character?.CharacterId != characterId)
+                return new(MapLiveStatus(finalLive.Status));
+            if (!SameSiteState(liveAccess.Character!, finalLive))
+                return new(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged);
+
             var finalAccess = await origins.GetAsync(characterId, cancellationToken);
             if (finalAccess.Status != CharacterOriginReadStatus.Ready)
                 return new(finalAccess.Status switch
@@ -129,6 +151,8 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                         CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized,
                     _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
                 });
+            if (!SameSiteState(finalLive.Character!, finalAccess))
+                return new(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged);
             if (finalAccess.SavedState is not { } finalOrigin ||
                 finalOrigin.Revision != saved.Revision ||
                 finalOrigin.RulesetId != saved.RulesetId ||
@@ -216,5 +240,30 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
         }
         return true;
     }
+
+    private static CharacterVerifiedOriginUnderlyingStatus MapLiveStatus(
+        SiteCharacterAccessStatus status) => status switch
+    {
+        SiteCharacterAccessStatus.Unauthenticated =>
+            CharacterVerifiedOriginUnderlyingStatus.Unauthenticated,
+        SiteCharacterAccessStatus.NotFoundOrNotOwned =>
+            CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+        _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
+    };
+
+    private static bool SameSiteState(
+        SiteCharacterProjection expected, SiteCharacterAccessResult actual) =>
+        actual.Status == SiteCharacterAccessStatus.Authorized &&
+        actual.Character is { } current &&
+        SameSiteState(expected, current);
+
+    private static bool SameSiteState(
+        SiteCharacterProjection expected, SiteCharacterProjection actual) =>
+        expected.CharacterId == actual.CharacterId &&
+        expected.LifecycleState == actual.LifecycleState &&
+        expected.ArchivedAt == actual.ArchivedAt &&
+        expected.CampaignIds.Count == expected.CampaignIds.Distinct().Count() &&
+        actual.CampaignIds.Count == actual.CampaignIds.Distinct().Count() &&
+        expected.CampaignIds.ToHashSet().SetEquals(actual.CampaignIds);
 
 }
