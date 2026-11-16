@@ -322,6 +322,128 @@ public sealed class CharacterStateCrossRepositoryTests
     }
 
     [Fact]
+    public async Task LatestOwnedOriginUnderlyingRequiresCurrentSourceEvidenceThroughRealCore()
+    {
+        // Read-only bridging of the independently committed Origin to the
+        // actual current-catalog Core validator. No supernatural entitlement
+        // and no new Origin construction procedure is created here.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var publicCore = await CoreHost.StartAsync();
+        using var catalogRequest = new HttpRequestMessage(
+            HttpMethod.Get, "/api/mechanics/v1/ruleset");
+        catalogRequest.Headers.Add("X-Dorks-Tool-Auth-Ticket", Ticket);
+        catalogRequest.Headers.Add("X-Dorks-Tool-Auth-Introspection-Path",
+            "/tool-host/registrations/rules-core/api/introspect");
+        using var catalogResponse = await publicCore.Client.SendAsync(catalogRequest);
+        Assert.Equal(HttpStatusCode.OK, catalogResponse.StatusCode);
+        var metadata = JsonNode.Parse(await catalogResponse.Content.ReadAsStringAsync())!;
+        var fingerprint = metadata["fingerprint"]!.GetValue<string>();
+        var underlying = new NativeOriginCurrentConfiguration("species.human", null, []);
+        var profile = new NativeOriginProfile("origin:source-verified", underlying,
+            underlying, [], [],
+            new NativeOriginDecisionBasis(NativeOriginAdjudication.Supported));
+        var sourceJson = JsonSerializer.Serialize(profile, Wire);
+
+        await using (var setup = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(id);
+            setup.AuthorizedOrigins.Add(new CharacterAuthorizedOriginState(
+                id, "first-party-001", fingerprint, sourceJson, null,
+                DateTimeOffset.UtcNow));
+            setup.OriginEventReceipts.Add(new CharacterOriginEventReceipt(
+                id, "construction:source-verified", 1,
+                "rule.creature-origination", "biological", "first-party",
+                "fixture:origin-source", DateTimeOffset.UtcNow));
+            await setup.SaveChangesAsync();
+        }
+
+        var verifier = new PostgresSyntheticOriginAuthority(
+            database.CreateOptions(), id, fingerprint, sourceJson);
+        await using var core = await CoreHost.StartAsync(
+            verifiedOriginProvider: verifier);
+
+        async Task<(HttpStatusCode Status, JsonNode Body)> Review(
+            NativeOriginProfile submitted, long revision = 1)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                "/api/mechanics/v1/origins/underlying/verify");
+            request.Headers.Add("X-Dorks-Tool-Auth-Ticket", Ticket);
+            request.Headers.Add("X-Dorks-Tool-Auth-Introspection-Path",
+                "/tool-host/registrations/rules-core/api/introspect");
+            request.Content = JsonContent.Create(new
+            {
+                characterId = id,
+                originRevision = revision,
+                rulesetId = "first-party-001",
+                fingerprint,
+                profile = submitted
+            }, options: Wire);
+            using var result = await core.Client.SendAsync(request);
+            return (result.StatusCode,
+                JsonNode.Parse(await result.Content.ReadAsStringAsync())!);
+        }
+
+        var original = await Review(profile);
+        Assert.Equal(HttpStatusCode.OK, original.Status);
+        Assert.Equal("partial", original.Body["status"]!.GetValue<string>());
+        Assert.False(original.Body["effectiveMechanicsReady"]!.GetValue<bool>());
+        Assert.Equal("species.human",
+            original.Body["underlying"]!["speciesId"]!.GetValue<string>());
+
+        var staleRevision = await Review(profile, revision: 2);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, staleRevision.Status);
+        Assert.Equal("origin_authority_unverified",
+            staleRevision.Body["error"]!.GetValue<string>());
+
+        var forged = await Review(profile with
+        {
+            Underlying = new NativeOriginCurrentConfiguration("species.elf", null, [])
+        });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, forged.Status);
+
+        // A changed persisted profile at the original revision must not turn
+        // an independently verified source into an alternative grant.
+        await using (var tamper = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var changed = JsonSerializer.Serialize(profile with
+            {
+                Underlying = new NativeOriginCurrentConfiguration(
+                    "species.elf", null, [])
+            }, Wire);
+            await tamper.AuthorizedOrigins.Where(x => x.CharacterId == id)
+                .ExecuteUpdateAsync(update => update.SetProperty(x => x.ProfileJson, changed));
+            var denied = await Review(profile);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, denied.Status);
+            await tamper.AuthorizedOrigins.Where(x => x.CharacterId == id)
+                .ExecuteUpdateAsync(update => update.SetProperty(x => x.ProfileJson, sourceJson));
+        }
+
+        // A matching stored profile is still insufficient when its separate
+        // source receipt is altered.
+        await using (var evidence = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await evidence.OriginEventReceipts.Where(x => x.CharacterId == id)
+                .ExecuteUpdateAsync(update => update.SetProperty(
+                    x => x.AuthorizationEvidenceId, "fixture:forged-source"));
+            var denied = await Review(profile);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, denied.Status);
+            await evidence.OriginEventReceipts.Where(x => x.CharacterId == id)
+                .ExecuteUpdateAsync(update => update.SetProperty(
+                    x => x.AuthorizationEvidenceId, "fixture:origin-source"));
+        }
+
+        var restored = await Review(profile);
+        Assert.Equal(HttpStatusCode.OK, restored.Status);
+        Assert.True(JsonNode.DeepEquals(original.Body, restored.Body));
+        await using var finalDb = new CharacterSheetDbContext(database.CreateOptions());
+        Assert.Empty(await finalDb.SupernaturalStates.ToArrayAsync());
+        Assert.Empty(await finalDb.SupernaturalEventReceipts.ToArrayAsync());
+        Assert.Equal(1, await finalDb.OriginEventReceipts.CountAsync(x => x.CharacterId == id));
+    }
+
+    [Fact]
     public async Task OwnedPrimaryCharacterUsesRealNativeHttpAndPostgresWithoutMutatingState()
     {
         await using var core = await CoreHost.StartAsync();
