@@ -56,6 +56,7 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
         public JsonElement? LastRequest { get; private set; }
         public string SourceFingerprint { get; set; } = Fingerprint;
         public bool ValidResult { get; set; } = true;
+        public Func<Task>? DuringPreviewAsync { get; set; }
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct) =>
             Task.FromResult(JsonNode.Parse(JsonSerializer.Serialize(new
             {
@@ -64,12 +65,14 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
                 fingerprint = SourceFingerprint,
                 capabilities = new { innateSpellLedgerBootstrap = "source-matched-preview" }
             }))!);
-        public Task<JsonNode> PreviewDirectInnateSpellLedgerBootstrapAsync(
+        public async Task<JsonNode> PreviewDirectInnateSpellLedgerBootstrapAsync(
             JsonElement request, CancellationToken ct)
         {
             Calls++;
             LastRequest = request.Clone();
-            return Task.FromResult(JsonNode.Parse(JsonSerializer.Serialize(new
+            if (DuringPreviewAsync is not null)
+                await DuringPreviewAsync();
+            return JsonNode.Parse(JsonSerializer.Serialize(new
             {
                 contractVersion = 1,
                 rulesetId = "first-party-001",
@@ -94,7 +97,7 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
                         }
                     }
                 }
-            }))!);
+            }))!;
         }
         public Task<JsonNode> SearchNativeOptionsAsync(string fingerprint,
             string category, string? query, int limit, int offset,
@@ -143,7 +146,8 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
                 TimeProvider.System),
             new CharacterStateService(site, new PostgresCharacterStateStore(db),
                 TimeProvider.System),
-            gateway);
+            gateway,
+            new PostgresCharacterMutationRevisionReader(db));
         return new CharacterInnateSpellLedgerService(site, new Actor(),
             origin, ledger, evaluator, TimeProvider.System);
     }
@@ -250,6 +254,56 @@ public sealed class NativeDirectInnateSpellLedgerBootstrapTests
         Assert.Equal(CharacterInnateSpellLedgerStatus.NativeUnresolved, result.Status);
         Assert.Equal(0, gateway.Calls);
         Assert.Null(await new PostgresCharacterInnateSpellLedgerStore(db).GetAsync(id));
+    }
+
+    [Theory]
+    [InlineData("score")]
+    [InlineData("class")]
+    public async Task ConcurrentAggregateMutationDuringNativePreviewCannotBootstrapStaleCourse(
+        string mutation)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using (var setup = new CharacterSheetDbContext(database.CreateOptions()))
+            await PrepareAsync(setup, id);
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var revisionAtStart = (await new
+            PostgresCharacterMutationRevisionReader(db).GetRevisionAsync(id))!.Value;
+        var native = new Native
+        {
+            DuringPreviewAsync = async () =>
+            {
+                // Emulate a real independent writer racing the delegated
+                // HTTP native calculation: there is no open ledger transaction
+                // to hold the network request or obstruct editing.
+                await using var writer = new CharacterSheetDbContext(
+                    database.CreateOptions());
+                var builds = new PostgresCharacterBuildStore(writer);
+                if (mutation == "score")
+                    Assert.NotNull(await builds.SetBaseAbilityScoreInputAsync(
+                        id, "strength", 17, DateTimeOffset.UnixEpoch));
+                else
+                {
+                    var current = await builds.GetAsync(id);
+                    Assert.NotNull(current);
+                    var warlock = Assert.Single(current!.AdvancementEntries,
+                        entry => entry.Kind == CharacterAdvancementKind.Class);
+                    Assert.NotNull(await builds.SetAdvancementLevelAsync(
+                        id, warlock.Id, 2, DateTimeOffset.UnixEpoch));
+                }
+            }
+        };
+        var attempted = await Service(db, id, native).ApplyAsync(id,
+            CharacterInnateSpellLedgerAction.Initialize, null, null);
+        Assert.Equal(CharacterInnateSpellLedgerStatus.CharacterChanged,
+            attempted.Status);
+        Assert.Equal(1, native.Calls);
+        Assert.Null(await new PostgresCharacterInnateSpellLedgerStore(db)
+            .GetAsync(id));
+        Assert.Empty(await new PostgresCharacterInnateSpellLedgerStore(db)
+            .GetEventsAsync(id));
+        Assert.True((await new PostgresCharacterMutationRevisionReader(db)
+            .GetRevisionAsync(id)) > revisionAtStart);
     }
 
     [Fact]
