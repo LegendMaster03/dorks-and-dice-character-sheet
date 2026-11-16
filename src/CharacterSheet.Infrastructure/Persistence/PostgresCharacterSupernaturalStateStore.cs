@@ -443,8 +443,15 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 x.EvaluatedProjectionJson, x.Revision }).SingleOrDefaultAsync(ct);
         var originEvents = await db.OriginEventReceipts.AsNoTracking()
             .Where(x => x.CharacterId == id).OrderBy(x => x.CommittedRevision)
-            .Select(x => new { x.EventId, x.CommittedRevision, x.AuthorizationKind,
-                x.AuthorizationEvidenceId, x.ApprovedDecisionsJson }).ToArrayAsync(ct);
+            // Every field identifying the authorized method, DM scope or
+            // independently recorded decision must participate in the
+            // primary dependency digest. An unchanged Origin row revision
+            // does not protect against tampering with a separate receipt.
+            .Select(x => new { x.EventId, x.CommittedRevision,
+                x.MethodRuleId, x.MethodId, x.AuthorizationKind,
+                x.AuthorizationEvidenceId, x.ApprovalActorUserId,
+                x.ApprovalCampaignId, x.ApprovedDecisionsJson,
+                x.CreatedAt }).ToArrayAsync(ct);
 
         var canonical = JsonSerializer.Serialize(new {
             root, classes, selections, abilities, rules, conditions, hpGains, items, currency,
