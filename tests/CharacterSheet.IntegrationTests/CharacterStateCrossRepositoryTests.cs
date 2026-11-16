@@ -1325,6 +1325,118 @@ public sealed class CharacterStateCrossRepositoryTests
     }
 
     [Fact]
+    public async Task FourResourceOwnersRemainDistinctThroughTransitionReadAndReload()
+    {
+        // Source evidence is deliberately test-only; the real Core HTTP host
+        // verifies all four owners against the persisted PostgreSQL snapshot.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var verifier = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(verifier, verifier);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms()) with
+        {
+            PersistentInfluences = [PassiveResourceInfluence()]
+        };
+        var emptyLedger = new NativeManifestationLedger(
+            id.ToString("D"), 0, [], AcquiredOwnerPools(), []);
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var (key, score) in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(id, key, score, DateTimeOffset.UtcNow);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire),
+                JsonSerializer.Serialize(state.PersistentInfluences, Wire),
+                JsonSerializer.Serialize(emptyLedger, Wire),
+                0, 0, 0, digest, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        var source = new SyntheticTrustedSource(state);
+        var transition = await TransitionRunner(db, new OwnerAccess(id),
+            store, gateway, source).ApplyAsync(id, 1, 0,
+                "enter:four-owner-wolf", "enter:four-owner-wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, transition.Status);
+        var preview = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+            transition.EffectivePreview!.ToJsonString(), Wire)!;
+        Assert.Equal("wolf", preview.EffectiveSheetId);
+        Assert.Equal(4, preview.Resources.Count);
+        var expected = new[]
+        {
+            ("resource.primary.1", NativeManifestationResourceOwner.Primary, "@primary", 4, 7),
+            ("resource.sheet.1", NativeManifestationResourceOwner.Sheet, "werewolf", 2, 5),
+            ("resource.influence.1", NativeManifestationResourceOwner.Influence,
+                "influence.synthetic.pool", 1, 3),
+            ("resource.wolf.1", NativeManifestationResourceOwner.Manifestation,
+                "manifest.wolf.1", 3, 5)
+        };
+        foreach (var (poolId, ownerKind, ownerId, current, maximum) in expected)
+        {
+            var pool = Assert.Single(preview.Resources, x => x.Id == poolId);
+            Assert.Equal(ownerKind, pool.OwnerKind);
+            Assert.Equal(ownerId, pool.OwnerId);
+            Assert.Equal(current, pool.Current);
+            Assert.Equal(maximum, pool.RecordedMaximum);
+            Assert.Equal(maximum, pool.EffectiveMaximum);
+            Assert.Equal(poolId == "resource.wolf.1"
+                ? NativeManifestationResourceMode.Separate
+                : NativeManifestationResourceMode.Inherit, pool.Policy);
+        }
+
+        // Fresh persistence context, independently verified real Core read;
+        // compare full resource identity, mechanics and source provenance.
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(reloaded);
+        var saved = (await fresh.GetAsync(id))!;
+        Assert.Equal(2, saved.Revision);
+        Assert.Equal(1, saved.LedgerRevision);
+        var read = await Reader(reloaded, id, gateway).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, read.Status);
+        Assert.Equal("partial", read.View!.Status);
+        Assert.Equal("wolf", read.View.EffectiveSheetId);
+        Assert.True(JsonNode.DeepEquals(transition.EffectivePreview,
+            read.View.NativeProjection!["effectiveCharacter"]));
+        using (var journal = JsonDocument.Parse(saved.LedgerJson))
+        {
+            var persisted = journal.RootElement.GetProperty("resources")
+                .EnumerateArray().ToArray();
+            Assert.Equal(4, persisted.Length);
+            foreach (var (poolId, ownerKind, ownerId, current, maximum) in expected)
+            {
+                var pool = Assert.Single(persisted,
+                    x => x.GetProperty("id").GetString() == poolId);
+                Assert.Equal((int)ownerKind, pool.GetProperty("ownerKind").GetInt32());
+                Assert.Equal(ownerId, pool.GetProperty("ownerId").GetString());
+                Assert.Equal(current, pool.GetProperty("current").GetInt32());
+                Assert.Equal(maximum, pool.GetProperty("maximum").GetInt32());
+            }
+        }
+
+        // Ending the instance hides its private resource, not its durable
+        // pool, and must not grant Sheet/Influence resources to primary.
+        var reverted = await TransitionRunner(reloaded, new OwnerAccess(id),
+            fresh, gateway, source).ApplyAsync(id, saved.Revision,
+                saved.LedgerRevision, "revert:resource-wolf", "revert:resource-wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, reverted.Status);
+        var primary = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+            reverted.EffectivePreview!.ToJsonString(), Wire)!;
+        Assert.Equal("@primary", primary.EffectiveSheetId);
+        Assert.Equal("resource.primary.1", Assert.Single(primary.Resources).Id);
+        var after = (await fresh.GetAsync(id))!;
+        using var finalLedger = JsonDocument.Parse(after.LedgerJson);
+        Assert.Equal(4, finalLedger.RootElement.GetProperty("resources").GetArrayLength());
+        Assert.Equal(3, (await fresh.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
     public async Task SuppressionAndRestorationPreserveResourceOwnershipWithoutNewActivation()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
