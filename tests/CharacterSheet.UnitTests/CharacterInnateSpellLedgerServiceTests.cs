@@ -132,7 +132,8 @@ public sealed class CharacterInnateSpellLedgerServiceTests
         public TrustedInnateSpellLedgerEvaluation? LastInput { get; private set; }
         public TrustedInnateSpellLedgerCandidate? Output { get; set; } =
             new(Ledger(0), "human", "proposal-human",
-                "native-evaluated:original");
+                "native-evaluated:original",
+                ExpectedCharacterMutationRevision: 0);
 
         public Task<TrustedInnateSpellLedgerCandidate?> CalculateAsync(
             TrustedInnateSpellLedgerEvaluation input,
@@ -250,6 +251,7 @@ public sealed class CharacterInnateSpellLedgerServiceTests
         Assert.Equal(1, cmd.ExpectedOriginRevision);
         Assert.Null(cmd.ExpectedLedgerRevision);
         Assert.Equal("native-evaluated:original", cmd.AuthorizationEvidenceId);
+        Assert.Equal(0, cmd.ExpectedCharacterMutationRevision);
         Assert.Equal("Initialize", cmd.Operation);
         Assert.StartsWith("native-innate:", cmd.EventId, StringComparison.Ordinal);
         Assert.Equal("human", cmd.OriginProfileId);
@@ -336,16 +338,27 @@ public sealed class CharacterInnateSpellLedgerServiceTests
         var bad = new[]
         {
             new TrustedInnateSpellLedgerCandidate(Ledger(0),
-                "other-profile", "proposal-human", "native:verification"),
+                "other-profile", "proposal-human", "native:verification",
+                ExpectedCharacterMutationRevision: 0),
             new TrustedInnateSpellLedgerCandidate(Ledger(0),
-                "human", "proposal-human", ""),
+                "human", "proposal-human", "",
+                ExpectedCharacterMutationRevision: 0),
             new TrustedInnateSpellLedgerCandidate(Ledger(1),
-                "human", "proposal-human", "native:verification"),
+                "human", "proposal-human", "native:verification",
+                ExpectedCharacterMutationRevision: 0),
             new TrustedInnateSpellLedgerCandidate("""{"foo":"bar"}""",
+                "human", "proposal-human", "native:verification",
+                ExpectedCharacterMutationRevision: 0),
+            new TrustedInnateSpellLedgerCandidate(Ledger(0),
+                "human", "proposal-human", "native:verification",
+                ["injected-capacity-decision"], 0),
+            // An otherwise correct native candidate with no saved aggregate
+            // revision can not bypass optimistic character-state isolation.
+            new TrustedInnateSpellLedgerCandidate(Ledger(0),
                 "human", "proposal-human", "native:verification"),
             new TrustedInnateSpellLedgerCandidate(Ledger(0),
                 "human", "proposal-human", "native:verification",
-                ["injected-capacity-decision"])
+                ExpectedCharacterMutationRevision: -1)
         };
         foreach (var candidate in bad)
         {
@@ -388,7 +401,7 @@ public sealed class CharacterInnateSpellLedgerServiceTests
         var native = new NativeStub
         {
             Output = new(Ledger(1, 0), "human", "proposal-human",
-                "native-calculated:grant:spell")
+                "native-calculated:grant:spell", ExpectedCharacterMutationRevision: 0)
         };
         var service = Service(new SiteStub(), new ActorStub(Actor),
             origin, ledgers, native);
@@ -408,6 +421,26 @@ public sealed class CharacterInnateSpellLedgerServiceTests
     }
 
     [Fact]
+    public async Task CharacterMutationConflictIsReportedWithoutPublishingALedger()
+    {
+        var origin = new OriginStub();
+        var ledger = new LedgerStub
+        {
+            CommitStatus = InnateSpellLedgerStoreStatus.CharacterMutationConflict
+        };
+        var native = new NativeStub();
+        var service = Service(new SiteStub(), new ActorStub(Actor),
+            origin, ledger, native);
+        var result = await service.ApplyAsync(Character,
+            CharacterInnateSpellLedgerAction.Initialize, null, null);
+        Assert.Equal(CharacterInnateSpellLedgerStatus.CharacterChanged,
+            result.Status);
+        Assert.Equal(1, ledger.Writes);
+        Assert.Null(ledger.Saved);
+        Assert.Equal(0, ledger.LastCommand!.ExpectedCharacterMutationRevision);
+    }
+
+    [Fact]
     public async Task TransactionConflictNeverReturnsAnAppliedResult()
     {
         var origin = new OriginStub();
@@ -419,7 +452,7 @@ public sealed class CharacterInnateSpellLedgerServiceTests
         var native = new NativeStub
         {
             Output = new(Ledger(1, 0), "human", "proposal-human",
-                "native:calculated")
+                "native:calculated", ExpectedCharacterMutationRevision: 0)
         };
         var result = await Service(new SiteStub(), new ActorStub(Actor),
             origin, ledgers, native).ApplyAsync(
