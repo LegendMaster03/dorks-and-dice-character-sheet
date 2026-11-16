@@ -174,6 +174,136 @@ public sealed class CharacterEffectiveStateReadTests
             new PostgresCharacterSupernaturalStateStore(db), native, site);
     }
 
+
+    [Fact]
+    public async Task EffectiveStateRejectsCachedOwnershipAfterLiveSiteDenial()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var site = new SiteAccess(id) { FreshAllowed = false };
+        var native = new NativeGateway();
+
+        var result = await Service(db, id, native, suppliedSite: site).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.NotFoundOrNotOwned, result.Status);
+        Assert.Null(result.View);
+        Assert.Equal(0, native.Calls);
+    }
+
+    [Fact]
+    public async Task EffectiveStateDoesNotPublishAfterSiteRevocationDuringNativeRead()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var site = new SiteAccess(id);
+        var native = new NativeGateway
+        {
+            BeforeReply = () =>
+            {
+                site.FreshAllowed = false;
+                return Task.CompletedTask;
+            }
+        };
+
+        var result = await Service(db, id, native, suppliedSite: site).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.NotFoundOrNotOwned, result.Status);
+        Assert.Null(result.View);
+        Assert.Equal(1, native.Calls);
+    }
+
+    [Fact]
+    public async Task EffectiveStateUsesLiveArchiveLifecycleDespiteCachedActiveBuild()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var site = new SiteAccess(id)
+        {
+            FreshLifecycle = SiteCharacterLifecycleState.Archived
+        };
+
+        var result = await Service(db, id, new NativeGateway(),
+            suppliedSite: site).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+        Assert.True(result.View!.ReadOnly);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SupernaturalInspectionRefusesStaleOwnerWithStoredEvidence(
+        bool revokeAfterFirstFreshRead)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var ledger = JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision = 0,
+            instances = Array.Empty<object>(), resources = Array.Empty<object>(),
+            processedEventIds = Array.Empty<string>()
+        });
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, Ruleset, Fingerprint, """[{"id":"wolf"}]""",
+                "[]", ledger, 0, 0, 0, digest, "fixture:private-evidence",
+                "fixture:controlled", false, DateTimeOffset.UtcNow))).Status);
+
+        var site = new SiteAccess(id)
+        {
+            FreshAllowed = revokeAfterFirstFreshRead
+        };
+        if (revokeAfterFirstFreshRead)
+            site.BeforeFreshRead = read =>
+            {
+                if (read == 2) site.FreshAllowed = false;
+                return Task.CompletedTask;
+            };
+
+        var reader = new CharacterSupernaturalInspectionService(
+            new CharacterBuildService(site, new PostgresCharacterBuildStore(db),
+                TimeProvider.System), store, site);
+        var denied = await reader.GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.NotFoundOrNotOwned, denied.Status);
+        Assert.Null(denied.View);
+        Assert.Single(await store.GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task SupernaturalInspectionUsesLiveArchivedReadOnlyState()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var site = new SiteAccess(id)
+        {
+            FreshLifecycle = SiteCharacterLifecycleState.Archived
+        };
+        var reader = new CharacterSupernaturalInspectionService(
+            new CharacterBuildService(site, new PostgresCharacterBuildStore(db),
+                TimeProvider.System),
+            new PostgresCharacterSupernaturalStateStore(db), site);
+
+        var result = await reader.GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+        Assert.True(result.View!.ReadOnly);
+        Assert.Equal("unconfigured", result.View.Status);
+    }
+
     [Fact]
     public async Task OrdinaryAndArchivedCharacterReadsArePartialAndNonMutating()
     {
