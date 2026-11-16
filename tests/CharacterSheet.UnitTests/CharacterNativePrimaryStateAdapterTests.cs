@@ -231,7 +231,11 @@ public sealed class CharacterNativePrimaryStateAdapterTests
             """{"id":"origin:synthetic","underlying":null,"current":{}}""",
             """{"underlying":{},"current":{},"underlying":{"speciesId":"species.forged"}}""",
             """{"underlying":{"speciesId":"species.human","speciesId":"species.forged"},"current":{}}""",
-            """{"underlying":{},"current":{"ancestryId":"ancestry.elf","ancestryId":"ancestry.forged"}}"""
+            """{"underlying":{},"current":{"ancestryId":"ancestry.elf","ancestryId":"ancestry.forged"}}""",
+            """{"id":"one","id":"two","underlying":{},"current":{}}""",
+            """{"underlying":{"inherentGrants":[{"source":{"occurrenceId":"first","occurrenceId":"second"}}]},"current":{}}""",
+            """{"underlying":{},"current":{},"history":[{"evidenceId":"one","evidenceId":"two"}]}""",
+            """{"underlying":{},"current":{},"adjudication":{"adjudication":"supported","adjudication":"other"}}"""
         })
         {
             var malformed = CharacterNativePrimaryStateAdapter.Assemble(

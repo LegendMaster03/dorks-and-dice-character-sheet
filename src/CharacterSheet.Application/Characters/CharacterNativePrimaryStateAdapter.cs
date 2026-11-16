@@ -180,29 +180,16 @@ public static class CharacterNativePrimaryStateAdapter
             using var profile = JsonDocument.Parse(profileJson);
             if (profile.RootElement.ValueKind != JsonValueKind.Object)
                 return false;
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            var underlyingFound = false;
-            var currentFound = false;
-            foreach (var property in profile.RootElement.EnumerateObject())
-            {
-                if (!seen.Add(property.Name))
-                    return false;
-                if (property.Name == "underlying")
-                {
-                    if (property.Value.ValueKind != JsonValueKind.Object)
-                        return false;
-                    underlyingFound = UniqueConfigurationKeys(property.Value);
-                    if (!underlyingFound) return false;
-                }
-                else if (property.Name == "current")
-                {
-                    if (property.Value.ValueKind != JsonValueKind.Object)
-                        return false;
-                    currentFound = UniqueConfigurationKeys(property.Value);
-                    if (!currentFound) return false;
-                }
-            }
-            return underlyingFound && currentFound;
+            // Source identities and grants can be nested inside arrays or
+            // adjudication/history objects. Reject duplicate JSON keys at
+            // every depth, not only at the configuration roots, before model
+            // binding chooses one of two conflicting occurrence values.
+            if (!HasUniqueJsonKeys(profile.RootElement))
+                return false;
+            return profile.RootElement.TryGetProperty("underlying", out var underlying) &&
+                underlying.ValueKind == JsonValueKind.Object &&
+                profile.RootElement.TryGetProperty("current", out var current) &&
+                current.ValueKind == JsonValueKind.Object;
         }
         catch (JsonException)
         {
@@ -210,11 +197,16 @@ public static class CharacterNativePrimaryStateAdapter
         }
     }
 
-    private static bool UniqueConfigurationKeys(JsonElement configuration)
+    private static bool HasUniqueJsonKeys(JsonElement value)
     {
-        var keys = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var property in configuration.EnumerateObject())
-            if (!keys.Add(property.Name))
+        if (value.ValueKind == JsonValueKind.Array)
+            return value.EnumerateArray().All(HasUniqueJsonKeys);
+        if (value.ValueKind != JsonValueKind.Object)
+            return true;
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject())
+            if (!names.Add(property.Name) || !HasUniqueJsonKeys(property.Value))
                 return false;
         return true;
     }
