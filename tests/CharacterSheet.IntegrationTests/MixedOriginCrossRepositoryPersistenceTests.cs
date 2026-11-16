@@ -1139,8 +1139,9 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 PostgresCharacterOriginDraftStore>();
             builder.Services.AddScoped<ICharacterAuthorizedOriginStore,
                 PostgresCharacterAuthorizedOriginStore>();
-            builder.Services.AddSingleton<ISiteOriginDmAccessGateway>(
-                new TestDmScope(true));
+            var dmScope = new TestDmScope(true);
+            builder.Services.AddSingleton<ISiteOriginDmAccessGateway>(dmScope);
+            builder.Services.AddSingleton<ISiteFreshOriginDmAccessGateway>(dmScope);
             builder.Services.AddSingleton(native);
             builder.Services.AddSingleton<INativeRulesCoreGateway>(native);
             builder.Services.AddSingleton(TimeProvider.System);
