@@ -117,6 +117,8 @@ builder.Services.AddScoped<CharacterOriginMixedReviewService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterEffectiveStateService>();
+// Internal read-only Origin verifier; no browser mutation or grant issuance endpoint.
+builder.Services.AddScoped<CharacterVerifiedOriginUnderlyingService>();
 builder.Services.AddScoped<CharacterSupernaturalInspectionService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
 builder.Services.AddScoped<CharacterArtService>();
