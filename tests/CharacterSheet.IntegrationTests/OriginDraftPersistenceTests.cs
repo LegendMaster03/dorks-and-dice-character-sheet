@@ -140,6 +140,58 @@ public sealed class OriginDraftPersistenceTests
         Assert.NotNull(approvedForDraftOnly.Preview);
     }
 
+
+    [Theory]
+    [InlineData("proposal")]
+    [InlineData("fingerprint")]
+    public async Task SourceBoundOriginCommitRejectsSameRevisionDraftRewrite(
+        string changedField)
+    {
+        // Deliberately bypass the normal revisioned draft API through SQL.
+        // The trusted activation command is pinned to the proposal actually
+        // evaluated by Core, not merely to its revision and ruleset.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var drafts = new PostgresCharacterOriginDraftStore(db);
+        var initial = await drafts.SaveAsync(characterId, "first-party-001",
+            "original-catalog", HumanDraft, 0, DateTimeOffset.UtcNow);
+        Assert.Equal(1, initial!.Revision);
+
+        if (changedField == "proposal")
+            await db.CharacterOriginDrafts.Where(x => x.CharacterId == characterId)
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.ProposalJson, ElfDraft));
+        else
+            await db.CharacterOriginDrafts.Where(x => x.CharacterId == characterId)
+                .ExecuteUpdateAsync(u => u.SetProperty(x => x.Fingerprint, "altered-catalog"));
+
+        var store = new PostgresCharacterAuthorizedOriginStore(db);
+        var result = await store.CommitVerifiedAsync(
+            new CharacterSheet.Application.Persistence.VerifiedOriginPersistenceCommand(
+                characterId, "first-party-001", "current-catalog",
+                """
+                {"id":"origin:human",
+                 "underlying":{"speciesId":"species.human","inherentGrants":[]},
+                 "current":{"speciesId":"species.human","inherentGrants":[]}}
+                """,
+                0, 1, "construction:source-locked",
+                "rule.creature-origination", "biological",
+                "first-party", "fixture:source-locked",
+                DateTimeOffset.UtcNow,
+                ExpectedDraftProposalJson: HumanDraft,
+                ExpectedDraftFingerprint: "original-catalog"));
+
+        Assert.Equal(
+            CharacterSheet.Application.Persistence.AuthorizedOriginStoreStatus.DraftRevisionConflict,
+            result.Status);
+        Assert.Null(await store.GetAsync(characterId));
+        Assert.Empty(await store.GetEventsAsync(characterId));
+        var unchangedRevision = await drafts.GetAsync(characterId);
+        Assert.Equal(1, unchangedRevision!.Revision);
+    }
+
     [Fact]
     public async Task CommittedOriginFreezesSourceDraftAtDatabaseAndServiceBoundary()
     {

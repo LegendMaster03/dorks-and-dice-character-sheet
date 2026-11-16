@@ -24,7 +24,12 @@ public sealed record VerifiedOriginPersistenceCommand(
     Guid? ApprovalActorUserId = null,
     Guid? ApprovalCampaignId = null,
     string? ApprovedDecisionsJson = null,
-    string? EvaluatedProjectionJson = null);
+    string? EvaluatedProjectionJson = null,
+    // The exact draft identity read before delegated native evaluation.
+    // Production initial/mixed activation must supply both values; optional
+    // defaults preserve legacy internal fixture commands, not authorization.
+    string? ExpectedDraftProposalJson = null,
+    string? ExpectedDraftFingerprint = null);
 
 public enum AuthorizedOriginStoreStatus
 {

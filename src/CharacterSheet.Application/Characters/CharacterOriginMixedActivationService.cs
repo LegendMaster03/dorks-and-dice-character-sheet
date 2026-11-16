@@ -266,7 +266,9 @@ public sealed class CharacterOriginMixedActivationService(
                 draft.Revision, "construction:" + proposalId,
                 methodRuleId!, methodId!, "campaign-dm", evidenceId,
                 clock.GetUtcNow(), actor, campaignId, decisions.ToJsonString(),
-                projectionJson),
+                projectionJson,
+                ExpectedDraftProposalJson: draft.ProposalJson,
+                ExpectedDraftFingerprint: draft.Fingerprint),
             cancellationToken);
         return committed.Status switch
         {

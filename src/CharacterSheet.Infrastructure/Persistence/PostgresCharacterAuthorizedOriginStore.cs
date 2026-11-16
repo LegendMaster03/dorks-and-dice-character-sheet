@@ -80,7 +80,15 @@ public sealed class PostgresCharacterAuthorizedOriginStore(CharacterSheetDbConte
                     """)
                 .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
             if (draft is null || draft.Revision != draftRevision ||
-                draft.RulesetId != command.RulesetId)
+                draft.RulesetId != command.RulesetId ||
+                // A direct DB rewrite could preserve the revision while
+                // changing native evidence after evaluation. Production
+                // activation binds the exact proposal and catalog identity
+                // inside the same root/draft-locked PostgreSQL transaction.
+                (command.ExpectedDraftProposalJson is not null &&
+                 (!string.Equals(draft.ProposalJson,
+                     command.ExpectedDraftProposalJson, StringComparison.Ordinal) ||
+                  draft.Fingerprint != command.ExpectedDraftFingerprint)))
                 return new(AuthorizedOriginStoreStatus.DraftRevisionConflict);
         }
 

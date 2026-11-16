@@ -155,7 +155,10 @@ public sealed class CharacterOriginInitialActivationService(
                 authorizedProfile!, 0, draft.Revision,
                 "construction:" + proposalId, methodRuleId!, methodId!,
                 "first-party", "native-catalog:" + latestFingerprint,
-                clock.GetUtcNow()), cancellationToken);
+                clock.GetUtcNow(),
+                ExpectedDraftProposalJson: draft.ProposalJson,
+                ExpectedDraftFingerprint: draft.Fingerprint),
+            cancellationToken);
 
         return committed.Status switch
         {
