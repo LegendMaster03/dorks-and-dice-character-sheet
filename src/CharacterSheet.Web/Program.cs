@@ -59,6 +59,19 @@ builder.Services
         AllowAutoRedirect = false,
         UseCookies = false
     });
+// Live Site character authority is separate from the cached per-request
+// introspection snapshot. No browser or forwarded credentials are used.
+builder.Services
+    .AddHttpClient<ISiteFreshCharacterAccessGateway, ToolHostFreshCharacterAccessGateway>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(3);
+        client.BaseAddress = toolHostBaseUri;
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false
+    });
 builder.Services
     .AddHttpClient<IToolLifecycleIntrospectionClient, DorksAndDiceToolLifecycleIntrospectionClient>(client =>
     {
