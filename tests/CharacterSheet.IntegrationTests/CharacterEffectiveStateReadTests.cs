@@ -756,7 +756,7 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial, valid.Status);
         Assert.Equal(1, valid.OriginRevision);
         Assert.Equal("species.human", valid.Underlying!["speciesId"]!.GetValue<string>());
-        Assert.Equal(2, native.OriginVerificationCalls);
+        Assert.Equal(1, native.OriginVerificationCalls);
 
 
         // A saved JSON profile can pass TryGetProperty despite duplicate
