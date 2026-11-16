@@ -25,7 +25,7 @@ public enum CharacterInnateSpellLedgerStatus
     Ready, Applied, Unauthenticated, NotFoundOrNotOwned,
     ProjectionUnavailable, ArchivedReadOnly, OriginNotCommitted,
     LedgerMissing, LedgerAlreadyInitialized, RevisionConflict,
-    OriginChanged, InvalidAction, NativeUnresolved, NativeUnavailable
+    OriginChanged, CharacterChanged, InvalidAction, NativeUnresolved, NativeUnavailable
 }
 
 /// <summary>
@@ -56,7 +56,8 @@ public sealed record TrustedInnateSpellLedgerEvaluation(
 /// </summary>
 public sealed record TrustedInnateSpellLedgerCandidate(
     string LedgerJson, string OriginProfileId, string ProposalId,
-    string EvidenceId, IReadOnlyList<string>? AppliedCapacityDecisionIds = null);
+    string EvidenceId, IReadOnlyList<string>? AppliedCapacityDecisionIds = null,
+    long? ExpectedCharacterMutationRevision = null);
 
 public sealed record CharacterInnateSpellLedgerResult(
     CharacterInnateSpellLedgerStatus Status,
@@ -198,7 +199,8 @@ public sealed class CharacterInnateSpellLedgerService(
             candidate.ProposalId.Length > 240 ||
             (stored is not null && candidate.ProposalId != stored.ProposalId) ||
             string.IsNullOrWhiteSpace(candidate.EvidenceId) ||
-            candidate.EvidenceId.Length > 320)
+            candidate.EvidenceId.Length > 320 ||
+            candidate.ExpectedCharacterMutationRevision is not >= 0)
             return new(CharacterInnateSpellLedgerStatus.NativeUnresolved);
 
         if (stored is not null && stored.LedgerRevision == long.MaxValue)
@@ -233,7 +235,8 @@ public sealed class CharacterInnateSpellLedgerService(
                 expectedLedgerRevision, candidate.LedgerJson,
                 "native-innate:" + Guid.NewGuid().ToString("N"), siteActor,
                 candidate.EvidenceId, action.ToString(), clock.GetUtcNow(),
-                decisionsJson), cancellationToken);
+                decisionsJson, candidate.ExpectedCharacterMutationRevision),
+            cancellationToken);
         return commit.Status switch
         {
             InnateSpellLedgerStoreStatus.Applied =>
@@ -241,6 +244,8 @@ public sealed class CharacterInnateSpellLedgerService(
                     Revision: commit.Revision),
             InnateSpellLedgerStoreStatus.LedgerAlreadyInitialized =>
                 new(CharacterInnateSpellLedgerStatus.LedgerAlreadyInitialized),
+            InnateSpellLedgerStoreStatus.CharacterMutationConflict =>
+                new(CharacterInnateSpellLedgerStatus.CharacterChanged),
             InnateSpellLedgerStoreStatus.LedgerRevisionConflict or
                 InnateSpellLedgerStoreStatus.DuplicateEvent or
                 InnateSpellLedgerStoreStatus.LedgerMissing =>
