@@ -1801,6 +1801,34 @@ public sealed class CharacterStateCrossRepositoryTests
                     }
                 });
             });
+        // The real Character Sheet process now independently refreshes Site
+        // ownership around protected reads. The restart fixture must model
+        // that backend-only capability rather than returning a cached ticket
+        // projection in its place.
+        var freshOwnerQueries = 0;
+        site.MapPost(
+            "/tool-host/registrations/character-sheet/api/characters/{characterId:guid}/fresh-access",
+            (HttpContext context, Guid characterId) =>
+            {
+                if (context.Request.Headers.Authorization.ToString() !=
+                    "Bearer " + capability)
+                    return Results.Unauthorized();
+                if (characterId != id)
+                    return Results.NotFound();
+                Interlocked.Increment(ref freshOwnerQueries);
+                return Results.Json(new
+                {
+                    contractVersion = 1,
+                    sourceToolKey = "character-sheet",
+                    actorUserId = Actor,
+                    characterId = id,
+                    characterName = "Restart test character",
+                    status = "Active",
+                    archivedAt = (DateTimeOffset?)null,
+                    campaignIds = Array.Empty<Guid>(),
+                    allowsOrdinaryEditing = true
+                });
+            });
         site.MapMethods(
             "/tool-host/character-sheet/api/delegate/rules-core/upstream/{**target}",
             ["GET", "POST"],
