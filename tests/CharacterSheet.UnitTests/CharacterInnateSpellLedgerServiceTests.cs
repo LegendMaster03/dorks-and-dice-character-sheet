@@ -378,7 +378,7 @@ public sealed class CharacterInnateSpellLedgerServiceTests
         Assert.Equal("SpendFreeCast", ledgers.LastCommand.Operation);
         Assert.Equal("native-calculated:grant:spell",
             ledgers.LastCommand.AuthorizationEvidenceId);
-        Assert.Same(ledgers.Saved?.CharacterId, origin.Saved?.CharacterId);
+        Assert.Equal(ledgers.Saved?.CharacterId, origin.Saved?.CharacterId);
         Assert.Equal(CharacterInnateSpellLedgerAction.SpendFreeCast,
             native.LastInput!.Action);
         Assert.Equal("grant:spell", native.LastInput.GrantId);
