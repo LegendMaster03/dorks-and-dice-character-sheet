@@ -641,6 +641,67 @@ public sealed class CharacterEffectiveStateReadTests
     }
 
     [Fact]
+    public async Task OriginReceiptMethodAndDmScopeChangesInvalidatePrimaryDigest()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var actor = Guid.NewGuid();
+        var campaign = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        db.AuthorizedOrigins.Add(new CharacterAuthorizedOriginState(
+            id, Ruleset, Fingerprint, """
+                {"id":"origin:verified","underlying":{"inherentGrants":[]},"current":{"inherentGrants":[]},"history":[],"independentGrants":[],"adjudication":{"adjudication":"supported"}}
+                """, null, DateTimeOffset.UtcNow));
+        db.OriginEventReceipts.Add(new CharacterOriginEventReceipt(
+            id, "construction:verified", 1,
+            "rule.creature-origination", "biological", "campaign-dm",
+            "evidence:verified", DateTimeOffset.UtcNow, actor, campaign,
+            """[{"id":"decision:verified"}]"""));
+        await db.SaveChangesAsync();
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var initial = await store.GetAuthoritativeInputsFingerprintAsync(id);
+        Assert.NotNull(initial);
+        var row = db.OriginEventReceipts.Where(x => x.CharacterId == id);
+
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.MethodRuleId, "rule.forged-method"));
+        Assert.NotEqual(initial,
+            await store.GetAuthoritativeInputsFingerprintAsync(id));
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.MethodRuleId, "rule.creature-origination"));
+        Assert.Equal(initial, await store.GetAuthoritativeInputsFingerprintAsync(id));
+
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.MethodId, "forged-origination"));
+        Assert.NotEqual(initial,
+            await store.GetAuthoritativeInputsFingerprintAsync(id));
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.MethodId, "biological"));
+        Assert.Equal(initial, await store.GetAuthoritativeInputsFingerprintAsync(id));
+
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.ApprovalActorUserId, Guid.NewGuid()));
+        Assert.NotEqual(initial,
+            await store.GetAuthoritativeInputsFingerprintAsync(id));
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.ApprovalActorUserId, actor));
+        Assert.Equal(initial, await store.GetAuthoritativeInputsFingerprintAsync(id));
+
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.ApprovalCampaignId, Guid.NewGuid()));
+        Assert.NotEqual(initial,
+            await store.GetAuthoritativeInputsFingerprintAsync(id));
+        await row.ExecuteUpdateAsync(change => change.SetProperty(
+            x => x.ApprovalCampaignId, campaign));
+        Assert.Equal(initial, await store.GetAuthoritativeInputsFingerprintAsync(id));
+
+        Assert.Equal(1, (await db.AuthorizedOrigins.AsNoTracking()
+            .SingleAsync(x => x.CharacterId == id)).Revision);
+    }
+
+    [Fact]
     public async Task OriginUnderlyingVerificationRejectsUntrustedReplyAndInFlightSourceChange()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
