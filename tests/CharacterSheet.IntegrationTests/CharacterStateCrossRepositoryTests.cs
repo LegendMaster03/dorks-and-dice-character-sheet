@@ -120,7 +120,7 @@ public sealed class CharacterStateCrossRepositoryTests
     /// </summary>
     private sealed class PostgresSyntheticOriginAuthority(
         DbContextOptions<CharacterSheetDbContext> options, Guid characterId,
-        string fingerprint) : CoreOriginAuthorityProvider
+        string fingerprint, string authorizedSourceProfile) : CoreOriginAuthorityProvider
     {
         public async Task<bool> VerifyAsync(Guid actorId, Guid id, long revision,
             NativeOriginProfile profile, CancellationToken cancellationToken)
@@ -135,8 +135,10 @@ public sealed class CharacterStateCrossRepositoryTests
                 saved.Fingerprint != fingerprint)
                 return false;
             using var committed = JsonDocument.Parse(saved.ProfileJson);
+            using var sourced = JsonDocument.Parse(authorizedSourceProfile);
             var claimed = JsonSerializer.SerializeToElement(profile, Wire);
-            if (!JsonElement.DeepEquals(committed.RootElement, claimed))
+            if (!JsonElement.DeepEquals(committed.RootElement, claimed) ||
+                !JsonElement.DeepEquals(committed.RootElement, sourced.RootElement))
                 return false;
 
             var events = await db.OriginEventReceipts.AsNoTracking()
