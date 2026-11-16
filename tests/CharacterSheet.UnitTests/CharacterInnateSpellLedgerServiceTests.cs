@@ -283,6 +283,8 @@ public sealed class CharacterInnateSpellLedgerServiceTests
             origins, ledgers, native);
 
         Assert.Equal(CharacterInnateSpellLedgerStatus.OriginChanged,
+            (await service.GetAsync(Character)).Status);
+        Assert.Equal(CharacterInnateSpellLedgerStatus.OriginChanged,
             (await service.ApplyAsync(Character,
                 CharacterInnateSpellLedgerAction.LongRest, null, 0)).Status);
         Assert.Equal(0, native.Calls);
@@ -354,6 +356,27 @@ public sealed class CharacterInnateSpellLedgerServiceTests
                 result.Status);
         }
         Assert.Null(ledgers.Saved);
+        Assert.Equal(0, ledgers.Writes);
+    }
+
+    [Fact]
+    public async Task MalformedCommittedProfileCannotAuthorizeReadOrMutation()
+    {
+        var origins = new OriginStub
+        {
+            Saved = new(Character, "first-party-001", Fingerprint,
+                """{"underlying":{}}""", 1, Now)
+        };
+        var ledgers = new LedgerStub { Saved = SavedLedger() };
+        var native = new NativeStub();
+        var service = Service(new SiteStub(), new ActorStub(Actor),
+            origins, ledgers, native);
+        Assert.Equal(CharacterInnateSpellLedgerStatus.NativeUnresolved,
+            (await service.GetAsync(Character)).Status);
+        Assert.Equal(CharacterInnateSpellLedgerStatus.NativeUnresolved,
+            (await service.ApplyAsync(Character,
+                CharacterInnateSpellLedgerAction.LongRest, null, 0)).Status);
+        Assert.Equal(0, native.Calls);
         Assert.Equal(0, ledgers.Writes);
     }
 
