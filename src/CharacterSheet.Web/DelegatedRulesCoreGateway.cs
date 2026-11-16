@@ -70,6 +70,12 @@ public sealed class DelegatedRulesCoreGateway(
     /// Forward only user-scoped Site delegation, never a browser-provided
     /// upstream token or a synthetic campaign/DM authority.
     /// </summary>
+    public Task<JsonNode> VerifyNativeOriginUnderlyingAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post,
+            "/api/mechanics/v1/origins/underlying/verify",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> PreviewNativeOriginAsync(
         JsonElement request, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/origins/preview",
