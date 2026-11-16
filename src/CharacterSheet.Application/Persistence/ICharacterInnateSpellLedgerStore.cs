@@ -15,7 +15,8 @@ public sealed record VerifiedInnateSpellLedgerPersistenceCommand(
     long? ExpectedLedgerRevision, string LedgerJson,
     string EventId, Guid ActorUserId, string AuthorizationEvidenceId,
     string Operation, DateTimeOffset RecordedAt,
-    string? AppliedDecisionIdsJson = null);
+    string? AppliedDecisionIdsJson = null,
+    long? ExpectedCharacterMutationRevision = null);
 
 public enum InnateSpellLedgerStoreStatus
 {
@@ -24,6 +25,7 @@ public enum InnateSpellLedgerStoreStatus
     AuthorizedOriginMissing,
     OriginRevisionConflict,
     OriginIdentityConflict,
+    CharacterMutationConflict,
     LedgerAlreadyInitialized,
     LedgerMissing,
     LedgerRevisionConflict,
