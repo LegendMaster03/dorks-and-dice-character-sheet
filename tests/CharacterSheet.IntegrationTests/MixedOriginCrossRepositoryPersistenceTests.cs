@@ -490,6 +490,31 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             }
             Assert.Equal(receipt.EventId, auditProfile.RootElement
                 .GetProperty("history")[0].GetProperty("id").GetString());
+            // Independently check the frozen DM-audit verifier stage so a
+            // cross-repository failure can be attributed to its actual gate.
+            var reconciler = typeof(VerifiedCommittedMixedOriginReader).GetMethod(
+                "MatchesCommittedDecisions",
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Static);
+            Assert.NotNull(reconciler);
+            Assert.True((bool)reconciler.Invoke(null,
+                [approvalAudit.RootElement, auditProfile.RootElement, "human-elf"])!,
+                "The persisted candidate approval audit did not reconcile.");
+            Assert.Equal("campaign-dm", receipt.AuthorizationKind);
+            Assert.Equal("rule.creature-origination", receipt.MethodRuleId);
+            Assert.Equal("biological", receipt.MethodId);
+            Assert.Equal(Actor, receipt.ApprovalActorUserId);
+            Assert.Equal(Campaign, receipt.ApprovalCampaignId);
+            Assert.Equal(1, receipt.CommittedRevision);
+            Assert.Equal("origin:human-elf",
+                auditProfile.RootElement.GetProperty("id").GetString());
+            Assert.Equal("human-elf",
+                auditProfile.RootElement.GetProperty("proposalId").GetString());
+            Assert.Equal(2, auditProfile.RootElement.GetProperty("history")[0]
+                .GetProperty("stage").GetInt32());
+            Assert.Equal(3, auditProfile.RootElement.GetProperty("adjudication")
+                .GetProperty("adjudication").GetInt32());
+            Assert.Equal(saved.Fingerprint, activeRuleset["fingerprint"]!.GetValue<string>());
             var verified = VerifiedCommittedMixedOriginReader.Read(
                 saved, receipts, activeRuleset);
             Assert.NotNull(verified);
