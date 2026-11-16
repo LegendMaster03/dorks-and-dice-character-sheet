@@ -105,6 +105,33 @@ public sealed class ToolHostFreshOriginDmAccessGatewayTests
         Assert.Equal(1, handler.Requests);
     }
 
+    [Fact]
+    public async Task UnlengthenedOversizedLiveDmReplyCannotAuthorize()
+    {
+        // The extra field preserves a valid authorization reply while
+        // exceeding the bounded backend response contract without a length.
+        var oversized = LiveResponse(new
+        {
+            contractVersion = 1,
+            sourceToolKey = "character-sheet",
+            actorUserId = Actor,
+            campaignId = Campaign,
+            characterId = Character,
+            hasActiveDmScope = true,
+            padding = new string('x', 5000)
+        });
+        oversized.Content.Headers.ContentLength = null;
+        var handler = new Handler(_ => oversized);
+        var gateway = new ToolHostFreshOriginDmAccessGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.test") },
+            new HttpContextAccessor { HttpContext = await ContextAsync(true) });
+
+        var denied = await gateway.CheckFreshAsync(Campaign, Character);
+        Assert.Equal(SiteOriginDmAccessStatus.ProjectionUnavailable, denied.Status);
+        Assert.Null(denied.ActorUserId);
+        Assert.Equal(1, handler.Requests);
+    }
+
     [Theory]
     [InlineData(401, SiteOriginDmAccessStatus.Unauthenticated)]
     [InlineData(403, SiteOriginDmAccessStatus.Unauthenticated)]

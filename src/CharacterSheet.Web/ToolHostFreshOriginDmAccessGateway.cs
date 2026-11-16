@@ -60,6 +60,9 @@ public sealed class ToolHostFreshOriginDmAccessGateway(
                 response.Content.Headers.ContentLength is > 4096)
                 return new(SiteOriginDmAccessStatus.ProjectionUnavailable);
 
+            // Content-Length is optional. Bound streamed replies as well as
+            // replies with a declared size before accepting live DM scope.
+            await response.Content.LoadIntoBufferAsync(4096, cancellationToken);
             var live = await response.Content.ReadFromJsonAsync<LiveDmAccess>(
                 Wire, cancellationToken);
             if (live is null ||

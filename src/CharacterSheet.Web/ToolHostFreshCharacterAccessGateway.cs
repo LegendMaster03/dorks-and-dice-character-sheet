@@ -58,6 +58,9 @@ public sealed class ToolHostFreshCharacterAccessGateway(
                 response.Content.Headers.ContentLength is > 8192)
                 return new(SiteCharacterAccessStatus.ProjectionUnavailable);
 
+            // A chunked response need not send Content-Length. Enforce the
+            // wire-size budget before parsing or trusting any Site decision.
+            await response.Content.LoadIntoBufferAsync(8192, cancellationToken);
             var live = await response.Content.ReadFromJsonAsync<LiveAccess>(Wire, cancellationToken);
             if (live is null ||
                 live.ContractVersion != 1 ||

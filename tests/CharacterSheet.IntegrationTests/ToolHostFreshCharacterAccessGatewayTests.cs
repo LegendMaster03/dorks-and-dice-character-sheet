@@ -110,6 +110,36 @@ public sealed class ToolHostFreshCharacterAccessGatewayTests
         Assert.Equal(1, handler.Requests);
     }
 
+    [Fact]
+    public async Task UnlengthenedOversizedLiveOwnerReplyCannotAuthorize()
+    {
+        // A valid owner JSON object with an unknown extra field would be
+        // accepted by the normal deserializer unless the actual body is bounded.
+        var oversized = LiveResponse(new
+        {
+            contractVersion = 1,
+            sourceToolKey = "character-sheet",
+            actorUserId = Actor,
+            characterId = Character,
+            characterName = "Owner character",
+            status = "Active",
+            archivedAt = (DateTimeOffset?)null,
+            campaignIds = Array.Empty<Guid>(),
+            allowsOrdinaryEditing = true,
+            padding = new string('x', 9000)
+        });
+        oversized.Content.Headers.ContentLength = null;
+        var handler = new Handler(_ => oversized);
+        var gateway = new ToolHostFreshCharacterAccessGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.test") },
+            new HttpContextAccessor { HttpContext = await ContextAsync(true) });
+
+        var denied = await gateway.GetFreshAuthorizedCharacterAsync(Character);
+        Assert.Equal(SiteCharacterAccessStatus.ProjectionUnavailable, denied.Status);
+        Assert.Null(denied.Character);
+        Assert.Equal(1, handler.Requests);
+    }
+
     [Theory]
     [InlineData(401, SiteCharacterAccessStatus.Unauthenticated)]
     [InlineData(403, SiteCharacterAccessStatus.Unauthenticated)]
