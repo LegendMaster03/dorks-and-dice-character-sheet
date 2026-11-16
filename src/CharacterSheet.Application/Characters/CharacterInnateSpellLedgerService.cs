@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CharacterSheet.Application.Persistence;
+using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Domain.Characters;
 
@@ -84,13 +85,28 @@ public sealed class CharacterInnateSpellLedgerService(
             requiresEditing: false);
         if (access != CharacterInnateSpellLedgerStatus.Ready)
             return new(access);
-        if (await originStore.GetAsync(characterId, cancellationToken) is null)
+        var origin = await originStore.GetAsync(characterId, cancellationToken);
+        if (origin is null)
             return new(CharacterInnateSpellLedgerStatus.OriginNotCommitted);
         var ledger = await ledgerStore.GetAsync(characterId, cancellationToken);
-        return ledger is null
-            ? new(CharacterInnateSpellLedgerStatus.LedgerMissing)
-            : new(CharacterInnateSpellLedgerStatus.Ready, ledger,
-                ledger.LedgerRevision);
+        if (ledger is null)
+            return new(CharacterInnateSpellLedgerStatus.LedgerMissing);
+        string currentProfileId;
+        try
+        {
+            currentProfileId = CharacterInnateSpellLedgerState.ReadProfileId(origin.ProfileJson);
+        }
+        catch (ArgumentException)
+        {
+            return new(CharacterInnateSpellLedgerStatus.NativeUnresolved);
+        }
+        if (ledger.OriginRevision != origin.Revision ||
+            ledger.RulesetId != origin.RulesetId ||
+            ledger.Fingerprint != origin.Fingerprint ||
+            ledger.OriginProfileId != currentProfileId)
+            return new(CharacterInnateSpellLedgerStatus.OriginChanged);
+        return new(CharacterInnateSpellLedgerStatus.Ready, ledger,
+            ledger.LedgerRevision);
     }
 
     /// <summary>
@@ -147,7 +163,15 @@ public sealed class CharacterInnateSpellLedgerService(
                 return new(CharacterInnateSpellLedgerStatus.OriginChanged);
         }
 
-        var profileId = CharacterInnateSpellLedgerState.ReadProfileId(origin.ProfileJson);
+        string profileId;
+        try
+        {
+            profileId = CharacterInnateSpellLedgerState.ReadProfileId(origin.ProfileJson);
+        }
+        catch (ArgumentException)
+        {
+            return new(CharacterInnateSpellLedgerStatus.NativeUnresolved);
+        }
         if (stored is not null && stored.OriginProfileId != profileId)
             return new(CharacterInnateSpellLedgerStatus.OriginChanged);
 
@@ -163,7 +187,7 @@ public sealed class CharacterInnateSpellLedgerService(
             throw;
         }
         catch (Exception error) when (error is InvalidOperationException or
-            NotSupportedException or JsonException)
+            NotSupportedException or JsonException or RulesCoreGatewayException)
         {
             return new(CharacterInnateSpellLedgerStatus.NativeUnavailable);
         }
