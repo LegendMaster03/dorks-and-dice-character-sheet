@@ -1,6 +1,7 @@
 #if CHARACTER_STATE_INCREMENT4
 extern alias CoreHost;
 using System.Net;
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -1322,6 +1323,231 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.NotEqual(CharacterManifestationApplyStatus.Applied, denied.Status);
         Assert.Equal(unchanged.Revision, (await recovered.GetAsync(id))!.Revision);
         Assert.Equal(4, (await recovered.GetEventsAsync(id)).Count);
+    }
+
+
+    [Fact]
+    public async Task RealCharacterSheetProcessRestartPreservesVerifiedActiveFormAndAudit()
+    {
+        // This test starts the actual CharacterSheet.Web executable twice.
+        // Site introspection and delegation are independently authenticated
+        // disposable fixtures, not production bypass endpoints.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var verifier = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(verifier, verifier);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms());
+
+        await using (var setup = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await setup.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(setup).GetOrCreateAsync(id);
+            var build = new PostgresCharacterBuildStore(setup);
+            foreach (var (key, score) in state.PrimaryMechanics.AbilityScores)
+                await build.SetBaseAbilityScoreInputAsync(id, key, score, DateTimeOffset.UtcNow);
+            var owned = new PostgresCharacterSupernaturalStateStore(setup);
+            var digest = (await owned.GetAuthoritativeInputsFingerprintAsync(id))!;
+            var initial = new NativeManifestationLedger(id.ToString("D"), 0, [], [], []);
+            Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+                (await owned.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                    id, "first-party-001", fingerprint,
+                    JsonSerializer.Serialize(state.AlternateSheets, Wire), "[]",
+                    JsonSerializer.Serialize(initial, Wire),
+                    0, 0, 0, digest, "fixture:acquire-werewolf",
+                    "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+            var transition = await TransitionRunner(setup, new OwnerAccess(id),
+                owned, gateway, new SyntheticTrustedSource(state)).ApplyAsync(
+                    id, 1, 0, "enter:resource-wolf", "enter:resource-wolf");
+            Assert.Equal(CharacterManifestationApplyStatus.Applied, transition.Status);
+        }
+
+        // Host-only Site fixture: a caller must redeem a concrete ticket,
+        // and the Rules Core proxy separately requires Site delegation.
+        const string sheetTicket = "test:character-sheet-restart";
+        const string capability = "test:rules-core-delegation";
+        var authentications = 0;
+        var siteBuilder = WebApplication.CreateBuilder();
+        siteBuilder.WebHost.UseUrls("http://127.0.0.1:0");
+        await using var site = siteBuilder.Build();
+        site.MapPost("/tool-host/character-sheet/api/introspect",
+            (HttpContext context) =>
+            {
+                if (context.Request.Headers.Authorization.ToString() !=
+                    "Bearer " + sheetTicket)
+                    return Results.Unauthorized();
+                System.Threading.Interlocked.Increment(ref authentications);
+                context.Response.Headers["X-Dorks-Tool-Delegation-Capability"] =
+                    capability;
+                context.Response.Headers["X-Dorks-Tool-Delegation-Path"] =
+                    "/tool-host/character-sheet/api/delegate/{targetSlug}/upstream";
+                return Results.Json(new
+                {
+                    contractVersion = 1, toolSlug = "character-sheet",
+                    siteMode = "dorks-and-dice",
+                    user = new { id = Actor.ToString("D"), displayName = "Test owner" },
+                    globalRoles = Array.Empty<string>(), campaigns = Array.Empty<object>(),
+                    characters = new[]
+                    {
+                        new
+                        {
+                            id, name = "Restart test character", status = "Active",
+                            archivedAt = (DateTimeOffset?)null,
+                            campaignIds = Array.Empty<Guid>()
+                        }
+                    }
+                });
+            });
+        site.MapMethods(
+            "/tool-host/character-sheet/api/delegate/rules-core/upstream/{**target}",
+            ["GET", "POST"],
+            async (HttpContext context, string target) =>
+            {
+                if (context.Request.Headers.Authorization.ToString() !=
+                    "Bearer " + capability)
+                {
+                    context.Response.StatusCode = 401;
+                    return;
+                }
+                using var upstream = new HttpRequestMessage(
+                    new HttpMethod(context.Request.Method), "/" + target);
+                upstream.Headers.Add("X-Dorks-Tool-Auth-Ticket", Ticket);
+                upstream.Headers.Add("X-Dorks-Tool-Auth-Introspection-Path",
+                    "/tool-host/registrations/rules-core/api/introspect");
+                if (context.Request.Method == "POST")
+                {
+                    upstream.Content = new StreamContent(context.Request.Body);
+                    upstream.Content.Headers.ContentType =
+                        new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+                }
+                using var returned = await core.Client.SendAsync(
+                    upstream, context.RequestAborted);
+                context.Response.StatusCode = (int)returned.StatusCode;
+                context.Response.ContentType = "application/json";
+                await returned.Content.CopyToAsync(context.Response.Body);
+            });
+        await site.StartAsync();
+        var siteUrl = site.Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+
+        // Run from the build output of the actual web project, which includes
+        // its executable runtime configuration and dependencies.
+        var webDll = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+            "../../../../../src/CharacterSheet.Web/bin/Release/net10.0/CharacterSheet.Web.dll"));
+        Assert.True(File.Exists(webDll), $"Missing real Character Sheet host: {webDll}");
+        var freePort = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        freePort.Start();
+        var port = ((IPEndPoint)freePort.LocalEndpoint).Port;
+        freePort.Stop();
+        var hostUrl = $"http://127.0.0.1:{port}";
+        using var client = new HttpClient { BaseAddress = new Uri(hostUrl) };
+
+        async Task<Process> StartHost()
+        {
+            var start = new ProcessStartInfo("dotnet")
+            {
+                UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(webDll)!
+            };
+            start.ArgumentList.Add(webDll);
+            start.Environment["ASPNETCORE_URLS"] = hostUrl;
+            start.Environment["ConnectionStrings__CharacterSheet"] =
+                database.ConnectionString;
+            start.Environment["ToolHost__BaseUrl"] = siteUrl;
+            var process = Process.Start(start)!;
+            _ = process.StandardOutput.ReadToEndAsync();
+            _ = process.StandardError.ReadToEndAsync();
+            for (var attempt = 0; attempt < 80; attempt++)
+            {
+                if (process.HasExited)
+                    throw new InvalidOperationException(
+                        $"Character Sheet host exited early: {process.ExitCode}");
+                try
+                {
+                    using var ready = await client.GetAsync("/ready");
+                    if (ready.IsSuccessStatusCode) return process;
+                }
+                catch (HttpRequestException) { }
+                catch (TaskCanceledException) { }
+                await Task.Delay(150);
+            }
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            throw new TimeoutException("Real Character Sheet host did not become ready.");
+        }
+
+        async Task<JsonNode> AuthorizedFormRead()
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"/api/characters/{id:D}/state/effective");
+            request.Headers.Add("X-Dorks-Tool-Auth-Ticket", sheetTicket);
+            request.Headers.Add("X-Dorks-Tool-Auth-Introspection-Path",
+                "/tool-host/character-sheet/api/introspect");
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        }
+
+        var before = 0;
+        JsonNode firstProjection;
+        using (var first = await StartHost())
+        {
+            try
+            {
+                firstProjection = await AuthorizedFormRead();
+                Assert.Equal("wolf",
+                    firstProjection["effectiveSheetId"]?.GetValue<string>());
+                Assert.Equal("manifest.wolf.1",
+                    firstProjection["activeManifestationId"]?.GetValue<string>());
+                before = authentications;
+                Assert.True(before > 0);
+            }
+            finally
+            {
+                if (!first.HasExited) first.Kill(entireProcessTree: true);
+                await first.WaitForExitAsync();
+            }
+        }
+
+        using (var restarted = await StartHost())
+        {
+            try
+            {
+                var restored = await AuthorizedFormRead();
+                Assert.True(authentications > before,
+                    "The restarted process must redeem Site authorization again.");
+                Assert.True(JsonNode.DeepEquals(firstProjection, restored));
+            }
+            finally
+            {
+                if (!restarted.HasExited) restarted.Kill(entireProcessTree: true);
+                await restarted.WaitForExitAsync();
+            }
+        }
+
+        await using var inspected = new CharacterSheetDbContext(database.CreateOptions());
+        var persisted = new PostgresCharacterSupernaturalStateStore(inspected);
+        var saved = (await persisted.GetAsync(id))!;
+        Assert.Equal(2, saved.Revision);
+        Assert.Equal(1, saved.LedgerRevision);
+        var receipts = await persisted.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        Assert.Equal("fixture:acquire-werewolf", receipts[0].EventId);
+        Assert.Equal("enter:resource-wolf", receipts[1].EventId);
+        using var ledger = JsonDocument.Parse(saved.LedgerJson);
+        Assert.Equal(1, ledger.RootElement.GetProperty("processedEventIds")
+            .GetArrayLength());
+        Assert.Equal("enter:resource-wolf",
+            ledger.RootElement.GetProperty("processedEventIds")[0].GetString());
+        Assert.Equal("manifest.wolf.1",
+            ledger.RootElement.GetProperty("instances")[0]
+                .GetProperty("id").GetString());
+        Assert.Equal("resource.wolf.1",
+            ledger.RootElement.GetProperty("resources")[0]
+                .GetProperty("id").GetString());
     }
 
     [Fact]
