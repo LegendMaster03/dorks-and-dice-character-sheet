@@ -759,6 +759,20 @@ public sealed class CharacterEffectiveStateReadTests
 
         native.BeforeOriginVerificationReply = async () =>
         {
+            await db.OriginEventReceipts.Where(x => x.CharacterId == id)
+                .ExecuteUpdateAsync(update => update.SetProperty(
+                    x => x.MethodId, "forged-origination"));
+        };
+        var changedMethod = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged,
+            changedMethod.Status);
+        Assert.Null(changedMethod.Underlying);
+        await db.OriginEventReceipts.Where(x => x.CharacterId == id)
+            .ExecuteUpdateAsync(update => update.SetProperty(
+                x => x.MethodId, "biological"));
+
+        native.BeforeOriginVerificationReply = async () =>
+        {
             await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
                 .ExecuteUpdateAsync(update => update.SetProperty(
                     x => x.ProfileJson, rewrittenProfile));
