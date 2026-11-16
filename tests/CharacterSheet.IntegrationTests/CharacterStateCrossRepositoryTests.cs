@@ -1420,6 +1420,37 @@ public sealed class CharacterStateCrossRepositoryTests
             }
         }
 
+        // Concurrent verified reads traverse the actual Rules Core HTTP host
+        // through independent PostgreSQL contexts. Their projections are not
+        // authority to change ownership, balances, revisions, or receipts.
+        var receiptsBeforeReads = (await fresh.GetEventsAsync(id))
+            .Select(x => (x.EventId, x.CommittedRevision, x.AuthorizationEvidenceId,
+                x.TransitionRequestJson)).ToArray();
+        async Task<CharacterEffectiveStateResult> IndependentRead()
+        {
+            await using var independentDb = new CharacterSheetDbContext(
+                database.CreateOptions());
+            return await Reader(independentDb, id, new RealGateway(core.Client))
+                .GetAsync(id);
+        }
+        var concurrent = await Task.WhenAll(
+            IndependentRead(), IndependentRead(), IndependentRead());
+        foreach (var result in concurrent)
+        {
+            Assert.Equal(CharacterEffectiveStateStatus.Ready, result.Status);
+            Assert.Equal("wolf", result.View!.EffectiveSheetId);
+            Assert.True(JsonNode.DeepEquals(transition.EffectivePreview,
+                result.View.NativeProjection!["effectiveCharacter"]));
+        }
+        var afterReads = (await fresh.GetAsync(id))!;
+        Assert.Equal(saved.Revision, afterReads.Revision);
+        Assert.Equal(saved.LedgerRevision, afterReads.LedgerRevision);
+        Assert.Equal(saved.LedgerJson, afterReads.LedgerJson);
+        Assert.Equal(receiptsBeforeReads,
+            (await fresh.GetEventsAsync(id))
+                .Select(x => (x.EventId, x.CommittedRevision, x.AuthorizationEvidenceId,
+                    x.TransitionRequestJson)).ToArray());
+
         // Ending the instance hides its private resource, not its durable
         // pool, and must not grant Sheet/Influence resources to primary.
         var reverted = await TransitionRunner(reloaded, new OwnerAccess(id),
@@ -1433,6 +1464,12 @@ public sealed class CharacterStateCrossRepositoryTests
         var after = (await fresh.GetAsync(id))!;
         using var finalLedger = JsonDocument.Parse(after.LedgerJson);
         Assert.Equal(4, finalLedger.RootElement.GetProperty("resources").GetArrayLength());
+        using var priorLedger = JsonDocument.Parse(saved.LedgerJson);
+        // Compare the complete persisted record, including provenance and
+        // source occurrence; visible resource counts are insufficient.
+        Assert.True(JsonElement.DeepEquals(
+            priorLedger.RootElement.GetProperty("resources"),
+            finalLedger.RootElement.GetProperty("resources")));
         Assert.Equal(3, (await fresh.GetEventsAsync(id)).Count);
     }
 
