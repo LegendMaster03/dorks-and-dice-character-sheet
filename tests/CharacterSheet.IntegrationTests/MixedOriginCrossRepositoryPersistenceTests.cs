@@ -826,6 +826,64 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             .GetEventsAsync(characterId));
     }
 
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HumanElfMethodAliasesAndExtraFieldsCannotReachNativeEvaluation(
+        bool caseAlias)
+    {
+        // PostgreSQL jsonb retains distinct-cased keys. Character Sheet's
+        // pinned source check must reject these method deviations even when
+        // the exact original ruleId/methodId are also present.
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        var altered = HumanElf.Replace(
+            "\"methodId\":\"biological\"",
+            caseAlias
+                ? "\"methodId\":\"biological\",\"MethodId\":\"unapproved\""
+                : "\"methodId\":\"biological\",\"extraAuthority\":\"invented\"",
+            StringComparison.Ordinal);
+        Assert.NotEqual(HumanElf, altered);
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var drafts = new PostgresCharacterOriginDraftStore(db);
+        Assert.Equal(1, (await drafts.SaveAsync(
+            characterId, "first-party-001", fingerprint, altered, 0,
+            DateTimeOffset.UtcNow))?.Revision);
+        var previewCalls = 0;
+        var gateway = new HttpNativeGateway(core.Client,
+            afterPreview: _ =>
+            {
+                previewCalls++;
+                return Task.CompletedTask;
+            });
+        var scope = new RevocableDmScope(characterId);
+        var builds = new PostgresCharacterBuildStore(db);
+        var origins = new PostgresCharacterAuthorizedOriginStore(db);
+        var review = new CharacterOriginMixedReviewService(
+            scope, scope, builds, drafts, origins, gateway);
+        var activation = new CharacterOriginMixedActivationService(
+            scope, scope, builds, drafts, origins, gateway, TimeProvider.System);
+
+        var rejectedReview = await review.ReviewAsync(characterId, Campaign);
+        Assert.Equal(CharacterOriginMixedReviewStatus.InvalidDraft,
+            rejectedReview.Status);
+        Assert.Null(rejectedReview.Candidates);
+        var rejectedActivation = await activation.ApplyAsync(
+            characterId, Campaign, 1, ["synthetic-candidate"]);
+        Assert.Equal(CharacterOriginMixedActivationStatus.InvalidSelection,
+            rejectedActivation.Status);
+        Assert.Equal(0, previewCalls);
+        Assert.Null(await origins.GetAsync(characterId));
+        Assert.Empty(await origins.GetEventsAsync(characterId));
+    }
+
     [Fact]
     public async Task ChangedNativeCatalogOrMissingSelectionDoesNotCommitAProfile()
     {

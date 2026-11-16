@@ -316,6 +316,13 @@ public sealed class CharacterOriginMixedActivationService(
             intent.ValueKind != JsonValueKind.Number ||
             !intent.TryGetInt32(out var intentValue) || intentValue != 1 ||
             !TryProperty(root, "method", out var method) ||
+            method.ValueKind != JsonValueKind.Object ||
+            // The native Web JSON parser is case-insensitive. Reject aliases
+            // and additional method metadata instead of permitting Character
+            // Sheet and Rules Core to parse different selected procedures.
+            method.EnumerateObject().Count() != 2 ||
+            method.EnumerateObject().Any(field =>
+                field.Name is not ("ruleId" or "methodId")) ||
             (ruleId = String(method, "ruleId")) != "rule.creature-origination" ||
             (methodId = String(method, "methodId")) != "biological" ||
             !Null(root, "selectedSpeciesId") ||
