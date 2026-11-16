@@ -188,6 +188,7 @@ public sealed class CharacterStateCrossRepositoryTests
         // Simulates an independent Site authorization change at the exact
         // boundary after a successful, real Rules Core HTTP plan.
         public Action? AfterVerifiedPlan { get; set; }
+        public Action? AfterVerifiedOriginRead { get; set; }
 
         public async Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct)
         {
@@ -246,7 +247,9 @@ public sealed class CharacterStateCrossRepositoryTests
                 "/api/mechanics/v1/origins/underlying/verify");
             message.Content = JsonContent.Create(request, options: Wire);
             using var response = await http.SendAsync(message, ct);
-            return await Parse(response, ct);
+            var result = await Parse(response, ct);
+            AfterVerifiedOriginRead?.Invoke();
+            return result;
         }
 
         public async Task<JsonNode> PlanVerifiedManifestationAsync(
@@ -467,6 +470,25 @@ public sealed class CharacterStateCrossRepositoryTests
                 partial.Underlying!["speciesId"]!.GetValue<string>());
             Assert.Equal("species.human",
                 partial.Current!["speciesId"]!.GetValue<string>());
+        }
+        await using (var revoked = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var site = new OwnerAccess(id);
+            var build = new PostgresCharacterBuildStore(revoked);
+            var realGateway = new RealGateway(core.Client)
+            {
+                // Test-only mutable gateway. Production Site introspection
+                // currently lacks an independently fresh revocation fence.
+                AfterVerifiedOriginRead = () => site.Allow = false
+            };
+            var verified = new CharacterVerifiedOriginUnderlyingService(
+                new CharacterOriginStateService(site, build,
+                    new PostgresCharacterAuthorizedOriginStore(revoked)),
+                new PostgresCharacterSupernaturalStateStore(revoked),
+                realGateway);
+            Assert.Equal(
+                CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+                (await verified.GetAsync(id)).Status);
         }
         await using (var unauthorized = new CharacterSheetDbContext(database.CreateOptions()))
         {
