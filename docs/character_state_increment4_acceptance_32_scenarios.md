@@ -68,3 +68,20 @@ Do not mark a scenario production-complete merely because a synthetic test-only 
 - Rules Core: `feature/character-state-mechanics-adapter-increment4-20261114` at `2de1587037ed469289131e8bc53d17875ed2b387`; draft PR #158.
 
 These refs are starting points, not instructions to merge or deploy.
+
+## November 16 execution and status cross-reference
+
+The authoritative, numbered **32-row evidence matrix** remains in
+[character-state-increment4-integration-20261115.md](character-state-increment4-integration-20261115.md#original-increment-4-32-scenario-acceptance-reconciliation).
+It identifies exact tests, test types, CI evidence and outstanding authority
+for each original scenario. Preserve the original scenario language above.
+
+At the current tested branch revisions: **23 complete, 9 partial,
+0 wholly blocked, 0 untested**. The partial scenario IDs are
+**2, 6, 7, 9, 21, 22, 24, 26, 27**. In particular:
+`SiteRevocationAtCommitBoundaryIsNotFencedByEarlierFreshReads` is
+deliberately **negative** security evidence for 26/27 and not a passing
+commit-time fence. The two new bounded-live-response tests verify a
+fail-closed transport limit, not supernatural entitlement. See the
+integration record's November 16 follow-up for the exact paired CI runs
+and the unapproved Site-owned commit-consistency contract.

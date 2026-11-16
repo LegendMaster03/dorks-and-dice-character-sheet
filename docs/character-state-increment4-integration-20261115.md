@@ -443,7 +443,7 @@ sources, not approved Werewolf/Vampire Lord acquisition or progression rules.
 | 3. Rules Core production authority registration | The planning and verified-read HTTP endpoints are implemented; absent/unverified authority produces explicit refusals. New request-shape guards run before authorization. | **Blocked:** both production authority-provider registrations depend on independent source-of-truth verification; installing permissive test providers would violate the contract. |
 | 4. Authorized operations and atomic persistence | PostgreSQL serializable CAS, revision/event receipts, ordered request audit, resource/interaction history guards, deterministic conflict handling and restart/reload are covered by real database and Core tests. | **Partial:** production acquisition and transition application can use this boundary only when approved authorization providers and commit-bound Site authorization exist. |
 | 5. Verified primary Origin, Class, Background, Upbringing, inventory, skills and resource facts | Class/ability/native-option inputs are reconstructed from current Character Sheet rows; unsupported independently owned facts are surfaced as issues rather than invented grants. Rules inputs, inventory, HP, death saves, currency and advancement progress block unsupported form transitions; currency joins the dependency digest. | **Partial/blocked:** fully verifying Origin Underlying, class features, independently earned background/upbringing/skill grants, inventory transfer/equipment, form HP and resource policy needs authored rules and source verifiers. |
-| 6. Acceptance and concurrency/regression tests | The recovered original 32-scenario checklist is now audited against exact methods and CI evidence in the matrix below. Structural and native tests cover the major persistence, ownership, conflict and read-only invariants. | **Partial:** cases 2, 6, 7, 9, 21, 22, 24, 26 and 32 retain production-authority or cross-pillar/host-restart gaps. |
+| 6. Acceptance and concurrency/regression tests | The recovered original 32-scenario checklist is now audited against exact methods and CI evidence in the matrix below. Structural and native tests cover the major persistence, ownership, conflict and read-only invariants. | **Partial:** cases 2, 6, 7, 9, 21, 22, 24, 26 and 27 retain production-authority or cross-pillar/host-restart gaps. |
 | 7. Cross-pillar and backward-compatibility regression | Existing branch CI builds the service and runs the established suites; read-only adapters fail closed on old catalog pins and unverified underlying Origin. | **Partial:** complete source evidence migration and first-party cross-pillar gameplay acceptance remain outstanding. No legacy occurrence ID should be converted into a canonical origin-trait identity by inference. |
 
 ### CI and review evidence
@@ -524,8 +524,8 @@ The [recovered original acceptance checklist](character_state_increment4_accepta
 | 23 | Existing Origin activation/receipts/projections still work | **complete** | **A** `NativeAuthorizedDirectOriginCommitsOnceAndBlocksLegacySpeciesChanges`; **D** `SiteScopedHumanElfApprovalEvaluatesPersistsAndReloadsRealNativeGrants`; **H** `CommittedOriginAndEventSurviveReloadWithoutActivatingDraftRows` | Origin integration, Core HTTP+PG (Origin), Origin persistence | Existing initial/mixed Origin regressions remain exercised in CI. |
 | 24 | Mismatched source occurrences and progression receipts fail closed | **partial** | **M** `IncorrectNonemptyFormOccurrenceAndReceiptFailHostVerification`; **M** `UnauthorizedInheritedProgressionAndGrantBlockTransitions`; **X** `ForgedFormAndSavedUnverifiedOwnerNeverBecomePlayable` | mechanics unit, Core HTTP+PG (synthetic) | Native/test authority denies forgeries; production acquisition, progression and DM source verifier remains absent. |
 | 25 | Stale content and ruleset versions rejected | **complete** | **X** `NativeCatalogChangeRejectsPreviouslyAcquiredStateBeforeAnyTransitionCommit`; **R** `OriginPinnedToObsoleteNativeCatalogIsExplicitlyUnresolved`; **M** `NativeProjectionRejectsStaleNativeCatalogVersion` | Core HTTP+PG (synthetic), PostgreSQL/read, mechanics unit | Catalog mismatch is explicit; no historical occurrence-ID inference. |
-| 26 | Unauthorized actor cannot read or mutate another character | **partial** | **R** `UnauthorizedActorNeverContactsNativeMechanics`; **X** `AbsentHostAuthorityStaleRevisionAndArchivedActorNeverCommitTransition`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | PostgreSQL/read, Core HTTP+PG (synthetic) | Owner gating works; production mutation endpoint and atomic Site authorization/revocation at PostgreSQL commit remain absent. |
-| 27 | Archived character lifecycle still applies | **partial** | **R** `OrdinaryAndArchivedCharacterReadsArePartialAndNonMutating`; **X** `AbsentHostAuthorityStaleRevisionAndArchivedActorNeverCommitTransition`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | PostgreSQL/read, Core HTTP+PG (synthetic) | Read-only access remains available; synthetic pre/post-plan archived mutation is denied, but the production gateway reuses the request-entry Site snapshot. A real mid-plan archive/revocation is not independently detected. |
+| 26 | Unauthorized actor cannot read or mutate another character | **partial** | **R** `UnauthorizedActorNeverContactsNativeMechanics`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **X** `SiteRevocationAtCommitBoundaryIsNotFencedByEarlierFreshReads` (three cases); **Site** `CharacterToolFreshAccessTests` | PostgreSQL/read, real Core HTTP+PG (synthetic), live Site HTTP integration | Fresh Site requests detect post-plan ownership loss before the final read, without falling back to cached introspection. The new real-PostgreSQL adversarial test shows that revocation immediately before commit **still permits a commit**. No approved Site-owned commit fence or production supernatural mutation endpoint exists. |
+| 27 | Archived character lifecycle still applies | **partial** | **R** `OrdinaryAndArchivedCharacterReadsArePartialAndNonMutating`; **X** `AbsentHostAuthorityStaleRevisionAndArchivedActorNeverCommitTransition`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **X** `SiteRevocationAtCommitBoundaryIsNotFencedByEarlierFreshReads` (`archive` case); **Site** `CharacterToolFreshAccessTests` | PostgreSQL/read, real Core HTTP+PG (synthetic), live Site HTTP integration | Current fresh Site calls reject a newly archived character during native planning and before commitment. A new archive **after the final fresh check** is not fenced: the adversarial test records an applied PostgreSQL transition. The old cached-only production-gateway finding has been superseded, but the final atomicity gap remains. |
 | 28 | Untrusted form, grant, ledger, DM claims cannot authorize | **complete** | **X** `ForgedFormAndSavedUnverifiedOwnerNeverBecomePlayable`; **N** `ManifestationPlanRequiresIndependentAuthorityNotJustDelegationOrEvidenceLabels`; **P** `AcquisitionRejectsForgedTransitionStepsWithoutCreatingNewReceipt` | Core HTTP+PG (synthetic), Core host HTTP, PostgreSQL | No browser supernatural mutation route; evidence labels do not confer authority. |
 | 29 | Reloaded mechanics/provenance equal committed result | **complete** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **M** `RepeatResolutionIsDeterministicAndDoesNotDoubleGrantOrConsume` | Core HTTP+PG (synthetic), mechanics unit | New deep effective-character parity assertion passes real Core HTTP/PostgreSQL CI at canonical primary planning commit 8d24ff28d363. |
 | 30 | Unsupported mechanics remain partial/unresolved | **complete** | **R** `StoredSupernaturalRecordRemainsUnresolvedUntilAuthorityIsAvailable`; **M** `NativeProjectionWithholdsUnverifiedFormFeaturesButPreservesNumbers`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | PostgreSQL/read, mechanics unit, Core HTTP+PG (synthetic) | Class/Origin/HP applicability withheld; effectiveMechanicsReady remains false. |
@@ -616,3 +616,99 @@ This investigation is read-only for the Site repository. It does not authorize c
 - `CharacterOriginInitialActivationService` now requests fresh Site ownership/lifecycle/campaign data **before** inspecting Origin drafts and **again after** Core first-party approval, before the PostgreSQL origin/event commit. It compares live and original ticket scope and fails closed when the actor loses ownership, character archives, or campaign associations change during native evaluation. The current native rule/selection verification and transactional draft revision lock remain unchanged; no mixed Origination method is admitted through the direct first-party path. PostgreSQL tests explicitly simulate the otherwise-valid cached ticket surviving each live change.
 - `ISiteFreshOriginDmAccessGateway` / `ToolHostFreshOriginDmAccessGateway` is a separate live Site backend client. It requires actor/campaign/character identities and `hasActiveDmScope=true` in the exact Site reply; any unavailable backend, malformed reply, wrong actor, missing capability, or revoked role denies without reusing ticket `DmCharacterScopes`. `CharacterOriginMixedReviewService` checks fresh DM scope **before reading a proposed Human–Elf Origin** and again **before returning the candidate list**. `CharacterOriginMixedActivationService` checks fresh DM scope before draft reads and after real Rules Core approval before persisting an individual DM-adjudicated construction. The real Core/PostgreSQL tests simulate separate cached-vs-live scope, after-preview revocation and after-approval revocation, asserting that no unauthorized receipt is written and that no candidate data is returned on denied review. [Real Core CI 43925433390](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43925433390) passed **12/12 Character State + 13/13 Mixed-Origin**.
 - All three live Site lookup types (owner, Origin DM scope, and manifestation precommit owner scope) are **read-time checks**, not a cross-service transaction. Site can still revoke permissions immediately after the second query and before Character Sheet commits. **F1 remains partial**, the production `INativeOriginHostUnderlyingAuthorityProvider` is still absent, and verified latest-Underlying reconstruction and transformation applicability remain incomplete. Preserve independent temporary Origin and transformation self-override arrangements until their planned shared mechanism is ready; this work does not merge or unify them. Acceptance remains **23 complete / 9 partial**. Site endpoint changes must be deployed ahead of the dependent Character Sheet branch; neither branch has been merged or deployed.
+
+
+### November 16 follow-up: bounded Site transport and adversarial commit race
+
+The exact revision pair Character Sheet `222eee379ac1a85daab9b1bcf4e670b72054ec55`
+and Rules Core `0d340c43248d2ae257302fe933fa712f82b1d045` passed
+[real Core HTTP/PostgreSQL run 43949011763](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43949011763):
+**15/15 Character State and 13/13 Mixed-Origin**, zero skips.
+[Character Sheet validation 43949011753](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43949011753)
+passed **136/136 unit and 229/229 integration** tests, zero skips,
+plus frontend, container, Compose and PostgreSQL smoke checks.
+The paired job's companion checkout printed the full Core SHA above.
+The unchanged Core HEAD previously passed
+[123 Host + 333 Mechanics tests, run 43812564554](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43812564554)
+and [structure validation 43812564562](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43812564562).
+The unchanged Site HEAD `6d7ceb0f02fd152ee843f645913448c9e4bac6a7`
+passed [595 Site tests, run 43924034607](https://github.com/LegendMaster03/dorks-and-dice-site/actions/runs/43924034607).
+Do not count these as a production-source authority test.
+
+- **Bounded backend authorization responses** — Character Sheet
+  `1694333352a347978e85378d489133a3ca28b8c2` makes
+  `ToolHostFreshCharacterAccessGateway` and
+  `ToolHostFreshOriginDmAccessGateway` buffer no more than 8192 and 4096
+  response bytes, respectively, before parsing. Previously they checked
+  only the optional `Content-Length` response header; a valid but
+  oversized chunked response could still deserialize and authorize.
+  `UnlengthenedOversizedLiveOwnerReplyCannotAuthorize` and
+  `UnlengthenedOversizedLiveDmReplyCannotAuthorize` now exercise valid
+  oversized JSON without a declared length and require a fail-closed
+  `ProjectionUnavailable` result, never cached-introspection fallback.
+- **Actual revocation at the final commit boundary** — Character Sheet
+  `222eee379ac1a85daab9b1bcf4e670b72054ec55` adds
+  `CharacterStateCrossRepositoryTests.SiteRevocationAtCommitBoundaryIsNotFencedByEarlierFreshReads`.
+  Three separate real-Core/PostgreSQL cases revoke independently observed
+  Site ownership, archive the character, or change its campaign associations
+  immediately on entry to the write store, *after* both successful live
+  checks and the last cached Site comparison. The fixture deliberately
+  records that PostgreSQL **still commits** the activation. This is an
+  adversarial characterization of a real unsupported security guarantee,
+  not a positive authorization test. The preexisting
+  `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`
+  separately proves revocation **during planning**, before the last live
+  read, denies without a receipt. Together these tests distinguish the
+  detected precommit window from the unresolved post-check window.
+- **Verified Origin** — The Core `/origins/underlying/verify` endpoint,
+  Character Sheet `CharacterVerifiedOriginUnderlyingService`, exact
+  saved-identity fingerprint, receipt continuity and source-qualified
+  synthetic verification remain in place. No production
+  `INativeOriginHostUnderlyingAuthorityProvider` exists and no live
+  effective-state projection now consumes that coordinator as its
+  authoritative reconstructed Origin. Class, Origin and independently
+  owned Background/Upbringing, equipment, HP and resource mechanics remain
+  separate. No stale historical `Current` is restored by this increment.
+
+#### Site-owned commit consistency: narrow approval-dependent proposal
+
+Inspected Site operations reload owner character data through
+`ICharacterService.GetAsync` and active campaign DM state through
+`ICampaignContextService.GetCampaignContextAsync`, with a separately
+checked current tool registration and backend delegation capability.
+The Site `Character.UpdatedAt` timestamp is **not an authorization
+revision or fence**: DM role/membership, registration eligibility and
+other Site-owned decisions are independent, and no Site version is
+coupled atomically to the Character Sheet PostgreSQL write. Character
+Sheet state/ledger revisions and digest likewise can not substitute for
+a Site-issued authorization version. Repeating a fresh read more often
+would only narrow the race.
+
+The smallest *candidate* cross-service contract must define, under Site
+ownership, the exact actor, character, lifecycle, active association,
+applicable campaign/DM scope and tool-registration dependencies; the
+mutation intent and one-use operation identity; a revocation-ordered
+authorization decision; and how a transaction is guaranteed not to commit
+after that authority is revoked. A monotonic Site scope revision would
+enable detection of stale decisions, **but a revision checked only before
+PostgreSQL commit is insufficient**. The contract also needs a
+commit-spanning barrier or a shared atomic coordinator in which all
+relevant Site revocation paths participate. Design review must specify
+lock/lease expiry, clock and process failures, retry/idempotency,
+partial failure, revocation linearization and recovery of an uncertain
+commit. A lease by itself is not a proof of cross-database atomicity.
+
+This proposal is **not approved or implemented**. Do not add an ad hoc
+Site lease/token, register a synthetic authority provider in production,
+promote ownership to grant-acquisition authority, or relocate the
+Dorks & Dice-only Site authorization endpoints into the generic
+framework. The shared Pillar 2/Character State testing override remains
+deferred to merge preparation.
+
+**Acceptance remains 23 complete, 9 partial**, with partial scenario
+IDs **2, 6, 7, 9, 21, 22, 24, 26, 27**; no wholly blocked or untested
+scenarios. The new commit-race tests are explicit negative evidence for
+26 and 27 (and the production qualification of 7), not grounds to close
+them. Infrastructure and test-only orchestration are more complete than
+the authoritative playable supernatural mechanics. No merge or
+deployment is approved.
