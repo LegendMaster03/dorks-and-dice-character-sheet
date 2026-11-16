@@ -50,8 +50,14 @@ public sealed class ToolHostFreshOriginDmAccessGateway(
 
         try
         {
+            // ResponseHeadersRead ends HttpClient's timeout at the headers.
+            // Cover headers, streamed body buffering and JSON parsing under
+            // one independent deadline, regardless of caller token lifetime.
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(3));
             using var response = await client.SendAsync(request,
-                HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return new(SiteOriginDmAccessStatus.NotAuthorized);
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
@@ -62,9 +68,9 @@ public sealed class ToolHostFreshOriginDmAccessGateway(
 
             // Content-Length is optional. Bound streamed replies as well as
             // replies with a declared size before accepting live DM scope.
-            await response.Content.LoadIntoBufferAsync(4096, cancellationToken);
+            await response.Content.LoadIntoBufferAsync(4096, deadline.Token);
             var live = await response.Content.ReadFromJsonAsync<LiveDmAccess>(
-                Wire, cancellationToken);
+                Wire, deadline.Token);
             if (live is null ||
                 live.ContractVersion != 1 ||
                 live.SourceToolKey != "character-sheet" ||

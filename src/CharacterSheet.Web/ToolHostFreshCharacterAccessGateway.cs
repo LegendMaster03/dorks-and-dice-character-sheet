@@ -48,8 +48,14 @@ public sealed class ToolHostFreshCharacterAccessGateway(
         request.Headers.Accept.ParseAdd("application/json");
         try
         {
+            // ResponseHeadersRead ends HttpClient's timeout at the headers.
+            // Cover headers, streamed body buffering and JSON parsing under
+            // one independent deadline, regardless of caller token lifetime.
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(3));
             using var response = await client.SendAsync(request,
-                HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return new(SiteCharacterAccessStatus.NotFoundOrNotOwned);
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
@@ -60,8 +66,8 @@ public sealed class ToolHostFreshCharacterAccessGateway(
 
             // A chunked response need not send Content-Length. Enforce the
             // wire-size budget before parsing or trusting any Site decision.
-            await response.Content.LoadIntoBufferAsync(8192, cancellationToken);
-            var live = await response.Content.ReadFromJsonAsync<LiveAccess>(Wire, cancellationToken);
+            await response.Content.LoadIntoBufferAsync(8192, deadline.Token);
+            var live = await response.Content.ReadFromJsonAsync<LiveAccess>(Wire, deadline.Token);
             if (live is null ||
                 live.ContractVersion != 1 ||
                 live.SourceToolKey != "character-sheet" ||
