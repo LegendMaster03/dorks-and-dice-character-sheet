@@ -137,7 +137,7 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
             if (finalLive.Status != SiteCharacterAccessStatus.Authorized ||
                 finalLive.Character?.CharacterId != characterId)
                 return new(MapLiveStatus(finalLive.Status));
-            if (!SameSiteState(liveAccess.Character!, finalLive))
+            if (!SameSiteState(liveAccess.Character!, finalLive.Character!))
                 return new(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged);
 
             var finalAccess = await origins.GetAsync(characterId, cancellationToken);
