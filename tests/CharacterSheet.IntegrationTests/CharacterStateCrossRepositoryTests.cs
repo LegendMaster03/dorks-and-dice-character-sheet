@@ -334,6 +334,35 @@ public sealed class CharacterStateCrossRepositoryTests
     }
 
 
+    /// <summary>
+    /// Adversarial test seam: revokes external Site authority at the final
+    /// Character Sheet write boundary, after all earlier fresh Site reads.
+    /// This is intentionally not a production store or a fencing solution.
+    /// </summary>
+    private sealed class RevokeSiteAtCommitStore(
+        ICharacterSupernaturalStateStore inner, Action revoke)
+        : ICharacterSupernaturalStateStore
+    {
+        public Task<CharacterSupernaturalState?> GetAsync(
+            Guid characterId, CancellationToken ct = default) =>
+            inner.GetAsync(characterId, ct);
+
+        public Task<IReadOnlyList<CharacterSupernaturalEventReceipt>> GetEventsAsync(
+            Guid characterId, CancellationToken ct = default) =>
+            inner.GetEventsAsync(characterId, ct);
+
+        public Task<string?> GetAuthoritativeInputsFingerprintAsync(
+            Guid characterId, CancellationToken ct = default) =>
+            inner.GetAuthoritativeInputsFingerprintAsync(characterId, ct);
+
+        public Task<CharacterSupernaturalWriteResult> CommitVerifiedAsync(
+            VerifiedSupernaturalStateWrite command, CancellationToken ct = default)
+        {
+            revoke();
+            return inner.CommitVerifiedAsync(command, ct);
+        }
+    }
+
     private static CharacterManifestationTransitionService TransitionRunner(
         CharacterSheetDbContext db, ISiteCharacterAccessGateway site,
         ICharacterSupernaturalStateStore store, RealGateway gateway,
@@ -1067,6 +1096,100 @@ public sealed class CharacterStateCrossRepositoryTests
                     JsonSerializer.SerializeToElement(transition, Wire),
                     "fixture:verified-source"));
         }
+    }
+
+    [Theory]
+    [InlineData("ownership")]
+    [InlineData("archive")]
+    [InlineData("campaign")]
+    public async Task SiteRevocationAtCommitBoundaryIsNotFencedByEarlierFreshReads(
+        string revocation)
+    {
+        // This is a deliberate characterization of the unresolved F1 race.
+        // An observed successful commit after revocation is NOT a passing
+        // production-authorization guarantee or acceptance for scenarios 26/27.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(provider, provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var forms = TestOwnedForms();
+        var state = TestCharacter(id, fingerprint, forms);
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var pair in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, pair.Key, pair.Value, DateTimeOffset.UtcNow);
+        var updatedBuild = await build.SetStartingClassAsync(
+            id, "class.barbarian", DateTimeOffset.UtcNow);
+        var classEntry = Assert.Single(updatedBuild!.AdvancementEntries,
+            x => x.Kind == CharacterAdvancementKind.Class);
+        state = state with
+        {
+            PrimaryMechanics = state.PrimaryMechanics with
+            {
+                Advancements =
+                [
+                    new NativeAdvancement("class.barbarian", 1,
+                        classEntry.Id.ToString("D"))
+                ]
+            }
+        };
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var before = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(forms, Wire), "[]",
+                JsonSerializer.Serialize(
+                    new NativeManifestationLedger(id.ToString("D"), 0, [], [], []), Wire),
+                0, 0, 0, before, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        var owner = new OwnerAccess(id);
+        var revokeCalls = 0;
+        var fenced = new RevokeSiteAtCommitStore(store, () =>
+        {
+            revokeCalls++;
+            switch (revocation)
+            {
+                case "ownership": owner.FreshAllow = false; break;
+                case "archive":
+                    owner.CurrentLifecycle = SiteCharacterLifecycleState.Archived;
+                    break;
+                case "campaign":
+                    owner.OverrideFreshCampaignIds = [Guid.NewGuid()];
+                    break;
+                default: throw new InvalidOperationException("Unknown revocation");
+            }
+        });
+        var service = TransitionRunner(
+            db, owner, fenced, gateway, new SyntheticTrustedSource(state));
+        var result = await service.ApplyAsync(
+            id, 1, 0, "enter:wolf", "enter:wolf");
+
+        Assert.Equal(1, revokeCalls);
+        // Both independent Site checks happened before this revocation; no
+        // Site-owned lease or revision is checked inside the PostgreSQL CAS.
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, result.Status);
+        var committed = (await store.GetAsync(id))!;
+        Assert.Equal(2, committed.Revision);
+        Assert.Equal(1, committed.LedgerRevision);
+        Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+        var newlyLive = await owner.GetFreshAuthorizedCharacterAsync(id);
+        if (revocation == "ownership")
+            Assert.Equal(SiteCharacterAccessStatus.NotFoundOrNotOwned, newlyLive.Status);
+        else if (revocation == "archive")
+            Assert.False(newlyLive.Character!.AllowsOrdinaryEditingByLifecycle);
+        else
+            Assert.NotEmpty(newlyLive.Character!.CampaignIds);
+
+        // Do not mistake this expected race reproduction for a resolved
+        // authorization property; it requires an approved cross-service fence.
     }
 
     [Fact]
