@@ -48,11 +48,12 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .IsRequired();
         root.Property(character => character.UpdatedAt)
             .IsRequired();
-        // EF writes use the originally loaded revision as a concurrency
-        // predicate, so overlapping aggregate mutations can not both commit
-        // a mechanics change against an unchanged character-root revision.
+        // Each root UPDATE is versioned by the PostgreSQL trigger, based on
+        // OLD.MutationRevision rather than an EF-tracked stale value. Do not
+        // mark this a concurrency token: independent Feat occurrences are
+        // explicitly allowed to be added concurrently.
         root.Property(character => character.MutationRevision)
-            .HasDefaultValue(0L).IsConcurrencyToken().IsRequired();
+            .HasDefaultValue(0L).IsRequired();
         root.Property(character => character.CurrentHitPoints);
         root.Property(character => character.AdvancementProgress);
         root.Property(character => character.DeathSaveSuccesses)
