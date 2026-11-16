@@ -369,11 +369,11 @@ authenticated Werewolf/Wolf/Hybrid acquisition and transition tests.
    Upbringing entitlements, trained skills, inventory and resource facts.
    The current bounded Class/ability/option subset is intentionally not a
    complete primary or form-specific entitlement verifier.
-6. Add real PostgreSQL and Core HTTP integration for all 32 scenarios in
-   the user acceptance specification, including Wolf/Hybrid switching,
-   progression persistence across reversion, simultaneous conflicting
-   operations, replay, resource policy, stale Origin/advancement, restart,
-   read-only previews and unauthorized DM/owner cases.
+6. Close the incomplete cases in the now-recovered 32-scenario checklist
+   below, particularly real supernatural acquisition and DM authorization,
+   authenticated Origin reconstruction, resource policies, Site revocation
+   and an actual host-process restart. Do not confuse synthetic coverage
+   with production entitlement.
 7. Verify no regression to existing initial-Origin verification, mixed
    Origin DM approval, older content compatibility, and ordinary character
    API behavior. Do not migrate old source-occurrence IDs into canonical
@@ -407,18 +407,11 @@ new gameplay acquisition policy has been registered.
 
 ## Acceptance accounting boundary
 
-The approved architecture document
-`character_state_inheritance_architecture_2026-11-14.md` defines S1–S15
-as conceptual design cases. The working integration record refers to a
-**separate original Increment 4 specification with 32 acceptance scenarios**.
-That complete numbered list is not included in these two repository branches,
-so the 32 cases must not be claimed individually completed or mapped
-one-to-one from nearby tests without retrieving the original specification.
-The existing test evidence supports synthetic orchestration, persistence,
-conflict handling, reload and trusted transport, but not production supernatural
-acquisition. The seven outstanding requirements in the preceding section
-remain the implementation reconciliation checklist until the original
-numbered specification is available.
+The original 32-scenario checklist has been recovered and checked into
+[the Character Sheet feature branch](character_state_increment4_acceptance_32_scenarios.md).
+The exact evidence-based status of each case is documented in the final
+reconciliation below. The original S1–S15 architecture design scenarios are
+separate from these Increment 4 implementation scenarios.
 
 ## Additional primary owner-input coverage
 
@@ -450,7 +443,7 @@ sources, not approved Werewolf/Vampire Lord acquisition or progression rules.
 | 3. Rules Core production authority registration | The planning and verified-read HTTP endpoints are implemented; absent/unverified authority produces explicit refusals. New request-shape guards run before authorization. | **Blocked:** both production authority-provider registrations depend on independent source-of-truth verification; installing permissive test providers would violate the contract. |
 | 4. Authorized operations and atomic persistence | PostgreSQL serializable CAS, revision/event receipts, ordered request audit, resource/interaction history guards, deterministic conflict handling and restart/reload are covered by real database and Core tests. | **Partial:** production acquisition and transition application can use this boundary only when approved authorization providers and commit-bound Site authorization exist. |
 | 5. Verified primary Origin, Class, Background, Upbringing, inventory, skills and resource facts | Class/ability/native-option inputs are reconstructed from current Character Sheet rows; unsupported independently owned facts are surfaced as issues rather than invented grants. Rules inputs, inventory, HP, death saves, currency and advancement progress block unsupported form transitions; currency joins the dependency digest. | **Partial/blocked:** fully verifying Origin Underlying, class features, independently earned background/upbringing/skill grants, inventory transfer/equipment, form HP and resource policy needs authored rules and source verifiers. |
-| 6. Acceptance and concurrency/regression tests | Existing tests exercise synthetic Wolf/Hybrid inheritance, form switch, replay, conflicting transitions, immutable histories, resource ownership, origin/primary freshness, reload, source forgery and read-only behavior. Added post-plan revocation, non-native choice, skill/resource, currency and malformed-request cases. | **Partial:** original separately referenced 32-scenario acceptance document is not present on these branches or in the available project context. Tests must not be declared exhaustive against an unseen checklist; production acquisitions have not been exercised. |
+| 6. Acceptance and concurrency/regression tests | The recovered original 32-scenario checklist is now audited against exact methods and CI evidence in the matrix below. Structural and native tests cover the major persistence, ownership, conflict and read-only invariants. | **Partial:** cases 2, 6, 7, 9, 16, 21, 22, 24, 26 and 32 retain production-authority or cross-pillar/host-restart gaps. |
 | 7. Cross-pillar and backward-compatibility regression | Existing branch CI builds the service and runs the established suites; read-only adapters fail closed on old catalog pins and unverified underlying Origin. | **Partial:** complete source evidence migration and first-party cross-pillar gameplay acceptance remain outstanding. No legacy occurrence ID should be converted into a canonical origin-trait identity by inference. |
 
 ### CI and review evidence
@@ -481,4 +474,69 @@ sources, not approved Werewolf/Vampire Lord acquisition or progression rules.
 * There is no approved playable Werewolf, Wolf, Hybrid or Vampire Lord source.
   Do not register synthetic fixture providers as production authority,
   infer old source IDs into canonical Origin traits, or close this increment.
+
+
+## Original Increment 4: 32-scenario acceptance reconciliation
+
+The [recovered original acceptance checklist](character_state_increment4_acceptance_32_scenarios.md) is preserved without replacing its source language or November 15 branch snapshot. These 32 implementation scenarios are separate from the architecture's S1–S15 design cases. The statuses apply to tested mechanics/persistence and current production boundaries, not to hypothetical first-party playable Werewolf/Vampire Lord rules.
+
+**Accounting:** 22 complete for the tested implementation boundary, 10 partial, 0 blocked without a tested slice, 0 untested. **Complete does not mean a synthetic source is authorized in production.**
+
+### Evidence key
+
+- **X** — `tests/CharacterSheet.IntegrationTests/CharacterStateCrossRepositoryTests.cs` (real Rules Core HTTP + PostgreSQL, synthetic only)
+- **P** — `tests/CharacterSheet.IntegrationTests/CharacterSupernaturalPersistenceTests.cs` (real PostgreSQL integration)
+- **R** — `tests/CharacterSheet.IntegrationTests/CharacterEffectiveStateReadTests.cs` (real PostgreSQL; Core gateway stub when applicable)
+- **M** — `tests/RulesCore.Mechanics.Tests/NativeCharacterManifestationTests.cs` (Rules Core mechanics unit)
+- **I** — `tests/RulesCore.Mechanics.Tests/NativeCharacterInfluenceResolverTests.cs` (Rules Core influence unit)
+- **O** — `tests/RulesCore.Mechanics.Tests/NativeCharacterSheetOriginBaselineAdapterTests.cs` (Rules Core Origin adapter unit)
+- **A** — `tests/CharacterSheet.IntegrationTests/NativeOriginInitialActivationTests.cs` (Character Sheet Origin integration)
+- **D** — `tests/CharacterSheet.IntegrationTests/MixedOriginCrossRepositoryPersistenceTests.cs` (real Core HTTP + PostgreSQL mixed-Origin integration)
+- **H** — `tests/CharacterSheet.IntegrationTests/AuthorizedOriginStatePersistenceTests.cs` (Origin PostgreSQL integration)
+- **N** — `tests/RulesCore.Host.Tests/NativeAuthenticatedApiTests.cs` (Rules Core authenticated HTTP integration)
+
+### Per-scenario evidence
+
+| # | Scenario | Status | Exact test method(s) | Test type | Remaining gap / qualification |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Ordinary primary character loads | **complete** | **X** `OwnedPrimaryCharacterUsesRealNativeHttpAndPostgresWithoutMutatingState`; **R** `OrdinaryAndArchivedCharacterReadsArePartialAndNonMutating` | Core HTTP+PG (synthetic), PostgreSQL/read | None; no supernatural state is synthesized. |
+| 2 | Verified Werewolf ownership reload | **partial** | **P** `OwnedAlternateSheetAndEventSurviveFreshContextWithoutAnotherCharacter`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | PostgreSQL, Core HTTP+PG (synthetic) | Stored ownership is durable; independently verified production Werewolf acquisition/DM evidence is missing. |
+| 3 | Shared parent progression without duplication | **complete** | **M** `WolfActivationReturnsPartialProjectionWithOwnedAdvancement`; **M** `SwitchingToHybridDoesNotClaimWolfOwnedProgression`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | mechanics unit, Core HTTP+PG (synthetic) | Complete engine ownership invariant for synthetic grants; no playable progression rules implied. |
+| 4 | Wolf progression remains separate from Hybrid | **complete** | **M** `SwitchingToHybridDoesNotClaimWolfOwnedProgression`; **P** `AcquisitionPreservesPreviouslyEarnedProgressionAndExistingLedger` | mechanics unit, PostgreSQL | Synthetic sheet-specific advancement is retained without transfer. |
+| 5 | Latest primary Class progression propagates dynamically | **complete** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **M** `CurrentClassAndUnderlyingOriginChangesFlowIntoActiveFormAndReversion` | Core HTTP+PG (synthetic), mechanics unit | Class levels and abilities propagate; unverified Class feature applicability remains withheld. |
+| 6 | Reversible influence expression preserves earned progression | **partial** | **I** `EarnedProgressionSurvivesExpressionLossAndUseRequiresAuthoredDecision`; **I** `ReversibleMultidimensionalCurseUsesLatestPrimaryNotStaleSnapshot`; **P** `SeparateAcquisitionCanAppendProgressionButNotRewriteInfluenceExpression` | influence unit, PostgreSQL | Resolver retains earned data; production-authorized revisioned influence expression updates do not exist. |
+| 7 | Authorized Wolf activation is durable and atomic | **partial** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **P** `TransitionIsAtomicDurableAndDuplicateOrStaleEventsDoNotChangeIt` | Core HTTP+PG (synthetic), PostgreSQL | Real commit uses independently checked synthetic authorities, not approved production Wolf acquisition/activation rules. |
+| 8 | Active Wolf identity survives PostgreSQL reload | **complete** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **P** `ActivationAndReversionPreserveImmutableOwnersAndPriorEventsAcrossReload` | Core HTTP+PG (synthetic), PostgreSQL | Persisted instance and receipt reload without reactivation. |
+| 9 | Reversion resolves the latest normal character | **partial** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **M** `AuthorizedReconstructedUnderlyingPropagatesThroughActiveWolfAndReversion` | Core HTTP+PG (synthetic), mechanics unit | Class and ability refresh works; real reconstructed Origin Underlying is not fully bridged into transition. |
+| 10 | Reentering Wolf preserves advancement | **complete** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **M** `ReversionAndReactivationPreservePersistentProgressionAndHistory` | Core HTTP+PG (synthetic), mechanics unit | Sheet progression persists independently of manifestation instance. |
+| 11 | Wolf-to-Hybrid switch is all-or-nothing | **complete** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **P** `OrderedStepAuditMustMatchEachCommittedInstanceLifecycleDelta` | Core HTTP+PG (synthetic), PostgreSQL | Rejected second step writes nothing; valid ordered End/Activate audit reloads. |
+| 12 | Stale expected revision rejected | **complete** | **P** `TransitionIsAtomicDurableAndDuplicateOrStaleEventsDoNotChangeIt`; **X** `AbsentHostAuthorityStaleRevisionAndArchivedActorNeverCommitTransition` | PostgreSQL, Core HTTP+PG (synthetic) | Serializable compare-and-swap enforced. |
+| 13 | Duplicate event cannot duplicate transition or resources | **complete** | **P** `TransitionIsAtomicDurableAndDuplicateOrStaleEventsDoNotChangeIt`; **X** `OwnedResourceSurvivesReversionWithoutLeakingToLaterWolfActivation` | PostgreSQL, Core HTTP+PG (synthetic) | Event identity and resource ownership reject replay. |
+| 14 | Simultaneous conflicting transitions cannot both commit | **complete** | **P** `CompetingTransitionsAtSameRevisionCanNotBothCommit`; **M** `StaleRevisionAndDuplicateEventRejectBeforeTransitionAuthority` | PostgreSQL, mechanics unit | Real PostgreSQL concurrent writers allow only one commit. |
+| 15 | Failed authorization/evaluation never mutates | **complete** | **X** `ForgedFormAndSavedUnverifiedOwnerNeverBecomePlayable`; **X** `OverlappingManifestationsRequireIndependentInteractionAuthorityAndAtomicSelection`; **M** `TransitionPreviewRejectsFormResourcePolicyConflict` | Core HTTP+PG (synthetic), mechanics unit | Current internal mutation boundary commits no denied or unresolved plans. |
+| 16 | Four resource owner kinds retain their identities | **partial** | **P** `FirstAcquisitionCanPersistSourceQualifiedPrimarySheetOrInfluenceResource`; **X** `OwnedResourceSurvivesReversionWithoutLeakingToLaterWolfActivation`; **M** `ResourceOwnershipIsStableAndMaximumChangeNeverRefills` | PostgreSQL, Core HTTP+PG (synthetic), mechanics unit | Owner kinds have separate structural evidence; combined verified effective read/transition and production resource policies remain absent. |
+| 17 | Ending an activation does not refill pools | **complete** | **X** `OwnedResourceSurvivesReversionWithoutLeakingToLaterWolfActivation`; **M** `ResourceOwnershipIsStableAndMaximumChangeNeverRefills` | Core HTTP+PG (synthetic), mechanics unit | Exit/reentry never changes recorded current quantity. |
+| 18 | Different activation cannot borrow private pool | **complete** | **X** `OwnedResourceSurvivesReversionWithoutLeakingToLaterWolfActivation`; **M** `NewFormCanNotBorrowAnotherActivationPrivateResource` | Core HTTP+PG (synthetic), mechanics unit | Future transfer requires independent authorized rules. |
+| 19 | Effective maximum changes do not change current | **complete** | **M** `CapacityReductionDoesNotClampRecordedCurrentQuantity`; **I** `NumericMaximumChangesAreProjectedWithoutRefillingCurrentResources` | mechanics unit, influence unit | Read-only capacity changes cannot refill current values. |
+| 20 | Unsupported HP/transfer policies unresolved | **complete** | **X** `CanonicalBackgroundAndHitPointsBlockUnverifiedFormTransition`; **M** `NativeProjectionWithholdsUnverifiedFormFeaturesButPreservesNumbers` | Core HTTP+PG (synthetic), mechanics unit | No current HP transfer or recovery mechanics are invented. |
+| 21 | Reconstructed authoritative Origin used by active form | **partial** | **M** `AuthorizedReconstructedUnderlyingPropagatesThroughActiveWolfAndReversion`; **O** `UpdatedUnderlyingOriginIsReadWithoutRestoringHistoricalOrCurrentForm` | mechanics unit, Origin adapter unit | Native adapter test exists; real saved Origin Underlying is not revalidated in the active-form host path. |
+| 22 | Reversion does not restore historical Origin snapshot | **partial** | **O** `UpdatedUnderlyingOriginIsReadWithoutRestoringHistoricalOrCurrentForm`; **M** `AuthorizedReconstructedUnderlyingPropagatesThroughActiveWolfAndReversion`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | Origin adapter unit, mechanics unit, Core HTTP+PG (synthetic) | No real persisted Rite/reconstruction through live activation and reversion integration test. |
+| 23 | Existing Origin activation/receipts/projections still work | **complete** | **A** `NativeAuthorizedDirectOriginCommitsOnceAndBlocksLegacySpeciesChanges`; **D** `SiteScopedHumanElfApprovalEvaluatesPersistsAndReloadsRealNativeGrants`; **H** `CommittedOriginAndEventSurviveReloadWithoutActivatingDraftRows` | Origin integration, Core HTTP+PG (Origin), Origin persistence | Existing initial/mixed Origin regressions remain exercised in CI. |
+| 24 | Mismatched source occurrences and progression receipts fail closed | **partial** | **M** `IncorrectNonemptyFormOccurrenceAndReceiptFailHostVerification`; **M** `UnauthorizedInheritedProgressionAndGrantBlockTransitions`; **X** `ForgedFormAndSavedUnverifiedOwnerNeverBecomePlayable` | mechanics unit, Core HTTP+PG (synthetic) | Native/test authority denies forgeries; production acquisition, progression and DM source verifier remains absent. |
+| 25 | Stale content and ruleset versions rejected | **complete** | **X** `NativeCatalogChangeRejectsPreviouslyAcquiredStateBeforeAnyTransitionCommit`; **R** `OriginPinnedToObsoleteNativeCatalogIsExplicitlyUnresolved`; **M** `NativeProjectionRejectsStaleNativeCatalogVersion` | Core HTTP+PG (synthetic), PostgreSQL/read, mechanics unit | Catalog mismatch is explicit; no historical occurrence-ID inference. |
+| 26 | Unauthorized actor cannot read or mutate another character | **partial** | **R** `UnauthorizedActorNeverContactsNativeMechanics`; **X** `AbsentHostAuthorityStaleRevisionAndArchivedActorNeverCommitTransition`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | PostgreSQL/read, Core HTTP+PG (synthetic) | Owner gating works; production mutation endpoint and atomic Site authorization/revocation at PostgreSQL commit remain absent. |
+| 27 | Archived character lifecycle still applies | **complete** | **R** `OrdinaryAndArchivedCharacterReadsArePartialAndNonMutating`; **X** `AbsentHostAuthorityStaleRevisionAndArchivedActorNeverCommitTransition`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | PostgreSQL/read, Core HTTP+PG (synthetic) | Read-only access remains available; pre/post-plan archived mutation denied. |
+| 28 | Untrusted form, grant, ledger, DM claims cannot authorize | **complete** | **X** `ForgedFormAndSavedUnverifiedOwnerNeverBecomePlayable`; **N** `ManifestationPlanRequiresIndependentAuthorityNotJustDelegationOrEvidenceLabels`; **P** `AcquisitionRejectsForgedTransitionStepsWithoutCreatingNewReceipt` | Core HTTP+PG (synthetic), Core host HTTP, PostgreSQL | No browser supernatural mutation route; evidence labels do not confer authority. |
+| 29 | Reloaded mechanics/provenance equal committed result | **complete** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **M** `RepeatResolutionIsDeterministicAndDoesNotDoubleGrantOrConsume` | Core HTTP+PG (synthetic), mechanics unit | New deep effective-character parity assertion passes real Core HTTP/PostgreSQL CI at canonical primary planning commit 8d24ff28d363. |
+| 30 | Unsupported mechanics remain partial/unresolved | **complete** | **R** `StoredSupernaturalRecordRemainsUnresolvedUntilAuthorityIsAvailable`; **M** `NativeProjectionWithholdsUnverifiedFormFeaturesButPreservesNumbers`; **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore` | PostgreSQL/read, mechanics unit, Core HTTP+PG (synthetic) | Class/Origin/HP applicability withheld; effectiveMechanicsReady remains false. |
+| 31 | Simultaneous effective reads do not mutate | **complete** | **R** `ConcurrentPrimaryEffectiveReadsRemainReadOnlyAndIndependent`; **R** `ConcurrentSupernaturalEffectiveReadsDoNotAlterResourceOwnershipOrReceipts` | PostgreSQL/read | Real PostgreSQL reads preserve revision, resources and receipts. |
+| 32 | Character Sheet restart restores stored activation | **partial** | **X** `StrictSyntheticAuthorityPlansAndPersistsWolfReversionAndHybridThroughRealCore`; **P** `OwnedAlternateSheetAndEventSurviveFreshContextWithoutAnotherCharacter` | Core HTTP+PG (synthetic), PostgreSQL | Fresh service and DbContext construction tested; literal full Character Sheet HTTP-host process restart with production Site delegation not yet tested. |
+
+### Regression and authorization conclusion
+
+- Character Sheet at `8d24ff28d36349152f7fe804f4bf5794ca8ea76a` passed [real Core HTTP/PostgreSQL run 43780514554](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43780514554): 9 of 9 tests. That run includes the newly strengthened scenario 29 assertion comparing the *complete* planned effective character to the freshly loaded, source-verified Core projection. The next documentation-only commit triggers its own CI.
+- The preceding complete Character Sheet validation at `b27e7d2db4f15bfbbf75d7f297c1f87befa82632` passed [run 43779111839](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43779111839): 134 unit tests, 205 integration tests, frontend build, container build and PostgreSQL smoke. Rules Core branch `2de1587037ed469289131e8bc53d17875ed2b387` passed [host CI 43777973876](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43777973876) and [structure validation 43777973860](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43777973860).
+- Scenario 29 revealed a concrete primary-serialization mismatch: a source-verifier may supply an optional empty native selection as `null`, whereas Character Sheet builds the canonical empty array. The transition service now forwards `primary.Mechanics.Value` **after** source equivalence verification. This makes planned and fresh-read mechanics/provenance consistent while preventing source-supplied primary content from bypassing the canonical adapter.
+- The partial cases are **2, 6, 7, 9, 16, 21, 22, 24, 26, and 32**. The missing production verifiers are cross-cutting, especially independent source occurrences and grants, DM evidence and revocation, the latest reconstructed `Origin.Underlying`, form-specific resource/HP/inventory policies, and a commit-bound Site authorization contract. Additional integration gaps are revisioned influence expression mutations, a combined resource-owner test and an actual host-process restart.
+- **No production supernatural source/DM authority provider or browser mutation endpoint is installed.** No test-only source receipts, synthetic Wolf form or matching native name is proof of production eligibility; do not merge or deploy Increment 4 as finished.
 
