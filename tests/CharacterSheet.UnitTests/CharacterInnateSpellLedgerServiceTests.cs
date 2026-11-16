@@ -312,7 +312,7 @@ public sealed class CharacterInnateSpellLedgerServiceTests
     [InlineData(CharacterInnateSpellLedgerAction.ShortRest, "grant:x", 0)]
     [InlineData(CharacterInnateSpellLedgerAction.Advance, "grant:x", 0)]
     public async Task MalformedActionOrRevisionCannotReachNative(
-        CharacterInnateSpellLedgerAction action, string? grant, long? revision)
+        CharacterInnateSpellLedgerAction action, string? grant, int? revision)
     {
         var origin = new OriginStub();
         var ledgers = new LedgerStub();
