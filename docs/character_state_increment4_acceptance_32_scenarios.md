@@ -98,3 +98,27 @@ fail-closed regressions. Existing scenario classifications remain unchanged.
 The commit-time revocation characterization uses synthetic Site scope
 rather than a live distributed transaction; it must not be used as
 positive authorization acceptance.
+
+## November 16 second continuation (final code evidence)
+
+The exact original 32 scenario numbers and classifications remain unchanged:
+**23 complete, 9 partial**; partial **2, 6, 7, 9, 21, 22, 24, 26, 27**.
+The authoritative per-row test-method and remaining-dependency matrix
+is in [the integration record](character-state-increment4-integration-20261115.md#original-increment-4-32-scenario-acceptance-reconciliation).
+
+Character Sheet code at `d2eed8c753022880d34954502ccc45d6b8cdb0b4`
+passed [full validation 43962922741](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43962922741)
+(136 unit, 231 integration) and
+[paired real Core/PostgreSQL 43962922699](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43962922699)
+(15 Character State, 17 Mixed-Origin). Site at
+`0eeaf232e2a3a11d4aac495c58b85ef6e3799a0e`
+passed [595 tests 43960608984](https://github.com/LegendMaster03/dorks-and-dice-site/actions/runs/43960608984).
+All had zero failures and skips.
+
+Additional evidence improves structural source identity, live Site DM
+decision snapshot consistency, and rejection of stale Origin review
+candidates/method aliases. PostgreSQL `jsonb` canonicalizes exact
+duplicate keys, so tests for those belong at the raw JSON boundary;
+only persisted structures and case aliases that survive PostgreSQL
+normalization count as PostgreSQL tampering evidence. No change
+advances scenario 21/22 reconstruction or closes 26/27 commit fencing.
