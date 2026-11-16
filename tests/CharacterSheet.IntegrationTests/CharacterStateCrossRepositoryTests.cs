@@ -330,7 +330,7 @@ public sealed class CharacterStateCrossRepositoryTests
                 TimeProvider.System),
             new CharacterOriginStateService(site, build,
                 new PostgresCharacterAuthorizedOriginStore(db)),
-            new PostgresCharacterSupernaturalStateStore(db), gateway);
+            new PostgresCharacterSupernaturalStateStore(db), gateway, site);
     }
 
 
