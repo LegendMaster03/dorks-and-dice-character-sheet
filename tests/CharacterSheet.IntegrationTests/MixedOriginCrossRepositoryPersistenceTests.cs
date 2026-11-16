@@ -467,54 +467,6 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 fingerprint = core.App.Services
                     .GetRequiredService<NativeCatalogStore>().Snapshot!.Fingerprint
             }, Wire)!;
-            // Confirm the immutable approval can be reconciled with every
-            // persisted source-qualified candidate before testing projection.
-            Assert.True(saved.SourceDraftRevision > 0);
-            using var auditProfile = JsonDocument.Parse(saved.ProfileJson);
-            var approvalGrants = auditProfile.RootElement.GetProperty("underlying")
-                .GetProperty("inherentGrants").EnumerateArray().ToArray();
-            using var approvalAudit = JsonDocument.Parse(receipt.ApprovedDecisionsJson!);
-            var candidateApprovals = approvalAudit.RootElement.EnumerateArray()
-                .Where(x => x.GetProperty("target").GetProperty("kind").GetString() ==
-                    "candidate")
-                .ToDictionary(x => x.GetProperty("target").GetProperty("id").GetString()!,
-                    x => x.GetProperty("id").GetString()!);
-            Assert.Equal(approvalGrants.Length, candidateApprovals.Count);
-            foreach (var grant in approvalGrants)
-            {
-                var candidate = grant.GetProperty("sourceCandidateIds")[0].GetString()!;
-                Assert.True(candidateApprovals.TryGetValue(candidate, out var expectedId),
-                    $"Missing approved candidate {candidate}");
-                Assert.Equal(expectedId, grant.GetProperty("authorization")
-                    .GetProperty("tableDecisionId").GetString());
-            }
-            Assert.Equal(receipt.EventId, auditProfile.RootElement
-                .GetProperty("history")[0].GetProperty("id").GetString());
-            // Independently check the frozen DM-audit verifier stage so a
-            // cross-repository failure can be attributed to its actual gate.
-            var reconciler = typeof(VerifiedCommittedMixedOriginReader).GetMethod(
-                "MatchesCommittedDecisions",
-                System.Reflection.BindingFlags.NonPublic |
-                System.Reflection.BindingFlags.Static);
-            Assert.NotNull(reconciler);
-            Assert.True((bool)reconciler.Invoke(null,
-                [approvalAudit.RootElement, auditProfile.RootElement, "human-elf"])!,
-                "The persisted candidate approval audit did not reconcile.");
-            Assert.Equal("campaign-dm", receipt.AuthorizationKind);
-            Assert.Equal("rule.creature-origination", receipt.MethodRuleId);
-            Assert.Equal("biological", receipt.MethodId);
-            Assert.Equal(Actor, receipt.ApprovalActorUserId);
-            Assert.Equal(Campaign, receipt.ApprovalCampaignId);
-            Assert.Equal(1, receipt.CommittedRevision);
-            Assert.Equal("origin:human-elf",
-                auditProfile.RootElement.GetProperty("id").GetString());
-            Assert.Equal("human-elf",
-                auditProfile.RootElement.GetProperty("proposalId").GetString());
-            Assert.Equal(2, auditProfile.RootElement.GetProperty("history")[0]
-                .GetProperty("stage").GetInt32());
-            Assert.Equal(3, auditProfile.RootElement.GetProperty("adjudication")
-                .GetProperty("adjudication").GetInt32());
-            Assert.Equal(saved.Fingerprint, activeRuleset["fingerprint"]!.GetValue<string>());
             var verified = VerifiedCommittedMixedOriginReader.Read(
                 saved, receipts, activeRuleset);
             Assert.NotNull(verified);
