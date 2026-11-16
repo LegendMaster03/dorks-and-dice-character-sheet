@@ -436,3 +436,44 @@ trained skills, non-native choices, resource inputs, and currency in addition
 to its prior Background, HP, death-save and inventory refusals. These are
 negative production-safety checks using test-only supernatural authorization,
 not new first-party transformation mechanics.
+
+## Increment 4 continuation — requirement-by-requirement accounting
+
+The categories below distinguish implemented **mechanism** from independently
+authorized **production gameplay**. The integration tests use synthetic
+sources, not approved Werewolf/Vampire Lord acquisition or progression rules.
+
+| Requirement | Implemented and tested | Remaining boundary |
+| --- | --- | --- |
+| 1. Independently trustworthy supernatural and DM source authorization | The native authority interfaces and fail-closed delegation boundaries are implemented and tested with independently checking synthetic providers. | **Blocked:** no approved first-party supernatural acquisition/progression definitions, production source/DM decision evidence verifier, or revocation contract; no provider is registered. |
+| 2. Authenticated acquisition and transition workflows with server-derived state | An internal Character Sheet transition service reloads the owned ledger and primary values; it refuses injected primary mechanics and now rechecks Site ownership, lifecycle and campaign association after remote planning. | **Partial/blocked:** no production acquisition service, browser/API transition mutation route or trusted production transition-source policy. Site authorization can still change between the final check and the database commit. |
+| 3. Rules Core production authority registration | The planning and verified-read HTTP endpoints are implemented; absent/unverified authority produces explicit refusals. New request-shape guards run before authorization. | **Blocked:** both production authority-provider registrations depend on independent source-of-truth verification; installing permissive test providers would violate the contract. |
+| 4. Authorized operations and atomic persistence | PostgreSQL serializable CAS, revision/event receipts, ordered request audit, resource/interaction history guards, deterministic conflict handling and restart/reload are covered by real database and Core tests. | **Partial:** production acquisition and transition application can use this boundary only when approved authorization providers and commit-bound Site authorization exist. |
+| 5. Verified primary Origin, Class, Background, Upbringing, inventory, skills and resource facts | Class/ability/native-option inputs are reconstructed from current Character Sheet rows; unsupported independently owned facts are surfaced as issues rather than invented grants. Rules inputs, inventory, HP, death saves, currency and advancement progress block unsupported form transitions; currency joins the dependency digest. | **Partial/blocked:** fully verifying Origin Underlying, class features, independently earned background/upbringing/skill grants, inventory transfer/equipment, form HP and resource policy needs authored rules and source verifiers. |
+| 6. Acceptance and concurrency/regression tests | Existing tests exercise synthetic Wolf/Hybrid inheritance, form switch, replay, conflicting transitions, immutable histories, resource ownership, origin/primary freshness, reload, source forgery and read-only behavior. Added post-plan revocation, non-native choice, skill/resource, currency and malformed-request cases. | **Partial:** original separately referenced 32-scenario acceptance document is not present on these branches or in the available project context. Tests must not be declared exhaustive against an unseen checklist; production acquisitions have not been exercised. |
+| 7. Cross-pillar and backward-compatibility regression | Existing branch CI builds the service and runs the established suites; read-only adapters fail closed on old catalog pins and unverified underlying Origin. | **Partial:** complete source evidence migration and first-party cross-pillar gameplay acceptance remain outstanding. No legacy occurrence ID should be converted into a canonical origin-trait identity by inference. |
+
+### CI and review evidence
+
+* Rules Core head `2de1587037ed469289131e8bc53d17875ed2b387`:
+  `Validate Rules Core Rewrite Structure` [run 43777973860](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43777973860)
+  and `Rules Core Phase 3B Public Native API CI`
+  [run 43777973876](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43777973876)
+  **passed**.
+* Character Sheet previously passed both full validation and its real
+  Rules Core HTTP/PostgreSQL suite at
+  `0bf2e200e9accb3ca818efe6f6175a24b919924e`:
+  [validation 43775774159](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43775774159),
+  [cross-repository 43775774162](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43775774162).
+  Following changes introduced more negative cases; their current-head runs
+  must be checked independently before this continuation can claim green CI.
+* Security findings: external Site authorization is not transactionally
+  coupled to Character Sheet PostgreSQL; currency was missing from the
+  authoritative primary input digest (now fixed); unrelated Character Sheet
+  choices, trained skills and resource facts had no dedicated form-interaction
+  issue classification (now fixed); malformed Core planning graphs were not
+  rejected before the provider boundary (now fixed).
+* There is no approved playable Werewolf, Wolf, Hybrid or Vampire Lord source.
+  Do not register synthetic fixture providers as production authority,
+  infer old source IDs into canonical Origin traits, or close this increment.
+
