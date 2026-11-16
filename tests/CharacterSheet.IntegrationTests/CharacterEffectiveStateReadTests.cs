@@ -717,6 +717,10 @@ public sealed class CharacterEffectiveStateReadTests
             """;
         db.AuthorizedOrigins.Add(new CharacterAuthorizedOriginState(
             id, Ruleset, Fingerprint, originalProfile, null, DateTimeOffset.UtcNow));
+        db.OriginEventReceipts.Add(new CharacterOriginEventReceipt(
+            id, "construction:current", 1, "rule.creature-origination",
+            "biological", "first-party", "native-catalog:" + Fingerprint,
+            DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
         var site = new SiteAccess(id);
         var builds = new PostgresCharacterBuildStore(db);
@@ -732,6 +736,19 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(1, valid.OriginRevision);
         Assert.Equal("species.human", valid.Underlying!["speciesId"]!.GetValue<string>());
         Assert.Equal(1, native.OriginVerificationCalls);
+
+        // A matching stored profile is not sufficient without a contiguous
+        // separately committed Origin event history.
+        await db.OriginEventReceipts.Where(x => x.CharacterId == id)
+            .ExecuteUpdateAsync(update => update.SetProperty(
+                x => x.CommittedRevision, 2L));
+        var brokenHistory = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified,
+            brokenHistory.Status);
+        Assert.Equal(1, native.OriginVerificationCalls);
+        await db.OriginEventReceipts.Where(x => x.CharacterId == id)
+            .ExecuteUpdateAsync(update => update.SetProperty(
+                x => x.CommittedRevision, 1L));
 
         native.CorruptOriginVerificationReply = true;
         var corrupt = await verifier.GetAsync(id);
