@@ -298,6 +298,74 @@ public sealed class InnateSpellLedgerPersistenceTests
     }
 
     [Fact]
+    public async Task GuardedResourceSqlUpdateAlsoInvalidatesPreviouslyEvaluatedLedger()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var setup = new CharacterSheetDbContext(database.CreateOptions());
+        await InitializeOriginAsync(setup, id);
+
+        const string resource = "resource.native-example";
+        var initialTimestamp = DateTimeOffset.UtcNow;
+        var stateStore = new PostgresCharacterStateStore(setup);
+        Assert.NotNull(await stateStore.SetRulesInputAsync(
+            id, CharacterRulesInputKind.Resource, resource,
+            5, null, null, initialTimestamp));
+        var before = (await new PostgresCharacterMutationRevisionReader(setup)
+            .GetRevisionAsync(id))!.Value;
+        var originallySaved = await setup.CharacterSheets.AsNoTracking()
+            .SingleAsync(x => x.CharacterId == id);
+
+        // This is the direct SQL compare-and-swap path. It formerly bypassed
+        // aggregate Touch(), and using an old timestamp left the revision
+        // invisible to native-ledger persistence.
+        await using (var writer = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var changed = await new PostgresCharacterStateStore(writer)
+                .ApplyIntegerStateMutationsAsync(id,
+                [new(CharacterIntegerStateMutationTarget.Resource,
+                    CharacterIntegerStateMutationOperation.Set,
+                    4, resource, ExpectedValue: 5)],
+                DateTimeOffset.UnixEpoch);
+            Assert.NotNull(changed);
+            Assert.Equal(before + 1, changed!.MutationRevision);
+            Assert.Equal(originallySaved.UpdatedAt, changed.UpdatedAt);
+            Assert.Equal(4, Assert.Single(changed.RulesInputs, x =>
+                x.Kind == CharacterRulesInputKind.Resource &&
+                x.Key == resource).IntegerValue);
+        }
+
+        var store = new PostgresCharacterInnateSpellLedgerStore(setup);
+        var stale = await store.CommitVerifiedAsync(
+            Command(id, expectedCharacterRevision: before));
+        Assert.Equal(InnateSpellLedgerStoreStatus.CharacterMutationConflict,
+            stale.Status);
+        Assert.Null(await store.GetAsync(id));
+        Assert.Empty(await store.GetEventsAsync(id));
+
+        var fresh = (await new PostgresCharacterMutationRevisionReader(setup)
+            .GetRevisionAsync(id))!.Value;
+        Assert.Equal(before + 1, fresh);
+        Assert.Equal(InnateSpellLedgerStoreStatus.Applied,
+            (await store.CommitVerifiedAsync(Command(id,
+                eventId: "ledger:recomputed-after-guarded-spend",
+                expectedCharacterRevision: fresh))).Status);
+
+        // A rejected expected-current mutation must not consume a revision.
+        await using var rejectedWriter = new CharacterSheetDbContext(database.CreateOptions());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new PostgresCharacterStateStore(rejectedWriter)
+                .ApplyIntegerStateMutationsAsync(id,
+                    [new(CharacterIntegerStateMutationTarget.Resource,
+                        CharacterIntegerStateMutationOperation.Set,
+                        3, resource, ExpectedValue: 5)],
+                    DateTimeOffset.UnixEpoch));
+        Assert.Equal(fresh,
+            (await new PostgresCharacterMutationRevisionReader(setup)
+                .GetRevisionAsync(id))!.Value);
+    }
+
+    [Fact]
     public async Task ClassProgressionMutationInvalidatesPreviouslyCalculatedFreeCastCourse()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
