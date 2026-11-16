@@ -23,9 +23,22 @@ public sealed class CharacterEffectiveStateReadTests
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
         SiteCharacterAccessStatus status = SiteCharacterAccessStatus.Authorized,
         Func<int, Task>? beforeAuthorizedRead = null)
-        : ISiteCharacterAccessGateway
+        : ISiteCharacterAccessGateway, ISiteFreshCharacterAccessGateway
     {
         private int readCount;
+        public bool FreshAllowed { get; set; } = true;
+        public Func<int, Task>? BeforeFreshRead { get; set; }
+        private int freshReadCount;
+
+        public async Task<SiteCharacterAccessResult> GetFreshAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken cancellationToken = default)
+        {
+            if (BeforeFreshRead is not null)
+                await BeforeFreshRead(Interlocked.Increment(ref freshReadCount));
+            return FreshAllowed
+                ? await GetAuthorizedCharacterAsync(characterId, cancellationToken)
+                : new(SiteCharacterAccessStatus.NotFoundOrNotOwned);
+        }
 
         public async Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
             Guid id, CancellationToken cancellationToken = default)
@@ -150,7 +163,7 @@ public sealed class CharacterEffectiveStateReadTests
                 TimeProvider.System),
             new CharacterOriginStateService(site, buildStore,
                 new PostgresCharacterAuthorizedOriginStore(db)),
-            new PostgresCharacterSupernaturalStateStore(db), native);
+            new PostgresCharacterSupernaturalStateStore(db), native, site);
     }
 
     [Fact]
@@ -737,7 +750,7 @@ public sealed class CharacterEffectiveStateReadTests
         var store = new PostgresCharacterSupernaturalStateStore(db);
         var native = new NativeGateway();
         var verifier = new CharacterVerifiedOriginUnderlyingService(
-            origins, store, native);
+            origins, store, native, site);
 
         var valid = await verifier.GetAsync(id);
         Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial, valid.Status);
@@ -757,6 +770,31 @@ public sealed class CharacterEffectiveStateReadTests
         await db.OriginEventReceipts.Where(x => x.CharacterId == id)
             .ExecuteUpdateAsync(update => update.SetProperty(
                 x => x.CommittedRevision, 1L));
+
+        // A cached Site snapshot can still look authorized after its
+        // current authoritative owner check has revoked access.
+        site.FreshAllowed = false;
+        var revoked = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+            revoked.Status);
+        Assert.Equal(1, native.OriginVerificationCalls);
+        site.FreshAllowed = true;
+
+        // A live source-state change during the remote call is distinct
+        // from PostgreSQL drift. It must not yield a usable baseline.
+        var requested = 0;
+        site.BeforeFreshRead = _ =>
+        {
+            if (Interlocked.Increment(ref requested) == 2)
+                site.FreshAllowed = false;
+            return Task.CompletedTask;
+        };
+        var changedAccess = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+            changedAccess.Status);
+        Assert.Null(changedAccess.Underlying);
+        site.BeforeFreshRead = null;
+        site.FreshAllowed = true;
 
         native.CorruptOriginVerificationReply = true;
         var corrupt = await verifier.GetAsync(id);
