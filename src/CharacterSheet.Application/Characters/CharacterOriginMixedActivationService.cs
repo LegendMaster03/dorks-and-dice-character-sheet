@@ -37,6 +37,7 @@ public sealed record CharacterOriginMixedActivationResult(
 /// </summary>
 public sealed class CharacterOriginMixedActivationService(
     ISiteOriginDmAccessGateway dmAccess,
+    ISiteFreshOriginDmAccessGateway freshDmAccess,
     ICharacterBuildStore builds,
     ICharacterOriginDraftStore drafts,
     ICharacterAuthorizedOriginStore origins,
@@ -50,8 +51,17 @@ public sealed class CharacterOriginMixedActivationService(
         IReadOnlyList<string>? selectedCandidateIds,
         CancellationToken cancellationToken = default)
     {
-        // No privileged draft or Character Sheet reads before the Site's
-        // exact DM + active campaign-character association is verified.
+        // The session ticket's captured DM scopes can outlive revocation.
+        // Independently query current Site campaign membership and active
+        // character association before inspecting protected Origin data.
+        var live = await freshDmAccess.CheckFreshAsync(
+            campaignId, characterId, cancellationToken);
+        if (live.Status != SiteOriginDmAccessStatus.Authorized)
+            return new(MapDmStatus(live.Status));
+        if (live.ActorUserId is not Guid currentActor || currentActor == Guid.Empty ||
+            live.CampaignId != campaignId || live.CharacterId != characterId)
+            return new(CharacterOriginMixedActivationStatus.SiteProjectionUnavailable);
+
         var scope = await dmAccess.CheckAsync(campaignId, characterId, cancellationToken);
         if (scope.Status != SiteOriginDmAccessStatus.Authorized)
             return new(scope.Status switch
@@ -63,6 +73,7 @@ public sealed class CharacterOriginMixedActivationService(
                 _ => CharacterOriginMixedActivationStatus.SiteProjectionUnavailable
             });
         if (scope.ActorUserId is not Guid actor || actor == Guid.Empty ||
+            scope.ActorUserId != currentActor ||
             scope.CampaignId != campaignId || scope.CharacterId != characterId)
             return new(CharacterOriginMixedActivationStatus.SiteProjectionUnavailable);
 
@@ -224,6 +235,28 @@ public sealed class CharacterOriginMixedActivationService(
             vision
         }, WireJson);
 
+        // The current campaign DM or the target association may be revoked
+        // during native evaluation. Reject the result unless Site confirms
+        // the *same* actor and exact scope again before the Origin commit.
+        // This reduces the stale-snapshot window, but is not an atomic
+        // cross-service commit lease.
+        var finalLive = await freshDmAccess.CheckFreshAsync(
+            campaignId, characterId, cancellationToken);
+        if (finalLive.Status != SiteOriginDmAccessStatus.Authorized)
+            return new(MapDmStatus(finalLive.Status));
+        if (finalLive.ActorUserId != actor ||
+            finalLive.CampaignId != campaignId ||
+            finalLive.CharacterId != characterId)
+            return new(CharacterOriginMixedActivationStatus.DmScopeDenied);
+        var finalSnapshot = await dmAccess.CheckAsync(
+            campaignId, characterId, cancellationToken);
+        if (finalSnapshot.Status != SiteOriginDmAccessStatus.Authorized)
+            return new(MapDmStatus(finalSnapshot.Status));
+        if (finalSnapshot.ActorUserId != actor ||
+            finalSnapshot.CampaignId != campaignId ||
+            finalSnapshot.CharacterId != characterId)
+            return new(CharacterOriginMixedActivationStatus.DmScopeDenied);
+
         // The immutable audit and authoritative profile enter PostgreSQL in
         // one transaction. A raced owner draft revision or prior activation
         // leaves the current authorized character state unchanged.
@@ -248,6 +281,16 @@ public sealed class CharacterOriginMixedActivationService(
             _ => new(CharacterOriginMixedActivationStatus.OriginAlreadyCommitted)
         };
     }
+
+    private static CharacterOriginMixedActivationStatus MapDmStatus(
+        SiteOriginDmAccessStatus status) => status switch
+    {
+        SiteOriginDmAccessStatus.Unauthenticated =>
+            CharacterOriginMixedActivationStatus.Unauthenticated,
+        SiteOriginDmAccessStatus.NotAuthorized =>
+            CharacterOriginMixedActivationStatus.DmScopeDenied,
+        _ => CharacterOriginMixedActivationStatus.SiteProjectionUnavailable
+    };
 
     private static JsonNode NewDecision(string id, string targetKind,
         string targetId, JsonNode outcome, string actor, string campaign,
