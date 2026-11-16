@@ -503,6 +503,36 @@ public sealed class CharacterStateCrossRepositoryTests
     private static NativeManifestationResourcePolicy ControlledWolfResourcePolicy() =>
         new("resource.wolf.1", NativeManifestationResourceMode.Separate);
 
+    // Exact test-only acquisition grants for all three non-activation owner
+    // categories. This is not a registered production resource policy.
+    private static NativeManifestationResourceState[] AcquiredOwnerPools() =>
+    [
+        new("resource.primary.1", "resource.definition.primary",
+            Occurrence("resources.primary"), "receipt.resource.primary.1",
+            NativeManifestationResourceOwner.Primary, "@primary", 4, 7),
+        new("resource.sheet.1", "resource.definition.sheet",
+            Occurrence("resources.sheet"), "receipt.resource.sheet.1",
+            NativeManifestationResourceOwner.Sheet, "werewolf", 2, 5),
+        new("resource.influence.1", "resource.definition.influence",
+            Occurrence("resources.influence"), "receipt.resource.influence.1",
+            NativeManifestationResourceOwner.Influence,
+            "influence.synthetic.pool", 1, 3)
+    ];
+
+    private static NativeCharacterPersistentInfluence PassiveResourceInfluence() =>
+        new("influence.synthetic.pool", "definition.influence.synthetic.pool",
+            SyntheticSource(), "receipt.acquire.influence.synthetic.pool",
+            "receipt.expression.influence.synthetic.pool",
+            new Dictionary<string, string>(), []);
+
+    private static NativeManifestationResourcePolicy[] FourOwnerPolicies() =>
+    [
+        new("resource.primary.1", NativeManifestationResourceMode.Inherit),
+        new("resource.sheet.1", NativeManifestationResourceMode.Inherit),
+        new("resource.influence.1", NativeManifestationResourceMode.Inherit),
+        ControlledWolfResourcePolicy()
+    ];
+
     private static NativeManifestationTransitionStep EnterWithResource(
         Guid characterId, string eventId) =>
         new(NativeManifestationTransitionAction.Activate, "manifest.wolf.1",
@@ -511,6 +541,17 @@ public sealed class CharacterStateCrossRepositoryTests
             TestInstance(characterId, "wolf", "manifest.wolf.1", eventId) with
             {
                 ResourcePolicies = [ControlledWolfResourcePolicy()]
+            },
+            [ControlledWolfResource()]);
+
+    private static NativeManifestationTransitionStep EnterWithFourOwnerResources(
+        Guid characterId, string eventId) =>
+        new(NativeManifestationTransitionAction.Activate, "manifest.wolf.1",
+            Occurrence("actions.activate"), SyntheticRule(),
+            "receipt.transition." + eventId,
+            TestInstance(characterId, "wolf", "manifest.wolf.1", eventId) with
+            {
+                ResourcePolicies = FourOwnerPolicies()
             },
             [ControlledWolfResource()]);
 
@@ -657,14 +698,17 @@ public sealed class CharacterStateCrossRepositoryTests
         public bool AuthorizesUnlistedEnding(string id, NativeManifestationLedger current,
             NativeManifestationInstance instance,
             NativeManifestationTransitionStep step) => false;
-        // One exact test-only acquired pool and its separately proven policy.
-        // Other IDs, quantities, owners and effects remain unauthorized.
+        // The source-verified synthetic fixture permits only these exact
+        // acquisition pools and scoped policies; arbitrary IDs fail closed.
         public bool AuthorizesResource(string id, NativeManifestationResourceState resource) =>
-            Character(id) && resource == ControlledWolfResource();
+            Character(id) && (resource == ControlledWolfResource() ||
+                AcquiredOwnerPools().Contains(resource));
         public bool AuthorizesResourcePolicy(string id, NativeManifestationInstance instance,
             NativeManifestationResourcePolicy policy) =>
             Character(id) && instance.Id == "manifest.wolf.1" &&
-            policy == ControlledWolfResourcePolicy();
+            (instance.ResourcePolicies.SequenceEqual([ControlledWolfResourcePolicy()]) ||
+             instance.ResourcePolicies.SequenceEqual(FourOwnerPolicies())) &&
+            instance.ResourcePolicies.Contains(policy);
         public bool AuthorizesInteraction(string id,
             NativeManifestationInteractionDecision decision) =>
             Character(id) && decision.Id == "interaction.synthetic.overlap" &&
@@ -676,8 +720,10 @@ public sealed class CharacterStateCrossRepositoryTests
             decision.DefinitionOccurrence == Occurrence("interactions.replace") &&
             decision.Basis == SyntheticRule() &&
             decision.AuthorizationEvidenceId == "receipt.interaction.overlap";
-        public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) => false;
-        public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) => false;
+        public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
+            Character(id) && influence == PassiveResourceInfluence();
+        public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) =>
+            Character(id) && influence == PassiveResourceInfluence();
         public bool AuthorizesEffect(string id, string influenceId,
             NativeCharacterInfluenceEffect effect) => false;
         public bool AuthorizesInfluenceProgression(string id, string influenceId,
@@ -717,6 +763,7 @@ public sealed class CharacterStateCrossRepositoryTests
                 "enter:wolf" => [Enter(characterId, "wolf",
                     "manifest.wolf.1", eventId)],
                 "enter:resource-wolf" => [EnterWithResource(characterId, eventId)],
+                "enter:four-owner-wolf" => [EnterWithFourOwnerResources(characterId, eventId)],
                 "revert:wolf" => [End("manifest.wolf.1", eventId)],
                 "revert:resource-wolf" => [End("manifest.wolf.1", eventId)],
                 "end:unlisted" => [UnlistedEnd("manifest.wolf.1", eventId)],
