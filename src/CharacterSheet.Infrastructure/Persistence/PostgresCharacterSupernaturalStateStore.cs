@@ -440,7 +440,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
         var origin = await db.AuthorizedOrigins.AsNoTracking()
             .Where(x => x.CharacterId == id)
             .Select(x => new { x.RulesetId, x.Fingerprint, x.ProfileJson,
-                x.EvaluatedProjectionJson, x.Revision }).SingleOrDefaultAsync(ct);
+                x.EvaluatedProjectionJson, x.SourceDraftRevision,
+                x.Revision }).SingleOrDefaultAsync(ct);
         var originEvents = await db.OriginEventReceipts.AsNoTracking()
             .Where(x => x.CharacterId == id).OrderBy(x => x.CommittedRevision)
             // Every field identifying the authorized method, DM scope or
