@@ -1341,6 +1341,11 @@ public sealed class CharacterStateCrossRepositoryTests
         var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
             ["fingerprint"]!.GetValue<string>();
         var state = TestCharacter(id, fingerprint, TestOwnedForms());
+        string ledgerBeforeRestart = "";
+        string sheetsBeforeRestart = "";
+        string influencesBeforeRestart = "";
+        (string EventId, long Revision, string EvidenceId, string? TransitionRequest)[]
+            receiptsBeforeRestart = [];
 
         await using (var setup = new CharacterSheetDbContext(database.CreateOptions()))
         {
@@ -1363,6 +1368,13 @@ public sealed class CharacterStateCrossRepositoryTests
                 owned, gateway, new SyntheticTrustedSource(state)).ApplyAsync(
                     id, 1, 0, "enter:resource-wolf", "enter:resource-wolf");
             Assert.Equal(CharacterManifestationApplyStatus.Applied, transition.Status);
+            var committed = (await owned.GetAsync(id))!;
+            ledgerBeforeRestart = committed.LedgerJson;
+            sheetsBeforeRestart = committed.AlternateSheetsJson;
+            influencesBeforeRestart = committed.PersistentInfluencesJson;
+            receiptsBeforeRestart = (await owned.GetEventsAsync(id))
+                .Select(x => (x.EventId, x.CommittedRevision,
+                    x.AuthorizationEvidenceId, x.TransitionRequestJson)).ToArray();
         }
 
         // Host-only Site fixture: a caller must redeem a concrete ticket,
@@ -1534,7 +1546,21 @@ public sealed class CharacterStateCrossRepositoryTests
         var saved = (await persisted.GetAsync(id))!;
         Assert.Equal(2, saved.Revision);
         Assert.Equal(1, saved.LedgerRevision);
+        Assert.Equal(ledgerBeforeRestart, saved.LedgerJson);
+        Assert.Equal(sheetsBeforeRestart, saved.AlternateSheetsJson);
+        Assert.Equal(influencesBeforeRestart, saved.PersistentInfluencesJson);
+        // Progression belongs to the acquired persistent sheet, and must not
+        // be reconstructed from an activation snapshot after process restart.
+        var retainedSheets = JsonSerializer.Deserialize<NativePersistentCharacterSheet[]>(
+            saved.AlternateSheetsJson, Wire)!;
+        Assert.Contains(retainedSheets, x => x.Id == "werewolf" &&
+            x.Progression.Any(p => p.Id == "progress.shared"));
+        Assert.Contains(retainedSheets, x => x.Id == "wolf" &&
+            x.Progression.Any(p => p.Id == "progress.wolf"));
         var receipts = await persisted.GetEventsAsync(id);
+        Assert.Equal(receiptsBeforeRestart,
+            receipts.Select(x => (x.EventId, x.CommittedRevision,
+                x.AuthorizationEvidenceId, x.TransitionRequestJson)).ToArray());
         Assert.Equal(2, receipts.Count);
         Assert.Equal("fixture:acquire-werewolf", receipts[0].EventId);
         Assert.Equal("enter:resource-wolf", receipts[1].EventId);
