@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Characters;
+using CharacterSheet.Domain.Characters;
 
 namespace CharacterSheet.UnitTests;
 
@@ -203,6 +204,55 @@ public sealed class CharacterNativePrimaryStateAdapterTests
         Assert.Contains("advancement-progress-form-policy-unverified", snapshot.Issues);
         Assert.False(CharacterNativePrimaryStateAdapter.Matches(
             snapshot.Mechanics.Value, snapshot));
+    }
+
+    [Fact]
+    public void AuthorizedOriginRequiresMatchingIdentityAndUnambiguousUnderlying()
+    {
+        var id = Guid.NewGuid();
+        var (build, state) = Fixture(id);
+        const string valid = """
+            {"id":"origin:synthetic","underlying":{"processCreatureTypeId":"creature.synthetic"},"current":{"processCreatureTypeId":"creature.synthetic"}}
+            """;
+        CharacterAuthorizedOriginState Saved(Guid owner, string ruleset, string fingerprint,
+            string profile) => new(owner, ruleset, fingerprint, profile, null, Now);
+
+        var acceptedShape = CharacterNativePrimaryStateAdapter.Assemble(
+            id, build, state, Saved(id, Ruleset, Fingerprint, valid), Ruleset, Fingerprint);
+        Assert.DoesNotContain("authorized-origin-state-mismatch", acceptedShape.Issues);
+        Assert.DoesNotContain("origin-underlying-structure-unverified", acceptedShape.Issues);
+        Assert.Contains("origin-underlying-grants-not-yet-revalidated",
+            acceptedShape.Issues);
+        Assert.False(acceptedShape.TransitionInputsVerified);
+
+        foreach (var invalid in new[]
+        {
+            """{"id":"origin:synthetic","underlying":{}}""",
+            """{"id":"origin:synthetic","underlying":null,"current":{}}""",
+            """{"underlying":{},"current":{},"underlying":{"speciesId":"species.forged"}}""",
+            """{"underlying":{"speciesId":"species.human","speciesId":"species.forged"},"current":{}}""",
+            """{"underlying":{},"current":{"ancestryId":"ancestry.elf","ancestryId":"ancestry.forged"}}"""
+        })
+        {
+            var malformed = CharacterNativePrimaryStateAdapter.Assemble(
+                id, build, state, Saved(id, Ruleset, Fingerprint, invalid),
+                Ruleset, Fingerprint);
+            Assert.Contains("origin-underlying-structure-unverified", malformed.Issues);
+            Assert.False(malformed.TransitionInputsVerified);
+        }
+
+        foreach (var mismatch in new[]
+        {
+            Saved(Guid.NewGuid(), Ruleset, Fingerprint, valid),
+            Saved(id, "other-ruleset", Fingerprint, valid),
+            Saved(id, Ruleset, new string('b', 64), valid)
+        })
+        {
+            var stale = CharacterNativePrimaryStateAdapter.Assemble(
+                id, build, state, mismatch, Ruleset, Fingerprint);
+            Assert.Contains("authorized-origin-state-mismatch", stale.Issues);
+            Assert.False(stale.TransitionInputsVerified);
+        }
     }
 
     [Fact]
