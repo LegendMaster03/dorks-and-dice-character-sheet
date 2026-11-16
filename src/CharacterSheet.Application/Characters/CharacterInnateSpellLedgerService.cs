@@ -80,7 +80,8 @@ public sealed class CharacterInnateSpellLedgerService(
     public async Task<CharacterInnateSpellLedgerResult> GetAsync(
         Guid characterId, CancellationToken cancellationToken = default)
     {
-        var access = await CheckSiteAsync(characterId, cancellationToken);
+        var access = await CheckSiteAsync(characterId, cancellationToken,
+            requiresEditing: false);
         if (access != CharacterInnateSpellLedgerStatus.Ready)
             return new(access);
         if (await originStore.GetAsync(characterId, cancellationToken) is null)
@@ -102,7 +103,8 @@ public sealed class CharacterInnateSpellLedgerService(
         string? grantId, long? expectedLedgerRevision,
         CancellationToken cancellationToken = default)
     {
-        var access = await CheckSiteAsync(characterId, cancellationToken);
+        var access = await CheckSiteAsync(characterId, cancellationToken,
+            requiresEditing: true);
         if (access != CharacterInnateSpellLedgerStatus.Ready)
             return new(access);
         // Read-only Site owner access is insufficient for applying any action
@@ -175,9 +177,9 @@ public sealed class CharacterInnateSpellLedgerService(
             candidate.EvidenceId.Length > 320)
             return new(CharacterInnateSpellLedgerStatus.NativeUnresolved);
 
-        var nextRevision = stored is null ? 0 : stored.LedgerRevision + 1;
         if (stored is not null && stored.LedgerRevision == long.MaxValue)
             return new(CharacterInnateSpellLedgerStatus.RevisionConflict);
+        var nextRevision = stored is null ? 0 : stored.LedgerRevision + 1;
         try
         {
             _ = new CharacterInnateSpellLedgerState(
@@ -229,7 +231,7 @@ public sealed class CharacterInnateSpellLedgerService(
     }
 
     private async Task<CharacterInnateSpellLedgerStatus> CheckSiteAsync(
-        Guid characterId, CancellationToken ct)
+        Guid characterId, CancellationToken ct, bool requiresEditing)
     {
         if (characterId == Guid.Empty)
             return CharacterInnateSpellLedgerStatus.NotFoundOrNotOwned;
@@ -241,7 +243,8 @@ public sealed class CharacterInnateSpellLedgerService(
         if (result.Status != SiteCharacterAccessStatus.Authorized ||
             result.Character?.CharacterId != characterId)
             return CharacterInnateSpellLedgerStatus.ProjectionUnavailable;
-        return result.Character.AllowsOrdinaryEditingByLifecycle
+        return !requiresEditing ||
+            result.Character.AllowsOrdinaryEditingByLifecycle
             ? CharacterInnateSpellLedgerStatus.Ready
             : CharacterInnateSpellLedgerStatus.ArchivedReadOnly;
     }
