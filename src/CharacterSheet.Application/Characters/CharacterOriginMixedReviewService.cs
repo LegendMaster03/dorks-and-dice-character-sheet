@@ -48,6 +48,7 @@ public sealed record CharacterOriginMixedReviewResult(
 /// </summary>
 public sealed class CharacterOriginMixedReviewService(
     ISiteOriginDmAccessGateway siteDm,
+    ISiteFreshOriginDmAccessGateway freshDm,
     ICharacterBuildStore builds,
     ICharacterOriginDraftStore drafts,
     ICharacterAuthorizedOriginStore origins,
@@ -59,18 +60,23 @@ public sealed class CharacterOriginMixedReviewService(
         Guid characterId, Guid campaignId,
         CancellationToken cancellationToken = default)
     {
+        // The owner may have unlinked this character or the DM's campaign
+        // role may have been revoked since ticket introspection. Refuse
+        // access to the private draft without a fresh Site database read.
+        var live = await freshDm.CheckFreshAsync(
+            campaignId, characterId, cancellationToken);
+        if (live.Status != SiteOriginDmAccessStatus.Authorized)
+            return new(MapDmStatus(live.Status));
+        if (live.ActorUserId is not Guid currentActor || currentActor == Guid.Empty ||
+            live.CampaignId != campaignId || live.CharacterId != characterId)
+            return new(CharacterOriginMixedReviewStatus.SiteProjectionUnavailable);
+
         var authorized = await siteDm.CheckAsync(
             campaignId, characterId, cancellationToken);
         if (authorized.Status != SiteOriginDmAccessStatus.Authorized)
-            return new(authorized.Status switch
-            {
-                SiteOriginDmAccessStatus.Unauthenticated =>
-                    CharacterOriginMixedReviewStatus.Unauthenticated,
-                SiteOriginDmAccessStatus.NotAuthorized =>
-                    CharacterOriginMixedReviewStatus.NotAuthorized,
-                _ => CharacterOriginMixedReviewStatus.SiteProjectionUnavailable
-            });
+            return new(MapDmStatus(authorized.Status));
         if (authorized.ActorUserId is not Guid actor || actor == Guid.Empty ||
+            actor != currentActor ||
             authorized.CampaignId != campaignId ||
             authorized.CharacterId != characterId)
             return new(CharacterOriginMixedReviewStatus.SiteProjectionUnavailable);
@@ -145,10 +151,39 @@ public sealed class CharacterOriginMixedReviewService(
                 offered, requiresChoices));
         }
 
+        // Recheck before returning the offer list. An in-flight Site DM
+        // revocation must not disclose the proposed mixed character choices.
+        var finalLive = await freshDm.CheckFreshAsync(
+            campaignId, characterId, cancellationToken);
+        if (finalLive.Status != SiteOriginDmAccessStatus.Authorized)
+            return new(MapDmStatus(finalLive.Status));
+        if (finalLive.ActorUserId != actor ||
+            finalLive.CampaignId != campaignId ||
+            finalLive.CharacterId != characterId)
+            return new(CharacterOriginMixedReviewStatus.NotAuthorized);
+        var finalSnapshot = await siteDm.CheckAsync(
+            campaignId, characterId, cancellationToken);
+        if (finalSnapshot.Status != SiteOriginDmAccessStatus.Authorized)
+            return new(MapDmStatus(finalSnapshot.Status));
+        if (finalSnapshot.ActorUserId != actor ||
+            finalSnapshot.CampaignId != campaignId ||
+            finalSnapshot.CharacterId != characterId)
+            return new(CharacterOriginMixedReviewStatus.NotAuthorized);
+
         return new(CharacterOriginMixedReviewStatus.Ready,
             draft.Revision, draft.RulesetId, draft.Fingerprint,
             proposalId, rows);
     }
+
+    private static CharacterOriginMixedReviewStatus MapDmStatus(
+        SiteOriginDmAccessStatus status) => status switch
+    {
+        SiteOriginDmAccessStatus.Unauthenticated =>
+            CharacterOriginMixedReviewStatus.Unauthenticated,
+        SiteOriginDmAccessStatus.NotAuthorized =>
+            CharacterOriginMixedReviewStatus.NotAuthorized,
+        _ => CharacterOriginMixedReviewStatus.SiteProjectionUnavailable
+    };
 
     private static bool Text(JsonNode? node, out string? value)
     {
