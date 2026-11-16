@@ -74,7 +74,9 @@ public sealed class NativeDirectInnateSpellLedgerEvaluator(
         foreach (var ability in sheet.BaseAbilityScoreInputs)
         {
             if (!Abilities.Contains(ability.AbilityKey, StringComparer.Ordinal) ||
-                ability.Score is < 1 or > 30 ||
+                // The native kernel bounds transported scores at 0..1000;
+                // do not introduce an unrelated first-party game cap here.
+                ability.Score is < 0 or > 1000 ||
                 !scores.TryAdd(ability.AbilityKey, ability.Score))
                 return null;
         }
