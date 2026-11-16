@@ -681,7 +681,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         var drafts = new PostgresCharacterOriginDraftStore(db);
         var origins = new PostgresCharacterAuthorizedOriginStore(db);
         var review = new CharacterOriginMixedReviewService(
-            scope, builds, drafts, origins, native);
+            scope, scope, builds, drafts, origins, native);
         var activation = new CharacterOriginMixedActivationService(
             scope, scope, builds, drafts, origins, native, TimeProvider.System);
 
@@ -695,6 +695,27 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         Assert.Equal(CharacterOriginMixedReviewStatus.Ready, offered.Status);
         Assert.Equal(1, offered.DraftRevision);
         var selected = await FiveNativeHumanElfOffers(native, fingerprint);
+
+        // The ticket still carries a DM scope, but Site has revoked the live
+        // membership. No proposed character offers may be returned.
+        scope.FreshAllow = false;
+        var liveRevoked = await review.ReviewAsync(characterId, Campaign);
+        Assert.Equal(CharacterOriginMixedReviewStatus.NotAuthorized, liveRevoked.Status);
+        Assert.Null(liveRevoked.Candidates);
+        scope.FreshAllow = true;
+
+        var revokedReviewGateway = new HttpNativeGateway(core.Client,
+            afterPreview: _ =>
+            {
+                scope.FreshAllow = false;
+                return Task.CompletedTask;
+            });
+        var revokedReview = new CharacterOriginMixedReviewService(
+            scope, scope, builds, drafts, origins, revokedReviewGateway);
+        var duringPreview = await revokedReview.ReviewAsync(characterId, Campaign);
+        Assert.Equal(CharacterOriginMixedReviewStatus.NotAuthorized, duringPreview.Status);
+        Assert.Null(duringPreview.Candidates);
+        scope.FreshAllow = true;
 
         // Authorization at review does not become a reusable approval token.
         scope.Allow = false;
