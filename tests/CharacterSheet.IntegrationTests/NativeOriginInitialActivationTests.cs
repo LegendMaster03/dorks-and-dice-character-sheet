@@ -73,12 +73,16 @@ public sealed class NativeOriginInitialActivationTests
         CharacterSheetDbContext db, Guid id, FakeNativeGateway native,
         SiteCharacterAccessStatus access = SiteCharacterAccessStatus.Authorized,
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
-        Guid? projectedId = null) =>
-        new(new Access(access, projectedId ?? id, lifecycle),
+        Guid? projectedId = null,
+        Access? site = null)
+    {
+        var authorizedSite = site ?? new Access(access, projectedId ?? id, lifecycle);
+        return new(authorizedSite, authorizedSite,
             new PostgresCharacterBuildStore(db),
             new PostgresCharacterOriginDraftStore(db),
             new PostgresCharacterAuthorizedOriginStore(db),
             native, TimeProvider.System);
+    }
 
     [Fact]
     public async Task NativeAuthorizedDirectOriginCommitsOnceAndBlocksLegacySpeciesChanges()
@@ -206,6 +210,88 @@ public sealed class NativeOriginInitialActivationTests
         Assert.Equal(CharacterOriginActivationStatus.DraftRevisionConflict, result.Status);
         Assert.Null(await new PostgresCharacterAuthorizedOriginStore(setup).GetAsync(id));
         Assert.Empty(await setup.OriginEventReceipts.ToArrayAsync());
+    }
+
+    [Theory]
+    [InlineData(SiteCharacterAccessStatus.NotFoundOrNotOwned,
+        CharacterOriginActivationStatus.NotFoundOrNotOwned)]
+    [InlineData(SiteCharacterAccessStatus.Unauthenticated,
+        CharacterOriginActivationStatus.Unauthenticated)]
+    [InlineData(SiteCharacterAccessStatus.ProjectionUnavailable,
+        CharacterOriginActivationStatus.ProjectionUnavailable)]
+    public async Task StaleCachedOwnershipDoesNotAllowAnOriginActivation(
+        SiteCharacterAccessStatus freshStatus, CharacterOriginActivationStatus expected)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, id);
+        var site = new Access(SiteCharacterAccessStatus.Authorized,
+            id, SiteCharacterLifecycleState.Active)
+        {
+            FreshStatus = freshStatus
+        };
+        var native = new FakeNativeGateway();
+        var result = await Service(db, id, native, site: site).ApplyAsync(id, 1);
+        Assert.Equal(expected, result.Status);
+        Assert.Equal(0, native.Calls);
+        Assert.Equal(1, site.FreshCalls);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
+        Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db).GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task ChangedSiteScopeBeforeCoreNeverReadsNativeOrCommits()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, id);
+        var site = new Access(SiteCharacterAccessStatus.Authorized, id,
+            SiteCharacterLifecycleState.Active)
+        {
+            FreshCampaignIds = [Guid.NewGuid()]
+        };
+        var native = new FakeNativeGateway();
+        var result = await Service(db, id, native, site: site).ApplyAsync(id, 1);
+        Assert.Equal(CharacterOriginActivationStatus.ProjectionUnavailable, result.Status);
+        Assert.Equal(0, native.Calls);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
+    }
+
+    [Fact]
+    public async Task RevocationArchiveOrCampaignChangeDuringCorePreviewDeniesCommit()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, id);
+        foreach (var mutate in new Action<Access>[]
+        {
+            site => site.FreshStatus = SiteCharacterAccessStatus.NotFoundOrNotOwned,
+            site => site.FreshLifecycle = SiteCharacterLifecycleState.Archived,
+            site => site.FreshCampaignIds = [Guid.NewGuid()]
+        })
+        {
+            var site = new Access(SiteCharacterAccessStatus.Authorized, id,
+                SiteCharacterLifecycleState.Active);
+            var native = new FakeNativeGateway(beforeReply: () =>
+            {
+                mutate(site);
+                return Task.CompletedTask;
+            });
+            var result = await Service(db, id, native, site: site).ApplyAsync(id, 1);
+            Assert.Equal(site.FreshStatus == SiteCharacterAccessStatus.NotFoundOrNotOwned
+                    ? CharacterOriginActivationStatus.NotFoundOrNotOwned
+                    : site.FreshLifecycle == SiteCharacterLifecycleState.Archived
+                    ? CharacterOriginActivationStatus.ArchivedReadOnly
+                    : CharacterOriginActivationStatus.ProjectionUnavailable, result.Status);
+            Assert.Equal(1, native.Calls);
+            Assert.Equal(2, site.FreshCalls);
+            Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
+            Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db).GetEventsAsync(id));
+            Assert.Equal(1, (await new PostgresCharacterOriginDraftStore(db).GetAsync(id))!.Revision);
+        }
     }
 
     [Fact]
@@ -354,16 +440,36 @@ public sealed class NativeOriginInitialActivationTests
     }
 
     private sealed class Access(SiteCharacterAccessStatus status, Guid projectedId,
-        SiteCharacterLifecycleState lifecycle) : ISiteCharacterAccessGateway
+        SiteCharacterLifecycleState lifecycle)
+        : ISiteCharacterAccessGateway, ISiteFreshCharacterAccessGateway
     {
+        public SiteCharacterAccessStatus? FreshStatus { get; set; }
+        public SiteCharacterLifecycleState? FreshLifecycle { get; set; }
+        public IReadOnlyCollection<Guid> FreshCampaignIds { get; set; } = [];
+        public IReadOnlyCollection<Guid> CachedCampaignIds { get; set; } = [];
+        public int FreshCalls { get; private set; }
+
+        public Task<SiteCharacterAccessResult> GetFreshAuthorizedCharacterAsync(Guid characterId,
+            CancellationToken cancellationToken = default)
+        {
+            FreshCalls++;
+            return Task.FromResult(Result(FreshStatus ?? status, projectedId,
+                FreshLifecycle ?? lifecycle, FreshCampaignIds));
+        }
+
         public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(Guid characterId,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(status == SiteCharacterAccessStatus.Authorized
-                ? SiteCharacterAccessResult.Authorized(
-                    new SiteCharacterProjection(projectedId, "Tester", lifecycle,
-                        lifecycle == SiteCharacterLifecycleState.Archived
-                            ? DateTimeOffset.UtcNow : null, []))
-                : new SiteCharacterAccessResult(status));
+            Task.FromResult(Result(status, projectedId, lifecycle, CachedCampaignIds));
+
+        private static SiteCharacterAccessResult Result(
+            SiteCharacterAccessStatus state, Guid id, SiteCharacterLifecycleState life,
+            IReadOnlyCollection<Guid> campaigns) =>
+            state == SiteCharacterAccessStatus.Authorized
+                ? SiteCharacterAccessResult.Authorized(new SiteCharacterProjection(
+                    id, "Tester", life,
+                    life == SiteCharacterLifecycleState.Archived
+                        ? DateTimeOffset.UnixEpoch : null, campaigns))
+                : new(state);
     }
 
     private sealed class FakeNativeGateway(
