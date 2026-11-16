@@ -84,3 +84,46 @@ Preserve the **original 32 scenario numbers**. Prior accounted baseline: **23 co
 Provide: severity-ordered findings with file/line references; a reproduction and expected-versus-observed result for each defect; exact HEADs, CI run IDs and counts, skipped/excluded tests, PostgreSQL migrations and process-restart evidence; assessment of authority and source-provenance bypasses; risks of new fixes; proposed changes that need architectural approval; and two separate judgments: **infrastructure review readiness** and **playable supernatural content readiness**.
 
 **WorkChat signoff:** PENDING — no independently executed WorkChat pass has been supplied. Leave this status pending until an actual independent report is returned and incorporated into the integration record.
+
+## WorkChat follow-up: required independent retest after R1/R2 changes
+
+The first WorkChat report examined Character Sheet HEAD
+`8488e0a2598588adfe5d2d7271dd7d167bcefb88` and concluded **not ready
+for merge**. Its repeated CI checks were independent, but browser tests and
+new runtime reproductions of R1/R2 were not performed.
+
+**New code to retest:** Character Sheet
+`1bd5272eac0dd2cab84ff318599605acc57b7ad4`
+(on the same existing feature branch). Core remains
+`0d340c43248d2ae257302fe933fa712f82b1d045`; Site remains
+`0eeaf232e2a3a11d4aac495c58b85ef6e3799a0e`.
+If the documentation-only branch HEAD differs, inspect its diff before signoff.
+
+1. Independently reproduce/assess **R1** on both read endpoints. Deny fresh
+   ownership while cached ownership remains authorized; revoke after native
+   evaluation; archive while cached lifecycle is active. Require no private
+   projection or ledger/receipt leakage after denial, and live read-only state
+   for permitted archived reads. Verify the actual process-restart fixture
+   queries the Site's fresh endpoint, not cached context.
+2. Independently reproduce/assess **R2** with headers immediately delivered
+   but stalled or slow-drip body delivery for both Site fresh gateways **and**
+   the delegated Rules Core success/error paths. Require bounded completion,
+   fail-closed results, correct body-size budgets, and propagation of caller
+   cancellation. These exact tests have passed developer CI, but WorkChat has
+   not yet independently executed or reviewed them after correction.
+3. Preserve R3's negative characterization and check it has not been masked
+   by additional fresh reads. Review the proposed Site-owned commit-consistency
+   requirements separately; there is **no approved implementation**.
+4. Verify unrelated ordinary characters, Origin activation, owner/DM
+   provenance, process restart, migrations and the original 32 numbered
+   scenarios. Repeat conditional test discovery and capture exact HEADs,
+   commands, successes, failures, and skips.
+5. If an owner-approved isolated deployment exists, execute the separate
+   browser/player/DM workflows specified above. Otherwise report **not run**.
+   Do not deploy these unmerged branches or test only the current production
+   site as a substitute.
+
+**Existing developer evidence:** [full CI 43981207619](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207619)
+136 unit/253 integration and [paired CI 43981207259](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207259)
+15 Character State/19 Mixed-Origin, all green. Independent WorkChat retest:
+**PENDING**. Browser acceptance: **NOT RUN**. R3: **OPEN**.

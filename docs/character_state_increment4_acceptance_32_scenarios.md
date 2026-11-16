@@ -130,3 +130,19 @@ Character Sheet code `d322c3811c558cae6da8af26f40295cbabe94e3d` passed [136 unit
 At code commit `cd556874a3d705631a108026ef19c190e67c0f7c`, two direct and two real Core/PostgreSQL mixed-Origin service races now verify that same-revision draft proposal/fingerprint tampering denies activation before any receipt. [Paired run 43966396008](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43966396008) passed 15 Character State + 19 Mixed-Origin tests, zero skips. Independent WorkChat code review and owner-authorized browser acceptance remain pending; the 23-complete/9-partial count is unchanged.
 
 Final checked code: `cd556874a3d705631a108026ef19c190e67c0f7c` — [full CI 43966396183](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43966396183) passed 136 unit/238 integration and [paired CI 43966396008](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43966396008) passed 15 Character State/19 Mixed-Origin; zero failures or skips. Independent WorkChat browser and code assessment: **not executed**. No scenario closure beyond the established 23 complete / 9 partial classification.
+
+## WorkChat review remediation (November 16, 2026)
+
+The independent WorkChat report (based on Character Sheet
+`8488e0a2598588adfe5d2d7271dd7d167bcefb88`) identified R1
+(cached-only effective and inspection reads) and R2 (unbounded streamed
+authorization bodies), plus the known R3 (Site revocation before commit).
+R1/R2 received targeted Character Sheet fixes at code SHA
+`1bd5272eac0dd2cab84ff318599605acc57b7ad4`, with
+[136/136 unit and 253/253 integration](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207619)
+and [15/15 Character State and 19/19 Mixed-Origin](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207259)
+passing, zero skips/failures. These are not an independent WorkChat retest.
+Scenarios **26 and 27 remain partial**, because the cross-service
+revocation-at-commit requirement R3 is still unimplemented. The overall
+acceptance matrix remains **23 complete and 9 partial**; production
+supernatural source and form mechanics remain outstanding.

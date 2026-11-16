@@ -906,3 +906,55 @@ passed [full CI 43966396183](https://github.com/LegendMaster03/dorks-and-dice-ch
 [paired real Core/PostgreSQL 43966396008](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43966396008) with **15 Character State and 19 Mixed-Origin tests**. Every listed suite had zero failures and zero skips, with Core pinned at `0d340c43248d2ae257302fe933fa712f82b1d045`. The first suite includes frontend/container/PostgreSQL smoke validation. Full Content/Core/Site validation remains separately documented at their own branch HEADs.
 
 This establishes passing implementation and regression evidence, **not an independent WorkChat test pass**. WorkChat's deployed/browser acceptance requires an owner-authorized disposable test environment and may not be substituted by current production behavior, because these feature branches are unmerged and undeployed. Exact acceptance remains **23 complete, 9 partial** (2, 6, 7, 9, 21, 22, 24, 26, 27). The cross-service commit-fencing contract and production playable supernatural policies still require separate architectural/rules approval.
+
+
+### November 16: independent WorkChat findings and post-review correction
+
+An independently authored WorkChat review of the coordinated feature HEADs
+Character Sheet `8488e0a2598588adfe5d2d7271dd7d167bcefb88`,
+Rules Core `0d340c43248d2ae257302fe933fa712f82b1d045`,
+and Site `0eeaf232e2a3a11d4aac495c58b85ef6e3799a0e`
+reported **not ready to merge**. It repeated the Character Sheet, Site and
+Rules Core CI jobs (attempt 2, zero failures/skips); importantly, it separately
+identified **R1** (effective-state/inspection cached-only Site reads), **R2**
+(response bodies that could outlive headers-only HTTP timeouts), and retained
+**R3** (Site revocation between fresh read and Character Sheet PostgreSQL commit).
+The new R1/R2 findings were source-confirmed, not new runtime reproductions in
+the independent report. WorkChat browser acceptance was not executed.
+
+**Code remediation:** Character Sheet `1bd5272eac0dd2cab84ff318599605acc57b7ad4`
+now independently checks fresh Site owner/lifecycle/association before protected
+effective/inspection reads and again before publishing, comparing stable
+Site scope. Archived owners remain read-only according to live Site state.
+The owner and DM fresh Site gateways enforce a linked three-second deadline
+over headers, buffered response bodies and JSON binding; caller cancellation
+propagates. The delegated Rules Core gateway applies its configured HTTP
+deadline to a 32 MiB-bounded success body and a 4 KiB-bounded manifestation
+error body before parsing. No cached authorization fallback is introduced.
+Tests exercise revoked cached contexts, mid-evaluation revocation, archive
+lifecycle, stalled/slow-drip bodies, and canceled callers. The real
+process-restart fixture now exposes an independently scoped fresh Site endpoint
+and confirms that both host processes make fresh calls. A test-fixture
+correction separated cached and live reads so its existing advancement race
+still occurs at the intended dependency window.
+
+**Validated code:** [Character Sheet CI 43981207619](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207619)
+passed **136 unit and 253 integration tests**, no failures/skips, including
+frontend/container/PostgreSQL smoke checks.
+[Paired real Core/PostgreSQL CI 43981207259](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207259)
+passed **15 Character State and 19 Mixed-Origin** tests with no failures/skips,
+and printed companion Core SHA
+`0d340c43248d2ae257302fe933fa712f82b1d045`.
+The CI run against the earlier `b3daeb407cf443ed1417ab7ea1875ed23119ab5e`
+identified a real delegated Core body-cancellation defect; it was corrected
+and revalidated, not counted as a pass.
+
+**Limits:** This is developer/CI regression evidence. Independent WorkChat
+**retest of the patched HEAD remains pending**, as does owner-authorized
+isolated browser testing. **R3 remains open** and no remote commit-fencing
+protocol has been implemented. See
+`docs/character-state-increment4-site-commit-consistency-investigation-20261116.md`
+for non-approved requirements and candidate approaches. No production
+supernatural authority, full Origin reconstruction or playable-form policy
+was invented. The original matrix remains **23 complete / 9 partial**
+(2, 6, 7, 9, 21, 22, 24, 26, 27). No main merge or deployment.
