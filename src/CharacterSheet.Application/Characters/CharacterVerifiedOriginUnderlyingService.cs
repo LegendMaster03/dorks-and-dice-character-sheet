@@ -47,9 +47,23 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
         if (characterId == Guid.Empty)
             return new(CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned);
 
-        // Capture the owner digest before reading the Origin. The underlying
-        // configuration, related receipts and other primary inputs are part
-        // of this fingerprint; source drift during a remote call is rejected.
+        // Site ownership must be established before any character-owned
+        // database fingerprint or Origin record is inspected.
+        var initialAccess = await origins.GetAsync(characterId, cancellationToken);
+        if (initialAccess.Status != CharacterOriginReadStatus.Ready)
+            return new(initialAccess.Status switch
+            {
+                CharacterOriginReadStatus.Unauthenticated =>
+                    CharacterVerifiedOriginUnderlyingStatus.Unauthenticated,
+                CharacterOriginReadStatus.NotFoundOrNotOwned =>
+                    CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+                CharacterOriginReadStatus.SheetNotInitialized =>
+                    CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized,
+                _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
+            });
+
+        // Reload inside the digest window, so an Origin change between
+        // initial Site access and fingerprint acquisition is not certified.
         var before = await ownerStore.GetAuthoritativeInputsFingerprintAsync(
             characterId, cancellationToken);
         var origin = await origins.GetAsync(characterId, cancellationToken);
@@ -64,7 +78,6 @@ public sealed class CharacterVerifiedOriginUnderlyingService(
                     CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized,
                 _ => CharacterVerifiedOriginUnderlyingStatus.ProjectionUnavailable
             });
-
         if (before is null)
             return new(CharacterVerifiedOriginUnderlyingStatus.SheetNotInitialized);
         if (origin.SavedState is not { } saved)
