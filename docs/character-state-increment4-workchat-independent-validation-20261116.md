@@ -8,7 +8,7 @@
 
 | Repository | Existing branch | Last tested code SHA |
 | --- | --- | --- |
-| LegendMaster03/dorks-and-dice-character-sheet | `feature/character-state-inheritance-increment4-20261114` | `d322c3811c558cae6da8af26f40295cbabe94e3d` |
+| LegendMaster03/dorks-and-dice-character-sheet | `feature/character-state-inheritance-increment4-20261114` | `cd556874a3d705631a108026ef19c190e67c0f7c` |
 | LegendMaster03/dorks-and-dice-rules-core | `feature/character-state-mechanics-adapter-increment4-20261114` | `0d340c43248d2ae257302fe933fa712f82b1d045` |
 | LegendMaster03/dorks-and-dice-site | `feature/site-fresh-character-authorization-increment4-20261116` | `0eeaf232e2a3a11d4aac495c58b85ef6e3799a0e` |
 
@@ -26,7 +26,7 @@ The Character Sheet documentation-only HEAD may move after these tested code SHA
 
 ## CI evidence to reproduce
 
-At the tested code SHA, Character Sheet [run 43965325731](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325731) passed **136 unit + 236 integration**, zero failures/skips; [paired run 43965325732](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325732) passed **15 Character State + 17 Mixed-Origin**, zero failures/skips. The paired workflow printed the exact Core SHA above. Site [run 43960608984](https://github.com/LegendMaster03/dorks-and-dice-site/actions/runs/43960608984) passed **595** tests. Rules Core [run 43812564554](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43812564554) passed **123 Host + 333 Mechanics** tests, plus [structure validation 43812564562](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43812564562).
+At prior tested code SHA d322c3811c558cae6da8af26f40295cbabe94e3d, Character Sheet [run 43965325731](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325731) passed **136 unit + 236 integration**, zero failures/skips; [paired run 43965325732](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43965325732) passed **15 Character State + 17 Mixed-Origin**, zero failures/skips. The paired workflow printed the exact Core SHA above. [Latest paired run 43966396008](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43966396008) at code commit cd556874a3d705631a108026ef19c190e67c0f7c passed **15 Character State + 19 Mixed-Origin** tests after two real Core/Postgres same-revision draft-race cases were added. The full general validation at this code revision is separately tracked and must be checked before signoff. Site [run 43960608984](https://github.com/LegendMaster03/dorks-and-dice-site/actions/runs/43960608984) passed **595** tests. Rules Core [run 43812564554](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43812564554) passed **123 Host + 333 Mechanics** tests, plus [structure validation 43812564562](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/43812564562).
 
 Run both Character Sheet workflows in the branch and the actual Site/Core workflows if available. For local paired execution, follow `.github/workflows/character-state-increment4-cross-repo.yml` (do not approximate its flags):
 
@@ -60,6 +60,22 @@ Counts must include tests actually discovered and executed, including conditiona
 **Transformation and persistence:** Verify immutable transition receipts, serializable CAS, idempotency, active-form selection, reversion against latest Underlying and primary Class progression (not an activation-time saved Current), independently retained resources, correct owner/source occurrence, inability to transfer synthetic pool balances to another activation, process restart, migration upgrade and rollback compatibility, corruption rejection and ordinary-character behavior. Missing playable first-party supernatural source authority must remain fail-closed.
 
 **Unresolved scope:** Explicitly identify the absent production `INativeOriginHostUnderlyingAuthorityProvider`, non-authoritative full effective-character Origin reconstruction, form-specific Class/Origin applicability, progression, HP, equipment/inventory/resource behavior, and deferred Pillar 2/Character State shared testing override.
+
+
+## Separate WorkChat deployed-product/browser acceptance pass
+
+WorkChat is the **independent acceptance-testing context**. A static code review and the branch CI suites are preparation, **not** the WorkChat browser pass. Use a deployed environment only if the owner has separately approved that exact disposable test environment, commit set, accounts and data. These feature branches have **not** been merged or deployed, so tests against the currently deployed production application do not exercise the new Increment 4 behavior. Do not deploy merely to satisfy this checklist.
+
+With an owner-authorized isolated test environment, independently perform and record:
+
+1. Test an ordinary character end to end: create, change primary ability/Class, select independently owned Background/Upbringing, manage inventory and equipment, save, refresh and restart. Verify ordinary character behavior has not regressed and no supernatural record appears without acquisition authority.
+2. Test supported direct native Origin workflows through the actual UI/API: draft, review, revision changes and authorized activation. Attempt malformed and stale method identity/source data; ensure refused operations do not create a receipt or usable Origin.
+3. Test Human/Elf mixed-Origin through two distinct accounts: player-owned draft and connected campaign DM, nonowner DM review, actual selected offers, native approval audit and persisted reload. Revoke DM role, disconnect/archive the character, disable the Tool or alter the draft between review and activation. Expect bounded refusal, no unexpected mutation or private offer disclosure.
+4. Inspect browser console, requests/responses, page refresh, the relevant editable/read-only states, responsive layout and player/DM distinction. Record actual HTTP errors, missing UI affordances and stale or unexpectedly populated mechanics. No fake success UI for unmodeled origin/form behavior.
+5. Confirm an active supernatural form **cannot be made playable in production merely by owner control or synthetic tests**. Without a separately approved acquisition/progression policy and production Core authority provider, the correct acceptance outcome is explicit unresolved/fail-closed behavior, not a successful Wolf/Hybrid gameplay walkthrough.
+6. Capture exact deployed image/commit IDs, test account roles, database isolation, steps, reproducible screenshots/network traces (redact authentication capabilities), failures, and regression outcomes. Retest after authorized fixes, not against an unrecorded replacement build.
+
+If no approved isolated deployment exists, classify this deployed-product pass as **not run / owner-authorized environment unavailable**. Do not report it as a failure of existing CI, and do not infer that production is playable. WorkChat's formal signoff must reflect that limitation.
 
 ## Acceptance report required from WorkChat
 
