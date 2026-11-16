@@ -98,6 +98,35 @@ public sealed class CharacterEffectiveStateReadTests
             }))!;
         }
 
+        public int OriginVerificationCalls { get; private set; }
+        public Func<Task>? BeforeOriginVerificationReply { get; set; }
+        public bool CorruptOriginVerificationReply { get; set; }
+
+        public async Task<JsonNode> VerifyNativeOriginUnderlyingAsync(
+            JsonElement request, CancellationToken ct)
+        {
+            OriginVerificationCalls++;
+            if (BeforeOriginVerificationReply is not null)
+                await BeforeOriginVerificationReply();
+            var profile = request.GetProperty("profile");
+            return JsonNode.Parse(JsonSerializer.Serialize(new
+            {
+                contractVersion = 1,
+                rulesetId = Ruleset,
+                fingerprint = Fingerprint,
+                characterId = request.GetProperty("characterId").GetString(),
+                originRevision = request.GetProperty("originRevision").GetInt64(),
+                supportedScope = "verified-origin-underlying",
+                status = "partial",
+                effectiveMechanicsReady = false,
+                underlying = CorruptOriginVerificationReply
+                    ? JsonSerializer.SerializeToElement(
+                        new { speciesId = "species.forged", inherentGrants = Array.Empty<object>() })
+                    : profile.GetProperty("underlying"),
+                current = profile.GetProperty("current")
+            }))!;
+        }
+
         public Task<JsonNode> SearchNativeOptionsAsync(string fingerprint, string category,
             string? query, int limit, int offset, CancellationToken ct) =>
             throw new NotSupportedException();
@@ -609,6 +638,82 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(3, pool.GetProperty("current").GetInt32());
         Assert.Equal(7, pool.GetProperty("maximum").GetInt32());
         Assert.Single(await saved.GetEventsAsync(id));
+    }
+
+    [Fact]
+    public async Task OriginUnderlyingVerificationRejectsUntrustedReplyAndInFlightSourceChange()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        const string originalProfile = """
+            {"id":"origin:current","underlying":{"speciesId":"species.human","inherentGrants":[]},"current":{"speciesId":"species.human","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
+        const string rewrittenProfile = """
+            {"id":"origin:current","underlying":{"speciesId":"species.elf","inherentGrants":[]},"current":{"speciesId":"species.elf","inherentGrants":[]},"independentGrants":[],"history":[],"adjudication":{"adjudication":"supported"}}
+            """;
+        db.AuthorizedOrigins.Add(new CharacterAuthorizedOriginState(
+            id, Ruleset, Fingerprint, originalProfile, null, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+        var site = new SiteAccess(id);
+        var builds = new PostgresCharacterBuildStore(db);
+        var origins = new CharacterOriginStateService(
+            site, builds, new PostgresCharacterAuthorizedOriginStore(db));
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var native = new NativeGateway();
+        var verifier = new CharacterVerifiedOriginUnderlyingService(
+            origins, store, native);
+
+        var valid = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial, valid.Status);
+        Assert.Equal(1, valid.OriginRevision);
+        Assert.Equal("species.human", valid.Underlying!["speciesId"]!.GetValue<string>());
+        Assert.Equal(1, native.OriginVerificationCalls);
+
+        native.CorruptOriginVerificationReply = true;
+        var corrupt = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.SourceUnverified,
+            corrupt.Status);
+        Assert.Null(corrupt.Underlying);
+        native.CorruptOriginVerificationReply = false;
+
+        native.BeforeOriginVerificationReply = async () =>
+        {
+            await db.AuthorizedOrigins.Where(x => x.CharacterId == id)
+                .ExecuteUpdateAsync(update => update.SetProperty(
+                    x => x.ProfileJson, rewrittenProfile));
+        };
+        var raced = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.AuthoritativeInputsChanged,
+            raced.Status);
+        Assert.Null(raced.Underlying);
+        Assert.Equal(1, (await db.AuthorizedOrigins.AsNoTracking()
+            .SingleAsync(x => x.CharacterId == id)).Revision);
+        Assert.Null(await store.GetAsync(id));
+    }
+
+    [Fact]
+    public async Task UnauthorizedOriginVerificationDoesNotReadOwnerOrCallRulesCore()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var site = new SiteAccess(id, status: SiteCharacterAccessStatus.NotFoundOrNotOwned);
+        var builds = new PostgresCharacterBuildStore(db);
+        var native = new NativeGateway();
+        var verifier = new CharacterVerifiedOriginUnderlyingService(
+            new CharacterOriginStateService(site, builds,
+                new PostgresCharacterAuthorizedOriginStore(db)),
+            new PostgresCharacterSupernaturalStateStore(db), native);
+        var denied = await verifier.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.NotFoundOrNotOwned,
+            denied.Status);
+        Assert.Equal(0, native.OriginVerificationCalls);
+        Assert.Equal(0, native.Calls);
     }
 
     [Fact]
