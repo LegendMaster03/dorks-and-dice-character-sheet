@@ -151,7 +151,11 @@ public sealed class CharacterManifestationTransitionService(
                 state = new
                 {
                     characterId = characterId.ToString("D"),
-                    primaryMechanics = verified.PrimaryMechanics,
+                    // Forward the canonical Character Sheet-owned primary
+                    // representation, not the source policy's equivalent
+                    // serialization. A null-vs-empty optional selection must
+                    // not make committed plans differ from fresh effective reads.
+                    primaryMechanics = primary.Mechanics.Value,
                     alternateSheets = sheets.RootElement,
                     persistentInfluences = influences.RootElement
                 },
