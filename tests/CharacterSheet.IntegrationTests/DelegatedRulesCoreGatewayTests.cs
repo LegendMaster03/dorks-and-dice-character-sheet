@@ -46,6 +46,59 @@ public sealed class DelegatedRulesCoreGatewayTests
     }
 
     [Fact]
+    public async Task VerifiedOriginUnderlyingUsesOnlySiteDelegationAndFailsClosedWithoutIt()
+    {
+        var handler = new RecordingHandler(request =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Contains("/origins/underlying/verify", request.RequestUri!.AbsolutePath,
+                StringComparison.Ordinal);
+            return Ok(new
+            {
+                contractVersion = 1, supportedScope = "verified-origin-underlying",
+                status = "partial", effectiveMechanicsReady = false
+            });
+        });
+        var httpContext = await AuthenticatedContextAsync(withDelegation: true);
+        var gateway = new DelegatedRulesCoreGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+            new HttpContextAccessor { HttpContext = httpContext },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+        var request = System.Text.Json.JsonSerializer.SerializeToElement(new
+        {
+            characterId = Guid.NewGuid(), originRevision = 1,
+            rulesetId = "first-party-001", fingerprint = new string('a', 64),
+            profile = new
+            {
+                id = "origin:fixture",
+                underlying = new { inherentGrants = Array.Empty<object>() },
+                current = new { inherentGrants = Array.Empty<object>() }
+            }
+        });
+        var response = await gateway.VerifyNativeOriginUnderlyingAsync(
+            request, CancellationToken.None);
+        Assert.Equal("verified-origin-underlying",
+            response["supportedScope"]!.GetValue<string>());
+        var forwarded = Assert.Single(handler.Requests);
+        Assert.Equal("Bearer", forwarded.Authorization?.Scheme);
+        Assert.Equal("ddtd_v1_test-capability",
+            forwarded.Authorization?.Parameter);
+        Assert.False(forwarded.HasToolTicket);
+        Assert.False(forwarded.HasToolIntrospectionPath);
+        Assert.StartsWith("/tool-host/character-sheet/api/delegate/rules-core/upstream/",
+            forwarded.Uri.AbsolutePath, StringComparison.Ordinal);
+
+        var noDelegation = await AuthenticatedContextAsync(withDelegation: false);
+        var denied = new DelegatedRulesCoreGateway(
+            new HttpClient(handler) { BaseAddress = new Uri("https://site.example") },
+            new HttpContextAccessor { HttpContext = noDelegation },
+            NullLogger<DelegatedRulesCoreGateway>.Instance);
+        await Assert.ThrowsAsync<RulesCoreGatewayException>(() =>
+            denied.VerifyNativeOriginUnderlyingAsync(request, CancellationToken.None));
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
     public async Task NativeMechanicsPreserveVersionConflictWithoutLeakingCoreResponse()
     {
         var handler = new RecordingHandler(_ =>
