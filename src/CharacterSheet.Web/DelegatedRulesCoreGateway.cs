@@ -222,6 +222,15 @@ public sealed class DelegatedRulesCoreGateway(
 
         try
         {
+            // HttpClient.Timeout stops at headers with ResponseHeadersRead.
+            // Apply its configured budget to headers, streamed success/error
+            // bodies and deserialization as one operation.
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            var budget = httpClient.Timeout == Timeout.InfiniteTimeSpan
+                ? TimeSpan.FromSeconds(10) : httpClient.Timeout;
+            deadline.CancelAfter(budget);
+
             string capability;
             string delegationPrefix;
             try
@@ -249,7 +258,7 @@ public sealed class DelegatedRulesCoreGateway(
                 response = await httpClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken);
+                    deadline.Token);
             }
             catch (HttpRequestException exception)
             {
@@ -281,17 +290,32 @@ public sealed class DelegatedRulesCoreGateway(
                         : "Rules Core is unavailable for this projection.";
                     // Only manifestation planning needs structured failure
                     // identity. Never forward arbitrary downstream body text.
-                    var errorCode = targetPath.EndsWith(
-                        "/characters/manifestations/plan", StringComparison.Ordinal)
-                        ? await ReadManifestationErrorCodeAsync(response, cancellationToken)
-                        : null;
+                    string? errorCode = null;
+                    if (targetPath.EndsWith(
+                        "/characters/manifestations/plan", StringComparison.Ordinal))
+                    {
+                        try
+                        {
+                            errorCode = await ReadManifestationErrorCodeAsync(
+                                response, deadline.Token);
+                        }
+                        catch (OperationCanceledException exception)
+                            when (!cancellationToken.IsCancellationRequested)
+                        {
+                            timingOutcome = "transport-failed";
+                            logger.LogWarning(exception,
+                                "Rules Core error-body reading timed out.");
+                            throw new RulesCoreGatewayException(
+                                "Rules Core transport is unavailable.", exception);
+                        }
+                    }
                     throw new RulesCoreGatewayException(message,
                         statusCode: (int)response.StatusCode, errorCode: errorCode);
                 }
 
                 try
                 {
-                    var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+                    var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, deadline.Token);
                     if (value is null)
                     {
                         timingOutcome = "invalid-response";
