@@ -1362,9 +1362,10 @@ public sealed class CharacterStateCrossRepositoryTests
             JsonSerializer.SerializeToNode(hybrid, Wire), reloadedEffective),
             "Reloaded effective mechanics and provenance must match the committed plan.");
 
-        // The three denied post-plan Site revocations still invoked the
-        // independently verified source; no denied plan wrote an event.
-        Assert.Equal(9, source.Calls);
+        // Five denied post-plan Site revocations (including live-only
+        // revocation and campaign drift) invoked the verified source; none
+        // wrote an event or consumed the current ledger revision.
+        Assert.Equal(11, source.Calls);
 
         // A replay through the application boundary can not append an
         // already-committed event or silently reconstruct a prior snapshot.
