@@ -97,11 +97,12 @@ builder.Services.AddScoped<ICharacterAuthorizedOriginStore, PostgresCharacterAut
 // No public write endpoint: a later trusted character application operation
  // must verify native entitlement and actor authority before using this store.
 builder.Services.AddScoped<ICharacterInnateSpellLedgerStore, PostgresCharacterInnateSpellLedgerStore>();
-// The coordinator is internal-only. A verified native ledger calculation is
-// NOT yet wired: the explicit unavailable implementation fails closed. No
-// ledger mutation route is mapped until that integration is reviewed.
+// Only the direct, still-current committed Source Draft supports a verified
+// native bootstrap candidate. Casting, resting, mixed-origin construction and
+// advancement remain unresolved in the evaluator. No ledger HTTP mutation
+// route is mapped; native preview cannot publish a resource without CAS.
 builder.Services.AddScoped<ICharacterInnateSpellActorSource, SiteInnateSpellActorSource>();
-builder.Services.AddScoped<ITrustedInnateSpellLedgerEvaluator, UnavailableInnateSpellLedgerEvaluator>();
+builder.Services.AddScoped<ITrustedInnateSpellLedgerEvaluator, NativeDirectInnateSpellLedgerEvaluator>();
 builder.Services.AddScoped<CharacterInnateSpellLedgerService>();
 builder.Services.AddScoped<ICharacterStateStore, PostgresCharacterStateStore>();
 builder.Services.AddScoped<ICharacterStartingEquipmentInventoryStore, PostgresCharacterStartingEquipmentInventoryStore>();
