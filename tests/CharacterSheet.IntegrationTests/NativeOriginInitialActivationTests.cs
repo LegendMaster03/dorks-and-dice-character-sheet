@@ -353,6 +353,53 @@ public sealed class NativeOriginInitialActivationTests
         }
     }
 
+
+    [Theory]
+    [InlineData("method-case-alias")]
+    [InlineData("method-extra-authority")]
+    [InlineData("root-case-alias")]
+    [InlineData("nested-method-duplicate")]
+    public async Task DirectInitialOriginRejectsAmbiguousDraftBeforeNativePreview(
+        string variation)
+    {
+        // PostgreSQL jsonb preserves case-distinct keys. A direct initial
+        // activation must reject those aliases and additional method evidence
+        // instead of relying on which property the native binder picks.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, id);
+        var method = variation switch
+        {
+            "method-case-alias" =>
+                "\"methodId\":\"biological\",\"MethodId\":\"unapproved\"",
+            "method-extra-authority" =>
+                "\"methodId\":\"biological\",\"authorizationEvidenceId\":\"forged\"",
+            "nested-method-duplicate" =>
+                "\"methodId\":\"biological\",\"methodId\":\"unapproved\"",
+            _ => "\"methodId\":\"biological\""
+        };
+        var altered = Draft.Replace(
+            "\"methodId\":\"biological\"", method, StringComparison.Ordinal);
+        if (variation == "root-case-alias")
+            altered = altered.Replace("\"selectedSpeciesId\":\"species.human\"",
+                "\"selectedSpeciesId\":\"species.human\",\"SelectedSpeciesId\":\"species.elf\"",
+                StringComparison.Ordinal);
+
+        var saved = await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+            id, "first-party-001", "old-native-content", altered,
+            1, DateTimeOffset.UtcNow);
+        Assert.Equal(2, saved?.Revision);
+        var native = new FakeNativeGateway();
+        var result = await Service(db, id, native).ApplyAsync(id, 2);
+
+        Assert.Equal(CharacterOriginActivationStatus.NotAuthorizedByNativeRules,
+            result.Status);
+        Assert.Equal(0, native.Calls);
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
+        Assert.Empty(await new PostgresCharacterAuthorizedOriginStore(db).GetEventsAsync(id));
+    }
+
     [Fact]
     public async Task HumanElfSourceOnlyDraftCannotBeActivatedEvenByAForgedAuthorizedResult()
     {

@@ -197,7 +197,7 @@ public static class CharacterNativePrimaryStateAdapter
         }
     }
 
-    private static bool HasUniqueJsonKeys(JsonElement value)
+    internal static bool HasUniqueJsonKeys(JsonElement value)
     {
         if (value.ValueKind == JsonValueKind.Array)
             return value.EnumerateArray().All(HasUniqueJsonKeys);

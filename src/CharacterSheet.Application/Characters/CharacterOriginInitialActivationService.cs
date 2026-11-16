@@ -199,10 +199,16 @@ public sealed class CharacterOriginInitialActivationService(
     {
         id = ruleId = methodId = speciesId = ancestryId = null;
         if (proposal.ValueKind != JsonValueKind.Object ||
+            // The Web native deserializer treats case variants as aliases.
+            // Do not let a stored draft have two competing interpretations.
+            !CharacterNativePrimaryStateAdapter.HasUniqueJsonKeys(proposal) ||
             !TryRead(proposal, "intent", out var intent) ||
             !EnumIs(intent, "Direct", 0) ||
             !TryRead(proposal, "method", out var method) ||
             method.ValueKind != JsonValueKind.Object ||
+            method.EnumerateObject().Count() != 2 ||
+            method.EnumerateObject().Any(field =>
+                field.Name is not ("ruleId" or "methodId")) ||
             // A native *direct* initial Origin has no separately asserted
             // contributors, inherited sources or process/table decisions.
             // In particular, the ordinary player endpoint must never
