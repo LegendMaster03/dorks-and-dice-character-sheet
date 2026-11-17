@@ -1,0 +1,109 @@
+name: Pillar 2 / Isolated Three-Service Browser Acceptance
+
+# This is an opt-in, nonproduction validation. There are no real user records,
+# external credentials or deploy steps. Exact source revisions are pinned.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  browser-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: agent
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: postgres
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U agent -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - name: Checkout the exact Character Sheet feature source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Checkout tested Pillar 2 Rules Core
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-rules-core
+          ref: 23919c3ce00825f2da6204f218786957e9f1f1c2
+          path: rules-core
+          persist-credentials: false
+      - name: Checkout Site's actual DM/campaign/character authority branch
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-site
+          ref: e8d0cb7d89de71aa337293b8f36d22bac98687c3
+          path: site
+          persist-credentials: false
+      - name: Verify exact checked-out Core and Site SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SHEET_SOURCE_SHA=$(git rev-parse HEAD)"
+          echo "CORE_SOURCE_SHA=$(git -C rules-core rev-parse HEAD)"
+          echo "SITE_SOURCE_SHA=$(git -C site rev-parse HEAD)"
+          test "$(git -C rules-core rev-parse HEAD)" = "23919c3ce00825f2da6204f218786957e9f1f1c2"
+          test "$(git -C site rev-parse HEAD)" = "e8d0cb7d89de71aa337293b8f36d22bac98687c3"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build actual Character Sheet browser assets
+        working-directory: src/CharacterSheet.Web/Client
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Build the three unmodified applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build site/dorks-and-dice-site.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false
+          dotnet build rules-core/RulesCore.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false
+          dotnet build dorks-and-dice-character-sheet.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false -p:BuildClient=false
+      - name: Install Playwright Chromium on isolated runner
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Create disposable localhost TLS certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .pillar2-browser
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout .pillar2-browser/localhost.key \
+            -out .pillar2-browser/localhost.crt \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+          openssl pkcs12 -export -out .pillar2-browser/localhost.pfx \
+            -inkey .pillar2-browser/localhost.key \
+            -in .pillar2-browser/localhost.crt \
+            -passout pass:local-review-only >/dev/null 2>&1
+      - name: Exercise actual Site, Sheet and Core in Chromium
+        env:
+          PILLAR2_RUN: ${{ github.run_id }}
+        run: python tests/browser/pillar2_acceptance.py
+      - name: Upload browser, network and disposable service evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pillar2-isolated-browser-evidence
+          path: .pillar2-browser/
+          if-no-files-found: warn
+          retention-days: 7
