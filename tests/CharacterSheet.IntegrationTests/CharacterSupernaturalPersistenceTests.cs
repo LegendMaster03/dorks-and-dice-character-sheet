@@ -946,6 +946,81 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Single(await store.GetEventsAsync(id));
     }
 
+
+    [Fact]
+    public async Task InfluenceExpressionChangesDuringActiveFormWithoutMutatingResourcesOrReversion()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var expressionAtAcquisition = SyntheticInfluence("1", "fixture:stage1");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest) with
+            {
+                PersistentInfluencesJson = expressionAtAcquisition
+            })).Status);
+
+        var active = ActivationLedger(id, 1,
+            ["enter:wolf"], [Instance(id, "enter:wolf")], [Resource()]);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 1,
+                "enter:wolf", transition: true, ledger: active) with
+            {
+                PersistentInfluencesJson = expressionAtAcquisition
+            })).Status);
+
+        // A form transition retains the influence's acquisition and expression
+        // while the separate expression event retains the activation and pool.
+        var increased = ExpressionChange(id, digest, 2, "4") with
+        {
+            ExpectedLedgerRevision = 1, NextLedgerRevision = 1,
+            LedgerJson = active
+        };
+        var changedLedger = JsonNode.Parse(active)!.AsObject();
+        changedLedger["resources"]![0]!["current"] = 8;
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            increased with { LedgerJson = changedLedger.ToJsonString() }));
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(increased)).Status);
+
+        var changed = (await store.GetAsync(id))!;
+        Assert.Equal(3, changed.Revision);
+        Assert.Equal(1, changed.LedgerRevision);
+        using (var ledger = JsonDocument.Parse(changed.LedgerJson))
+        {
+            Assert.Equal("manifest.wolf", ledger.RootElement
+                .GetProperty("instances")[0].GetProperty("id").GetString());
+            Assert.Equal(4, ledger.RootElement
+                .GetProperty("resources")[0].GetProperty("current").GetInt32());
+            Assert.Equal(1, ledger.RootElement
+                .GetProperty("processedEventIds").GetArrayLength());
+        }
+
+        var ended = ActivationLedger(id, 2,
+            ["enter:wolf", "revert:wolf"],
+            [Instance(id, "revert:wolf", lifecycle: 1)], [Resource()]);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 3, 1, 2,
+                "revert:wolf", transition: true, ledger: ended) with
+            {
+                PersistentInfluencesJson = SyntheticInfluence("4", "fixture:stage2")
+            })).Status);
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var durable = new PostgresCharacterSupernaturalStateStore(reloaded);
+        var snapshot = (await durable.GetAsync(id))!;
+        Assert.Equal(4, snapshot.Revision);
+        Assert.Equal(2, snapshot.LedgerRevision);
+        Assert.Contains("curse.earned", snapshot.PersistentInfluencesJson);
+        Assert.Contains("fixture:stage2", snapshot.PersistentInfluencesJson);
+        var receipts = await durable.GetEventsAsync(id);
+        Assert.Equal(new[] { "acquisition", "transition", "expression-change", "transition" },
+            receipts.Select(x => x.Kind));
+        Assert.Null(receipts[2].TransitionRequestJson);
+        Assert.NotNull(receipts[2].ExpressionChangeJson);
+        Assert.Equal("revert:wolf", receipts[3].EventId);
+    }
+
     [Fact]
     public async Task AcquisitionPreservesPreviouslyEarnedProgressionAndExistingLedger()
     {
