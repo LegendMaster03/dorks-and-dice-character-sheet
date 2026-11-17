@@ -1057,3 +1057,46 @@ domains, and independent browser/WorkChat acceptance remain outstanding.
 
 Neither Rules Core nor Site was modified by this continuation. No feature
 branch was merged or deployed.
+
+
+### November 17 — expression-change F1/F2 focused remediation
+
+The existing Character Sheet branch adds post-commit projection outcomes distinct
+from the authoritative expression-write result. A confirmed PostgreSQL write
+retains `Applied`, the committed event ID and revision even when the subsequent
+read throws a database or other dependency exception. The failure is traced,
+not represented as a failed write and does not trigger a second write. Caller
+cancellation after commitment is explicitly reported as a canceled projection
+without revoking the committed event. A retry with an identical character,
+original revision, ledger revision, event ID, target influence and **intent ID**
+can recover the existing receipt as `PreviouslyCommitted` after fresh Site
+access checks. Different identities do not receive a positive acknowledgment;
+unrelated stale requests remain revision conflicts. The original receipt's
+committed revision is returned even if the current character has advanced.
+
+New coordinator events bind intent IDs inside the existing expression JSONB
+audit. Old seven-field expression receipts remain structurally valid history,
+but they lack evidence to authenticate a particular intent ID and therefore
+cannot be positively recovered by this new replay path. No historical intent
+value is invented. The application checks persisted receipt evidence, not a
+new synthetic source decision. Event IDs alone are not authorization.
+
+Under the existing serialized PostgreSQL write transaction, every historical
+expression audit is now parsed for exact receipt identities, allowed fields,
+valid ordinal dimension maps and bounded evidence, then chained separately
+for each influence. The latest recorded expression and evidence must match the
+saved owner snapshot. Existing acquisition and transition receipts without an
+expression audit remain compatible. An acquisition from before this migration
+usually does not record the initial expression snapshot, so the **first**
+expression audit's previous value cannot be independently reconstructed from
+that acquisition receipt. Later expression-to-expression transitions and the
+latest saved state are checked. This is application-enforced integrity on
+future writes, not cryptographic or privileged-database tamper prevention.
+
+Regression tests use real disposable PostgreSQL databases, a synthetic
+post-commit `NpgsqlException`, exact replay/mismatch checks, malformed
+historical receipts, broken chains, and valid fresh-context reloads. These
+are internal testing controls, not approved production expression authority.
+The baseline remains **23 complete / 9 partial**. The separately documented
+Site R3 dependency, production source policy and browser acceptance remain
+out of scope. No merge or deployment was approved by this remediation.
