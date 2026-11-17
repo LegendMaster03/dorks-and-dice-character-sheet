@@ -995,3 +995,63 @@ R1/R2 remain independently WorkChat-closed; **R3 stays open**.
 This does not close original scenarios 7, 26 or 27 or change the
 **23 complete / 9 partial** 32-scenario tally. Browser and production
 supernatural acceptance remain outstanding. No merge or deployment.
+
+
+### November 17 — influence-expression event and internal coordinator
+
+The Increment 2 progressive-influence model already distinguished acquired
+identity, current expression and independently earned progression. Increment 4
+now has an **internal-only expression-change operation** rather than treating
+an expression edit as another acquisition or a manifestation transition.
+
+- `VerifiedSupernaturalStateWrite` supports a distinct
+  `expression-change` receipt with source-verified before/after expression
+  values and evidence IDs. The stored source of truth uses the existing
+  character-level revision/CAS, unique event identity, canonical character
+  lock and serializable PostgreSQL transaction. The manifestation ledger
+  revision and processed manifestation events are unchanged.
+- The history guard accepts a change to exactly one acquired influence's
+  `expression` and `expressionEvidenceId`. It retains the influence ID,
+  definition/acquisition provenance, effects, applicability decisions and
+  independently acquired progression and grants. All other influences,
+  alternate sheets, manifestation instances, resources and the ledger are
+  immutable for this event.
+- Migration `20261117090000_AddInfluenceExpressionChangeAudit` adds a nullable
+  JSONB audit to supernatural event receipts. Its downgrade guard rejects
+  removal of recorded expression changes. Historical records remain null
+  rather than claiming reconstructed expression evidence.
+- `CharacterInfluenceExpressionChangeService` is a backend-only coordinator
+  using fresh Site ownership/lifecycle checks, a separate trusted source
+  interface, verified record snapshots, input fingerprints and the existing
+  atomic store. It invokes the ordinary effective-state read **after** a
+  successful commit, so a separate Rules Core source verifier still governs
+  all effective characteristics. An unavailable verifier leaves the result
+  unresolved rather than providing invented playable mechanics. The interface
+  has **no production implementation or mutation route**.
+- Synthetic PostgreSQL tests cover increase/decrease, unchanged grant and
+  progression ownership, duplicate and stale revisions, bad or missing audit
+  evidence, mutations outside expression scope, resource preservation while
+  an alternate form is active, reversion, process-context reload, rejected
+  source/ownership, and rollback protection. A test-only trusted source is
+  deliberately not a production self-authorization path.
+
+**This is not first-party curse or Werewolf gameplay.** No universal expression
+scale, automatic progression award, form-specific resource refill, class-feature
+substitution, or full Origin reconstruction has been added. Production
+expression authorization still requires an independently approved source
+policy. Existing verified Origin Underlying functionality and primary-state
+partial projections remain separate; the missing production Core Underlying
+source provider has not been fabricated.
+
+**Acceptance accounting:** Infrastructure coverage has increased, but the
+original 32 scenarios remain **23 complete / 9 partial** with partial
+**2, 6, 7, 9, 21, 22, 24, 26 and 27**. No partial scenario is promoted from
+synthetic authorization alone. R1/R2 remain independently closed; R3 stays
+an **external Site commit-ordering dependency** with no new Site changes.
+The shared Pillar 2 temporary testing-authorization integration remains
+reserved for merge preparation. Origin/alternate-form integration,
+production-authorized source rules, the remaining effective-character
+domains, and independent browser/WorkChat acceptance remain outstanding.
+
+Neither Rules Core nor Site was modified by this continuation. No feature
+branch was merged or deployed.
