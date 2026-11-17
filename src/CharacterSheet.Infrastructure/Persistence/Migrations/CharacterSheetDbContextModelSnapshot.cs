@@ -642,6 +642,48 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_sheet_roots");
         });
 
+
+        modelBuilder.Entity("CharacterSheet.Infrastructure.Persistence.ProtectedMutationTerminal", b =>
+        {
+            b.Property<Guid>("OperationId")
+                .HasColumnType("uuid");
+
+            b.Property<string>("AdmissionDigest")
+                .IsRequired()
+                .HasMaxLength(64)
+                .HasColumnType("character varying(64)");
+
+            b.Property<Guid>("CharacterId")
+                .HasColumnType("uuid");
+
+            b.Property<string>("CommandDigest")
+                .IsRequired()
+                .HasMaxLength(64)
+                .HasColumnType("character varying(64)");
+
+            b.Property<string>("OperationKind")
+                .IsRequired()
+                .HasMaxLength(80)
+                .HasColumnType("character varying(80)");
+
+            b.Property<DateTimeOffset>("RecordedAt")
+                .HasColumnType("timestamp with time zone");
+
+            b.Property<string>("ReceiptEventId")
+                .HasMaxLength(240)
+                .HasColumnType("character varying(240)");
+
+            b.Property<ProtectedMutationTerminalStatus>("Status")
+                .HasConversion<int>()
+                .HasColumnType("integer");
+
+            b.HasKey("OperationId");
+
+            b.HasIndex("CharacterId", "Status");
+
+            b.ToTable("character_protected_mutation_terminals");
+        });
+
         modelBuilder.Entity("CharacterSheet.Infrastructure.Persistence.ProcessedLifecycleEvent", b =>
         {
             b.Property<Guid>("EventId")
