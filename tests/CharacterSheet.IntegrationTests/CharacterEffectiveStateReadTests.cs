@@ -1331,6 +1331,69 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Equal(3, (await realStore.GetEventsAsync(id)).Count);
     }
 
+    private sealed class ConcurrentExpressionSource : ITrustedCharacterInfluenceExpressionSource
+    {
+        private readonly TaskCompletionSource<bool> bothPrepared =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int prepared;
+
+        public async Task<TrustedInfluenceExpressionChange?> PrepareAsync(
+            Guid id, SiteCharacterProjection site, CharacterSupernaturalState saved,
+            string influenceId, string intentId, string eventId, CancellationToken ct)
+        {
+            if (site.CharacterId != id || saved.Revision != 1 ||
+                influenceId != "curse.fixture" || intentId != eventId)
+                return null;
+            if (Interlocked.Increment(ref prepared) == 2)
+                bothPrepared.TrySetResult(true);
+            await bothPrepared.Task.WaitAsync(TimeSpan.FromSeconds(15), ct);
+            return new TrustedInfluenceExpressionChange(
+                new Dictionary<string, string> { ["severity"] = "3" },
+                "fixture:expression:3", "fixture:verified-expression-rule");
+        }
+    }
+
+    [Fact]
+    public async Task SimultaneousSameEventExpressionRequestsReturnOneCommitAndReceiptRecovery()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db1 = new CharacterSheetDbContext(database.CreateOptions());
+        var (store1, _) = await AcquiredInfluenceAsync(db1, id);
+        await using var db2 = new CharacterSheetDbContext(database.CreateOptions());
+        var store2 = new PostgresCharacterSupernaturalStateStore(db2);
+        var site = new SiteAccess(id);
+        var source = new ConcurrentExpressionSource();
+        var native1 = new NativeGateway();
+        var native2 = new NativeGateway();
+        var first = new CharacterInfluenceExpressionChangeService(
+            site, site, store1, source, native1, Service(db1, id, native1, suppliedSite: site));
+        var second = new CharacterInfluenceExpressionChangeService(
+            site, site, store2, source, native2, Service(db2, id, native2, suppliedSite: site));
+
+        var results = await Task.WhenAll(
+            first.ApplyAsync(id, 1, 0, "curse.fixture", "fixture:shared", "fixture:shared"),
+            second.ApplyAsync(id, 1, 0, "curse.fixture", "fixture:shared", "fixture:shared"));
+
+        Assert.Single(results, result =>
+            result.Status == CharacterInfluenceExpressionChangeStatus.Applied);
+        Assert.Single(results, result =>
+            result.Status == CharacterInfluenceExpressionChangeStatus.PreviouslyCommitted);
+        Assert.All(results, result =>
+        {
+            Assert.Equal(2, result.StateRevision);
+            Assert.Equal(0, result.LedgerRevision);
+            Assert.Equal("fixture:shared", result.EventId);
+        });
+
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var persisted = new PostgresCharacterSupernaturalStateStore(reloaded);
+        Assert.Equal(2, (await persisted.GetAsync(id))!.Revision);
+        var receipts = await persisted.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        Assert.Equal("fixture:shared", receipts[1].EventId);
+    }
+
     [Fact]
     public async Task TrustedExpressionCoordinatorPreservesOrdinalDimensionIdentity()
     {
