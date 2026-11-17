@@ -1671,7 +1671,7 @@ public sealed class CharacterStateCrossRepositoryTests
         var baseline = await Reader(db, id, gateway).GetAsync(id);
         Assert.Equal("partial", baseline.View!.Status);
         Assert.Empty((JsonArray)baseline.View.NativeProjection!["effectiveCharacter"]!
-            ["influenceEffects"]!);
+            ["appliedEffects"]!);
         Assert.Equal(activeAlternateManifestation ? 17 : 10,
             baseline.View.NativeProjection!["effectiveCharacter"]!
                 ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
@@ -1696,8 +1696,8 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(activeAlternateManifestation ? 17 : 10,
             result.EffectiveProjection!["effectiveCharacter"]!
                 ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
-        Assert.Equal(1, ((JsonArray)result.EffectiveProjection!["effectiveCharacter"]!
-            ["influenceEffects"]!).Count);
+        Assert.Single((JsonArray)result.EffectiveProjection!["effectiveCharacter"]!
+            ["appliedEffects"]!);
         Assert.Equal("progress.curse", result.EffectiveProjection!
             ["effectiveCharacter"]!["influenceProgression"]![0]!
             ["record"]!["id"]!.GetValue<string>());
