@@ -74,13 +74,14 @@ public sealed class NativeOriginInitialActivationTests
         SiteCharacterAccessStatus access = SiteCharacterAccessStatus.Authorized,
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
         Guid? projectedId = null,
-        Access? site = null)
+        Access? site = null,
+        ICharacterAuthorizedOriginStore? commitStore = null)
     {
         var authorizedSite = site ?? new Access(access, projectedId ?? id, lifecycle);
         return new(authorizedSite, authorizedSite,
             new PostgresCharacterBuildStore(db),
             new PostgresCharacterOriginDraftStore(db),
-            new PostgresCharacterAuthorizedOriginStore(db),
+            commitStore ?? new PostgresCharacterAuthorizedOriginStore(db),
             native, TimeProvider.System);
     }
 
@@ -294,6 +295,53 @@ public sealed class NativeOriginInitialActivationTests
         }
     }
 
+
+    [Theory]
+    [InlineData("ownership")]
+    [InlineData("archive")]
+    [InlineData("campaign")]
+    public async Task SiteRevocationAtOriginCommitBoundaryRemainsUnfenced(
+        string reason)
+    {
+        // R3 negative characterization: all earlier fresh/cached authorization
+        // checks passed, but Site changes scope before the SQL commit begins.
+        // A strict Site-owned commit fence would reject this same operation.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await PrepareAsync(db, characterId);
+        var site = new Access(SiteCharacterAccessStatus.Authorized,
+            characterId, SiteCharacterLifecycleState.Active);
+        var originStore = new PostgresCharacterAuthorizedOriginStore(db);
+        var revocation = new RevokeAtOriginCommitStore(originStore, () =>
+        {
+            switch (reason)
+            {
+                case "ownership":
+                    site.FreshStatus = SiteCharacterAccessStatus.NotFoundOrNotOwned;
+                    break;
+                case "archive":
+                    site.FreshLifecycle = SiteCharacterLifecycleState.Archived;
+                    break;
+                case "campaign":
+                    site.FreshCampaignIds = [Guid.NewGuid()];
+                    break;
+                default: throw new InvalidOperationException(reason);
+            }
+        });
+
+        var applied = await Service(db, characterId, new FakeNativeGateway(),
+            site: site, commitStore: revocation).ApplyAsync(characterId, 1);
+
+        Assert.Equal(CharacterOriginActivationStatus.Applied, applied.Status);
+        Assert.Equal(2, site.FreshCalls);
+        var live = await site.GetFreshAuthorizedCharacterAsync(characterId);
+        Assert.True(live.Status != SiteCharacterAccessStatus.Authorized ||
+            live.Character?.LifecycleState != SiteCharacterLifecycleState.Active ||
+            live.Character.CampaignIds.Count != 0);
+        Assert.NotNull(await originStore.GetAsync(characterId));
+        Assert.Single(await originStore.GetEventsAsync(characterId));
+    }
 
     [Theory]
     [InlineData("proposal")]
@@ -521,6 +569,29 @@ public sealed class NativeOriginInitialActivationTests
             Assert.Equal(CharacterOriginActivationStatus.NotAuthorizedByNativeRules, result.Status);
             Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
             Assert.Empty(await db.OriginEventReceipts.ToArrayAsync());
+        }
+    }
+
+    /// <summary>
+    /// Intentionally unfenced boundary used only to characterize R3: Site
+    /// revokes authority *after* all application reads but *before* the
+    /// real PostgreSQL origin transaction begins. This is negative evidence.
+    /// </summary>
+    private sealed class RevokeAtOriginCommitStore(
+        ICharacterAuthorizedOriginStore inner, Action revoke)
+        : ICharacterAuthorizedOriginStore
+    {
+        public Task<CharacterAuthorizedOriginState?> GetAsync(
+            Guid id, CancellationToken ct = default) => inner.GetAsync(id, ct);
+
+        public Task<IReadOnlyList<CharacterOriginEventReceipt>> GetEventsAsync(
+            Guid id, CancellationToken ct = default) => inner.GetEventsAsync(id, ct);
+
+        public Task<AuthorizedOriginStoreResult> CommitVerifiedAsync(
+            VerifiedOriginPersistenceCommand command, CancellationToken ct = default)
+        {
+            revoke();
+            return inner.CommitVerifiedAsync(command, ct);
         }
     }
 

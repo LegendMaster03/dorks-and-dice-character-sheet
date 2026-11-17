@@ -885,6 +885,47 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
 
+    [Fact]
+    public async Task DmRevocationAtMixedOriginCommitBoundaryRemainsUnfenced()
+    {
+        // R3 negative characterization with authenticated real Core HTTP
+        // and actual PostgreSQL. Synthetic Site DM scope is revoked *inside*
+        // the persistence boundary, after final live/cached reads succeeded.
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var draft = await new PostgresCharacterOriginDraftStore(db).SaveAsync(
+            characterId, "first-party-001", fingerprint,
+            HumanElf, 0, DateTimeOffset.UtcNow);
+        Assert.Equal(1, draft!.Revision);
+
+        var native = new HttpNativeGateway(core.Client);
+        var candidates = await FiveNativeHumanElfOffers(native, fingerprint);
+        var site = new RevocableDmScope(characterId);
+        var origins = new PostgresCharacterAuthorizedOriginStore(db);
+        var revokedAtCommit = new RevokeAtOriginCommitStore(origins,
+            () => site.FreshAllow = false);
+        var activation = new CharacterOriginMixedActivationService(
+            site, site,
+            new PostgresCharacterBuildStore(db),
+            new PostgresCharacterOriginDraftStore(db),
+            revokedAtCommit, native, TimeProvider.System);
+
+        var applied = await activation.ApplyAsync(characterId, Campaign, 1, candidates);
+
+        Assert.Equal(CharacterOriginMixedActivationStatus.Applied, applied.Status);
+        Assert.Equal(2, site.FreshCalls);
+        Assert.Equal(SiteOriginDmAccessStatus.NotAuthorized,
+            (await site.CheckFreshAsync(Campaign, characterId)).Status);
+        Assert.NotNull(await origins.GetAsync(characterId));
+        Assert.Single(await origins.GetEventsAsync(characterId));
+    }
+
     [Theory]
     [InlineData("proposal")]
     [InlineData("fingerprint")]
@@ -1093,6 +1134,29 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                         SiteCharacterLifecycleState.Active, null, [])));
             return Task.FromResult(new SiteCharacterAccessResult(
                 SiteCharacterAccessStatus.NotFoundOrNotOwned));
+        }
+    }
+
+    /// <summary>
+    /// Intentionally unfenced boundary used only to characterize R3: Site
+    /// revokes authority *after* all application reads but *before* the
+    /// real PostgreSQL origin transaction begins. This is negative evidence.
+    /// </summary>
+    private sealed class RevokeAtOriginCommitStore(
+        ICharacterAuthorizedOriginStore inner, Action revoke)
+        : ICharacterAuthorizedOriginStore
+    {
+        public Task<CharacterAuthorizedOriginState?> GetAsync(
+            Guid id, CancellationToken ct = default) => inner.GetAsync(id, ct);
+
+        public Task<IReadOnlyList<CharacterOriginEventReceipt>> GetEventsAsync(
+            Guid id, CancellationToken ct = default) => inner.GetEventsAsync(id, ct);
+
+        public Task<AuthorizedOriginStoreResult> CommitVerifiedAsync(
+            VerifiedOriginPersistenceCommand command, CancellationToken ct = default)
+        {
+            revoke();
+            return inner.CommitVerifiedAsync(command, ct);
         }
     }
 
