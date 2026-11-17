@@ -1023,7 +1023,9 @@ an expression edit as another acquisition or a manifestation transition.
 - `CharacterInfluenceExpressionChangeService` is a backend-only coordinator
   using fresh Site ownership/lifecycle checks, a separate trusted source
   interface, verified record snapshots, input fingerprints and the existing
-  atomic store. It invokes the ordinary effective-state read **after** a
+  atomic store. It checks the current native Rules Core catalog before
+  committing and refuses stale fingerprints or an unavailable delegated
+  catalog read. It invokes the ordinary effective-state read **after** a
   successful commit, so a separate Rules Core source verifier still governs
   all effective characteristics. An unavailable verifier leaves the result
   unresolved rather than providing invented playable mechanics. The interface
