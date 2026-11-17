@@ -22,6 +22,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RulesCore.Content;
+using RulesCore.Mechanics;
 using CoreApplication = CoreHost::RulesCore.Host.RulesCoreApplication;
 using CoreTicketValidator = CoreHost::RulesCore.Host.CharacterSheetMechanicsTicketValidator;
 
