@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CharacterSheet.Application.Persistence;
+using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
 using CharacterSheet.Domain.Characters;
 
@@ -11,7 +12,7 @@ public enum CharacterInfluenceExpressionChangeStatus
     Applied, InvalidRequest, Unauthenticated, NotFoundOrNotOwned,
     ProjectionUnavailable, ArchivedReadOnly, NotInitialized,
     StateRevisionConflict, LedgerRevisionConflict, SourceUnauthorized,
-    NativeContentChanged, AuthoritativeInputsChanged, DuplicateEvent
+    NativeContentChanged, RulesCoreUnavailable, AuthoritativeInputsChanged, DuplicateEvent
 }
 
 public sealed record CharacterInfluenceExpressionChangeResult(
@@ -53,6 +54,7 @@ public sealed class CharacterInfluenceExpressionChangeService(
     ISiteFreshCharacterAccessGateway freshSite,
     ICharacterSupernaturalStateStore store,
     ITrustedCharacterInfluenceExpressionSource source,
+    INativeRulesCoreGateway rules,
     CharacterEffectiveStateService effective)
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
@@ -198,6 +200,23 @@ public sealed class CharacterInfluenceExpressionChangeService(
             characterId, cancellationToken);
         if (after != before)
             return new(CharacterInfluenceExpressionChangeStatus.AuthoritativeInputsChanged);
+
+        // A valid saved catalog pin is not evidence that the referenced
+        // native rules are still current. No alternate local mechanics engine
+        // or trust in the source's echoed fingerprint is introduced.
+        try
+        {
+            var native = await rules.GetNativeRulesetAsync(cancellationToken);
+            if (native["contractVersion"]?.GetValue<int>() != 1 ||
+                native["rulesetId"]?.GetValue<string>() != saved.RulesetId ||
+                native["fingerprint"]?.GetValue<string>() != saved.Fingerprint)
+                return new(CharacterInfluenceExpressionChangeStatus.NativeContentChanged);
+        }
+        catch (Exception error) when (error is RulesCoreGatewayException or
+            JsonException or InvalidOperationException or FormatException)
+        {
+            return new(CharacterInfluenceExpressionChangeStatus.RulesCoreUnavailable);
+        }
 
         // These are fresh Site checks, not a cross-service commit fence.
         // Site R3 remains an external dependency, not solved here.
