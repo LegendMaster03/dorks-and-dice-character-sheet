@@ -100,7 +100,29 @@ No Source, Site, Core or Sheet runtime behavior is changed by this document.
 ## Separate browser acceptance
 
 The Sheet feature branch adds `.github/workflows/pillar2-isolated-browser-acceptance.yml`
-and `tests/browser/pillar2_acceptance.py` to run disposable Site,
-Character Sheet, Rules Core and a real Chrome browser. Browser runs are
-independent of S04 and should not be presented as approving either
-consistency policy. Both PRs remain draft and unmerged.
+and `tests/browser/pillar2_acceptance.py` to run actual Site, Character
+Sheet, Rules Core, and Chrome with entirely disposable identity, content,
+PostgreSQL, and TLS fixtures.
+
+**Verified browser run:** [44164142897](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44164142897)
+**PASS** with exact checked-out source identities:
+- Sheet `72745125eaa2787b08997b06403ee31f42a0f72a`
+- Core `23919c3ce00825f2da6204f218786957e9f1f1c2`
+- Site `e8d0cb7d89de71aa337293b8f36d22bac98687c3`
+
+The executable browser assertions cover ordinary Site password login with
+private cookies, actual embedded Character Sheet creation form, Direct Orc
+save/activation/reload, Site-delegated native catalog, Human/Elf draft, the
+DM-only route and five native candidate checkboxes, a role-demotion denial
+on a fresh DM request, restored DM approval, a committed mixed Origin, owner
+reload, unrelated-account denial and unhandled browser exceptions.
+Screenshots, logs and structured results were uploaded to [the run
+artifact](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44164142897/artifacts/14365226412).
+The artifact intentionally excludes disposable databases and TLS files.
+
+This is a **PASS only for the scripted supported browser subset**, not all
+Species presets, unimplemented mechanics, or a visual accessibility audit.
+It does not execute the suspended in-flight Site revocation case above,
+and **does not approve either S04 consistency policy**. Keep the feature PRs
+draft and unmerged until an explicit security consistency decision and
+corresponding race tests are completed.
