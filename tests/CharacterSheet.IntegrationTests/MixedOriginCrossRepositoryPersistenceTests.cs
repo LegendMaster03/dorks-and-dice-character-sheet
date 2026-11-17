@@ -726,6 +726,58 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     [Fact]
+    [Trait("OpenSecurityAcceptanceGap", "S04")]
+    public async Task S04CurrentBehaviorCharacterization_RevocationAfterCoreApprovalStillCommits()
+    {
+        // This is a *characterization of the existing security gap*, not an
+        // acceptance test asserting desired behavior. Source review identified
+        // that the request-scoped Site projection is read only once. A role
+        // removed after the actual Rules Core evaluation can therefore be
+        // absent from current Site state when Sheet commits its Origin event.
+        //
+        // An approved future policy must replace this assertion with the
+        // explicit authorized-at-issuance or serialized-revocation contract.
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var fingerprint = core.App.Services.GetRequiredService<NativeCatalogStore>()
+            .Snapshot!.Fingerprint;
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var drafts = new PostgresCharacterOriginDraftStore(db);
+        Assert.Equal(1, (await drafts.SaveAsync(characterId,
+            "first-party-001", fingerprint, HumanElf, 0,
+            DateTimeOffset.UtcNow))?.Revision);
+
+        var scoped = new RevocableDmScope(characterId);
+        var native = new HttpNativeGateway(core.Client,
+            afterEvaluation: () =>
+            {
+                // This barrier fires only after a successful real native
+                // HTTP evaluation and before activation continues to DB.
+                scoped.Allow = false;
+                return Task.CompletedTask;
+            });
+        var offers = await FiveNativeHumanElfOffers(
+            new HttpNativeGateway(core.Client), fingerprint);
+        var builds = new PostgresCharacterBuildStore(db);
+        var origins = new PostgresCharacterAuthorizedOriginStore(db);
+        var service = new CharacterOriginMixedActivationService(
+            scoped, builds, drafts, origins, native, TimeProvider.System);
+
+        var result = await service.ApplyAsync(characterId, Campaign, 1, offers);
+        Assert.False(scoped.Allow);
+        // The current code does commit despite mid-request revocation. Keep
+        // S04 BLOCKED even though this diagnostic reproducer passes.
+        Assert.Equal(CharacterOriginMixedActivationStatus.Applied, result.Status);
+        Assert.Equal(1, (await origins.GetAsync(characterId))?.Revision);
+        var receipt = Assert.Single(await origins.GetEventsAsync(characterId));
+        Assert.Equal(Actor, receipt.ApprovalActorUserId);
+        Assert.Equal(Campaign, receipt.ApprovalCampaignId);
+    }
+
+    [Fact]
     public async Task ChangedNativeCatalogOrMissingSelectionDoesNotCommitAProfile()
     {
         await using var core = await RealCore.StartAsync();
@@ -1105,7 +1157,8 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
     private sealed class HttpNativeGateway(HttpClient http, string? malformedReply = null,
-        Func<int, Task>? afterPreview = null) : INativeRulesCoreGateway
+        Func<int, Task>? afterPreview = null,
+        Func<Task>? afterEvaluation = null) : INativeRulesCoreGateway
     {
         private int _previewCount;
 
@@ -1119,10 +1172,16 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             return response;
         }
 
-        public Task<JsonNode> EvaluateApprovedMixedOriginAsync(
-            JsonElement request, CancellationToken cancellationToken) =>
-            SendAsync("/api/mechanics/v1/origins/evaluate-approved-mixed", request,
-                cancellationToken);
+        public async Task<JsonNode> EvaluateApprovedMixedOriginAsync(
+            JsonElement request, CancellationToken cancellationToken)
+        {
+            var evaluated = await SendAsync(
+                "/api/mechanics/v1/origins/evaluate-approved-mixed",
+                request, cancellationToken);
+            if (afterEvaluation is not null)
+                await afterEvaluation();
+            return evaluated;
+        }
 
         private async Task<JsonNode> SendAsync(
             string path, JsonElement request, CancellationToken cancellationToken)
