@@ -112,8 +112,7 @@ public sealed class CharacterInfluenceExpressionChangeService(
         try
         {
             using var document = JsonDocument.Parse(saved.PersistentInfluencesJson);
-            if (!CharacterNativePrimaryStateAdapter.HasUniqueJsonKeys(
-                    document.RootElement))
+            if (!HasUnambiguousInfluenceKeys(document.RootElement))
                 return new(CharacterInfluenceExpressionChangeStatus.SourceUnauthorized);
 
             influences = JsonNode.Parse(saved.PersistentInfluencesJson) as JsonArray
@@ -291,6 +290,34 @@ public sealed class CharacterInfluenceExpressionChangeService(
             return new(CharacterInfluenceExpressionChangeStatus.Applied,
                 committed.Revision, committed.LedgerRevision);
         }
+    }
+
+    /// <summary>
+    /// Model property names use web JSON's case-insensitive binding, but
+    /// source-authored expression dimensions and owned choice keys have exact
+    /// ordinal identity. Reject ambiguous model fields without collapsing two
+    /// legitimately distinct expression dimensions.
+    /// </summary>
+    private static bool HasUnambiguousInfluenceKeys(
+        JsonElement value, string? parentField = null)
+    {
+        if (value.ValueKind == JsonValueKind.Array)
+            return value.EnumerateArray().All(item =>
+                HasUnambiguousInfluenceKeys(item));
+        if (value.ValueKind != JsonValueKind.Object)
+            return true;
+
+        var isSourceMap = parentField is not null &&
+            (parentField.Equals("expression", StringComparison.OrdinalIgnoreCase) ||
+             parentField.Equals("requiredExpression", StringComparison.OrdinalIgnoreCase) ||
+             parentField.Equals("choices", StringComparison.OrdinalIgnoreCase));
+        var names = new HashSet<string>(isSourceMap
+            ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+        foreach (var property in value.EnumerateObject())
+            if (!names.Add(property.Name) ||
+                !HasUnambiguousInfluenceKeys(property.Value, property.Name))
+                return false;
+        return true;
     }
 
     private static CharacterInfluenceExpressionChangeStatus FromSite(
