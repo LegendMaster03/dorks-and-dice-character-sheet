@@ -828,7 +828,8 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         var proposal = new NativeOriginProposal("real-drow-ledger",
             NativeOriginIntent.Direct,
             new("rule.creature-origination", "biological"),
-            [], [], [], SelectedAncestryId: "ancestry.elf.drow");
+            [], [], [], SelectedSpeciesId: "species.elf",
+            SelectedAncestryId: "ancestry.elf.drow");
 
         var engine = new NativeOriginConstructionEngine(catalog);
         var offers = engine.Evaluate(new(proposal,
