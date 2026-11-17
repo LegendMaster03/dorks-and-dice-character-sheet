@@ -1395,6 +1395,45 @@ public sealed class CharacterEffectiveStateReadTests
     }
 
     [Fact]
+    public async Task ExpressionCoordinatorAcceptsExactDimensionBoundsAndRejectsExcess()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, _) = await AcquiredInfluenceAsync(db, id);
+        var site = new SiteAccess(id);
+        var native = new NativeGateway();
+        var source = new VerifiedExpressionFixture
+        {
+            NextEvidence = "fixture:expression:bounds",
+            NextExpression = Enumerable.Range(0, 128).ToDictionary(
+                i => $"dimension-{i:D3}" + new string('k', 147),
+                _ => new string('v', 1024), StringComparer.Ordinal)
+        };
+        var coordinator = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, native, Service(db, id, native, suppliedSite: site));
+        var applied = await coordinator.ApplyAsync(
+            id, 1, 0, "curse.fixture", "fixture:max-dimensions", "fixture:max-dimensions");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, applied.Status);
+        await using var freshDb = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(freshDb);
+        using var saved = JsonDocument.Parse((await fresh.GetAsync(id))!.PersistentInfluencesJson);
+        var dimensions = saved.RootElement[0].GetProperty("expression");
+        Assert.Equal(128, dimensions.EnumerateObject().Count());
+        Assert.All(dimensions.EnumerateObject(),
+            value => Assert.Equal(1024, value.Value.GetString()!.Length));
+
+        source.NextExpression = Enumerable.Range(0, 129).ToDictionary(
+            i => $"dimension-{i:D3}", _ => "value", StringComparer.Ordinal);
+        source.NextEvidence = "fixture:expression:too-many";
+        var rejected = await coordinator.ApplyAsync(
+            id, 2, 0, "curse.fixture", "fixture:excess-dimensions", "fixture:excess-dimensions");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.SourceUnauthorized, rejected.Status);
+        Assert.Equal(2, (await fresh.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await fresh.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
     public async Task TrustedExpressionCoordinatorPreservesOrdinalDimensionIdentity()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
