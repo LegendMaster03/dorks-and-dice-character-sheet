@@ -819,12 +819,12 @@ public sealed class CharacterStateCrossRepositoryTests
                 ["phase"] = phase
             },
             [
-                new NativeCharacterInfluenceEffect("effect.synthetic.strength",
-                    Occurrence("effects.synthetic.strength"),
-                    "receipt.effect.synthetic.strength", SyntheticRule(),
+                new NativeCharacterInfluenceEffect("effect.synthetic.dexterity",
+                    Occurrence("effects.synthetic.dexterity"),
+                    "receipt.effect.synthetic.dexterity", SyntheticRule(),
                     new Dictionary<string, string> { ["phase"] = "active" },
                     ["@primary", "wolf"], NativeInfluenceCharacteristic.AbilityScore,
-                    NativeInfluenceOperation.Adjust, "strength", -2,
+                    NativeInfluenceOperation.Adjust, "dexterity", 2,
                     RequiredEarned:
                     [
                         new NativeInfluenceEarnedRequirement(
@@ -1675,6 +1675,8 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(activeAlternateManifestation ? 17 : 10,
             baseline.View.NativeProjection!["effectiveCharacter"]!
                 ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        Assert.Equal(12, baseline.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["dexterity"]!.GetValue<int>());
 
         var site = new OwnerAccess(id);
         var coordinator = new CharacterInfluenceExpressionChangeService(
@@ -1689,7 +1691,9 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal("partial", result.EffectiveStatus);
         Assert.Equal(before.Revision + 1, result.StateRevision);
         Assert.Equal(before.LedgerRevision, result.LedgerRevision);
-        Assert.Equal(activeAlternateManifestation ? 15 : 8,
+        Assert.Equal(14, result.EffectiveProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["dexterity"]!.GetValue<int>());
+        Assert.Equal(activeAlternateManifestation ? 17 : 10,
             result.EffectiveProjection!["effectiveCharacter"]!
                 ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
         Assert.Equal(1, ((JsonArray)result.EffectiveProjection!["effectiveCharacter"]!
@@ -2148,6 +2152,9 @@ public sealed class CharacterStateCrossRepositoryTests
                 Assert.Equal(17, dormant["nativeProjection"]?
                     ["effectiveCharacter"]?["effectiveMechanics"]?
                     ["abilityScores"]?["strength"]?.GetValue<int>());
+                Assert.Equal(12, dormant["nativeProjection"]?
+                    ["effectiveCharacter"]?["effectiveMechanics"]?
+                    ["abilityScores"]?["dexterity"]?.GetValue<int>());
 
                 // Commit the expression while the first real web host is
                 // running. The host must observe it before shutdown; the
@@ -2184,9 +2191,12 @@ public sealed class CharacterStateCrossRepositoryTests
                     firstProjection["effectiveSheetId"]?.GetValue<string>());
                 Assert.Equal("manifest.wolf.1",
                     firstProjection["activeManifestationId"]?.GetValue<string>());
-                Assert.Equal(15, firstProjection["nativeProjection"]?
+                Assert.Equal(17, firstProjection["nativeProjection"]?
                     ["effectiveCharacter"]?["effectiveMechanics"]?
                     ["abilityScores"]?["strength"]?.GetValue<int>());
+                Assert.Equal(14, firstProjection["nativeProjection"]?
+                    ["effectiveCharacter"]?["effectiveMechanics"]?
+                    ["abilityScores"]?["dexterity"]?.GetValue<int>());
                 before = authentications;
                 Assert.True(before > 0);
             }
