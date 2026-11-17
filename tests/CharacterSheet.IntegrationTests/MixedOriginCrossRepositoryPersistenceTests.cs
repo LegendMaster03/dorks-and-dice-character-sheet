@@ -815,6 +815,156 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             .GetEventsAsync(characterId));
     }
 
+#if PILLAR2_CURRENT_ORIGIN
+    [Fact]
+    public async Task RealDrowCourseInitializesNonemptyNativeLedgerAndReloadsFromPostgres()
+    {
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var catalog = core.App.Services.GetRequiredService<NativeCatalogStore>().Snapshot!;
+        var native = new HttpNativeGateway(core.Client);
+        var characterId = Guid.NewGuid();
+        var proposal = new NativeOriginProposal("real-drow-ledger",
+            NativeOriginIntent.Direct,
+            new("rule.creature-origination", "biological"),
+            [], [], [], SelectedAncestryId: "ancestry.elf.drow");
+
+        var engine = new NativeOriginConstructionEngine(catalog);
+        var offers = engine.Evaluate(new(proposal,
+            AutoManifestDirectDefaults: true)).EvaluatedProposal.Candidates;
+        var ability = Assert.Single(offers, x =>
+            x.Identity.IntrinsicSlotId == "spellcastingAbility");
+        var requirement = Assert.Single(ability.RequiredChoices!);
+        Assert.Contains("wisdom", requirement.FiniteOptions!);
+        var selected = proposal with
+        {
+            Manifestations = [
+                new("drow-ability", ability.Id,
+                    Choices: [new(requirement.Id, ["wisdom"])])
+            ]
+        };
+        var completed = engine.Evaluate(new(selected,
+            AutoManifestDirectDefaults: true));
+        Assert.Equal(NativeOriginConstructionStatus.Authorized, completed.Status);
+        // Only the submitted *manifestations* are copied. Source candidates
+        // and eligibility proof are always rediscovered by actual Core HTTP.
+        var source = selected with
+        {
+            Manifestations = completed.EvaluatedProposal.Manifestations
+        };
+
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await db.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+            var drafts = new PostgresCharacterOriginDraftStore(db);
+            var savedDraft = await drafts.SaveAsync(characterId, catalog.RulesetId,
+                catalog.Fingerprint, JsonSerializer.Serialize(source, Wire),
+                0, DateTimeOffset.UtcNow);
+            Assert.NotNull(savedDraft);
+            Assert.Equal(1, savedDraft.Revision);
+
+            var site = new OwnerScopedParentAccess(characterId, characterId, true);
+            var builds = new PostgresCharacterBuildStore(db);
+            var origins = new PostgresCharacterAuthorizedOriginStore(db);
+            var activation = new CharacterOriginInitialActivationService(
+                site, builds, drafts, origins, native, TimeProvider.System);
+            var activated = await activation.ApplyAsync(characterId, 1);
+            Assert.Equal(CharacterOriginActivationStatus.Applied, activated.Status);
+            Assert.Equal(1, activated.Revision);
+
+            foreach (var abilityKey in new[]
+                { "strength", "dexterity", "constitution",
+                  "intelligence", "wisdom", "charisma" })
+                Assert.NotNull(await builds.SetBaseAbilityScoreInputAsync(
+                    characterId, abilityKey, 12, DateTimeOffset.UtcNow));
+            Assert.NotNull(await builds.ApplyClassAdvancementAsync(characterId,
+                null, "class.warlock", 5, null, DateTimeOffset.UtcNow));
+
+            var ledgers = new PostgresCharacterInnateSpellLedgerStore(db);
+            var evaluator = new NativeDirectInnateSpellLedgerEvaluator(
+                drafts,
+                new CharacterBuildService(site, builds, TimeProvider.System),
+                new CharacterStateService(site,
+                    new PostgresCharacterStateStore(db), TimeProvider.System),
+                native, new PostgresCharacterMutationRevisionReader(db));
+            var service = new CharacterInnateSpellLedgerService(
+                site, new InnateActor(), origins, ledgers,
+                evaluator, TimeProvider.System);
+            var initialized = await service.ApplyAsync(characterId,
+                CharacterInnateSpellLedgerAction.Initialize, null, null);
+            Assert.Equal(CharacterInnateSpellLedgerStatus.Applied,
+                initialized.Status);
+
+            var committed = await origins.GetAsync(characterId);
+            Assert.NotNull(committed);
+            Assert.Equal(catalog.Fingerprint, committed.Fingerprint);
+            var stored = await ledgers.GetAsync(characterId);
+            Assert.NotNull(stored);
+            Assert.Equal(0, stored.LedgerRevision);
+            using var profile = JsonDocument.Parse(committed.ProfileJson);
+            var grants = profile.RootElement.GetProperty("underlying")
+                .GetProperty("inherentGrants").EnumerateArray().ToArray();
+            string GrantId(string trait) => Assert.Single(grants,
+                grant => grant.GetProperty("identity")
+                    .GetProperty("mechanicalDefinitionId").GetString() == trait)
+                    .GetProperty("id").GetString()!;
+            var faerie = GrantId("trait.elf.drow.faerie-fire");
+            var darkness = GrantId("trait.elf.drow.darkness");
+            using var persisted = JsonDocument.Parse(stored.LedgerJson);
+            var remaining = persisted.RootElement.GetProperty("remainingFreeCasts");
+            Assert.Equal(2, remaining.EnumerateObject().Count());
+            Assert.Equal(1, remaining.GetProperty(faerie).GetInt32());
+            Assert.Equal(1, remaining.GetProperty(darkness).GetInt32());
+            Assert.Equal(catalog.Fingerprint,
+                persisted.RootElement.GetProperty("catalogFingerprint").GetString());
+            Assert.Single(await ledgers.GetEventsAsync(characterId));
+
+            // The native action executor is not wired for casting or rests.
+            // Initializing a verified balance never exposes those mutations.
+            var refused = await service.ApplyAsync(characterId,
+                CharacterInnateSpellLedgerAction.SpendFreeCast, faerie, 0);
+            Assert.Equal(CharacterInnateSpellLedgerStatus.NativeUnresolved,
+                refused.Status);
+        }
+
+        // A second database context must recover the exact nonempty balance,
+        // source-derived Origin identity and one initialization receipt.
+        await using (var reopened = new CharacterSheetDbContext(
+            database.CreateOptions()))
+        {
+            var site = new OwnerScopedParentAccess(characterId, characterId, true);
+            var origins = new PostgresCharacterAuthorizedOriginStore(reopened);
+            var ledgers = new PostgresCharacterInnateSpellLedgerStore(reopened);
+            var stored = await ledgers.GetAsync(characterId);
+            Assert.NotNull(stored);
+            Assert.Equal(catalog.Fingerprint, stored.Fingerprint);
+            Assert.Equal("origin:real-drow-ledger", stored.OriginProfileId);
+            Assert.Equal(0, stored.LedgerRevision);
+            Assert.Equal(2, JsonDocument.Parse(stored.LedgerJson).RootElement
+                .GetProperty("remainingFreeCasts").EnumerateObject().Count());
+            Assert.Single(await ledgers.GetEventsAsync(characterId));
+            var service = new CharacterInnateSpellLedgerService(
+                site, new InnateActor(), origins, ledgers,
+                new NativeDirectInnateSpellLedgerEvaluator(
+                    new PostgresCharacterOriginDraftStore(reopened),
+                    new CharacterBuildService(site,
+                        new PostgresCharacterBuildStore(reopened), TimeProvider.System),
+                    new CharacterStateService(site,
+                        new PostgresCharacterStateStore(reopened), TimeProvider.System),
+                    native, new PostgresCharacterMutationRevisionReader(reopened)),
+                TimeProvider.System);
+            Assert.Equal(CharacterInnateSpellLedgerStatus.Ready,
+                (await service.GetAsync(characterId)).Status);
+        }
+    }
+
+    private sealed class InnateActor : ICharacterInnateSpellActorSource
+    {
+        public Guid? GetActorUserId() => Actor;
+    }
+#endif
+
     private static CharacterOriginMixedActivationService Service(
         CharacterSheetDbContext db, INativeRulesCoreGateway native, bool allow) =>
         new(new TestDmScope(allow),
@@ -961,9 +1111,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             {
                 Content = JsonContent.Create(request, options: Wire)
             };
-            message.Headers.Add("X-Dorks-Tool-Auth-Ticket", "site-ticket-for-character-sheet");
-            message.Headers.Add("X-Dorks-Tool-Auth-Introspection-Path",
-                "/tool-host/registrations/rules-core/api/introspect");
+            Authorize(message);
             using var response = await http.SendAsync(message, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
@@ -999,8 +1147,32 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             return json;
         }
 
-        public Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct) =>
-            throw new NotSupportedException();
+        public async Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct)
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, "/api/mechanics/v1/ruleset");
+            Authorize(request);
+            using var response = await http.SendAsync(request, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+                throw new RulesCoreGatewayException(
+                    $"Real Rules Core ruleset returned {(int)response.StatusCode}: {body}");
+            return JsonNode.Parse(body) ??
+                throw new RulesCoreGatewayException("Real Core omitted ruleset JSON.");
+        }
+
+        public Task<JsonNode> PreviewDirectInnateSpellLedgerBootstrapAsync(
+            JsonElement request, CancellationToken ct) =>
+            SendAsync("/api/mechanics/v1/origins/innate-spells/ledger/initialize-preview",
+                request, ct);
+        private static void Authorize(HttpRequestMessage message)
+        {
+            message.Headers.Add("X-Dorks-Tool-Auth-Ticket",
+                "site-ticket-for-character-sheet");
+            message.Headers.Add("X-Dorks-Tool-Auth-Introspection-Path",
+                "/tool-host/registrations/rules-core/api/introspect");
+        }
+
         public Task<JsonNode> SearchNativeOptionsAsync(
             string fingerprint, string category, string? query, int limit, int offset,
             CancellationToken ct) => throw new NotSupportedException();
@@ -1015,7 +1187,8 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.True(request.Method == HttpMethod.Post ||
+                request.Method == HttpMethod.Get);
             Assert.Equal("/tool-host/registrations/rules-core/api/introspect",
                 request.RequestUri?.AbsolutePath);
             Assert.Equal("site-ticket-for-character-sheet",
