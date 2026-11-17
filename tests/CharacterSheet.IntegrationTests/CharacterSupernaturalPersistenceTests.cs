@@ -837,10 +837,10 @@ public sealed class CharacterSupernaturalPersistenceTests
         var updated = (await fresh.GetAsync(id))!;
         Assert.Equal(2, updated.Revision);
         Assert.Equal(0, updated.LedgerRevision);
+        Assert.Contains("curse.earned", updated.PersistentInfluencesJson);
         using var influence = JsonDocument.Parse(updated.PersistentInfluencesJson);
         Assert.Equal("3", influence.RootElement[0]
             .GetProperty("expression").GetProperty("severity").GetString());
-        Assert.Contains("\\"severity\\":\\"3\\"", updated.PersistentInfluencesJson);
         var receipts = await fresh.GetEventsAsync(id);
         Assert.Equal(2, receipts.Count);
         Assert.Equal("expression-change", receipts[1].Kind);
