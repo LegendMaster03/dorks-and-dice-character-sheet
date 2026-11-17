@@ -958,3 +958,12 @@ for non-approved requirements and candidate approaches. No production
 supernatural authority, full Origin reconstruction or playable-form policy
 was invented. The original matrix remains **23 complete / 9 partial**
 (2, 6, 7, 9, 21, 22, 24, 26, 27). No main merge or deployment.
+
+
+### November 16 — independent WorkChat follow-up assessment of R1/R2 fixes
+
+WorkChat subsequently inspected the current Character Sheet HEAD `28af4b3f7f0032dbbe953bd70c0533daba9e95fe`, reviewed implementation and regression tests, and independently inspected the recorded workflow logs. **WorkChat did not rerun the workflows during this follow-up.** Both GitHub Actions runs were separately verified as successful at that exact HEAD: [Character Sheet validation 43981869420](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981869420) (**136 unit, 253 integration**) and [real Core/PostgreSQL 43981869437](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981869437) (**15 Character State, 19 Mixed-Origin**), all with zero failures and skips.
+
+WorkChat's updated finding status: **R1 CLOSED** (fresh owner/lifecycle authorization before and after both protected read services); **R2 CLOSED** (3-second linked full-response deadlines on both fresh Site gateways, and delegated Rules Core body handling); **R3 OPEN** (no Site-to-Character Sheet authorization fence at PostgreSQL commit). This is an independent source-and-logged-test verification of the R1/R2 remediation, not an independent new execution of the test suites or deployed browser acceptance.
+
+**Merge readiness remains NO** for completed Increment 4: R3, production supernatural source authority and mechanics/Origin applicability, and owner-authorized isolated browser acceptance remain outstanding. The original 32-case tally stays **23 complete / 9 partial**, with partial **2, 6, 7, 9, 21, 22, 24, 26, 27**. No new gameplay rule, commit protocol, merge, or deployment is authorized by this assessment.

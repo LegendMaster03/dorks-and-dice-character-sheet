@@ -125,5 +125,5 @@ If the documentation-only branch HEAD differs, inspect its diff before signoff.
 
 **Existing developer evidence:** [full CI 43981207619](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207619)
 136 unit/253 integration and [paired CI 43981207259](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981207259)
-15 Character State/19 Mixed-Origin, all green. Independent WorkChat retest:
-**PENDING**. Browser acceptance: **NOT RUN**. R3: **OPEN**.
+15 Character State/19 Mixed-Origin, all green. Independent WorkChat source-and-logged-CI follow-up at `28af4b3f7f0032dbbe953bd70c0533daba9e95fe`:
+**COMPLETE — R1 CLOSED, R2 CLOSED; CI independently inspected, not rerun in this follow-up.** Browser acceptance: **NOT RUN**. R3: **OPEN**.

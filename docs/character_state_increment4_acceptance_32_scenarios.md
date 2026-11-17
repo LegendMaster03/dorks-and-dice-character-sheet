@@ -146,3 +146,10 @@ Scenarios **26 and 27 remain partial**, because the cross-service
 revocation-at-commit requirement R3 is still unimplemented. The overall
 acceptance matrix remains **23 complete and 9 partial**; production
 supernatural source and form mechanics remain outstanding.
+
+
+## Independent WorkChat R1/R2 closure — November 16 follow-up
+
+WorkChat inspected Character Sheet HEAD `28af4b3f7f0032dbbe953bd70c0533daba9e95fe` and the corresponding actual passing CI logs, **without rerunning those workflows in the follow-up**. Its updated review **closes R1 and R2**. The patched source checks fresh Site authority on effective-state/supernatural-inspection reads, preserves current archived read-only status, and bounds Site/Rules Core streamed body handling under linked cancellation deadlines. The verified recorded workflows are [full 43981869420](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981869420) (**136 unit, 253 integration**) and [paired 43981869437](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981869437) (**15 Character State, 19 Mixed-Origin**), all passing with no skips.
+
+**R3 remains open**, so scenarios **26/27 remain partial**. The overall acceptance tally remains **23 complete, 9 partial** (2, 6, 7, 9, 21, 22, 24, 26, 27), with missing production mechanics/authority and browser acceptance separately outstanding. No authorization to merge/deploy is implied.
