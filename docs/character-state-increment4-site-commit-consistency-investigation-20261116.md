@@ -325,3 +325,32 @@ The paired job pinned Rules Core to
 **R3 remains open.** No Site-owned intent arbitration, cancellation
 tombstone, transactional fence, live two-database interleaving, browser
 acceptance, merge or production deployment has been performed.
+
+
+## November 17, 2026 — Owner-approved revocation ordering behavior
+
+The project owner selected the **second** alternative for revocation during
+an in-flight operation. This authorizes the **behavioral requirement** that
+new conflicting operations stop upon a durable revocation request; earlier
+admitted operations may commit or be durably aborted; and effective revocation
+is acknowledged only after those operations have settled. If Character Sheet
+is unavailable, the request remains visibly pending. This is **not** approval
+of any particular coordinator, schema, wire protocol, migrations, merge or
+deployment.
+
+The detailed design now lives in:
+
+- [Site Revocation Ordering and Protected-Commit Contract](character-state-increment4-site-revocation-ordering-contract-20261117.md)
+- [R3 Cross-Service Revocation Implementation Plan](character-state-increment4-site-revocation-implementation-plan-20261117.md)
+
+**Important acceptance distinction:** existing R3 negative-characterization
+tests show a write succeeding after *synthetic immediate Site authority change*.
+Under the newly approved semantics, an already **admitted** write may instead
+commit while the revocation remains **Pending**; the tested security property
+must assert that no revocation is marked **Effective** before all earlier
+operations are durably committed or aborted. The old tests remain evidence
+of the absence of any current ordering mechanism, not proof that every
+post-request commit must fail.
+
+R1/R2 remain closed; R3 remains open. No protocol implementation or branch
+merge is authorized by this behavioral decision.
