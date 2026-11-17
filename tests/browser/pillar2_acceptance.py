@@ -261,24 +261,30 @@ def run_browser():
                                   API + "/native-rules/ruleset")
         fp = catalog["fingerprint"]
 
-        direct = {
-            "id": "browser-direct", "intent": 0,
-            "method": {"ruleId": "rule.creature-origination",
-                       "methodId": "biological"},
-            "contributors": [], "candidates": [], "manifestations": [],
-            "selectedSpeciesId": "species.orc"
-        }
-        saved = request_on_page(
-            owner, "browser-save-direct", API + "/characters/" + UUIDS["direct"] +
-            "/origin/draft", "PUT",
-            {"rulesetId": "first-party-001", "fingerprint": fp,
-             "proposal": direct, "expectedRevision": 0})
-        request_on_page(owner, "browser-activate-direct",
-                        API + "/characters/" + UUIDS["direct"] +
-                        "/origin/activate-native", "POST",
-                        {"expectedDraftRevision": saved["draft"]["revision"]})
+        # Exercise the actual owner Species chooser, native option search,
+        # save-draft workflow and native activation button. These previously
+        # used browser-authenticated fetch fixture setup only.
         owner.goto(BASE + "/tools/character-sheet/characters/" + UUIDS["direct"])
         owner.locator('[data-character-sheet-state="rich-character"]').wait_for(timeout=30000)
+        owner.locator('[data-sheet-mode-control="guided"]').click()
+        owner.locator('[data-guided-builder-section="species"]').click()
+        identity = owner.locator('[data-origin-identity="species"]')
+        identity.get_by_role("button", name="Choose").click()
+        owner.locator('[data-origin-chooser="species"]').wait_for(timeout=30000)
+        owner.get_by_role("button", name="Orc", exact=True).click()
+        identity.get_by_text("species.orc").wait_for(timeout=30000)
+        owner.get_by_role("button", name="Activate Native Origin").click()
+        owner.get_by_text("Origin construction is committed at revision 1",
+                          exact=False).wait_for(timeout=30000)
+        expect_event("browser-owner-direct-chooser-and-activation", True)
+        owner.screenshot(path=str(OUT / "browser-direct-origin-ui.png"),
+                         full_page=True)
+        owner.reload()
+        owner.locator('[data-character-sheet-state="rich-character"]').wait_for(timeout=30000)
+        owner.locator('[data-sheet-mode-control="guided"]').click()
+        owner.locator('[data-guided-builder-section="species"]').click()
+        owner.get_by_text("Origin construction is committed at revision 1",
+                          exact=False).wait_for(timeout=30000)
         owner.screenshot(path=str(OUT / "browser-direct-reloaded.png"), full_page=True)
         state = request_on_page(owner, "browser-direct-reload",
                                 API + "/characters/" + UUIDS["direct"] + "/origin/state")
@@ -339,6 +345,11 @@ def run_browser():
                      persisted["savedState"]["revision"] == 1 and
                      persisted["savedState"]["profile"]["underlying"]["speciesId"]
                      == "custom.human-elf")
+        owner.locator('[data-sheet-mode-control="guided"]').click()
+        owner.locator('[data-guided-builder-section="species"]').click()
+        owner.get_by_text("Origin construction is committed at revision 1",
+                          exact=False).wait_for(timeout=30000)
+        expect_event("browser-owner-mixed-committed-presentation", True)
         owner.screenshot(path=str(OUT / "browser-mixed-owner.png"), full_page=True)
         denied = request_on_page(unrelated, "browser-unrelated-owner-denied",
                                  API + "/characters/" + UUIDS["mixed"] +
