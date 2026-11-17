@@ -1248,6 +1248,17 @@ public sealed class CharacterEffectiveStateReadTests
 
         site.FreshAllowed = true;
         source.Allow = true;
+        var outdatedCatalog = new NativeGateway
+        {
+            CatalogFingerprint = new string('b', 64)
+        };
+        var staleNative = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, outdatedCatalog,
+            Service(db, id, outdatedCatalog, suppliedSite: site));
+        var staleContent = await staleNative.ApplyAsync(
+            id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.NativeContentChanged,
+            staleContent.Status);
         source.BeforeReturn = () => site.FreshAllowed = false;
         var revoked = await operation.ApplyAsync(
             id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
