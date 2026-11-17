@@ -100,11 +100,24 @@ jobs:
         env:
           PILLAR2_RUN: ${{ github.run_id }}
         run: python tests/browser/pillar2_acceptance.py
-      - name: Upload browser, network and disposable service evidence
+      - name: Print isolated service diagnostics if browser run fails
+        if: failure()
+        shell: bash
+        run: |
+          for file in .pillar2-browser/site.log .pillar2-browser/sheet.log .pillar2-browser/core.log; do
+            echo "==== $file ===="
+            if [ -f "$file" ]; then tail -n 75 "$file"; else echo "Not created"; fi
+          done
+          if [ -f .pillar2-browser/result.json ]; then cat .pillar2-browser/result.json; fi
+      - name: Upload browser and service evidence (not test databases or certificates)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pillar2-isolated-browser-evidence
-          path: .pillar2-browser/
+          path: |
+            .pillar2-browser/*.log
+            .pillar2-browser/result.json
+            .pillar2-browser/*.png
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 7
