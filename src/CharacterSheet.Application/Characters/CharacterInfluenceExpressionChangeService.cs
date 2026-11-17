@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.Extensions.Logging;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
@@ -69,8 +68,7 @@ public sealed class CharacterInfluenceExpressionChangeService(
     ICharacterSupernaturalStateStore store,
     ITrustedCharacterInfluenceExpressionSource source,
     INativeRulesCoreGateway rules,
-    CharacterEffectiveStateService effective,
-    ILogger<CharacterInfluenceExpressionChangeService>? logger = null)
+    CharacterEffectiveStateService effective)
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
 
@@ -346,12 +344,8 @@ public sealed class CharacterInfluenceExpressionChangeService(
             // failure is a known dependency outage or a programming defect,
             // log it and retain the durable receipt instead of throwing a
             // false write failure or attempting another write.
-            logger?.LogError(error,
-                "Post-commit influence projection failed for character {CharacterId}, event {EventId}, revision {Revision}",
-                characterId, eventId, committed.Revision);
-            if (logger is null)
-                System.Diagnostics.Trace.TraceError(
-                    $"Post-commit influence projection failed for character {characterId}, event {eventId}, revision {committed.Revision}: {error}");
+            System.Diagnostics.Trace.TraceError(
+                $"Post-commit influence projection failed for character {characterId}, event {eventId}, revision {committed.Revision}: {error}");
             return new(CharacterInfluenceExpressionChangeStatus.Applied,
                 committed.Revision, committed.LedgerRevision, EventId: eventId,
                 ProjectionOutcome: CharacterInfluenceProjectionOutcome.Failed);
