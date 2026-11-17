@@ -28,6 +28,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterCurrencyBalance> CharacterCurrencyBalances => Set<CharacterCurrencyBalance>();
     public DbSet<CharacterArtAsset> CharacterArtAssets => Set<CharacterArtAsset>();
     public DbSet<ProcessedLifecycleEvent> ProcessedLifecycleEvents => Set<ProcessedLifecycleEvent>();
+    public DbSet<ProtectedMutationTerminal> ProtectedMutationTerminals => Set<ProtectedMutationTerminal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -472,6 +473,20 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .WithMany()
             .HasForeignKey(value => value.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        var protectedTerminal = modelBuilder.Entity<ProtectedMutationTerminal>();
+        protectedTerminal.ToTable("character_protected_mutation_terminals");
+        protectedTerminal.HasKey(item => item.OperationId);
+        protectedTerminal.Property(item => item.OperationId).ValueGeneratedNever();
+        protectedTerminal.Property(item => item.OperationKind).HasMaxLength(80).IsRequired();
+        protectedTerminal.Property(item => item.CommandDigest).HasMaxLength(64).IsRequired();
+        protectedTerminal.Property(item => item.AdmissionDigest).HasMaxLength(64).IsRequired();
+        protectedTerminal.Property(item => item.Status).HasConversion<int>().IsRequired();
+        protectedTerminal.Property(item => item.ReceiptEventId).HasMaxLength(240);
+        protectedTerminal.Property(item => item.RecordedAt).IsRequired();
+        protectedTerminal.HasIndex(item => new { item.CharacterId, item.Status });
+        // Deliberately no FK to the character root: an abort must survive
+        // deletion/recreation and prevent a delayed operation from committing.
 
         var processedLifecycleEvent = modelBuilder.Entity<ProcessedLifecycleEvent>();
         processedLifecycleEvent.ToTable("processed_lifecycle_events");
