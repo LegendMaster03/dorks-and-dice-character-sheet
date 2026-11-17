@@ -230,7 +230,7 @@ def run_browser():
     wait_ready("http://127.0.0.1:5159/ready")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+        browser = p.chromium.launch(channel="chrome", headless=True, args=["--no-sandbox"])
         owner_context, owner = login(browser, "owner")
         dm_context, dm = login(browser, "dm")
         unrelated_context, unrelated = login(browser, "unrelated")
