@@ -845,6 +845,15 @@ public sealed class CharacterStateCrossRepositoryTests
     private static NativeManifestationInteractionDecision UnapprovedOverlap() =>
         AuthorizedOverlap() with { AuthorizationEvidenceId = "receipt.interaction.forged" };
 
+    // Synthetic mechanics-only interaction: the two contributing forms replace
+    // disjoint ability-score slots, rather than selecting one full form.
+    private static NativeManifestationInteractionDecision AuthorizedCoexist() =>
+        new("interaction.synthetic.coexist",
+            NativeManifestationInteractionKind.Coexist,
+            ["manifest.wolf.1", "manifest.hybrid.1"], null,
+            Occurrence("interactions.coexist"), SyntheticRule(),
+            "receipt.interaction.coexist");
+
 
 
     private sealed class PostgresSyntheticAuthorityProvider(
@@ -999,7 +1008,16 @@ public sealed class CharacterStateCrossRepositoryTests
             decision.SelectedInstanceId == "manifest.hybrid.1" &&
             decision.DefinitionOccurrence == Occurrence("interactions.replace") &&
             decision.Basis == SyntheticRule() &&
-            decision.AuthorizationEvidenceId == "receipt.interaction.overlap";
+            decision.AuthorizationEvidenceId == "receipt.interaction.overlap" ||
+            Character(id) && decision.Id == "interaction.synthetic.coexist" &&
+            decision.Kind == NativeManifestationInteractionKind.Coexist &&
+            decision.InstanceIds.SequenceEqual(
+                new[] { "manifest.wolf.1", "manifest.hybrid.1" },
+                StringComparer.Ordinal) &&
+            decision.SelectedInstanceId is null &&
+            decision.DefinitionOccurrence == Occurrence("interactions.coexist") &&
+            decision.Basis == SyntheticRule() &&
+            decision.AuthorizationEvidenceId == "receipt.interaction.coexist";
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
             Character(id) && JsonElement.DeepEquals(
                 JsonSerializer.SerializeToElement(influence, Wire),
@@ -1064,6 +1082,32 @@ public sealed class CharacterStateCrossRepositoryTests
                     Enter(characterId, "wolf", "manifest.wolf.1", eventId),
                     Enter(characterId, "hybrid", "manifest.hybrid.1", eventId)
                 ],
+                "coexist:authorized" =>
+                [
+                    Enter(characterId, "wolf", "manifest.wolf.1", eventId) with
+                    {
+                        NewInstance = TestInstance(characterId, "wolf",
+                            "manifest.wolf.1", eventId) with
+                        {
+                            ContributionSlots = [new(
+                                NativeInfluenceCharacteristic.AbilityScore, "strength")]
+                        }
+                    },
+                    Enter(characterId, "hybrid", "manifest.hybrid.1", eventId) with
+                    {
+                        NewInstance = TestInstance(characterId, "hybrid",
+                            "manifest.hybrid.1", eventId) with
+                        {
+                            ContributionSlots = [new(
+                                NativeInfluenceCharacteristic.AbilityScore, "dexterity")]
+                        }
+                    }
+                ],
+                "revert:coexist" =>
+                [
+                    End("manifest.wolf.1", eventId),
+                    End("manifest.hybrid.1", eventId)
+                ],
                 "switch:hybrid" =>
                 [
                     End("manifest.wolf.2", eventId),
@@ -1084,6 +1128,7 @@ public sealed class CharacterStateCrossRepositoryTests
             {
                 "overlap:authorized" =>
                     new[] { AuthorizedOverlap() },
+                "coexist:authorized" => new[] { AuthorizedCoexist() },
                 "overlap:unapproved" =>
                     new[] { UnapprovedOverlap() },
                 _ => null
@@ -2556,6 +2601,101 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.NotEqual(CharacterManifestationApplyStatus.Applied, replay.Status);
         Assert.Equal(2, (await fresh.GetEventsAsync(id)).Count);
         Assert.Equal(saved.LedgerJson, (await fresh.GetAsync(id))!.LedgerJson);
+    }
+
+
+    [Fact]
+    public async Task CoexistingPartialFormsPersistAndProjectBothSlotsThroughRealCoreHttp()
+    {
+        // Rules Core owns transformation composition. Character Sheet stores
+        // only the verified transition and independently matches the returned
+        // composite contributor identities to its persisted ledger.
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(
+            database.CreateOptions(), characterId);
+        await using var core = await CoreHost.StartAsync(provider, provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(characterId, fingerprint, TestOwnedForms());
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var (key, score) in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                characterId, key, score, DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(characterId))!;
+        var empty = new NativeManifestationLedger(
+            characterId.ToString("D"), 0, [], [], []);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                characterId, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire), "[]",
+                JsonSerializer.Serialize(empty, Wire), 0, 0, 0, digest,
+                "fixture:acquire-werewolf", "fixture:verified-source",
+                false, DateTimeOffset.UtcNow))).Status);
+
+        var source = new SyntheticTrustedSource(state);
+        var transition = TransitionRunner(
+            db, new OwnerAccess(characterId), store, gateway, source);
+        var applied = await transition.ApplyAsync(
+            characterId, 1, 0, "coexist:authorized", "coexist:authorized");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, applied.Status);
+        Assert.Equal(2, applied.StateRevision);
+        Assert.Equal(1, applied.LedgerRevision);
+
+        var effective = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+            applied.EffectivePreview!.ToJsonString(), Wire)!;
+        Assert.Equal("partial", effective.Status);
+        Assert.Equal("@composite", effective.EffectiveSheetId);
+        Assert.Equal(17, effective.EffectiveMechanics!.AbilityScores["strength"]);
+        Assert.Equal(16, effective.EffectiveMechanics.AbilityScores["dexterity"]);
+        Assert.Equal(new[] { "manifest.hybrid.1", "manifest.wolf.1" },
+            effective.ContributingManifestationInstanceIds);
+
+        await using (var reload = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var saved = (await new PostgresCharacterSupernaturalStateStore(reload)
+                .GetAsync(characterId))!;
+            Assert.Equal(1, saved.LedgerRevision);
+            using var json = JsonDocument.Parse(saved.LedgerJson);
+            Assert.Equal(2, json.RootElement.GetProperty("instances").GetArrayLength());
+            Assert.All(json.RootElement.GetProperty("instances").EnumerateArray(),
+                item => Assert.Single(item.GetProperty("contributionSlots").EnumerateArray()));
+            Assert.Single(json.RootElement.GetProperty("interactions").EnumerateArray());
+            var reader = await Reader(reload, characterId, gateway).GetAsync(characterId);
+            Assert.Equal(CharacterEffectiveStateStatus.Ready, reader.Status);
+            Assert.Equal("partial", reader.View!.Status);
+            Assert.Equal("@composite", reader.View.EffectiveSheetId);
+            Assert.Null(reader.View.ActiveManifestationId);
+            Assert.Equal(new[] { "manifest.hybrid.1", "manifest.wolf.1" },
+                reader.View.ActiveManifestationIds);
+            Assert.NotNull(reader.View.NativeProjection);
+            Assert.False(reader.View.EffectiveMechanicsReady);
+        }
+
+        // Ending both source-owned manifestations is one atomic event.
+        var reverted = await transition.ApplyAsync(
+            characterId, 2, 1, "revert:coexist", "revert:coexist");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, reverted.Status);
+        Assert.Equal(3, reverted.StateRevision);
+        Assert.Equal(2, reverted.LedgerRevision);
+        var restored = JsonSerializer.Deserialize<NativeManifestationEffectiveCharacter>(
+            reverted.EffectivePreview!.ToJsonString(), Wire)!;
+        Assert.Equal("@primary", restored.EffectiveSheetId);
+        Assert.Null(restored.ManifestationInstanceId);
+        Assert.Equal(10, restored.EffectiveMechanics!.AbilityScores["strength"]);
+        Assert.Equal(12, restored.EffectiveMechanics.AbilityScores["dexterity"]);
+
+        var events = await store.GetEventsAsync(characterId);
+        Assert.Equal(3, events.Count);
+        Assert.Equal("coexist:authorized", events[1].EventId);
+        Assert.Equal("revert:coexist", events[2].EventId);
     }
 
     [Fact]
