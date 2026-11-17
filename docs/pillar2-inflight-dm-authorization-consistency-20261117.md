@@ -50,9 +50,24 @@ records or obtain a Site commit-time authorization lease.
 5. Repeat at barriers before delegated Core evaluation and during persistence,
    and with concurrent draft editing, duplicate activation and Site timeout.
 
-The prior independent review **did not execute** case 2–4. Source inspection
-shows why an old authenticated request may commit; do not mark this exact
-reproduction as PASS or FAIL without a run.
+The prior independent review **did not execute** the exact live Site
+case 2–4. A new deterministic **service-level** characterization now executes
+the important interleaving against real native Rules Core HTTP and PostgreSQL,
+with a controllable Site-authority test double:
+
+`S04CurrentBehaviorCharacterization_RevocationAfterCoreApprovalStillCommits`
+
+Its `HttpNativeGateway.afterEvaluation` barrier revokes the test DM scope
+immediately after a successful native evaluation and before the Sheet commit.
+The result is **Applied**, an immutable audit receipt and Origin revision 1,
+despite the test authority reporting revoked. [Pinned Core/Sheet run
+44165389916](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44165389916)
+**PASS 15/15** at Sheet `78241906c8537c694c66fd7777d9f6a9d887c330`
+and Core `23919c3ce00825f2da6204f218786957e9f1f1c2`.
+
+**This passing characterization is evidence of the security gap, not a passing
+S04 acceptance check.** The actual Site SQLite membership-change barrier and
+cross-store commit atomicity remain NOT RUN.
 
 ## Policies requiring an explicit owner decision
 
@@ -104,21 +119,23 @@ and `tests/browser/pillar2_acceptance.py` to run actual Site, Character
 Sheet, Rules Core, and Chrome with entirely disposable identity, content,
 PostgreSQL, and TLS fixtures.
 
-**Verified browser run:** [44164142897](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44164142897)
-**PASS** with exact checked-out source identities:
-- Sheet `72745125eaa2787b08997b06403ee31f42a0f72a`
+**Verified browser runs:** [initial 44164142897](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44164142897)
+**PASS** and [expanded UI 44165230706](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44165230706)
+**PASS**, with exact expanded run source identities:
+- Sheet `85ae7e234905b868c6d8c79449df4303f69edbd9`
 - Core `23919c3ce00825f2da6204f218786957e9f1f1c2`
 - Site `e8d0cb7d89de71aa337293b8f36d22bac98687c3`
 
-The executable browser assertions cover ordinary Site password login with
-private cookies, actual embedded Character Sheet creation form, Direct Orc
-save/activation/reload, Site-delegated native catalog, Human/Elf draft, the
-DM-only route and five native candidate checkboxes, a role-demotion denial
-on a fresh DM request, restored DM approval, a committed mixed Origin, owner
-reload, unrelated-account denial and unhandled browser exceptions.
-Screenshots, logs and structured results were uploaded to [the run
-artifact](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44164142897/artifacts/14365226412).
-The artifact intentionally excludes disposable databases and TLS files.
+The expanded browser assertions cover actual Site password login and
+private cookies; the embedded Character Sheet creation form; the native
+Species chooser selecting Orc, the UI `Activate Native Origin` button and
+reload that displays the committed state; delegated native catalog; the
+Human/Elf draft and DM-only five checkbox selections; role-demotion denial
+on a fresh DM request; restored DM approval; committed mixed Origin shown
+in the owner-facing setup UI; persisted owner reload, unrelated-account
+denial and browser script-exception checks. Screenshots, logs and structured
+results are in [the expanded run artifact](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44165230706/artifacts/14365781356).
+This artifact excludes disposable databases and TLS keys/certificates.
 
 This is a **PASS only for the scripted supported browser subset**, not all
 Species presets, unimplemented mechanics, or a visual accessibility audit.
