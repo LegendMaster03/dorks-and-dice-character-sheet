@@ -194,7 +194,7 @@ def request_on_page(page, name, path, method="GET", body=None, expected=200):
 
 def run_browser():
     launch("site",
-           ["dotnet", "site/dorks-and-dice-site/bin/Release/net10.0/dorks-and-dice-site.dll"],
+           ["dotnet", str(ROOT / "site/dorks-and-dice-site/bin/Release/net10.0/dorks-and-dice-site.dll")],
            {"ASPNETCORE_ENVIRONMENT": "Development",
             "ConnectionStrings__ContentDatabaseLocal": f"Data Source={OUT}/site-content.db",
             "ConnectionStrings__ContentDatabaseExternal": f"Data Source={OUT}/site-content.db",
@@ -209,11 +209,12 @@ def run_browser():
                 str(OUT / "localhost.pfx"),
             "ASPNETCORE_Kestrel__Certificates__Default__Password":
                 "local-review-only",
-            "ASPNETCORE_URLS": BASE, "SSL_CERT_FILE": CERT})
+            "ASPNETCORE_URLS": BASE, "SSL_CERT_FILE": CERT},
+           ROOT / "site/dorks-and-dice-site")
     wait_ready(BASE + "/account/login")
     seed_site()
     launch("sheet",
-           ["dotnet", "src/CharacterSheet.Web/bin/Release/net10.0/CharacterSheet.Web.dll"],
+           ["dotnet", str(ROOT / "src/CharacterSheet.Web/bin/Release/net10.0/CharacterSheet.Web.dll")],
            {"ASPNETCORE_URLS": "http://127.0.0.1:5158",
             "ToolHost__BaseUrl": BASE, "SSL_CERT_FILE": CERT,
             "ConnectionStrings__CharacterSheet":
@@ -222,7 +223,7 @@ def run_browser():
            ROOT / "src/CharacterSheet.Web")
     wait_ready("http://127.0.0.1:5158/health")
     launch("core",
-           ["dotnet", "rules-core/src/RulesCore.Host/bin/Release/net10.0/RulesCore.Host.dll"],
+           ["dotnet", str(ROOT / "rules-core/src/RulesCore.Host/bin/Release/net10.0/RulesCore.Host.dll")],
            {"ASPNETCORE_URLS": "http://127.0.0.1:5159",
             "ToolHost__BaseUrl": BASE, "SSL_CERT_FILE": CERT,
             "Rulesets__ContentRoot": str(ROOT / "rules-core/data/rulesets")},
