@@ -1,0 +1,106 @@
+# Pillar 2 — In-Flight DM Authorization Consistency (S04)
+
+**Status:** OPEN DESIGN DECISION — neither policy nor a production authorization
+protocol is approved. This document does not authorize a Site refactor, claim
+atomic revocation, or change the current mixed-Origin gameplay permissions.
+
+## Source-derived boundary (2026-11-17)
+
+In `CharacterOriginMixedActivationService.ApplyAsync` the operation:
+
+1. calls `ISiteOriginDmAccessGateway.CheckAsync` on the exact campaign and character;
+2. reads the target Sheet and Origin draft;
+3. runs native Core preview and delegated scoped mixed evaluation;
+4. checks resulting profile, projection and source authority;
+5. sends `VerifiedOriginPersistenceCommand` to
+   `PostgresCharacterAuthorizedOriginStore.CommitVerifiedAsync`.
+
+The ordinary `ToolHostOriginDmAccessGateway.CheckAsync` reads the
+`ToolHostAuthenticationContext` already stored on the current request by
+`HostedToolAuthenticationMiddleware`. **Calling it again in that same request
+does not re-introspect Site** or guarantee that a previously valid campaign DM
+and character association remain valid.
+
+Site's one-use authentication ticket is redeemed at middleware entry. The
+issued delegate capability is short-lived (30 seconds, up to 32 uses), with
+fresh Site role projection for each *delegated target* request. That fresh role
+check in Rules Core can reject some early revocations. It does not establish
+the target character's association at the eventual Sheet PostgreSQL commit,
+and no live check occurs after successful Core evaluation.
+
+Sheet's Origin store commits snapshot and event atomically **with respect to
+the Sheet PostgreSQL transaction**, including row locks, draft revision
+conflicts and duplicate event protection. Site role and character-link records
+live in a different data store. The Sheet transaction does not lock those
+records or obtain a Site commit-time authorization lease.
+
+## Deterministic race case to execute in a separate isolated fixture
+
+1. Use a genuine Site login for a DM and an active Human/Elf target in a
+   campaign. Save a revision-pinned native draft as the target owner.
+2. Submit mixed activation. Hold the request after successful delegated Rules
+   Core evaluation but **before** the Sheet `CommitVerifiedAsync` call. A
+   controlled gateway barrier in an integration test, or an isolated network
+   response barrier between Core and Sheet, provides a deterministic pause.
+3. From Site, revoke the DM role or archive/unlink the target. Commit that
+   Site state change, verify Site now denies a *fresh* review request.
+4. Release the original activation. Record HTTP status, Origin revision,
+   immutable event receipt, exact actor/campaign/character and whether the
+   state actually persisted.
+5. Repeat at barriers before delegated Core evaluation and during persistence,
+   and with concurrent draft editing, duplicate activation and Site timeout.
+
+The prior independent review **did not execute** case 2–4. Source inspection
+shows why an old authenticated request may commit; do not mark this exact
+reproduction as PASS or FAIL without a run.
+
+## Policies requiring an explicit owner decision
+
+### A. Approval authorization is a bounded, durable snapshot
+
+Site signs/issues a server-only approval for the exact actor, campaign,
+target, native draft revision/fingerprint and explicit selected native offers.
+Its issuance is serialized with current Site membership/link checks.
+The resulting authorization has a short validity interval and is consumed
+once by the Sheet's atomic Origin event commit.
+
+Under **this** policy, role revocation invalidates **new** approvals, but an
+already issued valid approval may still finish until expiry. Such a commit is
+not characterized as an unauthorized race, **provided the approved policy
+explicitly allows that window**. Audit the issuance time, bounded expiry and
+one-use approval identity. A mere existing delegation capability is not
+an exact Origin authorization token.
+
+### B. Revocation takes precedence until final commit
+
+Site must provide a serialized, revocable per-target authorization reservation
+or lock whose grant and revocation operations share a single ordering. Sheet
+keeps that reservation through its PostgreSQL commit and completes/releases
+it afterward. Fencing, bounded lease lifetime, retries, process failures,
+Site availability, and ambiguity when Sheet commits but acknowledgement
+fails must all be defined and tested. A single late recheck alone **does
+not** provide this atomic guarantee.
+
+This is a coordinated Site/Sheet protocol; neither of the two existing
+databases can unilaterally supply a cross-database transaction.
+
+## Recommendation for implementation planning
+
+Do not add a second call to the cached `ToolHostOriginDmAccessGateway` and
+label S04 resolved. First decide whether the system's consistency contract
+is (A) bounded authorization at decision issuance or (B) immediate revocation
+up to a serialized commit point. Both are defensible if deliberately specified,
+but have different security and user-facing consequences.
+
+Until a policy is approved, the final acceptance matrix must record
+**S04 INCONCLUSIVE/BLOCKED**. Site role checks between *distinct* HTTP
+requests are already covered; they are not evidence of an in-flight guarantee.
+No Source, Site, Core or Sheet runtime behavior is changed by this document.
+
+## Separate browser acceptance
+
+The Sheet feature branch adds `.github/workflows/pillar2-isolated-browser-acceptance.yml`
+and `tests/browser/pillar2_acceptance.py` to run disposable Site,
+Character Sheet, Rules Core and a real Chrome browser. Browser runs are
+independent of S04 and should not be presented as approving either
+consistency policy. Both PRs remain draft and unmerged.
