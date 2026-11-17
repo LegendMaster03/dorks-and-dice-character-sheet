@@ -170,9 +170,15 @@ public sealed class CharacterInfluenceExpressionChangeService(
         JsonObject audit;
         try
         {
-            var nextExpression = JsonSerializer.SerializeToNode(
-                verified.NextExpression, Wire) as JsonObject
-                ?? throw new JsonException("Invalid expression.");
+            // Web serializer settings have case-insensitive property binding.
+            // Expression dimensions are source-defined ordinal keys; build an
+            // explicitly ordinal JSON object instead of using those settings.
+            var nextExpression = new JsonObject(new JsonNodeOptions
+            {
+                PropertyNameCaseInsensitive = false
+            });
+            foreach (var (dimension, value) in verified.NextExpression)
+                nextExpression.Add(dimension, value);
             if (JsonNode.DeepEquals(nextExpression, previousExpression))
                 return new(CharacterInfluenceExpressionChangeStatus.InvalidRequest);
 
