@@ -195,6 +195,9 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 "Supernatural state revisions do not match immutable event receipts.");
 
         var transitionEvents = new List<string>();
+        // Expression audits are independent per influence; acquisition receipts
+        // predate expression snapshots and cannot supply a fabricated baseline.
+        var expressionHistory = new Dictionary<string, ExpressionAudit>(StringComparer.Ordinal);
         long ledgerRevision = 0;
         for (var index = 0; index < receipts.Count; index++)
         {
@@ -219,6 +222,14 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                     if (receipt.TransitionRequestJson is not null ||
                         receipt.ExpressionChangeJson is null)
                         throw new ArgumentException("An expression change requires its immutable audit.");
+                    var audited = ParseExpressionAudit(receipt.ExpressionChangeJson,
+                        receipt.CharacterId, receipt.EventId);
+                    if (expressionHistory.TryGetValue(audited.InfluenceId, out var prior) &&
+                        (!JsonElement.DeepEquals(prior.NextExpression, audited.PreviousExpression) ||
+                         prior.NextEvidenceId != audited.PreviousEvidenceId))
+                        throw new ArgumentException(
+                            "Historical influence expression or evidence chain is discontinuous.");
+                    expressionHistory[audited.InfluenceId] = audited;
                     break;
                 case "acquisition":
                     if (receipt.ExpressionChangeJson is not null)
@@ -240,6 +251,35 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
         if (ledgerRevision != existing.LedgerRevision)
             throw new ArgumentException(
                 "Supernatural ledger revision conflicts with committed event history.");
+
+        // Acquisitions can append earned progression, but cannot rewrite the
+        // last expression. The current snapshot must agree with the most
+        // recent expression receipt for each affected influence.
+        if (expressionHistory.Count != 0)
+        {
+            using var influenceDocument = JsonDocument.Parse(existing.PersistentInfluencesJson);
+            var current = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var influence in influenceDocument.RootElement.EnumerateArray())
+            {
+                if (influence.ValueKind != JsonValueKind.Object ||
+                    !influence.TryGetProperty("id", out var id) ||
+                    id.ValueKind != JsonValueKind.String ||
+                    !current.TryAdd(id.GetString()!, influence))
+                    throw new ArgumentException("Malformed current influence identity.");
+            }
+
+            foreach (var (id, last) in expressionHistory)
+            {
+                if (!current.TryGetValue(id, out var influence) ||
+                    !influence.TryGetProperty("expression", out var expression) ||
+                    !influence.TryGetProperty("expressionEvidenceId", out var evidence) ||
+                    evidence.ValueKind != JsonValueKind.String ||
+                    !JsonElement.DeepEquals(expression, last.NextExpression) ||
+                    evidence.GetString() != last.NextEvidenceId)
+                    throw new ArgumentException(
+                        "Latest historical expression receipt does not match current influence state.");
+            }
+        }
 
         using var document = JsonDocument.Parse(existing.LedgerJson);
         var root = document.RootElement;
@@ -275,6 +315,77 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
     /// The history guard compares these values to the locked prior and new
     /// snapshots. Neither layer substitutes for independent source authority.
     /// </summary>
+    /// <summary>
+    /// The optional intent is recorded by the coordinator for replay-safe
+    /// acknowledgement. Older internal receipts without intent remain valid
+    /// history but cannot prove a retry with a particular intent.
+    /// </summary>
+    private sealed record ExpressionAudit(
+        string InfluenceId, string? IntentId,
+        string PreviousEvidenceId, string NextEvidenceId,
+        JsonElement PreviousExpression, JsonElement NextExpression);
+
+    private static ExpressionAudit ParseExpressionAudit(
+        string json, Guid characterId, string eventId)
+    {
+        using var document = JsonDocument.Parse(CharacterSupernaturalState.CheckJson(
+            json, JsonValueKind.Object, "expressionChange"));
+        var root = document.RootElement;
+        RejectDuplicateJsonKeys(root);
+        var expected = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "characterId", "eventId", "influenceId", "intentId",
+            "previousExpressionEvidenceId", "nextExpressionEvidenceId",
+            "previousExpression", "nextExpression"
+        };
+        var fields = root.EnumerateObject().ToArray();
+        if (fields.Length is < 7 or > 8 ||
+            fields.Any(field => !expected.Contains(field.Name)) ||
+            !root.TryGetProperty("characterId", out var owner) ||
+            owner.ValueKind != JsonValueKind.String ||
+            owner.GetString() != characterId.ToString("D") ||
+            !root.TryGetProperty("eventId", out var recordedEvent) ||
+            recordedEvent.ValueKind != JsonValueKind.String ||
+            recordedEvent.GetString() != eventId ||
+            !root.TryGetProperty("influenceId", out var target) ||
+            target.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(target.GetString()) ||
+            target.GetString()!.Length > 160 ||
+            !root.TryGetProperty("previousExpressionEvidenceId", out var beforeEvidence) ||
+            beforeEvidence.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(beforeEvidence.GetString()) ||
+            beforeEvidence.GetString()!.Length > 320 ||
+            !root.TryGetProperty("nextExpressionEvidenceId", out var afterEvidence) ||
+            afterEvidence.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(afterEvidence.GetString()) ||
+            afterEvidence.GetString()!.Length > 320 ||
+            beforeEvidence.GetString() == afterEvidence.GetString() ||
+            !root.TryGetProperty("previousExpression", out var before) ||
+            !root.TryGetProperty("nextExpression", out var after))
+            throw new ArgumentException("Malformed historical influence expression audit.");
+
+        string? intentId = null;
+        if (root.TryGetProperty("intentId", out var intent))
+        {
+            if (intent.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(intent.GetString()) ||
+                intent.GetString()!.Length > 160)
+                throw new ArgumentException("Invalid expression intent identity.");
+            intentId = intent.GetString();
+        }
+        else if (fields.Length != 7)
+            throw new ArgumentException("An expression audit has an ambiguous identity.");
+
+        CharacterSupernaturalHistoryGuard.ValidateExpressionDimensions(before);
+        CharacterSupernaturalHistoryGuard.ValidateExpressionDimensions(after);
+        if (JsonElement.DeepEquals(before, after))
+            throw new ArgumentException("An expression audit cannot record an unchanged expression.");
+
+        return new ExpressionAudit(target.GetString()!, intentId,
+            beforeEvidence.GetString()!, afterEvidence.GetString()!,
+            before.Clone(), after.Clone());
+    }
+
     private static void ValidateExpressionChangeAudit(VerifiedSupernaturalStateWrite command)
     {
         if (!command.IsExpressionChange)
@@ -286,40 +397,9 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
         if (command.TransitionRequestJson is not null ||
             command.ExpressionChangeJson is null)
             throw new ArgumentException("An influence expression change requires a separate immutable audit.");
-        using var document = JsonDocument.Parse(CharacterSupernaturalState.CheckJson(
-            command.ExpressionChangeJson, JsonValueKind.Object, "expressionChange"));
-        var root = document.RootElement;
-        RejectDuplicateJsonKeys(root);
-        var expected = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "characterId", "eventId", "influenceId",
-            "previousExpressionEvidenceId", "nextExpressionEvidenceId",
-            "previousExpression", "nextExpression"
-        };
-        if (root.EnumerateObject().Count() != expected.Count ||
-            root.EnumerateObject().Any(field => !expected.Contains(field.Name)) ||
-            !root.TryGetProperty("characterId", out var owner) ||
-            owner.ValueKind != JsonValueKind.String ||
-            owner.GetString() != command.CharacterId.ToString("D") ||
-            !root.TryGetProperty("eventId", out var eventId) ||
-            eventId.ValueKind != JsonValueKind.String ||
-            eventId.GetString() != command.EventId ||
-            !root.TryGetProperty("influenceId", out var influence) ||
-            influence.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(influence.GetString()) ||
-            !root.TryGetProperty("previousExpressionEvidenceId", out var priorEvidence) ||
-            priorEvidence.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(priorEvidence.GetString()) ||
-            !root.TryGetProperty("nextExpressionEvidenceId", out var nextEvidence) ||
-            nextEvidence.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(nextEvidence.GetString()) ||
-            priorEvidence.GetString() == nextEvidence.GetString() ||
-            !root.TryGetProperty("previousExpression", out var prior) ||
-            prior.ValueKind != JsonValueKind.Object ||
-            !root.TryGetProperty("nextExpression", out var next) ||
-            next.ValueKind != JsonValueKind.Object ||
-            JsonElement.DeepEquals(prior, next))
-            throw new ArgumentException("Incomplete or unchanged influence expression audit.");
+
+        _ = ParseExpressionAudit(command.ExpressionChangeJson,
+            command.CharacterId, command.EventId);
     }
 
     private static void ValidateTransitionAudit(VerifiedSupernaturalStateWrite command)

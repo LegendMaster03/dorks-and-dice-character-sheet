@@ -500,7 +500,7 @@ internal static class CharacterSupernaturalHistoryGuard
         }
     }
 
-    private static void ValidateExpressionDimensions(JsonElement expression)
+    internal static void ValidateExpressionDimensions(JsonElement expression)
     {
         if (expression.ValueKind != JsonValueKind.Object ||
             expression.EnumerateObject().Count() > 128)
