@@ -1105,6 +1105,7 @@ public sealed class CharacterEffectiveStateReadTests
     {
         public bool Allow { get; set; } = true;
         public string NextSeverity { get; set; } = "3";
+        public IReadOnlyDictionary<string, string>? NextExpression { get; set; }
         public string NextEvidence { get; set; } = "fixture:expression:3";
         public Action? BeforeReturn { get; set; }
 
@@ -1126,7 +1127,8 @@ public sealed class CharacterEffectiveStateReadTests
                 return Task.FromResult<TrustedInfluenceExpressionChange?>(null);
 
             return Task.FromResult<TrustedInfluenceExpressionChange?>(
-                new(new Dictionary<string, string> { ["severity"] = NextSeverity },
+                new(NextExpression ??
+                    new Dictionary<string, string> { ["severity"] = NextSeverity },
                     NextEvidence, "fixture:verified-expression-rule"));
         }
     }
@@ -1223,6 +1225,42 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Contains("curse.earned", saved.PersistentInfluencesJson);
         Assert.Equal(3, (await reloaded.GetEventsAsync(id)).Count);
         Assert.Equal(digest, await reloaded.GetAuthoritativeInputsFingerprintAsync(id));
+    }
+
+
+    [Fact]
+    public async Task TrustedExpressionCoordinatorPreservesOrdinalDimensionIdentity()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, _) = await AcquiredInfluenceAsync(db, id);
+        var site = new SiteAccess(id);
+        var native = new NativeGateway();
+        var source = new VerifiedExpressionFixture
+        {
+            NextEvidence = "fixture:expression:ordinal",
+            NextExpression = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["severity"] = "4", ["Stage"] = "dominant",
+                ["stage"] = "suppressed"
+            }
+        };
+        var operation = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, native,
+            Service(db, id, native, suppliedSite: site));
+
+        var applied = await operation.ApplyAsync(
+            id, 1, 0, "curse.fixture", "ordinal:curse", "ordinal:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, applied.Status);
+
+        using var saved = JsonDocument.Parse((await store.GetAsync(id))!
+            .PersistentInfluencesJson);
+        var dimensions = saved.RootElement[0].GetProperty("expression");
+        Assert.Equal(3, dimensions.EnumerateObject().Count());
+        Assert.Equal("dominant", dimensions.GetProperty("Stage").GetString());
+        Assert.Equal("suppressed", dimensions.GetProperty("stage").GetString());
+        Assert.Equal("4", dimensions.GetProperty("severity").GetString());
     }
 
     [Fact]
