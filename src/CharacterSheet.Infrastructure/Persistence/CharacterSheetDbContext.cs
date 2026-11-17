@@ -444,6 +444,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         supernaturalReceipt.Property(value => value.Kind).HasMaxLength(32).IsRequired();
         supernaturalReceipt.Property(value => value.AuthorizationEvidenceId).HasMaxLength(320).IsRequired();
         supernaturalReceipt.Property(value => value.TransitionRequestJson).HasColumnType("jsonb");
+        supernaturalReceipt.Property(value => value.ExpressionChangeJson).HasColumnType("jsonb");
         supernaturalReceipt.Property(value => value.CreatedAt).IsRequired();
         supernaturalReceipt.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
             .HasDatabaseName("UX_character_supernatural_event_receipts_Revision").IsUnique();

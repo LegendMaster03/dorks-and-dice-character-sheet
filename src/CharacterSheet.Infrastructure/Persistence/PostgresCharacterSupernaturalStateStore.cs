@@ -41,7 +41,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             command.NextLedgerRevision < 0 ||
             (command.IsTransition && (command.ExpectedLedgerRevision == long.MaxValue ||
                 command.NextLedgerRevision != command.ExpectedLedgerRevision + 1)) ||
-            (!command.IsTransition && command.NextLedgerRevision != command.ExpectedLedgerRevision))
+            (!command.IsTransition && command.NextLedgerRevision != command.ExpectedLedgerRevision) ||
+            (command.IsExpressionChange && (command.IsTransition || command.ExpectedRevision == 0)))
             throw new ArgumentException("Invalid supernatural write revision.", nameof(command));
 
         // Shape checks never confer entitlement. The application must have
@@ -53,11 +54,12 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             command.RecordedAt);
         _ = new CharacterSupernaturalEventReceipt(command.CharacterId,
             command.EventId, command.ExpectedRevision + 1,
-            command.NextLedgerRevision, command.IsTransition ? "transition" : "acquisition",
+            command.NextLedgerRevision, ReceiptKind(command),
             command.AuthorizationEvidenceId, command.RecordedAt,
-            command.TransitionRequestJson);
+            command.TransitionRequestJson, command.ExpressionChangeJson);
         ValidateLedger(command);
         ValidateTransitionAudit(command);
+        ValidateExpressionChangeAudit(command);
 
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, cancellationToken);
@@ -135,9 +137,9 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
 
             db.SupernaturalEventReceipts.Add(new CharacterSupernaturalEventReceipt(
                 command.CharacterId, command.EventId, command.ExpectedRevision + 1,
-                command.NextLedgerRevision, command.IsTransition ? "transition" : "acquisition",
+                command.NextLedgerRevision, ReceiptKind(command),
                 command.AuthorizationEvidenceId, command.RecordedAt,
-                command.TransitionRequestJson));
+                command.TransitionRequestJson, command.ExpressionChangeJson));
 
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -205,13 +207,22 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             switch (receipt.Kind)
             {
                 case "transition":
+                    if (receipt.ExpressionChangeJson is not null)
+                        throw new ArgumentException("A transition receipt cannot contain an influence expression audit.");
                     if (ledgerRevision == long.MaxValue)
                         throw new ArgumentException(
                             "Supernatural ledger revision overflow.");
                     ledgerRevision++;
                     transitionEvents.Add(receipt.EventId);
                     break;
+                case "expression-change":
+                    if (receipt.TransitionRequestJson is not null ||
+                        receipt.ExpressionChangeJson is null)
+                        throw new ArgumentException("An expression change requires its immutable audit.");
+                    break;
                 case "acquisition":
+                    if (receipt.ExpressionChangeJson is not null)
+                        throw new ArgumentException("An acquisition cannot contain an expression-change audit.");
                     if (receipt.TransitionRequestJson is not null)
                         throw new ArgumentException(
                             "An acquisition receipt can not contain a transition step audit.");
@@ -255,6 +266,62 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
     /// Historical receipts stay nullable because their steps can not be
     /// reconstructed from an event ID or a final ledger alone.
     /// </summary>
+    private static string ReceiptKind(VerifiedSupernaturalStateWrite command) =>
+        command.IsTransition ? "transition" :
+        command.IsExpressionChange ? "expression-change" : "acquisition";
+
+    /// <summary>
+    /// Validate exact event scope before entering the database transaction.
+    /// The history guard compares these values to the locked prior and new
+    /// snapshots. Neither layer substitutes for independent source authority.
+    /// </summary>
+    private static void ValidateExpressionChangeAudit(VerifiedSupernaturalStateWrite command)
+    {
+        if (!command.IsExpressionChange)
+        {
+            if (command.ExpressionChangeJson is not null)
+                throw new ArgumentException("Only an expression-change event may carry an expression audit.");
+            return;
+        }
+        if (command.TransitionRequestJson is not null ||
+            command.ExpressionChangeJson is null)
+            throw new ArgumentException("An influence expression change requires a separate immutable audit.");
+        using var document = JsonDocument.Parse(CharacterSupernaturalState.CheckJson(
+            command.ExpressionChangeJson, JsonValueKind.Object, "expressionChange"));
+        var root = document.RootElement;
+        RejectDuplicateJsonKeys(root);
+        var expected = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "characterId", "eventId", "influenceId",
+            "previousExpressionEvidenceId", "nextExpressionEvidenceId",
+            "previousExpression", "nextExpression"
+        };
+        if (root.EnumerateObject().Count() != expected.Count ||
+            root.EnumerateObject().Any(field => !expected.Contains(field.Name)) ||
+            !root.TryGetProperty("characterId", out var owner) ||
+            owner.ValueKind != JsonValueKind.String ||
+            owner.GetString() != command.CharacterId.ToString("D") ||
+            !root.TryGetProperty("eventId", out var eventId) ||
+            eventId.ValueKind != JsonValueKind.String ||
+            eventId.GetString() != command.EventId ||
+            !root.TryGetProperty("influenceId", out var influence) ||
+            influence.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(influence.GetString()) ||
+            !root.TryGetProperty("previousExpressionEvidenceId", out var priorEvidence) ||
+            priorEvidence.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(priorEvidence.GetString()) ||
+            !root.TryGetProperty("nextExpressionEvidenceId", out var nextEvidence) ||
+            nextEvidence.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(nextEvidence.GetString()) ||
+            priorEvidence.GetString() == nextEvidence.GetString() ||
+            !root.TryGetProperty("previousExpression", out var prior) ||
+            prior.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("nextExpression", out var next) ||
+            next.ValueKind != JsonValueKind.Object ||
+            JsonElement.DeepEquals(prior, next))
+            throw new ArgumentException("Incomplete or unchanged influence expression audit.");
+    }
+
     private static void ValidateTransitionAudit(VerifiedSupernaturalStateWrite command)
     {
         if (!command.IsTransition)
