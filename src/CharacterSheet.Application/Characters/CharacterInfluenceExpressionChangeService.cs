@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
@@ -12,13 +13,26 @@ public enum CharacterInfluenceExpressionChangeStatus
     Applied, InvalidRequest, Unauthenticated, NotFoundOrNotOwned,
     ProjectionUnavailable, ArchivedReadOnly, NotInitialized,
     StateRevisionConflict, LedgerRevisionConflict, SourceUnauthorized,
-    NativeContentChanged, RulesCoreUnavailable, AuthoritativeInputsChanged, DuplicateEvent
+    NativeContentChanged, RulesCoreUnavailable, AuthoritativeInputsChanged, DuplicateEvent,
+    PreviouslyCommitted, EventIdentityConflict
+}
+
+/// <summary>
+/// Outcome of the optional, post-commit mechanics read. A durable receipt is
+/// independent of this projection and can be acknowledged without it.
+/// </summary>
+public enum CharacterInfluenceProjectionOutcome
+{
+    NotRequested, Available, Unresolved, Unavailable, Failed, Canceled
 }
 
 public sealed record CharacterInfluenceExpressionChangeResult(
     CharacterInfluenceExpressionChangeStatus Status,
     long? StateRevision = null, long? LedgerRevision = null,
-    string? EffectiveStatus = null, JsonNode? EffectiveProjection = null);
+    string? EffectiveStatus = null, JsonNode? EffectiveProjection = null,
+    string? EventId = null,
+    CharacterInfluenceProjectionOutcome ProjectionOutcome =
+        CharacterInfluenceProjectionOutcome.NotRequested);
 
 /// <summary>
 /// Output of an independently trusted source policy after it has checked
@@ -55,7 +69,8 @@ public sealed class CharacterInfluenceExpressionChangeService(
     ICharacterSupernaturalStateStore store,
     ITrustedCharacterInfluenceExpressionSource source,
     INativeRulesCoreGateway rules,
-    CharacterEffectiveStateService effective)
+    CharacterEffectiveStateService effective,
+    ILogger<CharacterInfluenceExpressionChangeService>? logger = null)
 {
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web);
 
@@ -93,12 +108,30 @@ public sealed class CharacterInfluenceExpressionChangeService(
             return new(CharacterInfluenceExpressionChangeStatus.NotInitialized);
         if (saved.ContractVersion != CharacterSupernaturalState.CurrentContractVersion)
             return new(CharacterInfluenceExpressionChangeStatus.NativeContentChanged);
-        if (saved.Revision != expectedStateRevision)
-            return new(CharacterInfluenceExpressionChangeStatus.StateRevisionConflict,
-                saved.Revision, saved.LedgerRevision);
-        if (saved.LedgerRevision != expectedLedgerRevision)
-            return new(CharacterInfluenceExpressionChangeStatus.LedgerRevisionConflict,
-                saved.Revision, saved.LedgerRevision);
+        if (saved.Revision != expectedStateRevision ||
+            saved.LedgerRevision != expectedLedgerRevision)
+        {
+            // A response may be lost after PostgreSQL committed. Recover only
+            // from a durable receipt matching this exact original operation,
+            // with independently checked current Site access. Do not ask the
+            // source to decide again or repeat the write.
+            var receipt = (await store.GetEventsAsync(characterId, cancellationToken))
+                .SingleOrDefault(x => x.EventId == eventId);
+            if (receipt is not null)
+                return MatchesCommittedOperation(receipt, characterId,
+                    expectedStateRevision, expectedLedgerRevision,
+                    influenceId, intentId, eventId)
+                    ? new(CharacterInfluenceExpressionChangeStatus.PreviouslyCommitted,
+                        receipt.CommittedRevision, receipt.LedgerRevision,
+                        EventId: eventId)
+                    : new(CharacterInfluenceExpressionChangeStatus.EventIdentityConflict,
+                        saved.Revision, saved.LedgerRevision);
+            return saved.Revision != expectedStateRevision
+                ? new(CharacterInfluenceExpressionChangeStatus.StateRevisionConflict,
+                    saved.Revision, saved.LedgerRevision)
+                : new(CharacterInfluenceExpressionChangeStatus.LedgerRevisionConflict,
+                    saved.Revision, saved.LedgerRevision);
+        }
 
         var before = await store.GetAuthoritativeInputsFingerprintAsync(
             characterId, cancellationToken);
@@ -189,6 +222,9 @@ public sealed class CharacterInfluenceExpressionChangeService(
                 ["characterId"] = characterId.ToString("D"),
                 ["eventId"] = eventId,
                 ["influenceId"] = influenceId,
+                // The source's distinct intent is needed to authenticate a
+                // later event-ID retry without asking for a second decision.
+                ["intentId"] = intentId,
                 ["previousExpressionEvidenceId"] = previousEvidence,
                 ["nextExpressionEvidenceId"] = verified.NextExpressionEvidenceId,
                 ["previousExpression"] = previousExpression,
@@ -283,20 +319,117 @@ public sealed class CharacterInfluenceExpressionChangeService(
         // legitimately report unresolved when a native authority is absent.
         if (cancellationToken.IsCancellationRequested)
             return new(CharacterInfluenceExpressionChangeStatus.Applied,
-                committed.Revision, committed.LedgerRevision);
+                committed.Revision, committed.LedgerRevision, EventId: eventId,
+                ProjectionOutcome: CharacterInfluenceProjectionOutcome.Canceled);
         try
         {
             var read = await effective.GetAsync(characterId, cancellationToken);
+            var projection = read.View?.NativeProjection?.DeepClone();
+            var outcome = read.View is null
+                ? CharacterInfluenceProjectionOutcome.Unavailable
+                : projection is null
+                    ? CharacterInfluenceProjectionOutcome.Unresolved
+                    : CharacterInfluenceProjectionOutcome.Available;
             return new(CharacterInfluenceExpressionChangeStatus.Applied,
                 committed.Revision, committed.LedgerRevision,
-                read.View?.Status, read.View?.NativeProjection?.DeepClone());
+                read.View?.Status, projection, eventId, outcome);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             return new(CharacterInfluenceExpressionChangeStatus.Applied,
-                committed.Revision, committed.LedgerRevision);
+                committed.Revision, committed.LedgerRevision, EventId: eventId,
+                ProjectionOutcome: CharacterInfluenceProjectionOutcome.Canceled);
+        }
+        catch (Exception error)
+        {
+            // The authoritative write has already committed. Whether the
+            // failure is a known dependency outage or a programming defect,
+            // log it and retain the durable receipt instead of throwing a
+            // false write failure or attempting another write.
+            logger?.LogError(error,
+                "Post-commit influence projection failed for character {CharacterId}, event {EventId}, revision {Revision}",
+                characterId, eventId, committed.Revision);
+            if (logger is null)
+                System.Diagnostics.Trace.TraceError(
+                    $"Post-commit influence projection failed for character {characterId}, event {eventId}, revision {committed.Revision}: {error}");
+            return new(CharacterInfluenceExpressionChangeStatus.Applied,
+                committed.Revision, committed.LedgerRevision, EventId: eventId,
+                ProjectionOutcome: CharacterInfluenceProjectionOutcome.Failed);
         }
     }
+
+    /// <summary>
+    /// Validate the persisted operation identity, including the intent that
+    /// older seven-field receipts did not record. Those older receipts remain
+    /// valid history but cannot prove a replay of a specific intent.
+    /// </summary>
+    private static bool MatchesCommittedOperation(
+        CharacterSupernaturalEventReceipt receipt, Guid characterId,
+        long expectedStateRevision, long expectedLedgerRevision,
+        string influenceId, string intentId, string eventId)
+    {
+        if (receipt.CharacterId != characterId ||
+            receipt.Kind != "expression-change" ||
+            receipt.EventId != eventId ||
+            receipt.CommittedRevision != expectedStateRevision + 1 ||
+            receipt.LedgerRevision != expectedLedgerRevision ||
+            string.IsNullOrWhiteSpace(receipt.AuthorizationEvidenceId) ||
+            receipt.ExpressionChangeJson is null ||
+            receipt.TransitionRequestJson is not null)
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(receipt.ExpressionChangeJson);
+            var audit = document.RootElement;
+            var fields = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "characterId", "eventId", "influenceId", "intentId",
+                "previousExpressionEvidenceId", "nextExpressionEvidenceId",
+                "previousExpression", "nextExpression"
+            };
+            if (audit.ValueKind != JsonValueKind.Object ||
+                audit.EnumerateObject().Count() != fields.Count ||
+                audit.EnumerateObject().Any(x => !fields.Remove(x.Name)) ||
+                fields.Count != 0 ||
+                !IsText(audit, "characterId", characterId.ToString("D")) ||
+                !IsText(audit, "eventId", eventId) ||
+                !IsText(audit, "influenceId", influenceId) ||
+                !IsText(audit, "intentId", intentId) ||
+                !audit.TryGetProperty("previousExpressionEvidenceId", out var prior) ||
+                !audit.TryGetProperty("nextExpressionEvidenceId", out var next) ||
+                prior.ValueKind != JsonValueKind.String ||
+                next.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(prior.GetString()) ||
+                string.IsNullOrWhiteSpace(next.GetString()) ||
+                prior.GetString()!.Length > 320 || next.GetString()!.Length > 320 ||
+                prior.GetString() == next.GetString() ||
+                !audit.TryGetProperty("previousExpression", out var before) ||
+                !audit.TryGetProperty("nextExpression", out var after) ||
+                !ValidExpression(before) || !ValidExpression(after) ||
+                JsonElement.DeepEquals(before, after))
+                return false;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsText(JsonElement audit, string name, string value) =>
+        audit.TryGetProperty(name, out var element) &&
+        element.ValueKind == JsonValueKind.String &&
+        element.GetString() == value;
+
+    private static bool ValidExpression(JsonElement expression) =>
+        expression.ValueKind == JsonValueKind.Object &&
+        expression.EnumerateObject().Count() <= 128 &&
+        expression.EnumerateObject().All(x =>
+            !string.IsNullOrWhiteSpace(x.Name) && x.Name.Length <= 160 &&
+            x.Value.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(x.Value.GetString()) &&
+            x.Value.GetString()!.Length <= 1024);
 
     /// <summary>
     /// Model property names use web JSON's case-insensitive binding, but
