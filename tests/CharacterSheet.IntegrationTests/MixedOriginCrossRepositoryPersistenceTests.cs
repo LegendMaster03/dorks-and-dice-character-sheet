@@ -880,8 +880,26 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                   "intelligence", "wisdom", "charisma" })
                 Assert.NotNull(await builds.SetBaseAbilityScoreInputAsync(
                     characterId, abilityKey, 12, DateTimeOffset.UtcNow));
-            Assert.NotNull(await builds.ApplyClassAdvancementAsync(characterId,
-                null, "class.warlock", 5, null, DateTimeOffset.UtcNow));
+            // ApplyClassAdvancementAsync's fourth argument is a Hit Die
+            // gain, not the requested Class level. Advance the actual native
+            // Class occurrence through every reviewed level.
+            var firstLevel = await builds.ApplyClassAdvancementAsync(
+                characterId, null, "class.warlock", null, null,
+                DateTimeOffset.UtcNow);
+            Assert.NotNull(firstLevel);
+            var occurrence = Assert.Single(firstLevel.AdvancementEntries,
+                entry => entry.RuleConceptKey == "class.warlock");
+            for (var level = 2; level <= 5; level++)
+            {
+                var advanced = await builds.ApplyClassAdvancementAsync(
+                    characterId, occurrence.Id, "class.warlock",
+                    null, null, DateTimeOffset.UtcNow);
+                Assert.NotNull(advanced);
+            }
+            var verifiedBuild = await builds.GetAsync(characterId);
+            Assert.NotNull(verifiedBuild);
+            Assert.Equal(5, Assert.Single(verifiedBuild.AdvancementEntries,
+                entry => entry.RuleConceptKey == "class.warlock").Level);
 
             var ledgers = new PostgresCharacterInnateSpellLedgerStore(db);
             var evaluator = new NativeDirectInnateSpellLedgerEvaluator(
