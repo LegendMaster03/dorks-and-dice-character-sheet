@@ -77,10 +77,11 @@ jobs:
           dotnet build site/dorks-and-dice-site.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false
           dotnet build rules-core/RulesCore.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false
           dotnet build dorks-and-dice-character-sheet.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false -p:BuildClient=false
-      - name: Install Playwright Chromium on isolated runner
+      - name: Use runner-provided Google Chrome with Playwright
         run: |
           python -m pip install --disable-pip-version-check playwright==1.56.0
-          python -m playwright install --with-deps chromium
+          command -v google-chrome
+          google-chrome --version
       - name: Create disposable localhost TLS certificate
         shell: bash
         run: |
