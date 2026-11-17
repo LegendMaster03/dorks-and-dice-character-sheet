@@ -826,7 +826,10 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Equal(CharacterSupernaturalWriteStatus.RevisionConflict,
             (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 1, "4") with
             {
-                EventId = "expression:stale"
+                EventId = "expression:stale",
+                ExpressionChangeJson = ExpressionChange(id, digest, 1, "4")
+                    .ExpressionChangeJson!.Replace("expression:curse:1",
+                        "expression:stale", StringComparison.Ordinal)
             })).Status);
 
         await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
@@ -834,7 +837,9 @@ public sealed class CharacterSupernaturalPersistenceTests
         var updated = (await fresh.GetAsync(id))!;
         Assert.Equal(2, updated.Revision);
         Assert.Equal(0, updated.LedgerRevision);
-        Assert.Contains("curse.earned", updated.PersistentInfluencesJson);
+        using var influence = JsonDocument.Parse(updated.PersistentInfluencesJson);
+        Assert.Equal("3", influence.RootElement[0]
+            .GetProperty("expression").GetProperty("severity").GetString());
         Assert.Contains("\\"severity\\":\\"3\\"", updated.PersistentInfluencesJson);
         var receipts = await fresh.GetEventsAsync(id);
         Assert.Equal(2, receipts.Count);
@@ -875,12 +880,12 @@ public sealed class CharacterSupernaturalPersistenceTests
             store.CommitVerifiedAsync(changed with { IsExpressionChange = false }));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             store.CommitVerifiedAsync(changed with { IsTransition = true }));
+        var forgedAudit = JsonNode.Parse(changed.ExpressionChangeJson!)!.AsObject();
+        forgedAudit["previousExpression"]!["severity"] = "9";
         await Assert.ThrowsAsync<ArgumentException>(() =>
             store.CommitVerifiedAsync(changed with
             {
-                ExpressionChangeJson = changed.ExpressionChangeJson!.Replace(
-                    "\\"severity\\":\\"1\\"", "\\"severity\\":\\"9\\"",
-                    StringComparison.Ordinal)
+                ExpressionChangeJson = forgedAudit.ToJsonString()
             }));
         await Assert.ThrowsAsync<ArgumentException>(() =>
             store.CommitVerifiedAsync(changed with
