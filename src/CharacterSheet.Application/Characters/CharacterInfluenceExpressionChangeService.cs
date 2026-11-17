@@ -113,17 +113,11 @@ public sealed class CharacterInfluenceExpressionChangeService(
             // from a durable receipt matching this exact original operation,
             // with independently checked current Site access. Do not ask the
             // source to decide again or repeat the write.
-            var receipt = (await store.GetEventsAsync(characterId, cancellationToken))
-                .SingleOrDefault(x => x.EventId == eventId);
-            if (receipt is not null)
-                return MatchesCommittedOperation(receipt, characterId,
-                    expectedStateRevision, expectedLedgerRevision,
-                    influenceId, intentId, eventId)
-                    ? new(CharacterInfluenceExpressionChangeStatus.PreviouslyCommitted,
-                        receipt.CommittedRevision, receipt.LedgerRevision,
-                        EventId: eventId)
-                    : new(CharacterInfluenceExpressionChangeStatus.EventIdentityConflict,
-                        saved.Revision, saved.LedgerRevision);
+            var previouslyCommitted = await RecoverCommittedAsync(characterId,
+                expectedStateRevision, expectedLedgerRevision, influenceId,
+                intentId, eventId, cancellationToken);
+            if (previouslyCommitted is not null)
+                return previouslyCommitted;
             return saved.Revision != expectedStateRevision
                 ? new(CharacterInfluenceExpressionChangeStatus.StateRevisionConflict,
                     saved.Revision, saved.LedgerRevision)
@@ -296,6 +290,21 @@ public sealed class CharacterInfluenceExpressionChangeService(
         }
 
         if (committed.Status != CharacterSupernaturalWriteStatus.Applied)
+        {
+            // Two same-event requests may pass the initial read before either
+            // writes. A transaction-level duplicate or serialization conflict
+            // must also consult the authoritative receipt after the losing
+            // transaction is disposed, without repeating the write.
+            if (committed.Status is CharacterSupernaturalWriteStatus.DuplicateEvent
+                or CharacterSupernaturalWriteStatus.RevisionConflict
+                or CharacterSupernaturalWriteStatus.LedgerRevisionConflict)
+            {
+                var recovered = await RecoverCommittedAsync(characterId,
+                    expectedStateRevision, expectedLedgerRevision, influenceId,
+                    intentId, eventId, cancellationToken);
+                if (recovered is not null)
+                    return recovered;
+            }
             return committed.Status switch
             {
                 CharacterSupernaturalWriteStatus.DuplicateEvent =>
@@ -311,6 +320,7 @@ public sealed class CharacterInfluenceExpressionChangeService(
                     new(CharacterInfluenceExpressionChangeStatus.AuthoritativeInputsChanged),
                 _ => new(CharacterInfluenceExpressionChangeStatus.NotInitialized)
             };
+        }
 
         // A successful durable event is not a successful feature projection.
         // A separate fresh read delegates all mechanics to Rules Core and may
@@ -350,6 +360,25 @@ public sealed class CharacterInfluenceExpressionChangeService(
                 committed.Revision, committed.LedgerRevision, EventId: eventId,
                 ProjectionOutcome: CharacterInfluenceProjectionOutcome.Failed);
         }
+    }
+
+    private async Task<CharacterInfluenceExpressionChangeResult?> RecoverCommittedAsync(
+        Guid characterId, long expectedStateRevision, long expectedLedgerRevision,
+        string influenceId, string intentId, string eventId, CancellationToken cancellationToken)
+    {
+        var receipt = (await store.GetEventsAsync(characterId, cancellationToken))
+            .SingleOrDefault(x => x.EventId == eventId);
+        if (receipt is null)
+            return null;
+        if (!MatchesCommittedOperation(receipt, characterId,
+                expectedStateRevision, expectedLedgerRevision,
+                influenceId, intentId, eventId))
+            return new(CharacterInfluenceExpressionChangeStatus.EventIdentityConflict);
+
+        // The source of the revision is the original immutable receipt, not
+        // the current state which may already have advanced again.
+        return new(CharacterInfluenceExpressionChangeStatus.PreviouslyCommitted,
+            receipt.CommittedRevision, receipt.LedgerRevision, EventId: eventId);
     }
 
     /// <summary>
