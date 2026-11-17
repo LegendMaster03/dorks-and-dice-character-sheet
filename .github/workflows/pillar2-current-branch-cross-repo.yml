@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LegendMaster03/dorks-and-dice-rules-core
-          ref: dbe86e42a0fda03c234210052ed76ef23e40f27f
+          ref: 1a753073e14e04d299b348974dbddf049ca93d20
           path: rules-core
           persist-credentials: false
       - name: Verify exact source revisions
@@ -39,7 +39,7 @@ jobs:
           echo "SHEET_SOURCE_SHA=$sheet_head"
           echo "CORE_SOURCE_SHA=$core_head"
           test "$sheet_head" = "${{ github.event.pull_request.head.sha }}"
-          test "$core_head" = "dbe86e42a0fda03c234210052ed76ef23e40f27f"
+          test "$core_head" = "1a753073e14e04d299b348974dbddf049ca93d20"
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
