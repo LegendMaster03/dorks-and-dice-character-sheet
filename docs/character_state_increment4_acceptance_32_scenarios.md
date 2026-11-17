@@ -153,3 +153,24 @@ supernatural source and form mechanics remain outstanding.
 WorkChat inspected Character Sheet HEAD `28af4b3f7f0032dbbe953bd70c0533daba9e95fe` and the corresponding actual passing CI logs, **without rerunning those workflows in the follow-up**. Its updated review **closes R1 and R2**. The patched source checks fresh Site authority on effective-state/supernatural-inspection reads, preserves current archived read-only status, and bounds Site/Rules Core streamed body handling under linked cancellation deadlines. The verified recorded workflows are [full 43981869420](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981869420) (**136 unit, 253 integration**) and [paired 43981869437](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43981869437) (**15 Character State, 19 Mixed-Origin**), all passing with no skips.
 
 **R3 remains open**, so scenarios **26/27 remain partial**. The overall acceptance tally remains **23 complete, 9 partial** (2, 6, 7, 9, 21, 22, 24, 26, 27), with missing production mechanics/authority and browser acceptance separately outstanding. No authorization to merge/deploy is implied.
+
+
+## R3 extended source characterization (still a failed safety property)
+
+Character Sheet `471651bea5ef058307dbdd0f2763c030dc920d23`
+adds negative tests for Site revocation at the direct Origin commitment
+boundary (three scenarios in normal integration) and DM revocation at
+mixed-Origin commitment (one scenario in conditional real Core/PostgreSQL
+integration), complementing the existing manifestation-transition race
+tests. All intentionally show that the write still **succeeds** after
+synthetic Site authority has changed.
+
+[Full workflow 43989247765](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43989247765):
+136 unit/256 integration; [paired 43989247801](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43989247801):
+15 Character State/20 Mixed-Origin. No failures or skipped tests;
+Core SHA `0d340c43248d2ae257302fe933fa712f82b1d045`.
+
+These added cases **do not justify marking 7, 26 or 27 complete**:
+R3 still lacks a cross-service commit-ordering protocol; Site authority
+is simulated in these characterizations. The original **23 complete /
+9 partial** count is unchanged.

@@ -287,3 +287,41 @@ interleaving tests. Do not install stubs claiming the contract already works.
 still open. This source audit and candidate protocol are design-only.
 The original 23-complete/9-partial acceptance matrix and no-merge
 recommendation are unchanged.
+
+
+## Executable R3 characterizations added after the source audit
+
+Character Sheet test commit `471651bea5ef058307dbdd0f2763c030dc920d23`
+now expands the intentionally **negative** commit-time characterization to
+all three known protected write paths:
+
+- **Supernatural transitions:** Existing
+  `CharacterStateCrossRepositoryTests.SiteRevocationAtCommitBoundaryIsNotFencedByEarlierFreshReads`;
+  real Rules Core HTTP and PostgreSQL, synthetic Site authority.
+- **Direct initial-Origin:** New
+  `NativeOriginInitialActivationTests.SiteRevocationAtOriginCommitBoundaryRemainsUnfenced`
+  exercises three synthetic Site changes (`ownership`, `archive`,
+  `campaign`) immediately upon entering the real Origin PostgreSQL store.
+  Native response is controlled; this is not a real Site database test.
+- **DM-approved mixed-Origin:** New
+  `MixedOriginCrossRepositoryPersistenceTests.DmRevocationAtMixedOriginCommitBoundaryRemainsUnfenced`
+  revokes the synthetic DM fresh scope upon entering the same real
+  PostgreSQL Origin store, after authenticated **real Rules Core HTTP**
+  evaluation. The Origin and immutable audit event still commit.
+
+These tests intentionally assert the **current insecure outcome** (a write
+returns `Applied` despite already-revoked synthetic Site scope), so passing
+CI is **negative evidence for R3** and can never be interpreted as a
+revocation fence. They preserve reproduction points for a future design
+and do not modify production mechanics or Site behavior.
+
+[Full validation 43989247765](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43989247765)
+passed **136 unit / 256 integration** tests; [paired Core/PostgreSQL
+43989247801](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43989247801)
+passed **15 Character State / 20 Mixed-Origin**, zero failures or skips.
+The paired job pinned Rules Core to
+`0d340c43248d2ae257302fe933fa712f82b1d045`.
+
+**R3 remains open.** No Site-owned intent arbitration, cancellation
+tombstone, transactional fence, live two-database interleaving, browser
+acceptance, merge or production deployment has been performed.

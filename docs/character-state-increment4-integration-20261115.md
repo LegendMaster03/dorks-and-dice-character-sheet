@@ -967,3 +967,31 @@ WorkChat subsequently inspected the current Character Sheet HEAD `28af4b3f7f0032
 WorkChat's updated finding status: **R1 CLOSED** (fresh owner/lifecycle authorization before and after both protected read services); **R2 CLOSED** (3-second linked full-response deadlines on both fresh Site gateways, and delegated Rules Core body handling); **R3 OPEN** (no Site-to-Character Sheet authorization fence at PostgreSQL commit). This is an independent source-and-logged-test verification of the R1/R2 remediation, not an independent new execution of the test suites or deployed browser acceptance.
 
 **Merge readiness remains NO** for completed Increment 4: R3, production supernatural source authority and mechanics/Origin applicability, and owner-authorized isolated browser acceptance remain outstanding. The original 32-case tally stays **23 complete / 9 partial**, with partial **2, 6, 7, 9, 21, 22, 24, 26, 27**. No new gameplay rule, commit protocol, merge, or deployment is authorized by this assessment.
+
+
+### R3 coverage expansion — direct and mixed-Origin commit boundaries
+
+On code commit `471651bea5ef058307dbdd0f2763c030dc920d23`,
+new **negative-characterization** regressions extend the known Site
+authorization race beyond manifestation transitions to:
+(1) direct initial-Origin commitment under synthetic ownership/archive/
+campaign changes and (2) DM-approved mixed-Origin commitment using
+real authenticated Rules Core HTTP plus PostgreSQL and synthetic Site
+revocation at the write boundary. In each case the current unfenced
+transaction can still return `Applied` and append its receipt.
+This is expected *failure of the desired safety property*,
+not a passing authorization guarantee.
+
+[Full CI 43989247765](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43989247765)
+passed **136 unit + 256 integration**,
+and [paired CI 43989247801](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/43989247801)
+passed **15 Character State + 20 Mixed-Origin**, all zero failures/skips,
+with Core pinned at `0d340c43248d2ae257302fe933fa712f82b1d045`.
+The [Site commit-consistency investigation](character-state-increment4-site-commit-consistency-investigation-20261116.md)
+now contains the source-level revocation inventory and an **unapproved**
+durable-intent candidate with explicit recovery/availability tradeoffs.
+
+R1/R2 remain independently WorkChat-closed; **R3 stays open**.
+This does not close original scenarios 7, 26 or 27 or change the
+**23 complete / 9 partial** 32-scenario tally. Browser and production
+supernatural acceptance remain outstanding. No merge or deployment.
