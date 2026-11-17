@@ -74,11 +74,13 @@ public sealed class CharacterEffectiveStateReadTests
         public Func<Task>? BeforeReply { get; set; }
         public Func<Task>? BeforeVerifiedReply { get; set; }
         public bool ReturnInvalid { get; set; }
+        public string? CatalogFingerprint { get; set; }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct) =>
             Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new
             {
-                contractVersion = 1, rulesetId = Ruleset, fingerprint = Fingerprint
+                contractVersion = 1, rulesetId = Ruleset,
+                fingerprint = CatalogFingerprint ?? Fingerprint
             }))!);
 
         public async Task<JsonNode> EvaluatePrimaryStateBaselineAsync(
@@ -1177,7 +1179,7 @@ public sealed class CharacterEffectiveStateReadTests
         var native = new NativeGateway();
         var source = new VerifiedExpressionFixture();
         var operation = new CharacterInfluenceExpressionChangeService(
-            site, site, store, source, Service(db, id, native, suppliedSite: site));
+            site, site, store, source, native, Service(db, id, native, suppliedSite: site));
 
         var applied = await operation.ApplyAsync(
             id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
@@ -1233,7 +1235,7 @@ public sealed class CharacterEffectiveStateReadTests
         var site = new SiteAccess(id);
         var source = new VerifiedExpressionFixture { Allow = false };
         var operation = new CharacterInfluenceExpressionChangeService(
-            site, site, store, source,
+            site, site, store, source, new NativeGateway(),
             Service(db, id, new NativeGateway(), suppliedSite: site));
 
         var denied = await operation.ApplyAsync(
