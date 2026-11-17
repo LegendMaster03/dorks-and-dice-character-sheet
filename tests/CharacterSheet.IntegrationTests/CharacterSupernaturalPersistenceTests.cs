@@ -240,6 +240,11 @@ public sealed class CharacterSupernaturalPersistenceTests
             downgrade.ToString(), StringComparison.Ordinal);
         Assert.Contains(auditMigration, await db.Database.GetAppliedMigrationsAsync());
 
+        // A newer additive migration can roll back before the older audit
+        // guard refuses its own downgrade. Restore the latest schema before
+        // querying with the current EF model; the original audit remains.
+        await migrator.MigrateAsync();
+
         // A rejected schema downgrade must not damage the originally
         // committed ledger, event identities or the JSONB transition audit.
         await using var reload = new CharacterSheetDbContext(database.CreateOptions());
@@ -253,6 +258,35 @@ public sealed class CharacterSupernaturalPersistenceTests
         using var actual = JsonDocument.Parse(receipts[1].TransitionRequestJson!);
         using var expected = JsonDocument.Parse(command.TransitionRequestJson!);
         Assert.True(JsonElement.DeepEquals(expected.RootElement, actual.RootElement));
+    }
+
+    [Fact]
+    public async Task DowngradingAfterExpressionChangeCannotDiscardItsImmutableAudit()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var acquired = Write(id, digest) with
+        {
+            PersistentInfluencesJson = SyntheticInfluence("1", "fixture:stage1")
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(acquired)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 1, "2"))).Status);
+
+        var migrator = db.Database.GetService<IMigrator>();
+        var downgrade = await Record.ExceptionAsync(() =>
+            migrator.MigrateAsync("20261115020000_AddSupernaturalTransitionRequestAudit"));
+        Assert.NotNull(downgrade);
+        Assert.Contains("Cannot discard durable influence expression-change history",
+            downgrade.ToString(), StringComparison.Ordinal);
+        Assert.Contains("20261117090000_AddInfluenceExpressionChangeAudit",
+            await db.Database.GetAppliedMigrationsAsync());
+        var persisted = await store.GetEventsAsync(id);
+        Assert.Equal("expression-change", persisted[1].Kind);
+        Assert.NotNull(persisted[1].ExpressionChangeJson);
     }
 
     [Fact]
