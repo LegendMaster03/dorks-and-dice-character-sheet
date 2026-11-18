@@ -115,6 +115,48 @@ immutable event receipt at committed revision 1**. The original request
 returned 200 despite the DM role's revocation and the fresh 404 denial.
 This is additional evidence of the S04 security gap, not acceptance.
 
+## Additional genuine Site target-association race (2026-11-18)
+
+The [three-service browser run 44257608305](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44257608305)
+**PASSED its diagnostic assertions** at Sheet
+`d44729faa7cb9bfce3740cb69d751f9425697a30`, Core
+`23919c3ce00825f2da6204f218786957e9f1f1c2`, and Site
+`e8d0cb7d89de71aa337293b8f36d22bac98687c3`.
+[Sanitized test evidence](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44257608305/artifacts/14406368526).
+
+Unlike the original role-revocation race, the DM's role remained valid.
+The fixture suspended a successful native evaluation for a different,
+revision-pinned Human/Elf target, committed a change to the *actual Site
+campaign-character association* from active to inactive, then verified
+a fresh DM review returned **404**. At the suspended point there was no
+committed Origin or event. After releasing the previously authorized
+operation, Character Sheet returned **200** and stored Origin revision
+**1** with **exactly one completed audit receipt**.
+
+This proves S04 must define the timing of **target eligibility** as well
+as actor/DM revocation. Both scenarios explicitly emit `OPEN-GAP` on
+the passing diagnostic run. They do not establish approval or enforcement
+of a chosen policy.
+
+## Explicit policy candidate for owner review
+
+A [commit-time Site-issued authorization candidate](pillar2-s04-authorization-policy-candidate-20261118.md)
+now proposes an exact-action, globally unique, auditable, short-lived permit
+issued **after native evaluation** and before the Sheet write. The candidate
+recommends a bounded authorization snapshot rather than distributed
+immediate-revocation locking, because the latter adds cross-store fencing,
+lease, and failure-recovery requirements. The provisional lifetime is
+**15 seconds**, not an approved rule or current guarantee.
+
+The existing 30-second delegation capability and request-cached scope
+**are not** substitutes for this new permit. Under the proposed snapshot
+policy, both demonstrated pre-permit races must fail to issue permission.
+Revocation or unlink **after** an already valid permit is issued could
+still allow that exact operation to complete within the defined window.
+Under the alternative immediate-revocation policy, even the latter case
+must be fenced until the final commit. **No runtime authority policy has
+been selected or implemented.**
+
 ## Policies requiring an explicit owner decision
 
 ### A. Approval authorization is a bounded, durable snapshot
