@@ -1,18 +1,18 @@
-"""Disposable localhost HTTP relay for S04 authorization-race characterization.
+"""Disposable Site-to-Rules-Core HTTP relay for S04 race characterization.
 
-Only the Sheet-to-Site path is relayed. A successful real Site -> Rules Core
-evaluation is held *after* Site has replied and *before* Sheet receives it,
-allowing a deterministic role revocation in Site's actual SQLite database.
+Only Site's Rules Core service registration routes through this localhost
+relay. A successful native evaluation is held *after* Rules Core has replied
+but *before* Site and Sheet receive the result, allowing a deterministic
+role revocation in Site's actual SQLite database.
 
 This is test-only. It is not a production authorization protocol or a remote
 proxy. The caller must release the barrier even on test failure.
 """
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Event, Thread
-from urllib.request import Request, HTTPSHandler, ProxyHandler, build_opener
+from urllib.request import Request, ProxyHandler, build_opener
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
-import ssl
 
 
 class S04SiteDelegationBarrier:
@@ -85,11 +85,9 @@ class S04SiteDelegationBarrier:
                         "host", "connection", "content-length",
                         "transfer-encoding", "accept-encoding")
                 }
-                req = Request("https://localhost:5157" + self.path,
+                req = Request("http://127.0.0.1:5159" + self.path,
                               data=data, headers=headers, method=self.command)
-                opener = build_opener(
-                    ProxyHandler({}),
-                    HTTPSHandler(context=ssl._create_unverified_context()))
+                opener = build_opener(ProxyHandler({}))
                 try:
                     reply = opener.open(req, timeout=45)
                 except HTTPError as error:
@@ -117,7 +115,7 @@ class S04SiteDelegationBarrier:
                 if (owner.armed and self.command == "POST" and
                         owner.ENDPOINT in self.path and status == 200):
                     # Rules Core evaluation has finished and Site returned
-                    # successfully. Sheet is still blocked awaiting this body.
+                    # successfully. Site and Sheet are still blocked awaiting this body.
                     owner.status = status
                     owner.reached.set()
                     if not owner.release.wait(timeout=30):
