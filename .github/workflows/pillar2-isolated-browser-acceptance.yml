@@ -107,12 +107,15 @@ jobs:
           import json
           from pathlib import Path
           evidence = json.loads(Path(".pillar2-browser/result.json").read_text())
-          race = [entry for entry in evidence if entry["name"] == "s04-security-acceptance"]
-          assert len(race) == 1 and race[0]["status"] == "OPEN-GAP", (
-              "The S04 race characterization did not execute to completion."
-          )
-          print("S04: CHARACTERIZED, NOT ACCEPTED — actual Site revocation "
-                "after native evaluation still permits the original commit.")
+          for scenario in ("s04-security-acceptance",
+                           "s04-unlink-security-acceptance"):
+              matching = [entry for entry in evidence if entry["name"] == scenario]
+              assert len(matching) == 1 and matching[0]["status"] == "OPEN-GAP", (
+                  f"Missing or incorrectly classified S04 diagnostic: {scenario}"
+              )
+          print("S04: CHARACTERIZED, NOT ACCEPTED — actual Site DM-role "
+                "revocation and target unlink after native evaluation both "
+                "permit the original commit.")
           PY
       - name: Print isolated service diagnostics if browser run fails
         if: failure()
