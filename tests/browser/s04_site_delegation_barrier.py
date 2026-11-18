@@ -99,6 +99,21 @@ class S04SiteDelegationBarrier:
                     body = reply.read()
                     upstream_headers = list(reply.headers.items())
 
+                if status >= 400 and "/origins/preview" in self.path:
+                    # Safe test-only diagnostics: lengths and the response
+                    # error code, never request bodies, tokens or credentials.
+                    import json
+                    try:
+                        error = json.loads(body).get("error", "unclassified")
+                    except (ValueError, AttributeError):
+                        error = "non-json"
+                    print("S04 relay preflight error", {
+                        "status": status,
+                        "requestBytes": len(data or b""),
+                        "transfer": transfer or "content-length",
+                        "responseError": str(error)[:120]
+                    }, flush=True)
+
                 if (owner.armed and self.command == "POST" and
                         owner.ENDPOINT in self.path and status == 200):
                     # Rules Core evaluation has finished and Site returned
