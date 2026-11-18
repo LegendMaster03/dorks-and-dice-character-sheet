@@ -68,7 +68,7 @@ def seed_site():
     """Use only the disposable Site schema created by its actual startup."""
     run_key = os.environ.get("PILLAR2_RUN", "local")
     for name in ["owner", "dm", "unrelated", "campaign", "direct", "mixed",
-                 "race", "outsider", "membership-owner", "membership-dm"]:
+                 "race", "race-unlink", "outsider", "membership-owner", "membership-dm"]:
         UUIDS[name] = str(uuid.uuid5(
             uuid.NAMESPACE_DNS, "pillar2-browser-" + run_key + "-" + name)).upper()
     now = "2026-11-17 14:10:00+00:00"
@@ -122,7 +122,7 @@ def seed_site():
             "(Id,Name,CreatedByUserId,Status,CreatedAt,UpdatedAt) "
             "VALUES (?,?,?,0,?,?)",
             (UUIDS["campaign"], "Browser Review Campaign", UUIDS["dm"], now, now))
-        for name in ["direct", "mixed", "race", "outsider"]:
+        for name in ["direct", "mixed", "race", "race-unlink", "outsider"]:
             owner = "unrelated" if name == "outsider" else "owner"
             db.execute(
                 "INSERT INTO dd_character "
@@ -154,6 +154,17 @@ def set_dm_role(role):
         db.execute("UPDATE dd_campaign_membership_role SET Role=? "
                    "WHERE CampaignMembershipId=?",
                    (role, UUIDS["membership-dm"]))
+
+
+def unlink_campaign_character(character_key):
+    """Remove an active Site campaign link while keeping owner identity intact."""
+    with sqlite3.connect(OUT / "site-content.db") as db:
+        cursor = db.execute(
+            "UPDATE dd_campaign_character SET Status=1 "
+            "WHERE CampaignId=? AND CharacterId=? AND Status=0",
+            (UUIDS["campaign"], UUIDS[character_key]))
+        if cursor.rowcount != 1:
+            raise AssertionError("Could not revoke exactly one active Site link")
 
 
 def expect_event(name, predicate, evidence=None):
@@ -265,7 +276,7 @@ def run_browser():
         # Set up previously seeded Site Characters through the same browser
         # credentials. These API calls are fixture setup, not assertions that
         # every builder control has been exercised.
-        for name in ["direct", "mixed", "race"]:
+        for name in ["direct", "mixed", "race", "race-unlink"]:
             request_on_page(owner, "browser-bootstrap-" + name,
                             API + "/characters/" + UUIDS[name] + "/sheet",
                             "POST", {}, 200)
@@ -459,6 +470,87 @@ def run_browser():
             "status": "OPEN-GAP",
             "detail": "Real Site DM revoked after native evaluation; original "
                       "activation still committed at revision 1"
+        })
+
+        # Second independent live race: the DM still has the role, but the
+        # target character becomes ineligible when its active campaign link
+        # is removed. The original request must remain in flight across a
+        # genuine Site data change, not a constructed/mock scope.
+        set_dm_role("dm")
+        unlink_draft = dict(mixed, id="browser-s04-unlink")
+        unlink_saved = request_on_page(
+            owner, "s04-unlink-owner-save-draft",
+            API + "/characters/" + UUIDS["race-unlink"] + "/origin/draft",
+            "PUT", {"rulesetId": "first-party-001", "fingerprint": fp,
+                    "proposal": unlink_draft, "expectedRevision": 0})
+        unlink_revision = unlink_saved["draft"]["revision"]
+        unlink_review = (API + "/characters/" + UUIDS["race-unlink"] +
+                         "/origin/mixed-review?campaignId=" + UUIDS["campaign"])
+        unlink_offers = request_on_page(
+            dm, "s04-unlink-genuine-site-review", unlink_review)
+        unlink_selected = [
+            candidate["id"] for candidate in unlink_offers["candidates"]
+            if (candidate["sourceId"], candidate["occurrencePath"]) in wanted
+        ]
+        expect_event("s04-unlink-five-native-offers-verified",
+                     len(unlink_selected) == 5)
+        unlink_activation = (API + "/characters/" + UUIDS["race-unlink"] +
+                             "/origin/activate-mixed-approved")
+        S04_BARRIER.arm()
+        dm.evaluate("""({path, body}) => {
+            window.__s04UnlinkResult = null;
+            fetch(path, {
+                method: "POST", credentials: "same-origin",
+                headers: {"Content-Type": "application/json",
+                          "Accept": "application/json"},
+                body: JSON.stringify(body)
+            }).then(async response => {
+                window.__s04UnlinkResult = {
+                    status: response.status,
+                    text: (await response.text()).slice(0, 350)
+                };
+            }).catch(error => {
+                window.__s04UnlinkResult = {status: 0,
+                                           text: String(error).slice(0, 350)};
+            });
+        }""", {"path": unlink_activation,
+               "body": {"campaignId": UUIDS["campaign"],
+                        "expectedDraftRevision": unlink_revision,
+                        "candidateIds": unlink_selected}})
+        try:
+            expect_event("s04-unlink-real-core-evaluation-held",
+                         S04_BARRIER.reached.wait(timeout=22),
+                         {"siteDelegatedEvaluationStatus": S04_BARRIER.status})
+            unlink_campaign_character("race-unlink")
+            request_on_page(dm, "s04-unlink-fresh-site-review-denied",
+                            unlink_review, expected=404)
+            uncommitted = request_on_page(
+                owner, "s04-unlink-no-commit-before-release",
+                API + "/characters/" + UUIDS["race-unlink"] + "/origin/state")
+            expect_event("s04-unlink-state-and-event-absent-at-revocation",
+                         uncommitted["savedState"] is None and
+                         len(uncommitted.get("events") or []) == 0)
+        finally:
+            S04_BARRIER.release.set()
+
+        dm.wait_for_function("window.__s04UnlinkResult !== null", timeout=40000)
+        unlink_response = dm.evaluate("window.__s04UnlinkResult")
+        expect_event("s04-unlink-original-request-commits-after-removal",
+                     unlink_response["status"] == 200,
+                     {"httpStatus": unlink_response["status"]})
+        linked_after = request_on_page(
+            owner, "s04-unlink-owner-reload-after-removal",
+            API + "/characters/" + UUIDS["race-unlink"] + "/origin/state")
+        unlink_events = linked_after.get("events") or []
+        expect_event("s04-unlink-origin-and-audit-receipt-persisted",
+                     linked_after["savedState"] is not None and
+                     linked_after["savedState"]["revision"] == 1 and
+                     len(unlink_events) == 1 and
+                     unlink_events[0]["committedRevision"] == 1)
+        EVENTS.append({
+            "name": "s04-unlink-security-acceptance", "status": "OPEN-GAP",
+            "detail": "Real Site campaign-character link removed after Core "
+                      "evaluation; original activation still committed"
         })
 
         expect_event("browser-no-script-exceptions", not page_errors,
