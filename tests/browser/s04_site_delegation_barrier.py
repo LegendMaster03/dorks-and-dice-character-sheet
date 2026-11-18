@@ -61,7 +61,7 @@ class S04SiteDelegationBarrier:
                             self.send_error(400)
                             return
                         if chunk_length == 0:
-                            while self.rfile.readline(8192) not in (b"\\r\\n", b"\\n", b""):
+                            while self.rfile.readline(8192) not in (b"\r\n", b"\n", b""):
                                 pass
                             break
                         size_so_far += chunk_length
@@ -69,7 +69,7 @@ class S04SiteDelegationBarrier:
                             self.send_error(413)
                             return
                         chunks.append(self.rfile.read(chunk_length))
-                        if self.rfile.read(2) != b"\\r\\n":
+                        if self.rfile.read(2) != b"\r\n":
                             self.send_error(400)
                             return
                     data = b"".join(chunks)
