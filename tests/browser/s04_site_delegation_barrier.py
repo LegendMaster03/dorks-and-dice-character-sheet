@@ -42,11 +42,43 @@ class S04SiteDelegationBarrier:
                         self.path.startswith("//")):
                     self.send_error(400)
                     return
-                length = int(self.headers.get("Content-Length", "0"))
-                if length < 0 or length > 2_000_000:
-                    self.send_error(413)
+                # ASP.NET HttpClient may stream JsonContent with chunked
+                # transfer encoding. Decode it before relaying: stripping the
+                # Transfer-Encoding header without reading chunks would drop
+                # the actual mixed-Origin proposal and invalidate the test.
+                transfer = self.headers.get("Transfer-Encoding", "").lower()
+                if transfer and transfer != "chunked":
+                    self.send_error(400)
                     return
-                data = self.rfile.read(length) if length else None
+                if transfer == "chunked":
+                    chunks = []
+                    size_so_far = 0
+                    while True:
+                        size_line = self.rfile.readline(100).split(b";", 1)[0]
+                        try:
+                            chunk_length = int(size_line.strip(), 16)
+                        except ValueError:
+                            self.send_error(400)
+                            return
+                        if chunk_length == 0:
+                            while self.rfile.readline(8192) not in (b"\\r\\n", b"\\n", b""):
+                                pass
+                            break
+                        size_so_far += chunk_length
+                        if size_so_far > 2_000_000:
+                            self.send_error(413)
+                            return
+                        chunks.append(self.rfile.read(chunk_length))
+                        if self.rfile.read(2) != b"\\r\\n":
+                            self.send_error(400)
+                            return
+                    data = b"".join(chunks)
+                else:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length < 0 or length > 2_000_000:
+                        self.send_error(413)
+                        return
+                    data = self.rfile.read(length) if length else None
                 headers = {
                     k: v for k, v in self.headers.items()
                     if k.lower() not in (
