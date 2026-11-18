@@ -21,6 +21,7 @@ import base64
 import secrets
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from s04_site_delegation_barrier import S04SiteDelegationBarrier
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / ".pillar2-browser"
@@ -33,6 +34,7 @@ LOGS = []
 EVENTS = []
 UUIDS = {}
 PASSWORD = "LocalReview123!"  # Disposable fixture account only.
+S04_BARRIER = None
 
 
 def launch(name, command, settings=None, cwd=None):
@@ -66,7 +68,7 @@ def seed_site():
     """Use only the disposable Site schema created by its actual startup."""
     run_key = os.environ.get("PILLAR2_RUN", "local")
     for name in ["owner", "dm", "unrelated", "campaign", "direct", "mixed",
-                 "outsider", "membership-owner", "membership-dm"]:
+                 "race", "outsider", "membership-owner", "membership-dm"]:
         UUIDS[name] = str(uuid.uuid5(
             uuid.NAMESPACE_DNS, "pillar2-browser-" + run_key + "-" + name)).upper()
     now = "2026-11-17 14:10:00+00:00"
@@ -117,7 +119,7 @@ def seed_site():
             "(Id,Name,CreatedByUserId,Status,CreatedAt,UpdatedAt) "
             "VALUES (?,?,?,0,?,?)",
             (UUIDS["campaign"], "Browser Review Campaign", UUIDS["dm"], now, now))
-        for name in ["direct", "mixed", "outsider"]:
+        for name in ["direct", "mixed", "race", "outsider"]:
             owner = "unrelated" if name == "outsider" else "owner"
             db.execute(
                 "INSERT INTO dd_character "
@@ -193,6 +195,12 @@ def request_on_page(page, name, path, method="GET", body=None, expected=200):
 
 
 def run_browser():
+    global S04_BARRIER
+    # All outbound Sheet -> Site ticket/delegation requests go through a
+    # localhost-only pass-through. The response barrier is armed only for the
+    # separate S04 reproduction after normal browser acceptance succeeds.
+    S04_BARRIER = S04SiteDelegationBarrier()
+    S04_BARRIER.start()
     launch("site",
            ["dotnet", str(ROOT / "site/dorks-and-dice-site/bin/Release/net10.0/dorks-and-dice-site.dll")],
            {"ASPNETCORE_ENVIRONMENT": "Development",
@@ -216,7 +224,7 @@ def run_browser():
     launch("sheet",
            ["dotnet", str(ROOT / "src/CharacterSheet.Web/bin/Release/net10.0/CharacterSheet.Web.dll")],
            {"ASPNETCORE_URLS": "http://127.0.0.1:5158",
-            "ToolHost__BaseUrl": BASE, "SSL_CERT_FILE": CERT,
+            "ToolHost__BaseUrl": "http://127.0.0.1:5160", "SSL_CERT_FILE": CERT,
             "ConnectionStrings__CharacterSheet":
                 "Host=127.0.0.1;Port=55433;Database=postgres;"
                 "Username=agent;Password=fixture-only"},
@@ -253,7 +261,7 @@ def run_browser():
         # Set up previously seeded Site Characters through the same browser
         # credentials. These API calls are fixture setup, not assertions that
         # every builder control has been exercised.
-        for name in ["direct", "mixed"]:
+        for name in ["direct", "mixed", "race"]:
             request_on_page(owner, "browser-bootstrap-" + name,
                             API + "/characters/" + UUIDS[name] + "/sheet",
                             "POST", {}, 200)
@@ -354,6 +362,96 @@ def run_browser():
         denied = request_on_page(unrelated, "browser-unrelated-owner-denied",
                                  API + "/characters/" + UUIDS["mixed"] +
                                  "/origin/draft", expected=404)
+        # S04 characterization with the actual Site source of authority.
+        # Hold the response AFTER real Site -> Rules Core approval evaluation,
+        # but BEFORE the Sheet receives it and persists the Origin. Revoke
+        # the real Site DM role in SQLite while the original HTTP request
+        # is still suspended. This is NOT a test that the behavior is safe.
+        race_proposal = dict(mixed, id="browser-s04-race")
+        race_saved = request_on_page(
+            owner, "s04-owner-save-race-draft",
+            API + "/characters/" + UUIDS["race"] + "/origin/draft",
+            "PUT", {"rulesetId": "first-party-001", "fingerprint": fp,
+                    "proposal": race_proposal, "expectedRevision": 0})
+        race_revision = race_saved["draft"]["revision"]
+        review_path = (API + "/characters/" + UUIDS["race"] +
+                       "/origin/mixed-review?campaignId=" + UUIDS["campaign"])
+        offers = request_on_page(dm, "s04-genuine-site-dm-review", review_path)
+        wanted = {
+            ("species.elf", "/creatureType"),
+            ("species.elf", "/size"),
+            ("species.elf", "/walkingSpeedFeet"),
+            ("species.elf", "/traits/0"),
+            ("species.human", "/traits/2"),
+        }
+        selected = [candidate["id"] for candidate in offers["candidates"]
+                    if (candidate["sourceId"], candidate["occurrencePath"]) in wanted]
+        expect_event("s04-five-native-offers-verified", len(selected) == 5)
+
+        activation_path = (API + "/characters/" + UUIDS["race"] +
+                           "/origin/activate-mixed-approved")
+        activation_command = {
+            "campaignId": UUIDS["campaign"],
+            "expectedDraftRevision": race_revision,
+            "candidateIds": selected,
+        }
+        S04_BARRIER.arm()
+        dm.evaluate("""({path, body}) => {
+            window.__s04RaceResult = null;
+            fetch(path, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {"Content-Type": "application/json",
+                          "Accept": "application/json"},
+                body: JSON.stringify(body)
+            }).then(async response => {
+                window.__s04RaceResult = {
+                    status: response.status,
+                    text: (await response.text()).slice(0, 350)
+                };
+            }).catch(error => {
+                window.__s04RaceResult = {status: 0,
+                                         text: String(error).slice(0, 350)};
+            });
+        }""", {"path": activation_path, "body": activation_command})
+        try:
+            expect_event("s04-real-core-evaluation-held",
+                         S04_BARRIER.reached.wait(timeout=22),
+                         {"siteDelegatedEvaluationStatus": S04_BARRIER.status})
+            # No browser-visible tokens or synthetic Site permissions are
+            # used to revoke this membership. It is the actual Site store.
+            set_dm_role("player")
+            request_on_page(dm, "s04-fresh-site-denies-revoked-dm",
+                            review_path, expected=404)
+            before_release = request_on_page(
+                owner, "s04-no-commit-while-core-response-held",
+                API + "/characters/" + UUIDS["race"] + "/origin/state")
+            expect_event("s04-still-uncommitted-at-revocation",
+                         before_release["savedState"] is None)
+        finally:
+            # Always release the suspended request; never strand a runner.
+            S04_BARRIER.release.set()
+
+        dm.wait_for_function("window.__s04RaceResult !== null", timeout=40000)
+        race_result = dm.evaluate("window.__s04RaceResult")
+        expect_event("s04-original-request-status-after-site-revocation",
+                     race_result["status"] == 200,
+                     {"httpStatus": race_result["status"]})
+        after = request_on_page(owner, "s04-owner-reload-after-revocation",
+                                API + "/characters/" + UUIDS["race"] + "/origin/state")
+        expect_event("s04-confirm-current-commit-after-site-revocation",
+                     after["savedState"] is not None and
+                     after["savedState"]["revision"] == 1)
+        # Passing here is a confirmed Site/Sheet/Core security RACE
+        # CHARACTERIZATION. S04 acceptance remains blocked, and policy is
+        # intentionally not changed by this test.
+        EVENTS.append({
+            "name": "s04-security-acceptance",
+            "status": "OPEN-GAP",
+            "detail": "Real Site DM revoked after native evaluation; original "
+                      "activation still committed at revision 1"
+        })
+
         expect_event("browser-no-script-exceptions", not page_errors,
                      {"exceptions": page_errors})
         browser.close()
@@ -367,6 +465,8 @@ def main():
                        "detail": type(error).__name__ + ": " + str(error)})
         raise
     finally:
+        if S04_BARRIER is not None:
+            S04_BARRIER.close()
         (OUT / "result.json").write_text(json.dumps(EVENTS, indent=2))
         # Terminate independent disposable processes, not system services.
         for proc in reversed(PROCS):
