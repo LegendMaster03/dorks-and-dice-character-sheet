@@ -431,7 +431,8 @@ def run_browser():
                 owner, "s04-no-commit-while-core-response-held",
                 API + "/characters/" + UUIDS["race"] + "/origin/state")
             expect_event("s04-still-uncommitted-at-revocation",
-                         before_release["savedState"] is None)
+                         before_release["savedState"] is None and
+                         len(before_release.get("events") or []) == 0)
         finally:
             # Always release the suspended request; never strand a runner.
             S04_BARRIER.release.set()
@@ -446,6 +447,10 @@ def run_browser():
         expect_event("s04-confirm-current-commit-after-site-revocation",
                      after["savedState"] is not None and
                      after["savedState"]["revision"] == 1)
+        receipts = after.get("events") or []
+        expect_event("s04-immutable-audit-receipt-after-site-revocation",
+                     len(receipts) == 1 and
+                     receipts[0]["committedRevision"] == 1)
         # Passing here is a confirmed Site/Sheet/Core security RACE
         # CHARACTERIZATION. S04 acceptance remains blocked, and policy is
         # intentionally not changed by this test.
