@@ -105,9 +105,15 @@ Do not infer atomicity from the Sheet PostgreSQL transaction or from
 the workflow's green status. The prior simulated-scope proof and this
 real-Site reproduction are now separate evidence.
 
-As a further live assertion, the next browser test revision also checks
-the Origin event receipt before and after release; its result must be
-verified before claiming that specific live audit assertion passed.
+The follow-up [audit-enhanced live test 44254425623](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44254425623)
+also **PASSED** at Sheet source `659bf0a2343d64b79f489a1c79b45f797f02dbd3`,
+using the same pinned Core and Site revisions.
+[Thirty structured results and screenshots](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44254425623/artifacts/14405506257)
+confirm **zero completed Origin event receipts and no committed profile
+before the held response was released**, followed by **exactly one
+immutable event receipt at committed revision 1**. The original request
+returned 200 despite the DM role's revocation and the fresh 404 denial.
+This is additional evidence of the S04 security gap, not acceptance.
 
 ## Policies requiring an explicit owner decision
 
