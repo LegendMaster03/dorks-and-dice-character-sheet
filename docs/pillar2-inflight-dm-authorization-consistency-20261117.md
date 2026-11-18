@@ -66,8 +66,48 @@ despite the test authority reporting revoked. [Pinned Core/Sheet run
 and Core `23919c3ce00825f2da6204f218786957e9f1f1c2`.
 
 **This passing characterization is evidence of the security gap, not a passing
-S04 acceptance check.** The actual Site SQLite membership-change barrier and
-cross-store commit atomicity remain NOT RUN.
+S04 acceptance check.**
+
+## New: genuine three-service S04 reproduction (2026-11-18)
+
+The [isolated Chrome/Site/Sheet/Core run 44254000314](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44254000314)
+**PASSED its test assertions, explicitly classifying S04 as OPEN-GAP**.
+Actual checked-out implementation revisions were:
+
+- Site `e8d0cb7d89de71aa337293b8f36d22bac98687c3`;
+- Rules Core `23919c3ce00825f2da6204f218786957e9f1f1c2`;
+- Character Sheet `c51bcaadf87c5e3c88772aeaac02a4e1754eacf5`.
+
+[Captured screenshots, sanitized service logs and 29 structured results](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44254000314/artifacts/14405112176)
+show all supported browser cases passed before the race, then:
+
+1. Genuine Site DM review returned HTTP 200 for an active Human/Elf
+   character and a revision-pinned draft with five native offers.
+2. The original DM activation reached a successful **real native Core**
+   evaluation (HTTP 200). A localhost-only test relay between Site and
+   Core held that response **before Site and Character Sheet received it**.
+3. The fixture changed the DM's role to `player` in the **actual Site
+   SQLite membership-role table**, committing the change.
+4. A new Site-authenticated DM review returned HTTP **404**; the
+   original character was still uncommitted at the pause.
+5. The held Core response was released. The original activation
+   returned HTTP **200** and the owner reloaded Origin revision **1**.
+
+The test did not alter Site, Core or Sheet production authorization code.
+The relay is strictly a disposable test mechanism. It does not depend on a
+constructed Site authority projection.
+
+**Security interpretation:** A fresh Site request correctly denies the
+revoked DM, but a preexisting request can commit after the role change.
+That observed behavior is neither an approved bounded-authorization
+contract nor the immediate-revocation guarantee. **S04 remains BLOCKED.**
+Do not infer atomicity from the Sheet PostgreSQL transaction or from
+the workflow's green status. The prior simulated-scope proof and this
+real-Site reproduction are now separate evidence.
+
+As a further live assertion, the next browser test revision also checks
+the Origin event receipt before and after release; its result must be
+verified before claiming that specific live audit assertion passed.
 
 ## Policies requiring an explicit owner decision
 
@@ -139,7 +179,9 @@ This artifact excludes disposable databases and TLS keys/certificates.
 
 This is a **PASS only for the scripted supported browser subset**, not all
 Species presets, unimplemented mechanics, or a visual accessibility audit.
-It does not execute the suspended in-flight Site revocation case above,
-and **does not approve either S04 consistency policy**. Keep the feature PRs
-draft and unmerged until an explicit security consistency decision and
-corresponding race tests are completed.
+A subsequent [three-service race workflow](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44254000314)
+**does now execute** the suspended Core-response/real Site-role-revocation
+case above. That additional coverage **does not approve either S04
+consistency policy**. Keep the feature PRs draft and unmerged until an
+explicit authorization consistency decision and corresponding enforcement
+tests are completed.
