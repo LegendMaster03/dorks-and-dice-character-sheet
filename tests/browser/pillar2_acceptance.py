@@ -90,7 +90,10 @@ def seed_site():
                  email, email.upper(), password_hash,
                  str(uuid.uuid4()), str(uuid.uuid4())))
     with sqlite3.connect(OUT / "site-content.db") as db:
-        for key, port in [("character-sheet", 5158), ("rules-core", 5159)]:
+        # Only Site -> Rules Core traffic uses the delay relay. Sheet's
+        # ordinary Site ticket redemption and other browser flows retain
+        # their previously validated direct path to the actual Site.
+        for key, port in [("character-sheet", 5158), ("rules-core", 5160)]:
             is_application = key == "character-sheet"
             fields = {
                 "tool_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, "browser-" + key)),
@@ -196,9 +199,10 @@ def request_on_page(page, name, path, method="GET", body=None, expected=200):
 
 def run_browser():
     global S04_BARRIER
-    # All outbound Sheet -> Site ticket/delegation requests go through a
-    # localhost-only pass-through. The response barrier is armed only for the
-    # separate S04 reproduction after normal browser acceptance succeeds.
+    # The real Site routes its Rules Core registration through a
+    # localhost-only pass-through. This isolates all normal Sheet ticket
+    # redemption, Site login and browser interactions from the S04 barrier.
+    # The delay is armed only for the final S04 characterization.
     S04_BARRIER = S04SiteDelegationBarrier()
     S04_BARRIER.start()
     launch("site",
@@ -224,7 +228,7 @@ def run_browser():
     launch("sheet",
            ["dotnet", str(ROOT / "src/CharacterSheet.Web/bin/Release/net10.0/CharacterSheet.Web.dll")],
            {"ASPNETCORE_URLS": "http://127.0.0.1:5158",
-            "ToolHost__BaseUrl": "http://127.0.0.1:5160", "SSL_CERT_FILE": CERT,
+            "ToolHost__BaseUrl": BASE, "SSL_CERT_FILE": CERT,
             "ConnectionStrings__CharacterSheet":
                 "Host=127.0.0.1;Port=55433;Database=postgres;"
                 "Username=agent;Password=fixture-only"},
