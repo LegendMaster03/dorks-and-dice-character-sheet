@@ -96,10 +96,24 @@ jobs:
             -inkey .pillar2-browser/localhost.key \
             -in .pillar2-browser/localhost.crt \
             -passout pass:local-review-only >/dev/null 2>&1
-      - name: Exercise actual Site, Sheet and Core in Chromium
+      - name: Exercise supported UI and characterize in-flight Site revocation
         env:
           PILLAR2_RUN: ${{ github.run_id }}
         run: python tests/browser/pillar2_acceptance.py
+      - name: Require S04 to remain explicitly marked as an open security gap
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          evidence = json.loads(Path(".pillar2-browser/result.json").read_text())
+          race = [entry for entry in evidence if entry["name"] == "s04-security-acceptance"]
+          assert len(race) == 1 and race[0]["status"] == "OPEN-GAP", (
+              "The S04 race characterization did not execute to completion."
+          )
+          print("S04: CHARACTERIZED, NOT ACCEPTED — actual Site revocation "
+                "after native evaluation still permits the original commit.")
+          PY
       - name: Print isolated service diagnostics if browser run fails
         if: failure()
         shell: bash
