@@ -3,18 +3,16 @@ using System.Text.Json;
 namespace CharacterSheet.Application.Characters;
 
 /// <summary>
-/// Narrow server-side bridge from current native Origin adjudication to the
-/// existing character kernel. Only a full first-party review can supply the
-/// native projection output to this reader; a browser preview is never input.
-/// Recheck each reported scalar against the exact committed grant occurrence.
-/// </summary>
-/// <summary>
 /// The exact committed native grant for a verified intrinsic entitlement.
 /// Provenance is informational and cannot execute a mechanical operation.
 /// </summary>
 public sealed record VerifiedOriginIntrinsicGrant(
     string GrantId, string SourceId, string OccurrencePath);
 
+/// <summary>
+/// Verified native scalars read from the exact committed Origin grants.
+/// A browser preview alone cannot authorize these values.
+/// </summary>
 public sealed record VerifiedOriginIntrinsics(
     string CreatureType, string Size, int BaseWalkingSpeedFeet,
     VerifiedOriginIntrinsicGrant? CreatureTypeGrant = null,
