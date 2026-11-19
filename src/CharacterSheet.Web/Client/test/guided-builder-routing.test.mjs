@@ -182,7 +182,7 @@ test("canonical Origin uses its own state rather than the legacy Species step", 
             savedState: { revision: 1, profile: { underlying: {
                 speciesId: "species.orc", ancestryId: null } } }
         });
-    assert.equal(saved.find(section => section.id === "species").status, "incomplete");
+    assert.equal(saved.find(section => section.id === "species").status, "resolved");
     assert.match(saved.find(section => section.id === "species").detail,
         /committed; current cross-pillar mechanics still need integration/);
 });
@@ -340,3 +340,53 @@ test("guided builder uses numbered steps, sequential navigation, a Rules Core-ba
     assert.match(builderSource, /reference\.status === "none" \? "Choose" : "Change"/);
     assert.match(builderSource, /const actionLabel = reference\.status === "none" \? "Choose" : "Change"/);
 });
+
+test("committed native Origin completes construction without asserting full mechanics readiness", () => {
+    const builder = readyBuilder();
+    builder.build.foundationalSelections = builder.build.foundationalSelections
+        .filter(item => !["species", "subspecies"].includes(item.category));
+    const nativeOrigin = {
+        status: "ready", savedState: null, draft: null, catalog: {}, preview: null,
+        readOnly: false, chooser: { kind: "closed" }, busy: false
+    };
+    const mechanics = {
+        ruleChoices: [choice("Unresolved Class Choice", "fighting-style", "class:fighter")],
+        projectionConflicts: [{
+            conflictKey: "conflict.class:fighter", kind: "source-unavailable",
+            message: "Class effects unresolved.", relatedMechanicKeys: [],
+            relatedConceptKeys: ["class:fighter"]
+        }]
+    };
+    const section = (state, rules = mechanics, source = builder) =>
+        getGuidedBuilderSectionStates(source, rules, null, false, state)
+            .find(entry => entry.id === "species");
+
+    assert.equal(section(nativeOrigin).status, "incomplete",
+        "A character without an Origin has not completed construction.");
+    const savedUncommitted = { ...nativeOrigin, draft: {
+        revision: 1, proposal: { intent: 0, selectedSpeciesId: "species.orc" }
+    }};
+    assert.equal(section(savedUncommitted).status, "incomplete",
+        "Saving a draft does not activate it.");
+    const incompleteHuman = { ...savedUncommitted, preview: {
+        previewOnly: true, result: { status: 1, issues: [
+            { code: "origin-feat-required" }
+        ] }
+    }, draft: { revision: 2, proposal: { intent: 0,
+        selectedSpeciesId: "species.human" } } };
+    assert.equal(section(incompleteHuman).status, "incomplete");
+
+    const committedOrc = { ...nativeOrigin, savedState: { revision: 1,
+        profile: { underlying: { speciesId: "species.orc", ancestryId: null } } } };
+    const complete = section(committedOrc);
+    assert.equal(complete.status, "resolved");
+    assert.match(complete.detail, /committed; current cross-pillar mechanics still need integration/);
+    const all = getGuidedBuilderSectionStates(builder, mechanics, null, false, committedOrc);
+    assert.equal(all.find(x => x.id === "class").status, "incomplete",
+        "Committing Origin must not resolve downstream class conflicts.");
+    assert.equal(all.find(x => x.id === "equipment").status, "incomplete");
+    assert.equal(section({ ...committedOrc, status: "loading" }).status, "incomplete");
+    assert.equal(section(committedOrc, mechanics, readyBuilder()).status, "incomplete",
+        "An unresolved legacy Species selection prevents claiming reconciliation.");
+});
+

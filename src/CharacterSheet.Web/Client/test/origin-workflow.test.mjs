@@ -186,7 +186,9 @@ function candidateReviewPreview(proposal, fingerprint = currentFingerprint) {
             id: "shade", timing: 0, minimum: 1, maximum: 2,
             finiteOptions: ["red", "blue", "green"]
         }]
-    }));
+    })).filter(candidate => proposal.contributors.some(contributor =>
+        contributor.id === candidate.contributorId &&
+        contributor.source.id === candidate.identity.occurrence.source.id));
     return {
         contractVersion: 1, rulesetId: "first-party-001",
         fingerprint, contentChangedSinceRequest: false,
@@ -659,3 +661,32 @@ test("late successful save does not overwrite a newer character load", async () 
         assert.equal(workflow.current().draft.proposal.manifestations.length, 1);
     });
 });
+
+test("mixed contributor removal persists other source choices across reload and saves", async () => {
+    const backend = candidateDraftBackend();
+    await withBackend(backend, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        const elf = "contributor:parent-two:species.elf:/traits/1";
+        await workflow.toggleMixedCandidate(characterId, elf, true);
+        await workflow.setFiniteChoice(characterId, elf, "shade", ["red", "blue"]);
+        assert.equal(workflow.current().draft.revision, 3);
+        const selected = structuredClone(workflow.current().draft.proposal.manifestations);
+        await workflow.clearMixedParent(characterId, "parent-one");
+        assert.equal(workflow.current().draft.revision, 4);
+        assert.deepEqual(workflow.current().draft.proposal.manifestations, selected);
+        assert.deepEqual(backend.writes[2].proposal.manifestations, selected);
+        assert.equal(backend.writes[2].expectedRevision, 3);
+        assert.equal(workflow.current().previewDraftRevision, 4);
+        assert.equal(mixedNativePreviewMatchesDraft(workflow.current().preview,
+            workflow.current().draft.proposal), true);
+        await workflow.load(characterId);
+        assert.deepEqual(workflow.current().draft.proposal.manifestations, selected);
+        assert.equal(workflow.current().draft.fingerprint, currentFingerprint);
+        assert.equal(backend.requests.some(x => x.path.includes("activate")), false);
+        await workflow.toggleMixedCandidate(characterId, elf, false);
+        assert.deepEqual(workflow.current().draft.proposal.manifestations, []);
+        assert.equal(workflow.current().draft.revision, 5);
+    });
+});
+

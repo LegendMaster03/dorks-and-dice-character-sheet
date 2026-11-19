@@ -574,3 +574,75 @@ test("basic contributor editor preserves unfamiliar or process-specific evidence
         assert.deepEqual(base.contributors[0].source.id, "species.human");
     }
 });
+
+test("unaffected mixed source occurrences and independent choices survive two to four sources", () => {
+    const mixed = changeNativeOriginMode(createInitialOriginProposal(id), "mixed");
+    const both = changeMixedNativeParent(changeMixedNativeParent(mixed,
+        "parent-one", "species.human"), "parent-two", "species.elf");
+    const humanId = "contributor:parent-one:species.human:/traits/1";
+    const elfId = "contributor:parent-two:species.elf:/traits/0";
+    const human = { id: "selection:" + humanId, candidateId: humanId };
+    const elf = { id: "selection:" + elfId, candidateId: elfId };
+    const chosen = { ...both, manifestations: [human, elf] };
+    assert.equal(isEditableMixedNativeOrigin(chosen), true);
+
+    const withOrc = changeMixedNativeParent(chosen, "source-3", "species.orc");
+    assert.deepEqual(withOrc.manifestations, [human, elf]);
+    const withDragonborn = changeMixedNativeParent(withOrc,
+        "source-4", "species.dragonborn");
+    assert.deepEqual(withDragonborn.manifestations, [human, elf]);
+    assert.equal(withDragonborn.contributors.length, 4);
+    assert.deepEqual(structuredClone(withDragonborn).manifestations, [human, elf]);
+    assert.deepEqual(changeMixedNativeParent(withDragonborn,
+        "source-3", null).manifestations, [human, elf]);
+
+    const removedHuman = changeMixedNativeParent(withDragonborn,
+        "parent-one", null);
+    assert.deepEqual(removedHuman.manifestations, [elf],
+        "Only the changed contributor loses its selection.");
+    const replacedHuman = changeMixedNativeParent(chosen,
+        "parent-one", "species.orc");
+    assert.deepEqual(replacedHuman.manifestations, [elf]);
+    assert.deepEqual(changeMixedNativeParent(replacedHuman,
+        "parent-one", "species.human").manifestations, [elf],
+        "Restoring a source cannot silently reselect an old occurrence.");
+    assert.deepEqual(changeMixedNativeParent(chosen,
+        "parent-two", "species.orc").manifestations, [human]);
+    assert.deepEqual(chosen.manifestations, [human, elf],
+        "The prior draft must not be mutated.");
+});
+
+test("unchanged Drow finite choice and stale draft evidence survive an unrelated source edit", () => {
+    const mixed = changeNativeOriginMode(createInitialOriginProposal(id), "mixed");
+    const both = changeMixedNativeParent(changeMixedNativeParent(mixed,
+        "parent-one", "species.human"), "parent-two", "ancestry.elf.drow");
+    const drowId = "contributor:parent-two:ancestry.elf.drow:/traits/4";
+    const unavailableId = "contributor:parent-two:ancestry.elf.drow:/traits/deprecated";
+    const charisma = {
+        id: "selection:" + drowId, candidateId: drowId,
+        choices: [{ requirementId: "spellcasting-ability",
+            selectedOptionIds: ["charisma"] }]
+    };
+    const unavailable = { id: "selection:" + unavailableId,
+        candidateId: unavailableId };
+    const selected = { ...both, manifestations: [charisma, unavailable] };
+    assert.equal(isEditableMixedNativeOrigin(selected), true);
+
+    const replaced = changeMixedNativeParent(selected, "parent-one", "species.orc");
+    assert.deepEqual(replaced.manifestations, [charisma, unavailable]);
+    assert.deepEqual(structuredClone(replaced).manifestations[0].choices,
+        charisma.choices, "Finite choice evidence survives serialization.");
+    assert.strictEqual(changeMixedNativeParent(replaced,
+        "parent-one", "species.orc"), replaced);
+    const preview = mixedNativeOfferPreview(replaced);
+    assert.deepEqual(originPreviewCandidates(preview, replaced).map(c => c.id), [],
+        "Unavailable saved evidence is not an authorized native offer.");
+    const removed = changeMixedNativeCandidate(replaced, preview, unavailableId, false);
+    assert.deepEqual(removed.manifestations, [charisma]);
+    assert.deepEqual(changeMixedNativeParent(removed,
+        "parent-two", "ancestry.elf.high").manifestations, [],
+        "A changed Ancestry invalidates even identical-looking occurrence paths.");
+    assert.deepEqual(replaced.candidates, []);
+    assert.equal(replaced.tableDecisions, undefined);
+});
+

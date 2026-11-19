@@ -202,13 +202,14 @@ export function getGuidedBuilderSectionStates(
         && rulesVerificationAvailable
         && pendingBackgroundChoices.length === 0
         && !backgroundHasConflict;
-    // Authorized Origin is stored separately from legacy foundational Species.
-    // Its effective grants are not yet projected into Character Sheet, so the
-    // setup step remains incomplete even when initial Origin is committed.
-    const speciesResolved = origin === undefined && speciesSelected
-        && rulesVerificationAvailable
-        && pendingSpeciesChoices.length === 0
-        && !speciesHasConflict;
+    // A committed native initial Origin completes its construction step, not
+    // downstream effective-mechanics projection. Keep legacy reconciliation
+    // conflicts visible rather than treating mixed legacy state as completed.
+    const speciesResolved = origin === undefined
+        ? speciesSelected && rulesVerificationAvailable &&
+            pendingSpeciesChoices.length === 0 && !speciesHasConflict
+        : origin.status === "ready" && origin.savedState !== null &&
+            !hasLegacySpeciesSelections(builder.build.foundationalSelections);
     const abilitiesResolved = allBaseAbilitiesConfigured
         && rulesVerificationAvailable
         && pendingAbilityChoices.length === 0;
