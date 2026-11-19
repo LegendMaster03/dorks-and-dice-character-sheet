@@ -97,7 +97,8 @@ public static class VerifiedCommittedMixedOriginReader
                 intrinsics, saved.ProfileJson);
             if (scalars is null) return null;
             var lowLight = VerifiedOriginVisionReader.Read(vision, saved.ProfileJson);
-            return new(saved.RulesetId, saved.Fingerprint, scalars, lowLight);
+            return new(saved.RulesetId, saved.Fingerprint, scalars, lowLight,
+                saved.Revision);
         }
         catch (Exception error) when (error is JsonException or
             InvalidOperationException or FormatException or ArgumentException)

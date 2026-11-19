@@ -1,0 +1,123 @@
+name: Pillar 2 / Isolated Three-Service Browser Acceptance
+
+# This is isolated nonproduction validation. There are no real user records,
+# external credentials or deploy steps. Exact source revisions are pinned.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  browser-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: agent
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: postgres
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U agent -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - name: Checkout the exact Character Sheet feature source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Checkout tested Pillar 2 Rules Core
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-rules-core
+          ref: 541e8d818da0e925dfede0708aebe9ab62a8ba6c
+          path: rules-core
+          persist-credentials: false
+      - name: Check out compatible Site main for Tool Host authentication
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-site
+          ref: aa15e85c5edf032275320b20442fe6c09501be5f
+          path: site
+          persist-credentials: false
+      - name: Verify exact checked-out Core and Site SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SHEET_SOURCE_SHA=$(git rev-parse HEAD)"
+          echo "CORE_SOURCE_SHA=$(git -C rules-core rev-parse HEAD)"
+          echo "SITE_SOURCE_SHA=$(git -C site rev-parse HEAD)"
+          test "$(git -C rules-core rev-parse HEAD)" = "541e8d818da0e925dfede0708aebe9ab62a8ba6c"
+          test "$(git -C site rev-parse HEAD)" = "aa15e85c5edf032275320b20442fe6c09501be5f"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build actual Character Sheet browser assets
+        working-directory: src/CharacterSheet.Web/Client
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Build the three unmodified applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build site/dorks-and-dice-site.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false
+          dotnet build rules-core/RulesCore.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false
+          dotnet build dorks-and-dice-character-sheet.slnx -c Release -m:1 -nr:false -p:UseSharedCompilation=false -p:BuildClient=false
+      - name: Use runner-provided Google Chrome with Playwright
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0
+          command -v google-chrome
+          google-chrome --version
+      - name: Create disposable localhost TLS certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .pillar2-browser
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout .pillar2-browser/localhost.key \
+            -out .pillar2-browser/localhost.crt \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+          openssl pkcs12 -export -out .pillar2-browser/localhost.pfx \
+            -inkey .pillar2-browser/localhost.key \
+            -in .pillar2-browser/localhost.crt \
+            -passout pass:local-review-only >/dev/null 2>&1
+      - name: Exercise supported Origins and verify deferred routes are unavailable
+        env:
+          PILLAR2_RUN: ${{ github.run_id }}
+        run: python tests/browser/pillar2_acceptance.py
+      - name: Print isolated service diagnostics if browser run fails
+        if: failure()
+        shell: bash
+        run: |
+          for file in .pillar2-browser/site.log .pillar2-browser/sheet.log .pillar2-browser/core.log; do
+            echo "==== $file ===="
+            if [ -f "$file" ]; then tail -n 75 "$file"; else echo "Not created"; fi
+          done
+          if [ -f .pillar2-browser/result.json ]; then cat .pillar2-browser/result.json; fi
+      - name: Upload browser and service evidence (not test databases or certificates)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pillar2-isolated-browser-evidence
+          path: |
+            .pillar2-browser/*.log
+            .pillar2-browser/result.json
+            .pillar2-browser/*.png
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7

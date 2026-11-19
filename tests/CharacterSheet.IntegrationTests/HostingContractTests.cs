@@ -74,6 +74,22 @@ public sealed class HostingContractTests : IClassFixture<PostgresWebApplicationF
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("GET", "mixed-review")]
+    [InlineData("POST", "activate-mixed-approved")]
+    public async Task DeferredMixedApprovalEndpointsAreNotPublished(string method, string route)
+    {
+        var characterId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(new HttpMethod(method),
+            $"/api/characters/{characterId:D}/origin/{route}")
+        {
+            Content = method == "POST" ? JsonContent.Create(new { }) : null
+        };
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     [Fact]
     public void AuthenticationContractIsPinnedToCharacterSheet()
     {
