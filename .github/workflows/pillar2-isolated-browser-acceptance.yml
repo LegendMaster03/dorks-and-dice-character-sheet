@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LegendMaster03/dorks-and-dice-rules-core
-          ref: 23919c3ce00825f2da6204f218786957e9f1f1c2
+          ref: 6b17cdac7d5d93bdccac0038aa179da3004ad2f6
           path: rules-core
           persist-credentials: false
       - name: Checkout Site's actual DM/campaign/character authority branch
@@ -54,7 +54,7 @@ jobs:
           echo "SHEET_SOURCE_SHA=$(git rev-parse HEAD)"
           echo "CORE_SOURCE_SHA=$(git -C rules-core rev-parse HEAD)"
           echo "SITE_SOURCE_SHA=$(git -C site rev-parse HEAD)"
-          test "$(git -C rules-core rev-parse HEAD)" = "23919c3ce00825f2da6204f218786957e9f1f1c2"
+          test "$(git -C rules-core rev-parse HEAD)" = "6b17cdac7d5d93bdccac0038aa179da3004ad2f6"
           test "$(git -C site rev-parse HEAD)" = "e8d0cb7d89de71aa337293b8f36d22bac98687c3"
       - uses: actions/setup-dotnet@v4
         with:
