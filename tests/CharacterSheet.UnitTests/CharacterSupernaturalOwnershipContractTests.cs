@@ -5,7 +5,7 @@ using CharacterSheet.Application.Characters;
 namespace CharacterSheet.UnitTests;
 
 /// <summary>
-/// Provisional Workstream A contract integrity only. Synthetic source and
+/// Canonical version-2 Core ownership contract correlation only. Synthetic source and
 /// Core plan payloads are not production entitlement authorization.
 /// </summary>
 public sealed class CharacterSupernaturalOwnershipContractTests
@@ -36,7 +36,7 @@ public sealed class CharacterSupernaturalOwnershipContractTests
 
     private static JsonNode Planned() => JsonNode.Parse("""
         {
-          "contractVersion":1,
+          "contractVersion":2,
           "rulesetId":"rules",
           "fingerprint":"catalog",
           "status":"planned",
@@ -49,15 +49,20 @@ public sealed class CharacterSupernaturalOwnershipContractTests
             "eventId":"acq-1",
             "authorizationEvidenceId":"fixture:trusted",
             "expectedSupernaturalRevision":0,
-            "expectedLedgerRevision":0,
-            "alternateSheets":[{"id":"wolf","progression":[]}],
-            "persistentInfluences":[],
-            "ledger":{
+            "expectedManifestationRevision":0,
+            "expectedProgressionRevision":0,
+            "proposedState":{
               "characterId":"11111111-2222-3333-4444-555555555555",
-              "revision":0,
-              "instances":[],
-              "resources":[],
-              "processedEventIds":[]
+              "primaryMechanics":{},
+              "alternateSheets":[{"id":"wolf","progression":[]}],
+              "persistentInfluences":[],
+              "influenceOverlapSelections":[]
+            },
+            "proposedJournal":{
+              "characterId":"11111111-2222-3333-4444-555555555555",
+              "revision":1,
+              "processedEventIds":["acq-1"],
+              "consumedEligibilityEvidenceIds":[]
             }
           }
         }
@@ -66,8 +71,8 @@ public sealed class CharacterSupernaturalOwnershipContractTests
     private static bool Accept(JsonNode response) =>
         CharacterSupernaturalOwnershipService.TryReadVerifiedPlan(
             response, Character, CharacterSupernaturalOwnershipOperation.Acquire,
-            "acq-1", "rules", "catalog", 0, 0, "fixture:trusted",
-            out _, out _, out _);
+            "acq-1", "rules", "catalog", 0, 0, 0, "fixture:trusted",
+            out _, out _, out _, out _);
 
     [Fact]
     public void SyntheticSourceMustBeBoundToCharacterOperationEventAndCatalog()
@@ -105,14 +110,17 @@ public sealed class CharacterSupernaturalOwnershipContractTests
         var source = Planned();
         Assert.True(CharacterSupernaturalOwnershipService.TryReadVerifiedPlan(
             source, Character, CharacterSupernaturalOwnershipOperation.Acquire,
-            "acq-1", "rules", "catalog", 0, 0, "fixture:trusted",
-            out var sheets, out var influences, out var ledger));
+            "acq-1", "rules", "catalog", 0, 0, 0, "fixture:trusted",
+            out var sheets, out var influences, out var journal,
+            out var overlap));
         Assert.Single(sheets!);
         Assert.Empty(influences!);
-        Assert.Equal(0, ledger!["revision"]!.GetValue<long>());
+        Assert.Equal(1, journal!["revision"]!.GetValue<long>());
+        Assert.Empty(overlap!);
 
         sheets[0]!["id"] = "modified";
-        Assert.Equal("wolf", source["plan"]!["alternateSheets"]![0]!["id"]!.GetValue<string>());
+        Assert.Equal("wolf", source["plan"]!["proposedState"]!
+            ["alternateSheets"]![0]!["id"]!.GetValue<string>());
     }
 
     [Theory]
@@ -146,11 +154,11 @@ public sealed class CharacterSupernaturalOwnershipContractTests
         Assert.False(Accept(response));
 
         response = Planned();
-        response["plan"]!["expectedLedgerRevision"] = 7;
+        response["plan"]!["expectedManifestationRevision"] = 7;
         Assert.False(Accept(response));
 
         response = Planned();
-        response["plan"]!["ledger"]!["revision"] = 7;
+        response["plan"]!["proposedJournal"]!["revision"] = 7;
         Assert.False(Accept(response));
 
         response = Planned();
@@ -162,18 +170,17 @@ public sealed class CharacterSupernaturalOwnershipContractTests
     public void MissingOrInvalidOwnedPayloadFailsClosed()
     {
         var response = Planned();
-        response["plan"]!.AsObject().Remove("persistentInfluences");
+        response["plan"]!["proposedState"]!.AsObject().Remove("persistentInfluences");
         Assert.False(Accept(response));
 
         response = Planned();
-        response["plan"]!["alternateSheets"] = new JsonObject();
+        response["plan"]!["proposedState"]!["alternateSheets"] = new JsonObject();
         Assert.False(Accept(response));
 
         response = Planned();
-        response["plan"]!["ledger"]!["instances"] = "forged";
-        // The PostgreSQL guard, not the wire correlator, validates the full
-        // ledger body. This test ensures that structure is not misclassified
-        // as successful native entitlement by a pure response check.
+        response["plan"]!["proposedJournal"]!["processedEventIds"] = "forged";
+        // Missing canonical progression evidence can not produce a committable
+        // supernatural ownership plan.
         Assert.False(Accept(response));
     }
 
