@@ -190,3 +190,58 @@ The scoped client corrections are committed to the Workstream B branch.
 Successful Node/.NET/hosted checks are the executed code evidence; actual
 three-service browser acceptance and A/C cross-repository integration remain
 independent acceptance tasks. No merge or deployment is authorized by this note.
+
+
+## Final bounded independent-review follow-up
+
+The baseline verified at `b5184301cd58dc78357d752be12a228f1f1e4890`
+was independently re-read alongside the existing Character Sheet services,
+the native Rules Core construction engine, and the browser workflow pins.
+Two additional client-only consistency defects were corrected:
+
+1. Native candidate cards already failed closed on malformed or duplicate
+   candidate identities, but the separate mixed finite-choice reader still
+   accepted choice requirements from the rejected offer list. Mixed finite
+   choices now require that the entire offered candidate set passes the same
+   read-only candidate provenance check. This does not grant eligibility.
+2. Basic source replacement could silently discard unfamiliar contributor
+   fields. Contributors with unsupported metadata or process-specific role
+   evidence are now noneditable in this basic source-reference editor. Their
+   original proposal remains persisted and intact for a future trusted editor.
+
+The snapshot comparison now also rejects additional/duplicate *evaluated*
+choice records absent from the saved mixed proposal, while allowing legitimate
+server-derived constraints, native inferred intrinsic values, authenticated
+candidate selection evidence, and native Ancestry lineage. Ordinary Species
+sources must match their offered Species occurrence; ancestry-to-ancestor
+validation continues to belong to Rules Core.
+
+Regression tests verify malformed mixed offer lists cannot supply finite
+choices, a later preview cannot inject player selections, source-specific
+evidence is not discarded, unavailable persisted selections can be removed
+via the complete client workflow, and a late successful save response cannot
+replace a subsequently loaded draft. Existing tests cover ordinary Species
+selection/activation, multi-value choice persistence, revision conflicts,
+read-only editing, earlier character requests, direct preview identity,
+and unresolved mixed authorization.
+
+[Hosted corrected-code run 44473381095](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44473381095):
+377/377 frontend, 158/158 .NET unit, 183/183 .NET integration;
+frontend build, disposable PostgreSQL, Docker image and HTTP smoke all pass.
+The CI run does **not** execute a real authenticated three-service browser.
+
+The opt-in browser workflow retains these **historical pins**:
+Rules Core `23919c3ce00825f2da6204f218786957e9f1f1c2`,
+Site `e8d0cb7d89de71aa337293b8f36d22bac98687c3`.
+These revisions must not be claimed as combined Workstream A/C.
+The current review environment has Chromium and Node, but lacks both
+`dotnet` and Docker, and the available GitHub connector has no workflow
+dispatch operation. The browser acceptance script therefore was not run.
+Workstream D should dispatch the isolated workflow on the reviewed Sheet SHA,
+inspect its evidence artifacts, and supplement the existing narrow script
+with the newly added multi-source, candidate toggle, finite choice,
+persistence, concurrency and read-only UI assertions. Combined A/C
+acceptance requires a separately pinned integrated Rules Core revision.
+
+S04 remains an explicitly open gap. This work changes no production
+authorization, Site, Rules Core, Pillar 4 or gameplay mechanics.

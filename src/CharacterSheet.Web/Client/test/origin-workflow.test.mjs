@@ -208,7 +208,7 @@ function candidateReviewPreview(proposal, fingerprint = currentFingerprint) {
 
 function candidateDraftBackend({ outdated = false, conflict = false,
     failNativePreview = false, mismatchedPreview = false,
-    readOnly = false } = {}) {
+    readOnly = false, hideSelectedOffer = false } = {}) {
     const requests = [], writes = [];
     let draft = makeDraft(1, outdated ? oldFingerprint : currentFingerprint);
     const fetch = async (url, init) => {
@@ -228,6 +228,10 @@ function candidateDraftBackend({ outdated = false, conflict = false,
                 outdated ? oldFingerprint : currentFingerprint);
             if (mismatchedPreview)
                 preview.result.evaluatedProposal.contributors[0].source.id = "species.orc";
+            if (hideSelectedOffer && draft.proposal.manifestations.length > 0)
+                preview.result.evaluatedProposal.candidates =
+                    preview.result.evaluatedProposal.candidates.filter(c =>
+                        c.id !== draft.proposal.manifestations[0].candidateId);
             return Response.json({
                 status: "ready", draft: structuredClone(draft),
                 preview: failNativePreview ? null : preview, activeGrants: false
@@ -248,9 +252,13 @@ function candidateDraftBackend({ outdated = false, conflict = false,
             assert.equal(body.proposal.tableDecisions, undefined);
             draft = { ...draft, revision: draft.revision + 1,
                 fingerprint: currentFingerprint, proposal: structuredClone(body.proposal) };
+            const preview = candidateReviewPreview(draft.proposal);
+            if (hideSelectedOffer && draft.proposal.manifestations.length > 0)
+                preview.result.evaluatedProposal.candidates =
+                    preview.result.evaluatedProposal.candidates.filter(c =>
+                        c.id !== draft.proposal.manifestations[0].candidateId);
             return Response.json({ status: "ready", draft: structuredClone(draft),
-                preview: candidateReviewPreview(draft.proposal),
-                activeGrants: false });
+                preview, activeGrants: false });
         }
         throw new Error("Unexpected request: " + path);
     };
@@ -593,5 +601,61 @@ test("same-fingerprint authorized-looking preview of another direct proposal can
         await workflow.activate(characterId);
         assert.equal(activations, 0);
         assert.equal(workflow.current().savedState, null);
+    });
+});
+
+test("workflow removes a disappeared persisted selection but refuses stale new choices", async () => {
+    const backend = candidateDraftBackend({ hideSelectedOffer: true });
+    await withBackend(backend, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        const missing = "contributor:parent-one:species.human:/traits/0";
+        const available = "contributor:parent-two:species.elf:/traits/1";
+        await workflow.toggleMixedCandidate(characterId, missing, true);
+        assert.equal(workflow.current().draft.revision, 2);
+        assert.equal(workflow.current().draft.proposal.manifestations.length, 1);
+        assert.equal(originPreviewCandidates(workflow.current().preview,
+            workflow.current().draft.proposal).some(c => c.id === missing), false);
+        assert.equal(originPreviewCandidates(workflow.current().preview,
+            workflow.current().draft.proposal).some(c => c.id === available), true);
+        await workflow.setFiniteChoice(characterId, missing, "shade", ["red"]);
+        await workflow.toggleMixedCandidate(characterId, missing, true);
+        assert.equal(backend.writes.length, 1,
+            "An unavailable offer cannot authorize a choice or a new selection.");
+        await workflow.toggleMixedCandidate(characterId, missing, false);
+        assert.equal(backend.writes.length, 2);
+        assert.equal(workflow.current().draft.revision, 3);
+        assert.deepEqual(workflow.current().draft.proposal.manifestations, []);
+        await workflow.load(characterId);
+        assert.deepEqual(workflow.current().draft.proposal.manifestations, []);
+        assert.equal(backend.draft().revision, 3);
+    });
+});
+
+test("late successful save does not overwrite a newer character load", async () => {
+    const backend = candidateDraftBackend();
+    let releaseSave;
+    const waitToSave = new Promise(resolve => { releaseSave = resolve; });
+    const fetch = async (url, init) => {
+        if (String(url).endsWith("/origin/draft") && init?.method === "PUT")
+            await waitToSave;
+        return backend.fetch(url, init);
+    };
+    await withBackend({ fetch }, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        const stale = workflow.toggleMixedCandidate(characterId,
+            "contributor:parent-one:species.human:/traits/0", true);
+        assert.equal(workflow.current().busy, true);
+        await workflow.load(characterId);
+        assert.equal(workflow.current().draft.revision, 1);
+        releaseSave();
+        await stale;
+        assert.equal(workflow.current().draft.revision, 1,
+            "The stale save result cannot replace the reloaded draft.");
+        assert.equal(backend.draft().revision, 2);
+        await workflow.load(characterId);
+        assert.equal(workflow.current().draft.revision, 2);
+        assert.equal(workflow.current().draft.proposal.manifestations.length, 1);
     });
 });

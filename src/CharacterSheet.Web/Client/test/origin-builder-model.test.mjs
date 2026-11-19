@@ -518,3 +518,59 @@ test("selected characteristic absent from current native offers can be removed w
         mixedNativeOfferPreview(revised), "unoffered-new-candidate", true),
     /does not belong/);
 });
+
+test("native evaluated choices must not add player selections or expose malformed offers", () => {
+    const base = changeMixedNativeParent(changeNativeOriginMode(
+        createInitialOriginProposal(id), "mixed"), "parent-one", "species.human");
+    const original = mixedNativeOfferPreview(base);
+    const offerId = original.result.evaluatedProposal.candidates[0].id;
+    const selected = changeMixedNativeCandidate(base, original, offerId, true);
+    const preview = mixedNativeOfferPreview(selected);
+    const withChoice = changeMixedNativeFiniteChoice(selected, preview,
+        offerId, "selection", ["red"]);
+    assert.equal(requiredDraftOriginChoices(
+        mixedNativeOfferPreview(withChoice), withChoice).length, 1);
+    const injectedChoice = mixedNativeOfferPreview(withChoice);
+    injectedChoice.result.evaluatedProposal.manifestations[0].choices.push({
+        requirementId: "unselected", selectedOptionIds: ["invented"]
+    });
+    assert.equal(mixedNativePreviewMatchesDraft(injectedChoice, withChoice), false);
+    assert.deepEqual(requiredDraftOriginChoices(injectedChoice, withChoice), []);
+
+    const valid = mixedNativeOfferPreview(withChoice);
+    const invalidOffers = [
+        p => p.result.evaluatedProposal.candidates[0].id = "browser-substituted-id",
+        p => p.result.evaluatedProposal.candidates[0].identity.occurrence.source.id = "species.orc",
+        p => p.result.evaluatedProposal.candidates.push(
+            structuredClone(p.result.evaluatedProposal.candidates[0]))
+    ];
+    for (const alter of invalidOffers) {
+        const malformed = structuredClone(valid);
+        alter(malformed);
+        assert.deepEqual(originPreviewCandidates(malformed, withChoice), []);
+        assert.deepEqual(requiredDraftOriginChoices(malformed, withChoice), [],
+            "A choice may not survive when the corresponding native offer set is rejected.");
+        assert.throws(() => changeMixedNativeFiniteChoice(withChoice,
+            malformed, offerId, "selection", ["blue"]), /finite native offer/);
+    }
+});
+
+test("basic contributor editor preserves unfamiliar or process-specific evidence", () => {
+    const base = changeMixedNativeParent(changeNativeOriginMode(
+        createInitialOriginProposal(id), "mixed"), "parent-one", "species.human");
+    for (const extra of [
+        { originProfileRevision: "trusted-server-only" },
+        { role: { kind: 0, processRoleId: "process-specific-input" } },
+        { source: { kind: 0, id: "species.human", otherEvidence: "rejected" } }
+    ]) {
+        const evidence = { ...base, contributors: [
+            { ...base.contributors[0], ...extra }
+        ] };
+        assert.equal(isEditableMixedNativeOrigin(evidence), false);
+        assert.throws(() => changeMixedNativeParent(evidence,
+            "parent-one", "species.elf"), /plain biological evidence draft/);
+        assert.throws(() => changeNativeOriginMode(evidence, "direct"),
+            /can not replace/);
+        assert.deepEqual(base.contributors[0].source.id, "species.human");
+    }
+});

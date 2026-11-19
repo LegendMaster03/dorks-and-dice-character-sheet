@@ -127,6 +127,8 @@ export function isEditableMixedNativeOrigin(
 
     const slots = new Set<string>();
     return proposal.contributors.every(raw => {
+        // Do not silently delete unfamiliar contributor metadata when this
+        // basic source-only editor replaces a slot or switches methods.
         if (!isRecord(raw) || !isRecord(raw.role) || !isRecord(raw.source) ||
             typeof raw.id !== "string" ||
             !mixedSourceSlots.includes(raw.id as MixedNativeParentSlot) ||
@@ -136,7 +138,13 @@ export function isEditableMixedNativeOrigin(
             typeof raw.source.id !== "string" ||
             !/^(species|ancestry)\.[a-z0-9]+(?:[.\-][a-z0-9]+)*$/.test(raw.source.id) ||
             raw.manifestedProfile != null || raw.historicalSourceIds != null ||
-            raw.source.version != null) return false;
+            raw.source.version != null || raw.role.processRoleId != null ||
+            !Object.keys(raw).every(k => [
+                "id", "role", "source", "manifestedProfile", "historicalSourceIds"
+            ].includes(k)) ||
+            !Object.keys(raw.role).every(k => ["kind", "processRoleId"].includes(k)) ||
+            !Object.keys(raw.source).every(k => ["kind", "id", "version"].includes(k)))
+            return false;
         slots.add(raw.id);
         return true;
     });
@@ -307,13 +315,20 @@ export function mixedNativePreviewMatchesDraft(
             return false;
         const selectedChoices = Array.isArray(current.choices) ?
             current.choices.filter(isRecord) : [];
-        if ((original.choices ?? []).some(choice =>
-            !selectedChoices.some(c =>
-                c.requirementId === choice.requirementId &&
-                Array.isArray(c.selectedOptionIds) &&
-                c.selectedOptionIds.length === choice.selectedOptionIds.length &&
-                c.selectedOptionIds.every((id, i) =>
-                    id === choice.selectedOptionIds[i])))) return false;
+        // Rules Core can enrich a selection with a verified value or native
+        // catalog proof. It does not invent additional player choice records.
+        // An extra or duplicate choice must not appear as if the player saved it.
+        const originalChoices = original.choices ?? [];
+        if (selectedChoices.length !== originalChoices.length ||
+            new Set(selectedChoices.map(c => c.requirementId)).size !==
+                selectedChoices.length ||
+            originalChoices.some(choice =>
+                !selectedChoices.some(c =>
+                    c.requirementId === choice.requirementId &&
+                    Array.isArray(c.selectedOptionIds) &&
+                    c.selectedOptionIds.length === choice.selectedOptionIds.length &&
+                    c.selectedOptionIds.every((id, i) =>
+                        id === choice.selectedOptionIds[i])))) return false;
     }
     return true;
 }
@@ -367,6 +382,19 @@ export function originPreviewCandidates(
                 "contributor:" + contributorId}:${sourceId}:${path}` ||
             (contributorId !== null && !proposal.contributors.some(entry =>
                 isRecord(entry) && entry.id === contributorId))) return [];
+        if (contributorId !== null) {
+            const sourceContributor = proposal.contributors.find(entry =>
+                isRecord(entry) && entry.id === contributorId);
+            const nativeSource = isRecord(sourceContributor) &&
+                isRecord(sourceContributor.source)
+                ? sourceContributor.source.id : null;
+            // A native Species reference offers only that Species. An Ancestry
+            // may legitimately offer traits from its authored ancestor chain;
+            // its lineage remains Rules Core's responsibility, not browser policy.
+            if (typeof nativeSource === "string" &&
+                nativeSource.startsWith("species.") &&
+                sourceId !== nativeSource) return [];
+        }
         seen.add(raw.id);
         const basis = isRecord(raw.selectionBasis) ? raw.selectionBasis : {};
         const kind = identity.kind === 0 || identity.kind === "Intrinsic" ? "Intrinsic" :
@@ -555,10 +583,21 @@ export function requiredDraftOriginChoices(
         (isEditableMixedNativeOrigin(draft) &&
             !mixedNativePreviewMatchesDraft(preview, draft))) return [];
     const direct = isDirectOriginProposal(draft);
+    // Only the same canonical, nonduplicated candidate offers inspected in the
+    // cards may supply editable choices. Previously this separate path accepted
+    // malformed native offer IDs even when the card projector rejected them.
+    const validatedMixedCandidates = direct ? null :
+        originPreviewCandidates(preview, draft);
+    if (validatedMixedCandidates !== null &&
+        validatedMixedCandidates.length !== preview.result.evaluatedProposal.candidates.length)
+        return [];
+    const mixedValidIds = validatedMixedCandidates === null ? null :
+        new Set(validatedMixedCandidates.map(candidate => candidate.id));
 
     const choices: NativeOriginRequiredChoice[] = [];
     for (const rawCandidate of preview.result.evaluatedProposal.candidates) {
         if (!isRecord(rawCandidate) || typeof rawCandidate.id !== "string" ||
+            (mixedValidIds !== null && !mixedValidIds.has(rawCandidate.id)) ||
             (direct ? rawCandidate.contributorId != null :
                 !draft.manifestations.some(m => m.candidateId === rawCandidate.id)) ||
             !Array.isArray(rawCandidate.requiredChoices)) continue;
