@@ -74,6 +74,17 @@ public interface INativeRulesCoreGateway
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
             "Approved mixed Origin evaluation is unsupported by this gateway."));
 
+    /// <summary>
+    /// Delegated native calculation for direct Origin free-cast bootstrap.
+    /// PreviewOnly is mandatory: the Character Sheet app must first verify
+    /// committed Origin and owner-held character progression, then commit
+    /// via its separate atomic character-owned store.
+    /// </summary>
+    Task<JsonNode> PreviewDirectInnateSpellLedgerBootstrapAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Native direct-Origin innate spell ledger bootstrap is unsupported."));
+
     Task<JsonNode> GetNativeHarvestingCatalogAsync(
         string fingerprint, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(

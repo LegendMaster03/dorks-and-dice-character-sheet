@@ -995,3 +995,108 @@ R1/R2 remain independently WorkChat-closed; **R3 stays open**.
 This does not close original scenarios 7, 26 or 27 or change the
 **23 complete / 9 partial** 32-scenario tally. Browser and production
 supernatural acceptance remain outstanding. No merge or deployment.
+
+
+### November 17 — influence-expression event and internal coordinator
+
+The Increment 2 progressive-influence model already distinguished acquired
+identity, current expression and independently earned progression. Increment 4
+now has an **internal-only expression-change operation** rather than treating
+an expression edit as another acquisition or a manifestation transition.
+
+- `VerifiedSupernaturalStateWrite` supports a distinct
+  `expression-change` receipt with source-verified before/after expression
+  values and evidence IDs. The stored source of truth uses the existing
+  character-level revision/CAS, unique event identity, canonical character
+  lock and serializable PostgreSQL transaction. The manifestation ledger
+  revision and processed manifestation events are unchanged.
+- The history guard accepts a change to exactly one acquired influence's
+  `expression` and `expressionEvidenceId`. It retains the influence ID,
+  definition/acquisition provenance, effects, applicability decisions and
+  independently acquired progression and grants. All other influences,
+  alternate sheets, manifestation instances, resources and the ledger are
+  immutable for this event.
+- Migration `20261117090000_AddInfluenceExpressionChangeAudit` adds a nullable
+  JSONB audit to supernatural event receipts. Its downgrade guard rejects
+  removal of recorded expression changes. Historical records remain null
+  rather than claiming reconstructed expression evidence.
+- `CharacterInfluenceExpressionChangeService` is a backend-only coordinator
+  using fresh Site ownership/lifecycle checks, a separate trusted source
+  interface, verified record snapshots, input fingerprints and the existing
+  atomic store. It checks the current native Rules Core catalog before
+  committing and refuses stale fingerprints or an unavailable delegated
+  catalog read. It invokes the ordinary effective-state read **after** a
+  successful commit, so a separate Rules Core source verifier still governs
+  all effective characteristics. An unavailable verifier leaves the result
+  unresolved rather than providing invented playable mechanics. The interface
+  has **no production implementation or mutation route**.
+- Synthetic PostgreSQL tests cover increase/decrease, unchanged grant and
+  progression ownership, duplicate and stale revisions, bad or missing audit
+  evidence, mutations outside expression scope, resource preservation while
+  an alternate form is active, reversion, process-context reload, rejected
+  source/ownership, and rollback protection. A test-only trusted source is
+  deliberately not a production self-authorization path.
+
+**This is not first-party curse or Werewolf gameplay.** No universal expression
+scale, automatic progression award, form-specific resource refill, class-feature
+substitution, or full Origin reconstruction has been added. Production
+expression authorization still requires an independently approved source
+policy. Existing verified Origin Underlying functionality and primary-state
+partial projections remain separate; the missing production Core Underlying
+source provider has not been fabricated.
+
+**Acceptance accounting:** Infrastructure coverage has increased, but the
+original 32 scenarios remain **23 complete / 9 partial** with partial
+**2, 6, 7, 9, 21, 22, 24, 26 and 27**. No partial scenario is promoted from
+synthetic authorization alone. R1/R2 remain independently closed; R3 stays
+an **external Site commit-ordering dependency** with no new Site changes.
+The shared Pillar 2 temporary testing-authorization integration remains
+reserved for merge preparation. Origin/alternate-form integration,
+production-authorized source rules, the remaining effective-character
+domains, and independent browser/WorkChat acceptance remain outstanding.
+
+Neither Rules Core nor Site was modified by this continuation. No feature
+branch was merged or deployed.
+
+
+### November 17 — expression-change F1/F2 focused remediation
+
+The existing Character Sheet branch adds post-commit projection outcomes distinct
+from the authoritative expression-write result. A confirmed PostgreSQL write
+retains `Applied`, the committed event ID and revision even when the subsequent
+read throws a database or other dependency exception. The failure is traced,
+not represented as a failed write and does not trigger a second write. Caller
+cancellation after commitment is explicitly reported as a canceled projection
+without revoking the committed event. A retry with an identical character,
+original revision, ledger revision, event ID, target influence and **intent ID**
+can recover the existing receipt as `PreviouslyCommitted` after fresh Site
+access checks. Different identities do not receive a positive acknowledgment;
+unrelated stale requests remain revision conflicts. The original receipt's
+committed revision is returned even if the current character has advanced.
+
+New coordinator events bind intent IDs inside the existing expression JSONB
+audit. Old seven-field expression receipts remain structurally valid history,
+but they lack evidence to authenticate a particular intent ID and therefore
+cannot be positively recovered by this new replay path. No historical intent
+value is invented. The application checks persisted receipt evidence, not a
+new synthetic source decision. Event IDs alone are not authorization.
+
+Under the existing serialized PostgreSQL write transaction, every historical
+expression audit is now parsed for exact receipt identities, allowed fields,
+valid ordinal dimension maps and bounded evidence, then chained separately
+for each influence. The latest recorded expression and evidence must match the
+saved owner snapshot. Existing acquisition and transition receipts without an
+expression audit remain compatible. An acquisition from before this migration
+usually does not record the initial expression snapshot, so the **first**
+expression audit's previous value cannot be independently reconstructed from
+that acquisition receipt. Later expression-to-expression transitions and the
+latest saved state are checked. This is application-enforced integrity on
+future writes, not cryptographic or privileged-database tamper prevention.
+
+Regression tests use real disposable PostgreSQL databases, a synthetic
+post-commit `NpgsqlException`, exact replay/mismatch checks, malformed
+historical receipts, broken chains, and valid fresh-context reloads. These
+are internal testing controls, not approved production expression authority.
+The baseline remains **23 complete / 9 partial**. The separately documented
+Site R3 dependency, production source policy and browser acceptance remain
+out of scope. No merge or deployment was approved by this remediation.

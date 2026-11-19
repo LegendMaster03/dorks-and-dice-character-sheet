@@ -395,6 +395,47 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.ToTable("character_authorized_origins");
         });
 
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterInnateSpellLedgerState", b =>
+        {
+            b.Property<Guid>("CharacterId").HasColumnType("uuid");
+            b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+            b.Property<string>("Fingerprint").IsRequired()
+                .HasMaxLength(200).HasColumnType("character varying(200)");
+            b.Property<string>("LedgerJson").IsRequired().HasColumnType("jsonb");
+            b.Property<long>("LedgerRevision").HasColumnType("bigint");
+            b.Property<long>("OriginRevision").HasColumnType("bigint");
+            b.Property<string>("OriginProfileId").IsRequired()
+                .HasMaxLength(240).HasColumnType("character varying(240)");
+            b.Property<string>("ProposalId").IsRequired()
+                .HasMaxLength(240).HasColumnType("character varying(240)");
+            b.Property<string>("RulesetId").IsRequired()
+                .HasMaxLength(160).HasColumnType("character varying(160)");
+            b.Property<DateTimeOffset>("UpdatedAt").HasColumnType("timestamp with time zone");
+            b.HasKey("CharacterId");
+            b.ToTable("character_innate_spell_ledgers", t =>
+                t.HasCheckConstraint("CK_innate_ledger_revision_nonnegative",
+                    "\"LedgerRevision\" >= 0 AND \"OriginRevision\" >= 1"));
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterInnateSpellLedgerReceipt", b =>
+        {
+            b.Property<Guid>("CharacterId").HasColumnType("uuid");
+            b.Property<string>("EventId").HasMaxLength(240).HasColumnType("character varying(240)");
+            b.Property<string>("AuthorizationEvidenceId").IsRequired()
+                .HasMaxLength(320).HasColumnType("character varying(320)");
+            b.Property<Guid>("ActorUserId").HasColumnType("uuid");
+            b.Property<string>("AppliedDecisionIdsJson").HasColumnType("jsonb");
+            b.Property<long>("CommittedRevision").HasColumnType("bigint");
+            b.Property<long>("OriginRevision").HasColumnType("bigint");
+            b.Property<string>("Operation").IsRequired()
+                .HasMaxLength(64).HasColumnType("character varying(64)");
+            b.Property<DateTimeOffset>("RecordedAt").HasColumnType("timestamp with time zone");
+            b.HasKey("CharacterId", "EventId");
+            b.HasIndex("CharacterId", "CommittedRevision").IsUnique()
+                .HasDatabaseName("UX_character_innate_spell_ledger_receipts_Revision");
+            b.ToTable("character_innate_spell_ledger_receipts");
+        });
+
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterSupernaturalState", b =>
         {
             b.Property<Guid>("CharacterId").HasColumnType("uuid");
@@ -429,6 +470,7 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasMaxLength(32).HasColumnType("character varying(32)");
             b.Property<string>("AuthorizationEvidenceId").IsRequired()
                 .HasMaxLength(320).HasColumnType("character varying(320)");
+            b.Property<string>("ExpressionChangeJson").HasColumnType("jsonb");
             b.Property<string>("TransitionRequestJson").HasColumnType("jsonb");
             b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
             b.HasKey("CharacterId", "EventId");
@@ -632,6 +674,11 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasColumnType("integer")
                 .HasDefaultValue(0);
 
+            b.Property<long>("MutationRevision")
+                .ValueGeneratedOnAdd()
+                .HasColumnType("bigint")
+                .HasDefaultValue(0L);
+
             b.Property<int>("SchemaVersion")
                 .HasColumnType("integer");
 
@@ -639,7 +686,9 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasColumnType("timestamp with time zone");
 
             b.HasKey("CharacterId");
-            b.ToTable("character_sheet_roots");
+            b.ToTable("character_sheet_roots", t =>
+                t.HasCheckConstraint("CK_character_mutation_revision_nonnegative",
+                    "\"MutationRevision\" >= 0"));
         });
 
         modelBuilder.Entity("CharacterSheet.Infrastructure.Persistence.ProcessedLifecycleEvent", b =>
@@ -771,6 +820,21 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .WithMany()
                 .HasForeignKey("CharacterId")
                 .OnDelete(DeleteBehavior.Cascade).IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterInnateSpellLedgerState", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterAuthorizedOriginState", null)
+                .WithOne()
+                .HasForeignKey("CharacterSheet.Domain.Characters.CharacterInnateSpellLedgerState", "CharacterId")
+                .OnDelete(DeleteBehavior.Cascade).IsRequired();
+        });
+
+        modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterInnateSpellLedgerReceipt", b =>
+        {
+            b.HasOne("CharacterSheet.Domain.Characters.CharacterInnateSpellLedgerState", null)
+                .WithMany()
+                .HasForeignKey("CharacterId").OnDelete(DeleteBehavior.Cascade).IsRequired();
         });
 
         modelBuilder.Entity("CharacterSheet.Domain.Characters.CharacterOriginEventReceipt", b =>

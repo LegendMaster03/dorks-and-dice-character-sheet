@@ -3,13 +3,21 @@ using System.Text.Json;
 namespace CharacterSheet.Application.Characters;
 
 /// <summary>
-/// Narrow server-side bridge from current native Origin adjudication to the
-/// existing character kernel. Only a full first-party review can supply the
-/// native projection output to this reader; a browser preview is never input.
-/// Recheck each reported scalar against the exact committed grant occurrence.
+/// The exact committed native grant for a verified intrinsic entitlement.
+/// Provenance is informational and cannot execute a mechanical operation.
+/// </summary>
+public sealed record VerifiedOriginIntrinsicGrant(
+    string GrantId, string SourceId, string OccurrencePath);
+
+/// <summary>
+/// Verified native scalars read from the exact committed Origin grants.
+/// A browser preview alone cannot authorize these values.
 /// </summary>
 public sealed record VerifiedOriginIntrinsics(
-    string CreatureType, string Size, int BaseWalkingSpeedFeet);
+    string CreatureType, string Size, int BaseWalkingSpeedFeet,
+    VerifiedOriginIntrinsicGrant? CreatureTypeGrant = null,
+    VerifiedOriginIntrinsicGrant? SizeGrant = null,
+    VerifiedOriginIntrinsicGrant? WalkingSpeedGrant = null);
 
 /// <summary>
 /// A revalidated Origin intrinsic payload belongs to one exact native catalog
@@ -18,7 +26,8 @@ public sealed record VerifiedOriginIntrinsics(
 /// </summary>
 public sealed record VerifiedOriginProjectionContext(
     string RulesetId, string Fingerprint, VerifiedOriginIntrinsics Intrinsics,
-    VerifiedOriginLowLightVision? LowLightVision = null);
+    VerifiedOriginLowLightVision? LowLightVision = null,
+    long? CommittedRevision = null);
 
 public static class VerifiedOriginIntrinsicReader
 {
@@ -58,9 +67,10 @@ public static class VerifiedOriginIntrinsicReader
                 return null;
 
             return new(type.Value.Value.GetString()!,
-                size.Value.Value.GetString()!, speed);
+                size.Value.Value.GetString()!, speed,
+                type.Value.Grant, size.Value.Grant, walk.Value.Grant);
 
-            (JsonElement Value, string GrantId)? Value(
+            (JsonElement Value, VerifiedOriginIntrinsicGrant Grant)? Value(
                 string slot, JsonValueKind requiredKind)
             {
                 if (!response.TryGetProperty(slot, out var projected) ||
@@ -96,7 +106,8 @@ public static class VerifiedOriginIntrinsicReader
                     !EnumIs(sourceKind, "Native", 0))
                     return null;
 
-                return (value, grantId);
+                return (value, new VerifiedOriginIntrinsicGrant(
+                    grantId!, sourceId!, path!));
             }
         }
         catch (JsonException)

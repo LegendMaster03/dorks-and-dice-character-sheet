@@ -163,6 +163,16 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
                     "A native resource current value can not be negative.");
 
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            // Keep the same lock order as innate-ledger CAS: root first.
+            // All aggregate changes must increment MutationRevision, even
+            // when their caller timestamp does not advance UpdatedAt.
+            var rootLock = await dbContext.CharacterSheets.FromSqlInterpolated(
+                $"""SELECT * FROM character_sheet_roots WHERE "CharacterId" = {characterId} FOR UPDATE""")
+                .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+            if (rootLock is null)
+                throw new InvalidOperationException(
+                    "Character Sheet does not exist for this resource mutation.");
+
             var changed = await dbContext.CharacterRulesInputs
                 .Where(value => value.CharacterId == characterId &&
                     value.Kind == CharacterRulesInputKind.Resource &&
@@ -181,11 +191,25 @@ public sealed class PostgresCharacterStateStore(CharacterSheetDbContext dbContex
                     : "Character Sheet does not exist for this resource mutation.");
             }
 
-            await dbContext.CharacterSheets
+            // One root UPDATE under the existing root lock. The PostgreSQL
+            // BEFORE UPDATE trigger advances MutationRevision from the locked
+            // database row, not the caller's possibly stale EF snapshot.
+            // Do not issue a second UPDATE for UpdatedAt: the trigger would
+            // correctly count it as another root revision. Preserve timestamp
+            // monotonicity within this same statement instead.
+            var rooted = await dbContext.CharacterSheets
                 .Where(value => value.CharacterId == characterId &&
-                    value.UpdatedAt < changedAt)
+                    value.MutationRevision == rootLock.MutationRevision &&
+                    value.MutationRevision < long.MaxValue)
                 .ExecuteUpdateAsync(update => update
-                    .SetProperty(value => value.UpdatedAt, changedAt), cancellationToken);
+                    .SetProperty(value => value.MutationRevision,
+                        value => value.MutationRevision + 1L)
+                    .SetProperty(value => value.UpdatedAt,
+                        value => value.UpdatedAt >= changedAt
+                            ? value.UpdatedAt : changedAt), cancellationToken);
+            if (rooted != 1)
+                throw new DbUpdateConcurrencyException(
+                    "Character changed during the guarded native resource mutation.");
             await transaction.CommitAsync(cancellationToken);
             // Do not return the tracked root from before the conditional UPDATE.
             return await GetAsync(characterId, cancellationToken);

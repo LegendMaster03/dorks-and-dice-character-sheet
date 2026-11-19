@@ -1,0 +1,87 @@
+name: Pillar 2 / Pinned Current Core and Sheet Integration
+
+# Independent, branch-specific validation for the native Character Origins
+# implementation under review. This supplements (does not replace) the
+# existing main-compatibility and historical Phase 5 workflows.
+# Pin the exact Rules Core commit. A future branch advance requires an
+# intentional review and update of this SHA before signoff.
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  current-origin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Character Sheet PR source HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Check out pinned Pillar 2 Rules Core source HEAD
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-rules-core
+          ref: 541e8d818da0e925dfede0708aebe9ab62a8ba6c
+          path: rules-core
+          persist-credentials: false
+      - name: Verify exact source revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          sheet_head="$(git rev-parse HEAD)"
+          core_head="$(git -C rules-core rev-parse HEAD)"
+          echo "SHEET_SOURCE_SHA=$sheet_head"
+          echo "CORE_SOURCE_SHA=$core_head"
+          test "$sheet_head" = "${{ github.event.pull_request.head.sha }}"
+          test "$core_head" = "541e8d818da0e925dfede0708aebe9ab62a8ba6c"
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Probe current real native Core through Character Sheet consumer
+        run: >-
+          dotnet run
+          --project tests/NativeCoreContractProbe/NativeCoreContractProbe.csproj
+          -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          -p:DefineConstants=PILLAR2_PHASE5_ORIGIN
+          --
+          "$GITHUB_WORKSPACE/rules-core/data/rulesets"
+      - name: Start disposable PostgreSQL 18
+        shell: bash
+        run: |
+          docker run -d --name pillar2-current-head-postgres \
+            -p 127.0.0.1:55433:5432 \
+            -e POSTGRES_DB=character_sheet_test \
+            -e POSTGRES_USER=character_sheet_test \
+            -e POSTGRES_PASSWORD=character_sheet_test \
+            postgres:18
+          for i in {1..40}; do
+            if docker exec pillar2-current-head-postgres \
+              pg_isready -U character_sheet_test -d character_sheet_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs pillar2-current-head-postgres
+          exit 1
+      - name: Exercise current real Core HTTP and Sheet PostgreSQL mixed-Origin acceptance
+        env:
+          RULES_CORE_CONTENT_ROOT: ${{ github.workspace }}/rules-core/data/rulesets
+          ConnectionStrings__CharacterSheet: Host=127.0.0.1;Port=55433;Database=character_sheet_test;Username=character_sheet_test;Password=character_sheet_test
+        run: >-
+          dotnet test
+          tests/CharacterSheet.IntegrationTests/CharacterSheet.IntegrationTests.csproj
+          --configuration Release
+          --filter FullyQualifiedName~MixedOriginCrossRepositoryPersistenceTests
+          -p:BuildClient=false
+          -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          -p:DefineConstants=PILLAR2_PHASE5_ORIGIN%3BPILLAR2_CURRENT_ORIGIN
+      - name: Cleanup disposable PostgreSQL
+        if: always()
+        run: docker rm -f pillar2-current-head-postgres 2>/dev/null || true

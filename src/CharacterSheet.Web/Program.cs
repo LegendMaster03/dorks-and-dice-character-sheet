@@ -120,6 +120,17 @@ builder.Services.AddScoped<ICharacterOriginDraftStore, PostgresCharacterOriginDr
 // Internal-only authorized Origin storage; there is deliberately no direct
 // controller or browser endpoint capable of calling CommitVerifiedAsync.
 builder.Services.AddScoped<ICharacterAuthorizedOriginStore, PostgresCharacterAuthorizedOriginStore>();
+// No public write endpoint: a later trusted character application operation
+ // must verify native entitlement and actor authority before using this store.
+builder.Services.AddScoped<ICharacterInnateSpellLedgerStore, PostgresCharacterInnateSpellLedgerStore>();
+builder.Services.AddScoped<ICharacterMutationRevisionReader, PostgresCharacterMutationRevisionReader>();
+// Only the direct, still-current committed Source Draft supports a verified
+// native bootstrap candidate. Casting, resting, mixed-origin construction and
+// advancement remain unresolved in the evaluator. No ledger HTTP mutation
+// route is mapped; native preview cannot publish a resource without CAS.
+builder.Services.AddScoped<ICharacterInnateSpellActorSource, SiteInnateSpellActorSource>();
+builder.Services.AddScoped<ITrustedInnateSpellLedgerEvaluator, NativeDirectInnateSpellLedgerEvaluator>();
+builder.Services.AddScoped<CharacterInnateSpellLedgerService>();
  // Supernatural writes are internal-only and require separately verified
  // acquisition or transition plans; no browser route invokes this store.
 builder.Services.AddScoped<ICharacterSupernaturalStateStore, PostgresCharacterSupernaturalStateStore>();
@@ -129,7 +140,6 @@ builder.Services.AddScoped<ICharacterArtStore, PostgresCharacterArtStore>();
 builder.Services.AddScoped<ICharacterSheetLifecycleProcessor, CharacterSheetLifecycleProcessor>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ISiteCharacterAccessGateway, ToolHostSiteCharacterAccessGateway>();
-builder.Services.AddScoped<ISiteOriginDmAccessGateway, ToolHostOriginDmAccessGateway>();
 builder.Services.AddScoped<CharacterSheetBootstrapService>();
 builder.Services.AddScoped<CharacterBuildService>();
 builder.Services.AddScoped<CharacterOriginDraftService>();
@@ -138,8 +148,6 @@ builder.Services.AddScoped<CharacterOriginParentSnapshotService>();
 builder.Services.AddScoped<CharacterOriginParentNativeReviewService>();
 builder.Services.AddScoped<CharacterOriginParentSourceAlignmentService>();
 builder.Services.AddScoped<CharacterOriginInitialActivationService>();
-builder.Services.AddScoped<CharacterOriginMixedActivationService>();
-builder.Services.AddScoped<CharacterOriginMixedReviewService>();
 builder.Services.AddScoped<CharacterAdvancementService>();
 builder.Services.AddScoped<CharacterStateService>();
 builder.Services.AddScoped<CharacterEffectiveStateService>();

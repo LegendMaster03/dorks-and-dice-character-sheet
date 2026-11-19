@@ -20,7 +20,8 @@ public sealed record VerifiedSupernaturalStateWrite(
     long ExpectedRevision, long ExpectedLedgerRevision, long NextLedgerRevision,
     string ExpectedDependencyFingerprint, string EventId,
     string AuthorizationEvidenceId, bool IsTransition, DateTimeOffset RecordedAt,
-    string? TransitionRequestJson = null);
+    string? TransitionRequestJson = null,
+    bool IsExpressionChange = false, string? ExpressionChangeJson = null);
 
 public sealed record CharacterSupernaturalWriteResult(
     CharacterSupernaturalWriteStatus Status, long? Revision = null,

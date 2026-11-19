@@ -211,8 +211,12 @@ public sealed class CharacterBuildPersistenceTests
             .Include(value => value.AdvancementEntries)
             .SingleAsync(value => value.CharacterId == characterId);
 
-        var featA = rootA.AddFeatOccurrence("feat:alert", DateTimeOffset.UtcNow);
-        var featB = rootB.AddFeatOccurrence("feat:alert", DateTimeOffset.UtcNow.AddMilliseconds(1));
+        // Both writers deliberately load the same original revision and use
+        // the same timestamp. Independent Feat occurrences must survive; the
+        // database-side trigger must still count two committed mutations.
+        var sharedTimestamp = DateTimeOffset.UtcNow;
+        var featA = rootA.AddFeatOccurrence("feat:alert", sharedTimestamp);
+        var featB = rootB.AddFeatOccurrence("feat:alert", sharedTimestamp);
 
         await Task.WhenAll(writerA.SaveChangesAsync(), writerB.SaveChangesAsync());
 
@@ -225,6 +229,9 @@ public sealed class CharacterBuildPersistenceTests
         Assert.Equal(2, feats.Length);
         Assert.NotEqual(featA.Id, featB.Id);
         Assert.All(feats, value => Assert.Equal("feat:alert", value.RuleConceptKey));
+        var committedRoot = await verification.CharacterSheets.AsNoTracking()
+            .SingleAsync(x => x.CharacterId == characterId);
+        Assert.Equal(2, committedRoot.MutationRevision);
     }
 
     [Fact]

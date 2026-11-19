@@ -101,7 +101,8 @@ public sealed class CharacterPresentationService(
                         var lowLight = VerifiedOriginVisionReader.Read(
                             reviewed.EvaluatedVision, saved.ProfileJson);
                         verifiedOrigin = new(reviewed.Review.RulesetId,
-                            reviewed.Review.LatestNativeFingerprint, scalars, lowLight);
+                            reviewed.Review.LatestNativeFingerprint, scalars, lowLight,
+                            saved.Revision);
                     }
                 }
                 if (verifiedOrigin is null)
@@ -115,7 +116,8 @@ public sealed class CharacterPresentationService(
             projection = await NativeCharacterPresentationBridge.ProjectAsync(
                 nativeRulesCoreGateway, build, state, cancellationToken,
                 hasCommittedOrigin: origin.SavedState is not null,
-                originProjection: verifiedOrigin);
+                originProjection: verifiedOrigin,
+                committedOriginRevision: origin.SavedState?.Revision);
         }
         catch (Exception exception) when (exception is RulesCoreGatewayException
             or JsonException or InvalidOperationException or FormatException)
