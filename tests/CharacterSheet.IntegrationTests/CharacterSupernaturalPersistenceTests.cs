@@ -162,7 +162,16 @@ public sealed class CharacterSupernaturalPersistenceTests
         var auditMigration = "20261115020000_AddSupernaturalTransitionRequestAudit";
         await migrator.MigrateAsync(beforeAudit);
         var id = Guid.NewGuid();
-        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+
+        // Seed the historical root with SQL: the current EF model expects
+        // MutationRevision, which this deliberately pre-Pillar-2 schema lacks.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO character_sheet_roots (
+                "CharacterId", "SchemaVersion", "BuilderStatus",
+                "CreatedAt", "UpdatedAt")
+            VALUES ({id}, {CharacterSheetRoot.CurrentSchemaVersion},
+                {"BuildInProgress"}, {Now}, {Now})
+            """);
 
         // Seed the original schema using SQL. The current EF receipt model
         // necessarily includes the added column and must not write into the
