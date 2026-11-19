@@ -66,6 +66,35 @@ public sealed class VerifiedOriginVisionReaderTests
     }
 
     [Fact]
+    public void CanonicalSharedTraitIdMatchesExactNativeGrantAndDoesNotAllowOtherDefinitions()
+    {
+        var canonical = Profile.Replace(
+            "species.orc#trait:low-light-vision",
+            "trait.shared.low-light-vision", StringComparison.Ordinal);
+        var view = Assert.IsType<VerifiedOriginLowLightVision>(
+            Read(stored: canonical));
+        Assert.Equal("species.orc", view.SourceId);
+        Assert.Equal("grant:vision", view.GrantId);
+
+        var mismatched = canonical.Replace(
+            "trait.shared.low-light-vision",
+            "trait.other.low-light-vision", StringComparison.Ordinal);
+        Assert.Null(Read(stored: mismatched));
+
+        var forgedSource = JsonNode.Parse(canonical)!;
+        foreach (var state in new[] { "underlying", "current" })
+            forgedSource[state]!["inherentGrants"]![0]!["identity"]!
+                ["occurrence"]!["source"]!["id"] = "species.elf";
+        Assert.Null(Read(stored: forgedSource.ToJsonString()));
+
+        var malformed = JsonNode.Parse(canonical)!;
+        foreach (var state in new[] { "underlying", "current" })
+            malformed[state]!["inherentGrants"]![0]!["effectiveValue"]!
+                ["extraEffect"] = true;
+        Assert.Null(Read(stored: malformed.ToJsonString()));
+    }
+
+    [Fact]
     public void UnresolvedOrBrowserClaimedSenseCannotBecomeActive()
     {
         Assert.Null(VerifiedOriginVisionReader.Read(null, Profile));

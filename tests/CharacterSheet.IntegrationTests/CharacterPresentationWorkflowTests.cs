@@ -142,8 +142,16 @@ public sealed class CharacterPresentationWorkflowTests
         Assert.Equal("movement.walk", walk.GetProperty("key").GetString());
         Assert.Equal(30, walk.GetProperty("effectiveValue").GetInt32());
         var metadata = mechanics.GetProperty("characterMetadata").EnumerateArray().ToArray();
-        Assert.Contains(metadata, item => item.GetProperty("key").GetString() ==
-            "origin.base-size" && item.GetProperty("effectiveValue").GetString() == "medium");
+        var size = Assert.Single(metadata, item =>
+            item.GetProperty("key").GetString() == "origin.base-size" &&
+            item.GetProperty("effectiveValue").GetString() == "medium");
+        var source = Assert.Single(
+            size.GetProperty("sourceAttributions").EnumerateArray());
+        Assert.Equal("origin-grant:grant:size", source.GetProperty("key").GetString());
+        Assert.Equal("species.orc/size", source.GetProperty("detail").GetString());
+        Assert.True(source.GetProperty("presentationRequired").GetBoolean());
+        Assert.All(metadata, item =>
+            Assert.Single(item.GetProperty("sourceAttributions").EnumerateArray()));
         Assert.Contains(metadata, item => item.GetProperty("key").GetString() ==
             "origin.base-creature-type" &&
             item.GetProperty("effectiveValue").GetString() == "humanoid");

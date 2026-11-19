@@ -56,8 +56,15 @@ public static class VerifiedOriginVisionReader
                 identity.ValueKind != JsonValueKind.Object ||
                 !identity.TryGetProperty("kind", out var kind) ||
                 !EnumIs(kind, "Trait", 1) ||
-                !StringIs(identity, "mechanicalDefinitionId",
-                    sourceId + "#trait:low-light-vision") ||
+                // Canonical native trait references preserve the shared
+                // definition ID even when granted by distinct Species.
+                // Retain the older source-local identifier for previously
+                // committed direct Origins; neither path relaxes source,
+                // occurrence, payload, or active-baseline verification.
+                (!StringIs(identity, "mechanicalDefinitionId",
+                    "trait.shared.low-light-vision") &&
+                 !StringIs(identity, "mechanicalDefinitionId",
+                    sourceId + "#trait:low-light-vision")) ||
                 !identity.TryGetProperty("occurrence", out var occurrence) ||
                 occurrence.ValueKind != JsonValueKind.Object ||
                 !StringIs(occurrence, "occurrencePath", path!) ||

@@ -261,7 +261,8 @@ var sheetWithOrc = await NativeCharacterPresentationBridge.ProjectAsync(
         new VerifiedOriginIntrinsics(
             orcIntrinsics.CreatureType.Value,
             orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value),
-        activeOrcVision));
+        activeOrcVision, CommittedRevision: 1),
+    committedOriginRevision: 1);
 Ensure(sheetWithOrc.Status == "partial" &&
     sheetWithOrc.Mechanics?.Movement?.Any(value =>
         value.Key == "movement.walk" &&
@@ -291,7 +292,8 @@ var grappledSheet = await NativeCharacterPresentationBridge.ProjectAsync(
         new VerifiedOriginIntrinsics(
             orcIntrinsics.CreatureType.Value,
             orcIntrinsics.Size.Value, orcIntrinsics.WalkingSpeedFeet.Value),
-        activeOrcVision));
+        activeOrcVision, CommittedRevision: 1),
+    committedOriginRevision: 1);
 Ensure(grappledSheet.Status == "partial" &&
     grappledSheet.Mechanics?.Movement?.Any(value =>
         value.Key == "movement.walk" &&
