@@ -690,3 +690,32 @@ test("mixed contributor removal persists other source choices across reload and 
     });
 });
 
+
+test("mixed contributor edit conflict never overwrites the locally loaded draft", async () => {
+    const backend = candidateDraftBackend({ conflict: true });
+    await withBackend(backend, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        const previous = structuredClone(workflow.current().draft);
+        await workflow.clearMixedParent(characterId, "parent-one");
+        assert.equal(backend.writes.length, 1);
+        assert.equal(backend.writes[0].expectedRevision, previous.revision);
+        assert.match(workflow.current().message, /changed in another session/);
+        assert.deepEqual(workflow.current().draft, previous);
+        assert.equal(workflow.current().busy, false);
+    });
+});
+
+test("read-only mixed contributor edit does not issue a draft save", async () => {
+    const backend = candidateDraftBackend({ readOnly: true });
+    await withBackend(backend, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        assert.equal(workflow.current().readOnly, true);
+        await workflow.clearMixedParent(characterId, "parent-one");
+        assert.equal(backend.writes.length, 0);
+        assert.equal(workflow.current().draft.revision, 1);
+        assert.equal(workflow.current().draft.proposal.contributors.length, 2);
+    });
+});
+

@@ -583,32 +583,34 @@ test("unaffected mixed source occurrences and independent choices survive two to
     const elfId = "contributor:parent-two:species.elf:/traits/0";
     const human = { id: "selection:" + humanId, candidateId: humanId };
     const elf = { id: "selection:" + elfId, candidateId: elfId };
-    const chosen = { ...both, manifestations: [human, elf] };
+    const elfSecondId = "contributor:parent-two:species.elf:/traits/2";
+    const elfSecond = { id: "selection:" + elfSecondId, candidateId: elfSecondId };
+    const chosen = { ...both, manifestations: [human, elf, elfSecond] };
     assert.equal(isEditableMixedNativeOrigin(chosen), true);
 
     const withOrc = changeMixedNativeParent(chosen, "source-3", "species.orc");
-    assert.deepEqual(withOrc.manifestations, [human, elf]);
+    assert.deepEqual(withOrc.manifestations, [human, elf, elfSecond]);
     const withDragonborn = changeMixedNativeParent(withOrc,
         "source-4", "species.dragonborn");
-    assert.deepEqual(withDragonborn.manifestations, [human, elf]);
+    assert.deepEqual(withDragonborn.manifestations, [human, elf, elfSecond]);
     assert.equal(withDragonborn.contributors.length, 4);
-    assert.deepEqual(structuredClone(withDragonborn).manifestations, [human, elf]);
+    assert.deepEqual(structuredClone(withDragonborn).manifestations, [human, elf, elfSecond]);
     assert.deepEqual(changeMixedNativeParent(withDragonborn,
-        "source-3", null).manifestations, [human, elf]);
+        "source-3", null).manifestations, [human, elf, elfSecond]);
 
     const removedHuman = changeMixedNativeParent(withDragonborn,
         "parent-one", null);
-    assert.deepEqual(removedHuman.manifestations, [elf],
+    assert.deepEqual(removedHuman.manifestations, [elf, elfSecond],
         "Only the changed contributor loses its selection.");
     const replacedHuman = changeMixedNativeParent(chosen,
         "parent-one", "species.orc");
-    assert.deepEqual(replacedHuman.manifestations, [elf]);
+    assert.deepEqual(replacedHuman.manifestations, [elf, elfSecond]);
     assert.deepEqual(changeMixedNativeParent(replacedHuman,
-        "parent-one", "species.human").manifestations, [elf],
+        "parent-one", "species.human").manifestations, [elf, elfSecond],
         "Restoring a source cannot silently reselect an old occurrence.");
     assert.deepEqual(changeMixedNativeParent(chosen,
         "parent-two", "species.orc").manifestations, [human]);
-    assert.deepEqual(chosen.manifestations, [human, elf],
+    assert.deepEqual(chosen.manifestations, [human, elf, elfSecond],
         "The prior draft must not be mutated.");
 });
 
@@ -635,6 +637,8 @@ test("unchanged Drow finite choice and stale draft evidence survive an unrelated
     assert.strictEqual(changeMixedNativeParent(replaced,
         "parent-one", "species.orc"), replaced);
     const preview = mixedNativeOfferPreview(replaced);
+    // The native catalog no longer offers these historical occurrences.
+    preview.result.evaluatedProposal.candidates = [];
     assert.deepEqual(originPreviewCandidates(preview, replaced).map(c => c.id), [],
         "Unavailable saved evidence is not an authorized native offer.");
     const removed = changeMixedNativeCandidate(replaced, preview, unavailableId, false);
