@@ -343,6 +343,8 @@ def run_browser():
                              for grant in profile["inherentGrants"]),
                          {"ancestry": profile["ancestryId"],
                           "grants": profile["inherentGrants"]})
+            owner.screenshot(path=str(OUT / f"browser-{fixture}-reloaded.png"),
+                             full_page=True)
 
         open_origin("human")
         choose_direct("species", "Human")
@@ -410,17 +412,21 @@ def run_browser():
         owner.get_by_role("button", name="Mixed biological sources").click()
         choose_source("parent-one", "species", "Human")
         choose_source("parent-two", "ancestry", "Drow")
-        drow_offer = owner.locator(
-            '[data-origin-native-candidate="contributor:parent-two:ancestry.elf.drow:/traits/4"]')
-        drow_id = drow_offer.get_attribute("data-origin-native-candidate")
+        drow_id = "contributor:parent-two:ancestry.elf.drow:/spellcastingAbilityChoice"
+        drow_offer = owner.locator(f'[data-origin-native-candidate="{drow_id}"]')
         drow_offer.get_by_role("button", name="Select characteristic for draft").click()
         charisma.select_option("charisma")
         original = saved_selection("drow-mixed", drow_id, 2)
         choose_source("parent-one", "species", "Orc")
         retained = saved_selection("drow-mixed", drow_id, 2)
         expect_event("browser-drow-finite-choice-retained",
-                     retained == original and
-                     retained["choices"][0]["selectedOptionIds"] == ["charisma"])
+                     retained == original and retained["choices"] == [{
+                         "requirementId": "spellcastingAbility",
+                         "selectedOptionIds": ["charisma"],
+                     }], {"selection": retained})
+        charisma.wait_for()
+        owner.screenshot(path=str(OUT / "browser-mixed-finite-choice-retained.png"),
+                         full_page=True)
 
         request_on_page(unrelated, "browser-cross-owner-draft-denied",
                         origin_url("mixed", "draft"), expected=404)
