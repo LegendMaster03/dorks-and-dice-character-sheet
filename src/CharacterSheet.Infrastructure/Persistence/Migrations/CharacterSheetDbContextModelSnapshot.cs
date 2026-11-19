@@ -402,8 +402,6 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("Fingerprint").IsRequired()
                 .HasMaxLength(200).HasColumnType("character varying(200)");
             b.Property<string>("LedgerJson").IsRequired().HasColumnType("jsonb");
-            b.Property<string>("ProgressionJournalJson").IsRequired().HasColumnType("jsonb");
-            b.Property<string>("InfluenceOverlapSelectionsJson").IsRequired().HasColumnType("jsonb");
             b.Property<long>("LedgerRevision").HasColumnType("bigint");
             b.Property<long>("OriginRevision").HasColumnType("bigint");
             b.Property<string>("OriginProfileId").IsRequired()
@@ -449,6 +447,8 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("AlternateSheetsJson").IsRequired().HasColumnType("jsonb");
             b.Property<string>("PersistentInfluencesJson").IsRequired().HasColumnType("jsonb");
             b.Property<string>("LedgerJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("ProgressionJournalJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("InfluenceOverlapSelectionsJson").IsRequired().HasColumnType("jsonb");
             b.Property<long>("LedgerRevision").HasColumnType("bigint");
             b.Property<string>("DependencyFingerprint").IsRequired()
                 .HasMaxLength(64).HasColumnType("character varying(64)");
