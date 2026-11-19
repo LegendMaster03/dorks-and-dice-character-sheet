@@ -476,6 +476,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         supernatural.Property(value => value.AlternateSheetsJson).HasColumnType("jsonb").IsRequired();
         supernatural.Property(value => value.PersistentInfluencesJson).HasColumnType("jsonb").IsRequired();
         supernatural.Property(value => value.LedgerJson).HasColumnType("jsonb").IsRequired();
+        supernatural.Property(value => value.ProgressionJournalJson).HasColumnType("jsonb").IsRequired();
+        supernatural.Property(value => value.InfluenceOverlapSelectionsJson).HasColumnType("jsonb").IsRequired();
         supernatural.Property(value => value.LedgerRevision).IsRequired();
         supernatural.Property(value => value.DependencyFingerprint).HasMaxLength(64).IsRequired();
         supernatural.Property(value => value.Revision).IsRequired();
@@ -496,6 +498,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         supernaturalReceipt.Property(value => value.AuthorizationEvidenceId).HasMaxLength(320).IsRequired();
         supernaturalReceipt.Property(value => value.TransitionRequestJson).HasColumnType("jsonb");
         supernaturalReceipt.Property(value => value.ExpressionChangeJson).HasColumnType("jsonb");
+        supernaturalReceipt.Property(value => value.ProgressionJournalSnapshotJson).HasColumnType("jsonb");
+        supernaturalReceipt.Property(value => value.OverlapSelectionsSnapshotJson).HasColumnType("jsonb");
         supernaturalReceipt.Property(value => value.CreatedAt).IsRequired();
         supernaturalReceipt.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
             .HasDatabaseName("UX_character_supernatural_event_receipts_Revision").IsUnique();

@@ -17,12 +17,14 @@ public sealed class CharacterSupernaturalState
 
     public CharacterSupernaturalState(Guid characterId, string rulesetId, string fingerprint,
         string alternateSheetsJson, string persistentInfluencesJson, string ledgerJson,
-        long ledgerRevision, string dependencyFingerprint, DateTimeOffset at)
+        long ledgerRevision, string dependencyFingerprint, DateTimeOffset at,
+        string? progressionJournalJson = null, string? overlapSelectionsJson = null)
     {
         if (characterId == Guid.Empty) throw new ArgumentException("Character ID is required.");
         CharacterId = characterId;
         SetContents(rulesetId, fingerprint, alternateSheetsJson,
-            persistentInfluencesJson, ledgerJson, ledgerRevision, dependencyFingerprint);
+            persistentInfluencesJson, ledgerJson, ledgerRevision, dependencyFingerprint,
+            progressionJournalJson, overlapSelectionsJson);
         ContractVersion = CurrentContractVersion;
         Revision = 1;
         CreatedAt = at;
@@ -36,6 +38,16 @@ public sealed class CharacterSupernaturalState
     public string AlternateSheetsJson { get; private set; } = "[]";
     public string PersistentInfluencesJson { get; private set; } = "[]";
     public string LedgerJson { get; private set; } = "{}";
+    /// <summary>
+    /// Independent event/eligibility journal from supernatural progression.
+    /// It is never the manifestation ledger and is not authority by itself.
+    /// </summary>
+    public string ProgressionJournalJson { get; private set; } = "{}";
+    /// <summary>
+    /// Last committed source-verified overlap decisions; historical updates
+    /// are recorded in immutable supernatural event receipts.
+    /// </summary>
+    public string InfluenceOverlapSelectionsJson { get; private set; } = "[]";
     public long LedgerRevision { get; private set; }
     public string DependencyFingerprint { get; private set; } = string.Empty;
     public long Revision { get; private set; }
@@ -45,19 +57,22 @@ public sealed class CharacterSupernaturalState
     public void ApplyVerified(string rulesetId, string fingerprint,
         string alternateSheetsJson, string persistentInfluencesJson,
         string ledgerJson, long ledgerRevision, string dependencyFingerprint,
-        long expectedRevision, DateTimeOffset at)
+        long expectedRevision, DateTimeOffset at,
+        string? progressionJournalJson = null, string? overlapSelectionsJson = null)
     {
         if (Revision != expectedRevision || expectedRevision == long.MaxValue)
             throw new InvalidOperationException("Stale supernatural state revision.");
         SetContents(rulesetId, fingerprint, alternateSheetsJson,
-            persistentInfluencesJson, ledgerJson, ledgerRevision, dependencyFingerprint);
+            persistentInfluencesJson, ledgerJson, ledgerRevision, dependencyFingerprint,
+            progressionJournalJson, overlapSelectionsJson);
         Revision++;
         UpdatedAt = at;
     }
 
     private void SetContents(string rulesetId, string fingerprint,
         string alternateSheetsJson, string persistentInfluencesJson,
-        string ledgerJson, long ledgerRevision, string dependencyFingerprint)
+        string ledgerJson, long ledgerRevision, string dependencyFingerprint,
+        string? progressionJournalJson, string? overlapSelectionsJson)
     {
         if (string.IsNullOrWhiteSpace(rulesetId) || rulesetId.Length > 160 ||
             string.IsNullOrWhiteSpace(fingerprint) || fingerprint.Length > 200 ||
@@ -70,6 +85,19 @@ public sealed class CharacterSupernaturalState
         AlternateSheetsJson = CheckJson(alternateSheetsJson, JsonValueKind.Array, "alternateSheets");
         PersistentInfluencesJson = CheckJson(persistentInfluencesJson, JsonValueKind.Array, "influences");
         LedgerJson = CheckJson(ledgerJson, JsonValueKind.Object, "manifestationLedger");
+        ProgressionJournalJson = CheckJson(progressionJournalJson ??
+            (ProgressionJournalJson == "{}"
+                ? JsonSerializer.Serialize(new
+                {
+                    characterId = CharacterId.ToString("D"),
+                    revision = 0,
+                    processedEventIds = Array.Empty<string>(),
+                    consumedEligibilityEvidenceIds = Array.Empty<string>()
+                })
+                : ProgressionJournalJson),
+            JsonValueKind.Object, "progressionJournal");
+        InfluenceOverlapSelectionsJson = CheckJson(overlapSelectionsJson ??
+            InfluenceOverlapSelectionsJson, JsonValueKind.Array, "influenceOverlapSelections");
         LedgerRevision = ledgerRevision;
         DependencyFingerprint = dependencyFingerprint.ToLowerInvariant();
     }
@@ -104,7 +132,9 @@ public sealed class CharacterSupernaturalEventReceipt
         long committedRevision, long ledgerRevision, string kind,
         string authorizationEvidenceId, DateTimeOffset createdAt,
         string? transitionRequestJson = null,
-        string? expressionChangeJson = null)
+        string? expressionChangeJson = null,
+        string? progressionJournalSnapshotJson = null,
+        string? overlapSelectionsSnapshotJson = null)
     {
         if (characterId == Guid.Empty || committedRevision < 1 || ledgerRevision < 0 ||
             string.IsNullOrWhiteSpace(eventId) || eventId.Length > 160 ||
@@ -124,6 +154,12 @@ public sealed class CharacterSupernaturalEventReceipt
         ExpressionChangeJson = expressionChangeJson is null ? null :
             CharacterSupernaturalState.CheckJson(expressionChangeJson,
                 JsonValueKind.Object, "expressionChange");
+        ProgressionJournalSnapshotJson = progressionJournalSnapshotJson is null ? null :
+            CharacterSupernaturalState.CheckJson(progressionJournalSnapshotJson,
+                JsonValueKind.Object, "progressionJournalSnapshot");
+        OverlapSelectionsSnapshotJson = overlapSelectionsSnapshotJson is null ? null :
+            CharacterSupernaturalState.CheckJson(overlapSelectionsSnapshotJson,
+                JsonValueKind.Array, "overlapSelectionsSnapshot");
         CreatedAt = createdAt;
     }
 
@@ -147,5 +183,9 @@ public sealed class CharacterSupernaturalEventReceipt
     /// before/after expression but never authenticates its own source.
     /// </summary>
     public string? ExpressionChangeJson { get; private set; }
+    /// <summary>Immutable snapshot of a verified progression-journal update.</summary>
+    public string? ProgressionJournalSnapshotJson { get; private set; }
+    /// <summary>Immutable snapshot of source-verified overlap decisions, when changed.</summary>
+    public string? OverlapSelectionsSnapshotJson { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 }

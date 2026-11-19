@@ -402,6 +402,8 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("Fingerprint").IsRequired()
                 .HasMaxLength(200).HasColumnType("character varying(200)");
             b.Property<string>("LedgerJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("ProgressionJournalJson").IsRequired().HasColumnType("jsonb");
+            b.Property<string>("InfluenceOverlapSelectionsJson").IsRequired().HasColumnType("jsonb");
             b.Property<long>("LedgerRevision").HasColumnType("bigint");
             b.Property<long>("OriginRevision").HasColumnType("bigint");
             b.Property<string>("OriginProfileId").IsRequired()
@@ -472,6 +474,8 @@ partial class CharacterSheetDbContextModelSnapshot : ModelSnapshot
                 .HasMaxLength(320).HasColumnType("character varying(320)");
             b.Property<string>("ExpressionChangeJson").HasColumnType("jsonb");
             b.Property<string>("TransitionRequestJson").HasColumnType("jsonb");
+            b.Property<string>("ProgressionJournalSnapshotJson").HasColumnType("jsonb");
+            b.Property<string>("OverlapSelectionsSnapshotJson").HasColumnType("jsonb");
             b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
             b.HasKey("CharacterId", "EventId");
             b.HasIndex("CharacterId", "CommittedRevision")
