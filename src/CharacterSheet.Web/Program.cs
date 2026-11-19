@@ -154,6 +154,7 @@ builder.Services.AddScoped<CharacterEffectiveStateService>();
 // Internal read-only Origin verifier; no browser mutation or grant issuance endpoint.
 builder.Services.AddScoped<CharacterVerifiedOriginUnderlyingService>();
 builder.Services.AddScoped<CharacterSupernaturalInspectionService>();
+builder.Services.AddScoped<CharacterOriginsBackendReadService>();
 builder.Services.AddScoped<CharacterStartingEquipmentService>();
 builder.Services.AddScoped<CharacterArtService>();
 builder.Services.AddScoped<CharacterRecoveryService>();
@@ -221,6 +222,7 @@ app.MapPost("/api/lifecycle/events", ReceiveLifecycleEventAsync);
 app.MapCharacterStateEndpoints();
 app.MapCharacterEffectiveStateEndpoints();
 app.MapCharacterSupernaturalInspectionEndpoints();
+app.MapCharacterOriginsBackendEndpoints();
 app.MapCharacterStartingEquipmentEndpoints();
 app.MapCharacterArtEndpoints();
 app.MapCharacterPresentationEndpoints();
