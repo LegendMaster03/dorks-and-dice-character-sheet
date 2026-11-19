@@ -24,7 +24,8 @@ internal static class CharacterSupernaturalHistoryGuard
 
         if (existing is null)
         {
-            if (command.IsTransition || command.ExpectedRevision != 0 ||
+            if (command.IsTransition || command.IsExpressionChange ||
+                command.ExpectedRevision != 0 ||
                 command.ExpectedLedgerRevision != 0 || command.NextLedgerRevision != 0 ||
                 nextEvents.Length != 0 || HasItems(next, "instances") ||
                 HasItems(next, "interactions"))
@@ -66,6 +67,16 @@ internal static class CharacterSupernaturalHistoryGuard
             PreserveAuditedInstanceActions(old, next, command);
             PreserveAuditedActivationResources(old, next, command.TransitionRequestJson!);
             PreserveInteractionDecisions(old, next, command.TransitionRequestJson!);
+        }
+
+        else if (command.IsExpressionChange)
+        {
+            if (!JsonEqual(existing.AlternateSheetsJson, command.AlternateSheetsJson) ||
+                !JsonElement.DeepEquals(old, next))
+                throw new ArgumentException(
+                    "An expression change cannot modify owned sheets or the manifestation ledger.");
+            PreserveExpressionChange(existing.PersistentInfluencesJson,
+                command.PersistentInfluencesJson, command.ExpressionChangeJson!);
         }
         else
         {
@@ -423,6 +434,85 @@ internal static class CharacterSupernaturalHistoryGuard
                 last.GetString() != command.EventId)
                 throw new ArgumentException("New activations must be owned by the character and current event.");
         }
+    }
+
+    /// <summary>
+    /// Only an existing influence's expression and its source-verified
+    /// expression receipt may change. Earned progression, acquired identity,
+    /// effects, applicability rules, other influences, and resources survive.
+    /// The persisted audit must describe the exact change on both sides.
+    /// </summary>
+    private static void PreserveExpressionChange(string previousJson, string proposedJson,
+        string auditJson)
+    {
+        using var previousDocument = JsonDocument.Parse(previousJson);
+        using var proposedDocument = JsonDocument.Parse(proposedJson);
+        using var auditDocument = JsonDocument.Parse(auditJson);
+        var previous = ById(previousDocument.RootElement, "previous influences");
+        var proposed = ById(proposedDocument.RootElement, "proposed influences");
+        var audit = auditDocument.RootElement;
+        var targetId = audit.GetProperty("influenceId").GetString()!;
+        if (previous.Count != proposed.Count || !previous.ContainsKey(targetId))
+            throw new ArgumentException("An expression change must retain every influence identity.");
+
+        foreach (var (id, original) in previous)
+        {
+            if (!proposed.TryGetValue(id, out var updated))
+                throw new ArgumentException("An expression change cannot acquire or remove influences.");
+            if (id != targetId)
+            {
+                if (!JsonElement.DeepEquals(original, updated))
+                    throw new ArgumentException("An expression change cannot rewrite another influence.");
+                continue;
+            }
+
+            var allowed = new HashSet<string>(StringComparer.Ordinal)
+                { "expression", "expressionEvidenceId" };
+            var originalFields = original.EnumerateObject().Select(x => x.Name)
+                .ToHashSet(StringComparer.Ordinal);
+            var updatedFields = updated.EnumerateObject().Select(x => x.Name)
+                .ToHashSet(StringComparer.Ordinal);
+            if (!originalFields.SetEquals(updatedFields) ||
+                !allowed.IsSubsetOf(originalFields))
+                throw new ArgumentException("An expression change cannot alter influence structure.");
+            foreach (var field in original.EnumerateObject())
+                if (!allowed.Contains(field.Name) &&
+                    !JsonElement.DeepEquals(field.Value, updated.GetProperty(field.Name)))
+                    throw new ArgumentException("An expression change cannot rewrite earned influence state.");
+
+            var oldExpression = original.GetProperty("expression");
+            var newExpression = updated.GetProperty("expression");
+            ValidateExpressionDimensions(oldExpression);
+            ValidateExpressionDimensions(newExpression);
+            var oldEvidence = original.GetProperty("expressionEvidenceId");
+            var newEvidence = updated.GetProperty("expressionEvidenceId");
+            if (oldEvidence.ValueKind != JsonValueKind.String ||
+                newEvidence.ValueKind != JsonValueKind.String ||
+                !JsonElement.DeepEquals(oldEvidence,
+                    audit.GetProperty("previousExpressionEvidenceId")) ||
+                !JsonElement.DeepEquals(newEvidence,
+                    audit.GetProperty("nextExpressionEvidenceId")) ||
+                !JsonElement.DeepEquals(oldExpression,
+                    audit.GetProperty("previousExpression")) ||
+                !JsonElement.DeepEquals(newExpression,
+                    audit.GetProperty("nextExpression")))
+                throw new ArgumentException("Expression audit does not match committed state.");
+        }
+    }
+
+    internal static void ValidateExpressionDimensions(JsonElement expression)
+    {
+        if (expression.ValueKind != JsonValueKind.Object ||
+            expression.EnumerateObject().Count() > 128)
+            throw new ArgumentException("Invalid expression dimensions.");
+        var dimensions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in expression.EnumerateObject())
+            if (!dimensions.Add(field.Name) ||
+                string.IsNullOrWhiteSpace(field.Name) || field.Name.Length > 160 ||
+                field.Value.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(field.Value.GetString()) ||
+                field.Value.GetString()!.Length > 1024)
+                throw new ArgumentException("Malformed or excessive expression dimension.");
     }
 
     private static void PreserveAcquiredOwners(string previousJson, string proposedJson,

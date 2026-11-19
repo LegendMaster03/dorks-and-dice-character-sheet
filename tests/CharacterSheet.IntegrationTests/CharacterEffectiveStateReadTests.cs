@@ -7,6 +7,7 @@ using CharacterSheet.Infrastructure.Persistence;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Domain.Characters;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CharacterSheet.IntegrationTests;
 
@@ -74,11 +75,13 @@ public sealed class CharacterEffectiveStateReadTests
         public Func<Task>? BeforeReply { get; set; }
         public Func<Task>? BeforeVerifiedReply { get; set; }
         public bool ReturnInvalid { get; set; }
+        public string? CatalogFingerprint { get; set; }
 
         public Task<JsonNode> GetNativeRulesetAsync(CancellationToken ct) =>
             Task.FromResult<JsonNode>(JsonNode.Parse(JsonSerializer.Serialize(new
             {
-                contractVersion = 1, rulesetId = Ruleset, fingerprint = Fingerprint
+                contractVersion = 1, rulesetId = Ruleset,
+                fingerprint = CatalogFingerprint ?? Fingerprint
             }))!);
 
         public async Task<JsonNode> EvaluatePrimaryStateBaselineAsync(
@@ -166,7 +169,8 @@ public sealed class CharacterEffectiveStateReadTests
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active,
         SiteCharacterAccessStatus status = SiteCharacterAccessStatus.Authorized,
         Func<int, Task>? beforeAuthorizedRead = null,
-        SiteAccess? suppliedSite = null)
+        SiteAccess? suppliedSite = null,
+        ICharacterSupernaturalStateStore? supernaturalStore = null)
     {
         var site = suppliedSite ??
             new SiteAccess(id, lifecycle, status, beforeAuthorizedRead);
@@ -177,7 +181,7 @@ public sealed class CharacterEffectiveStateReadTests
                 TimeProvider.System),
             new CharacterOriginStateService(site, buildStore,
                 new PostgresCharacterAuthorizedOriginStore(db)),
-            new PostgresCharacterSupernaturalStateStore(db), native, site);
+            supernaturalStore ?? new PostgresCharacterSupernaturalStateStore(db), native, site);
     }
 
 
@@ -1094,6 +1098,414 @@ public sealed class CharacterEffectiveStateReadTests
         Assert.Null(read.View.NativeProjection);
         Assert.Contains("supernatural-native-content-changed", read.View.Unresolved);
         Assert.Equal(0, native.Calls);
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+    }
+
+
+    private sealed class VerifiedExpressionFixture : ITrustedCharacterInfluenceExpressionSource
+    {
+        public bool Allow { get; set; } = true;
+        public string NextSeverity { get; set; } = "3";
+        public IReadOnlyDictionary<string, string>? NextExpression { get; set; }
+        public string NextEvidence { get; set; } = "fixture:expression:3";
+        public Action? BeforeReturn { get; set; }
+
+        public Task<TrustedInfluenceExpressionChange?> PrepareAsync(
+            Guid characterId, SiteCharacterProjection authorizedCharacter,
+            CharacterSupernaturalState committed, string influenceId,
+            string intentId, string eventId, CancellationToken ct)
+        {
+            // Only a controlled test fixture. A production source must verify
+            // independently committed native or DM expression authority.
+            using var stored = JsonDocument.Parse(committed.PersistentInfluencesJson);
+            var owner = stored.RootElement[0];
+            BeforeReturn?.Invoke();
+            if (!Allow || authorizedCharacter.CharacterId != characterId ||
+                influenceId != "curse.fixture" || intentId != eventId ||
+                owner.GetProperty("id").GetString() != influenceId ||
+                owner.GetProperty("acquisitionEvidenceId").GetString() !=
+                    "fixture:acquisition")
+                return Task.FromResult<TrustedInfluenceExpressionChange?>(null);
+
+            return Task.FromResult<TrustedInfluenceExpressionChange?>(
+                new(NextExpression ??
+                    new Dictionary<string, string> { ["severity"] = NextSeverity },
+                    NextEvidence, "fixture:verified-expression-rule"));
+        }
+    }
+
+    private static async Task<(PostgresCharacterSupernaturalStateStore, string)>
+        AcquiredInfluenceAsync(CharacterSheetDbContext db, Guid characterId)
+    {
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(characterId))!;
+        var influence = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                id = "curse.fixture", definitionId = "source.curse",
+                acquisitionEvidenceId = "fixture:acquisition",
+                expressionEvidenceId = "fixture:expression:1",
+                expression = new { severity = "1" },
+                effects = Array.Empty<object>(),
+                progression = new[]
+                {
+                    new { id = "curse.earned", grants = Array.Empty<object>() }
+                },
+                grantApplicability = Array.Empty<object>()
+            }
+        });
+        var ledger = JsonSerializer.Serialize(new
+        {
+            characterId = characterId.ToString("D"), revision = 0,
+            instances = Array.Empty<object>(), resources = Array.Empty<object>(),
+            processedEventIds = Array.Empty<string>()
+        });
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                characterId, Ruleset, Fingerprint, "[]", influence, ledger,
+                0, 0, 0, digest, "fixture:acquire",
+                "fixture:verified-acquisition", false, DateTimeOffset.UtcNow))).Status);
+        return (store, digest);
+    }
+
+    [Fact]
+    public async Task TrustedExpressionCoordinatorCommitsAndReevaluatesWithoutAwardingProgression()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await AcquiredInfluenceAsync(db, id);
+        var site = new SiteAccess(id);
+        var native = new NativeGateway();
+        var source = new VerifiedExpressionFixture();
+        var operation = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, native, Service(db, id, native, suppliedSite: site));
+
+        var applied = await operation.ApplyAsync(
+            id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, applied.Status);
+        Assert.Equal(2, applied.StateRevision);
+        Assert.Equal(0, applied.LedgerRevision);
+        // Missing production Core read authority must not become a playable
+        // native expression/feature claim.
+        Assert.Equal("unresolved", applied.EffectiveStatus);
+        Assert.Null(applied.EffectiveProjection);
+
+        var persisted = (await store.GetAsync(id))!;
+        Assert.Equal(2, persisted.Revision);
+        using (var expression = JsonDocument.Parse(persisted.PersistentInfluencesJson))
+        {
+            Assert.Equal("3", expression.RootElement[0]
+                .GetProperty("expression").GetProperty("severity").GetString());
+            Assert.Equal("curse.earned", expression.RootElement[0]
+                .GetProperty("progression")[0].GetProperty("id").GetString());
+        }
+        var receipts = await store.GetEventsAsync(id);
+        Assert.Equal("expression-change", receipts[1].Kind);
+        Assert.Equal("fixture:verified-expression-rule", receipts[1].AuthorizationEvidenceId);
+        Assert.Null(receipts[1].TransitionRequestJson);
+
+        source.NextSeverity = "0";
+        source.NextEvidence = "fixture:expression:0";
+        var reduced = await operation.ApplyAsync(
+            id, 2, 0, "curse.fixture", "suppress:curse", "suppress:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, reduced.Status);
+        Assert.Equal(3, reduced.StateRevision);
+        var stale = await operation.ApplyAsync(
+            id, 2, 0, "curse.fixture", "stale:curse", "stale:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.StateRevisionConflict, stale.Status);
+
+        await using var fresh = new CharacterSheetDbContext(database.CreateOptions());
+        var reloaded = new PostgresCharacterSupernaturalStateStore(fresh);
+        var saved = (await reloaded.GetAsync(id))!;
+        Assert.Equal(3, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Contains("curse.earned", saved.PersistentInfluencesJson);
+        Assert.Equal(3, (await reloaded.GetEventsAsync(id)).Count);
+        Assert.Equal(digest, await reloaded.GetAuthoritativeInputsFingerprintAsync(id));
+    }
+
+
+
+    /// <summary>
+    /// Synthetic post-commit read failure; the authoritative PostgreSQL writer
+    /// and receipts remain real and count duplicate write attempts.
+    /// </summary>
+    private sealed class ObservedSupernaturalStore(
+        ICharacterSupernaturalStateStore inner, bool failFingerprint = false)
+        : ICharacterSupernaturalStateStore
+    {
+        public int CommitCalls { get; private set; }
+        public Task<CharacterSupernaturalState?> GetAsync(Guid id, CancellationToken ct = default) =>
+            inner.GetAsync(id, ct);
+        public Task<IReadOnlyList<CharacterSupernaturalEventReceipt>> GetEventsAsync(
+            Guid id, CancellationToken ct = default) => inner.GetEventsAsync(id, ct);
+        public Task<string?> GetAuthoritativeInputsFingerprintAsync(
+            Guid id, CancellationToken ct = default) =>
+            failFingerprint
+                ? Task.FromException<string?>(new NpgsqlException("Post-commit synthetic database outage"))
+                : inner.GetAuthoritativeInputsFingerprintAsync(id, ct);
+        public Task<CharacterSupernaturalWriteResult> CommitVerifiedAsync(
+            VerifiedSupernaturalStateWrite command, CancellationToken ct = default)
+        {
+            CommitCalls++;
+            return inner.CommitVerifiedAsync(command, ct);
+        }
+    }
+
+    [Fact]
+    public async Task ExpressionCoordinatorAcknowledgesCommittedPostCommitDatabaseFailureAndExactReplay()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (realStore, _) = await AcquiredInfluenceAsync(db, id);
+        var writer = new ObservedSupernaturalStore(realStore);
+        var failingReader = new ObservedSupernaturalStore(realStore, failFingerprint: true);
+        var site = new SiteAccess(id);
+        var native = new NativeGateway();
+        var source = new VerifiedExpressionFixture();
+        var coordinator = new CharacterInfluenceExpressionChangeService(
+            site, site, writer, source, native,
+            Service(db, id, native, suppliedSite: site, supernaturalStore: failingReader));
+
+        var result = await coordinator.ApplyAsync(
+            id, 1, 0, "curse.fixture", "fixture:raise", "fixture:raise");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, result.Status);
+        Assert.Equal(CharacterInfluenceProjectionOutcome.Failed, result.ProjectionOutcome);
+        Assert.Equal("fixture:raise", result.EventId);
+        Assert.Equal(2, result.StateRevision);
+        Assert.Equal(0, result.LedgerRevision);
+        Assert.Null(result.EffectiveProjection);
+        Assert.Equal(1, writer.CommitCalls);
+
+        await using (var reloaded = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var persisted = new PostgresCharacterSupernaturalStateStore(reloaded);
+            Assert.Equal(2, (await persisted.GetAsync(id))!.Revision);
+            var receipts = await persisted.GetEventsAsync(id);
+            Assert.Equal(2, receipts.Count);
+            Assert.Equal("fixture:raise", receipts[1].EventId);
+            using var audit = JsonDocument.Parse(receipts[1].ExpressionChangeJson!);
+            Assert.Equal("fixture:raise", audit.RootElement.GetProperty("intentId").GetString());
+            Assert.Equal("3", audit.RootElement.GetProperty("nextExpression")
+                .GetProperty("severity").GetString());
+        }
+
+        // Recovery is based on the immutable receipt rather than a second source decision.
+        source.Allow = false;
+        var replay = await coordinator.ApplyAsync(
+            id, 1, 0, "curse.fixture", "fixture:raise", "fixture:raise");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.PreviouslyCommitted, replay.Status);
+        Assert.Equal(2, replay.StateRevision);
+        Assert.Equal("fixture:raise", replay.EventId);
+        Assert.Equal(1, writer.CommitCalls);
+
+        var changedIntent = await coordinator.ApplyAsync(
+            id, 1, 0, "curse.fixture", "different:intent", "fixture:raise");
+        var changedTarget = await coordinator.ApplyAsync(
+            id, 1, 0, "different:influence", "fixture:raise", "fixture:raise");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.EventIdentityConflict, changedIntent.Status);
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.EventIdentityConflict, changedTarget.Status);
+        var stale = await coordinator.ApplyAsync(
+            id, 1, 0, "curse.fixture", "other:event", "other:event");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.StateRevisionConflict, stale.Status);
+        Assert.Equal(1, writer.CommitCalls);
+
+        source.Allow = true;
+        source.NextSeverity = "0";
+        source.NextEvidence = "fixture:expression:0";
+        var next = await coordinator.ApplyAsync(
+            id, 2, 0, "curse.fixture", "fixture:lower", "fixture:lower");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, next.Status);
+        var old = await coordinator.ApplyAsync(
+            id, 1, 0, "curse.fixture", "fixture:raise", "fixture:raise");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.PreviouslyCommitted, old.Status);
+        Assert.Equal(2, old.StateRevision);
+        Assert.Equal(2, writer.CommitCalls);
+        Assert.Equal(3, (await realStore.GetAsync(id))!.Revision);
+        Assert.Equal(3, (await realStore.GetEventsAsync(id)).Count);
+    }
+
+    private sealed class ConcurrentExpressionSource : ITrustedCharacterInfluenceExpressionSource
+    {
+        private readonly TaskCompletionSource<bool> bothPrepared =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int prepared;
+
+        public async Task<TrustedInfluenceExpressionChange?> PrepareAsync(
+            Guid id, SiteCharacterProjection site, CharacterSupernaturalState saved,
+            string influenceId, string intentId, string eventId, CancellationToken ct)
+        {
+            if (site.CharacterId != id || saved.Revision != 1 ||
+                influenceId != "curse.fixture" || intentId != eventId)
+                return null;
+            if (Interlocked.Increment(ref prepared) == 2)
+                bothPrepared.TrySetResult(true);
+            await bothPrepared.Task.WaitAsync(TimeSpan.FromSeconds(15), ct);
+            return new TrustedInfluenceExpressionChange(
+                new Dictionary<string, string> { ["severity"] = "3" },
+                "fixture:expression:3", "fixture:verified-expression-rule");
+        }
+    }
+
+    [Fact]
+    public async Task SimultaneousSameEventExpressionRequestsReturnOneCommitAndReceiptRecovery()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db1 = new CharacterSheetDbContext(database.CreateOptions());
+        var (store1, _) = await AcquiredInfluenceAsync(db1, id);
+        await using var db2 = new CharacterSheetDbContext(database.CreateOptions());
+        var store2 = new PostgresCharacterSupernaturalStateStore(db2);
+        var site = new SiteAccess(id);
+        var source = new ConcurrentExpressionSource();
+        var native1 = new NativeGateway();
+        var native2 = new NativeGateway();
+        var first = new CharacterInfluenceExpressionChangeService(
+            site, site, store1, source, native1, Service(db1, id, native1, suppliedSite: site));
+        var second = new CharacterInfluenceExpressionChangeService(
+            site, site, store2, source, native2, Service(db2, id, native2, suppliedSite: site));
+
+        var results = await Task.WhenAll(
+            first.ApplyAsync(id, 1, 0, "curse.fixture", "fixture:shared", "fixture:shared"),
+            second.ApplyAsync(id, 1, 0, "curse.fixture", "fixture:shared", "fixture:shared"));
+
+        Assert.Single(results, result =>
+            result.Status == CharacterInfluenceExpressionChangeStatus.Applied);
+        Assert.Single(results, result =>
+            result.Status == CharacterInfluenceExpressionChangeStatus.PreviouslyCommitted);
+        Assert.All(results, result =>
+        {
+            Assert.Equal(2, result.StateRevision);
+            Assert.Equal(0, result.LedgerRevision);
+            Assert.Equal("fixture:shared", result.EventId);
+        });
+
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var persisted = new PostgresCharacterSupernaturalStateStore(reloaded);
+        Assert.Equal(2, (await persisted.GetAsync(id))!.Revision);
+        var receipts = await persisted.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        Assert.Equal("fixture:shared", receipts[1].EventId);
+    }
+
+    [Fact]
+    public async Task ExpressionCoordinatorAcceptsExactDimensionBoundsAndRejectsExcess()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, _) = await AcquiredInfluenceAsync(db, id);
+        var site = new SiteAccess(id);
+        var native = new NativeGateway();
+        var source = new VerifiedExpressionFixture
+        {
+            NextEvidence = "fixture:expression:bounds",
+            NextExpression = Enumerable.Range(0, 128).ToDictionary(
+                i => $"dimension-{i:D3}" + new string('k', 147),
+                _ => new string('v', 1024), StringComparer.Ordinal)
+        };
+        var coordinator = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, native, Service(db, id, native, suppliedSite: site));
+        var applied = await coordinator.ApplyAsync(
+            id, 1, 0, "curse.fixture", "fixture:max-dimensions", "fixture:max-dimensions");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, applied.Status);
+        await using var freshDb = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(freshDb);
+        using var saved = JsonDocument.Parse((await fresh.GetAsync(id))!.PersistentInfluencesJson);
+        var dimensions = saved.RootElement[0].GetProperty("expression");
+        Assert.Equal(128, dimensions.EnumerateObject().Count());
+        Assert.All(dimensions.EnumerateObject(),
+            value => Assert.Equal(1024, value.Value.GetString()!.Length));
+
+        source.NextExpression = Enumerable.Range(0, 129).ToDictionary(
+            i => $"dimension-{i:D3}", _ => "value", StringComparer.Ordinal);
+        source.NextEvidence = "fixture:expression:too-many";
+        var rejected = await coordinator.ApplyAsync(
+            id, 2, 0, "curse.fixture", "fixture:excess-dimensions", "fixture:excess-dimensions");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.SourceUnauthorized, rejected.Status);
+        Assert.Equal(2, (await fresh.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await fresh.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task TrustedExpressionCoordinatorPreservesOrdinalDimensionIdentity()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, _) = await AcquiredInfluenceAsync(db, id);
+        var site = new SiteAccess(id);
+        var native = new NativeGateway();
+        var source = new VerifiedExpressionFixture
+        {
+            NextEvidence = "fixture:expression:ordinal",
+            NextExpression = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["severity"] = "4", ["Stage"] = "dominant",
+                ["stage"] = "suppressed"
+            }
+        };
+        var operation = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, native,
+            Service(db, id, native, suppliedSite: site));
+
+        var applied = await operation.ApplyAsync(
+            id, 1, 0, "curse.fixture", "ordinal:curse", "ordinal:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, applied.Status);
+
+        using var saved = JsonDocument.Parse((await store.GetAsync(id))!
+            .PersistentInfluencesJson);
+        var dimensions = saved.RootElement[0].GetProperty("expression");
+        Assert.Equal(3, dimensions.EnumerateObject().Count());
+        Assert.Equal("dominant", dimensions.GetProperty("Stage").GetString());
+        Assert.Equal("suppressed", dimensions.GetProperty("stage").GetString());
+        Assert.Equal("4", dimensions.GetProperty("severity").GetString());
+    }
+
+    [Fact]
+    public async Task TrustedExpressionCoordinatorRejectsMissingSourceAndRevokedSiteScope()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, _) = await AcquiredInfluenceAsync(db, id);
+        var site = new SiteAccess(id);
+        var source = new VerifiedExpressionFixture { Allow = false };
+        var operation = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, new NativeGateway(),
+            Service(db, id, new NativeGateway(), suppliedSite: site));
+
+        var denied = await operation.ApplyAsync(
+            id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.SourceUnauthorized, denied.Status);
+        site.FreshAllowed = false;
+        var notOwned = await operation.ApplyAsync(
+            id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.NotFoundOrNotOwned, notOwned.Status);
+
+        site.FreshAllowed = true;
+        source.Allow = true;
+        var outdatedCatalog = new NativeGateway
+        {
+            CatalogFingerprint = new string('b', 64)
+        };
+        var staleNative = new CharacterInfluenceExpressionChangeService(
+            site, site, store, source, outdatedCatalog,
+            Service(db, id, outdatedCatalog, suppliedSite: site));
+        var staleContent = await staleNative.ApplyAsync(
+            id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.NativeContentChanged,
+            staleContent.Status);
+        source.BeforeReturn = () => site.FreshAllowed = false;
+        var revoked = await operation.ApplyAsync(
+            id, 1, 0, "curse.fixture", "raise:curse", "raise:curse");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.NotFoundOrNotOwned, revoked.Status);
         Assert.Equal(1, (await store.GetAsync(id))!.Revision);
         Assert.Single(await store.GetEventsAsync(id));
     }

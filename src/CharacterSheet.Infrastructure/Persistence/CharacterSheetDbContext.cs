@@ -23,6 +23,8 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     public DbSet<CharacterOriginDraftState> CharacterOriginDrafts => Set<CharacterOriginDraftState>();
     public DbSet<CharacterAuthorizedOriginState> AuthorizedOrigins => Set<CharacterAuthorizedOriginState>();
     public DbSet<CharacterOriginEventReceipt> OriginEventReceipts => Set<CharacterOriginEventReceipt>();
+    public DbSet<CharacterInnateSpellLedgerState> InnateSpellLedgers => Set<CharacterInnateSpellLedgerState>();
+    public DbSet<CharacterInnateSpellLedgerReceipt> InnateSpellLedgerReceipts => Set<CharacterInnateSpellLedgerReceipt>();
     public DbSet<CharacterSupernaturalState> SupernaturalStates => Set<CharacterSupernaturalState>();
     public DbSet<CharacterSupernaturalEventReceipt> SupernaturalEventReceipts => Set<CharacterSupernaturalEventReceipt>();
     public DbSet<CharacterCurrencyBalance> CharacterCurrencyBalances => Set<CharacterCurrencyBalance>();
@@ -33,7 +35,9 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var root = modelBuilder.Entity<CharacterSheetRoot>();
-        root.ToTable("character_sheet_roots");
+        root.ToTable("character_sheet_roots", table =>
+            table.HasCheckConstraint("CK_character_mutation_revision_nonnegative",
+                "\"MutationRevision\" >= 0"));
         root.HasKey(character => character.CharacterId);
         root.Property(character => character.CharacterId)
             .ValueGeneratedNever();
@@ -47,6 +51,12 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .IsRequired();
         root.Property(character => character.UpdatedAt)
             .IsRequired();
+        // Each root UPDATE is versioned by the PostgreSQL trigger, based on
+        // OLD.MutationRevision rather than an EF-tracked stale value. Do not
+        // mark this a concurrency token: independent Feat occurrences are
+        // explicitly allowed to be added concurrently.
+        root.Property(character => character.MutationRevision)
+            .HasDefaultValue(0L).IsRequired();
         root.Property(character => character.CurrentHitPoints);
         root.Property(character => character.AdvancementProgress);
         root.Property(character => character.DeathSaveSuccesses)
@@ -410,6 +420,46 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         originEvent.HasOne<CharacterAuthorizedOriginState>().WithMany()
             .HasForeignKey(value => value.CharacterId).OnDelete(DeleteBehavior.Cascade);
 
+        // Ledger balances are separate from native Origin grants. No client
+        // draft or unverified spell resource input becomes an active balance.
+        var innate = modelBuilder.Entity<CharacterInnateSpellLedgerState>();
+        innate.ToTable("character_innate_spell_ledgers", table =>
+            table.HasCheckConstraint("CK_innate_ledger_revision_nonnegative",
+                "\"LedgerRevision\" >= 0 AND \"OriginRevision\" >= 1"));
+        innate.HasKey(value => value.CharacterId);
+        innate.Property(value => value.CharacterId).ValueGeneratedNever();
+        innate.Property(value => value.RulesetId)
+            .HasMaxLength(CharacterOriginDraftState.MaxRulesetIdLength).IsRequired();
+        innate.Property(value => value.Fingerprint)
+            .HasMaxLength(CharacterOriginDraftState.MaxFingerprintLength).IsRequired();
+        innate.Property(value => value.OriginProfileId).HasMaxLength(240).IsRequired();
+        innate.Property(value => value.ProposalId).HasMaxLength(240).IsRequired();
+        innate.Property(value => value.OriginRevision).IsRequired();
+        innate.Property(value => value.LedgerRevision).IsRequired();
+        innate.Property(value => value.LedgerJson).HasColumnType("jsonb").IsRequired();
+        innate.Property(value => value.CreatedAt).IsRequired();
+        innate.Property(value => value.UpdatedAt).IsRequired();
+        innate.HasOne<CharacterAuthorizedOriginState>().WithOne()
+            .HasForeignKey<CharacterInnateSpellLedgerState>(value => value.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var innateReceipt = modelBuilder.Entity<CharacterInnateSpellLedgerReceipt>();
+        innateReceipt.ToTable("character_innate_spell_ledger_receipts");
+        innateReceipt.HasKey(value => new { value.CharacterId, value.EventId });
+        innateReceipt.Property(value => value.CharacterId).ValueGeneratedNever();
+        innateReceipt.Property(value => value.EventId).HasMaxLength(240).IsRequired();
+        innateReceipt.Property(value => value.CommittedRevision).IsRequired();
+        innateReceipt.Property(value => value.OriginRevision).IsRequired();
+        innateReceipt.Property(value => value.ActorUserId).IsRequired();
+        innateReceipt.Property(value => value.AuthorizationEvidenceId)
+            .HasMaxLength(320).IsRequired();
+        innateReceipt.Property(value => value.Operation).HasMaxLength(64).IsRequired();
+        innateReceipt.Property(value => value.AppliedDecisionIdsJson).HasColumnType("jsonb");
+        innateReceipt.Property(value => value.RecordedAt).IsRequired();
+        innateReceipt.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
+            .HasDatabaseName("UX_character_innate_spell_ledger_receipts_Revision")
+            .IsUnique();
+        innateReceipt.HasOne<CharacterInnateSpellLedgerState>().WithMany()
 
         // Server-verified character-owned state uses bounded versioned JSONB
         // documents. Transactional CAS and unique event identities live in
@@ -445,6 +495,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
         supernaturalReceipt.Property(value => value.Kind).HasMaxLength(32).IsRequired();
         supernaturalReceipt.Property(value => value.AuthorizationEvidenceId).HasMaxLength(320).IsRequired();
         supernaturalReceipt.Property(value => value.TransitionRequestJson).HasColumnType("jsonb");
+        supernaturalReceipt.Property(value => value.ExpressionChangeJson).HasColumnType("jsonb");
         supernaturalReceipt.Property(value => value.CreatedAt).IsRequired();
         supernaturalReceipt.HasIndex(value => new { value.CharacterId, value.CommittedRevision })
             .HasDatabaseName("UX_character_supernatural_event_receipts_Revision").IsUnique();

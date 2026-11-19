@@ -240,6 +240,11 @@ public sealed class CharacterSupernaturalPersistenceTests
             downgrade.ToString(), StringComparison.Ordinal);
         Assert.Contains(auditMigration, await db.Database.GetAppliedMigrationsAsync());
 
+        // A newer additive migration can roll back before the older audit
+        // guard refuses its own downgrade. Restore the latest schema before
+        // querying with the current EF model; the original audit remains.
+        await migrator.MigrateAsync();
+
         // A rejected schema downgrade must not damage the originally
         // committed ledger, event identities or the JSONB transition audit.
         await using var reload = new CharacterSheetDbContext(database.CreateOptions());
@@ -253,6 +258,35 @@ public sealed class CharacterSupernaturalPersistenceTests
         using var actual = JsonDocument.Parse(receipts[1].TransitionRequestJson!);
         using var expected = JsonDocument.Parse(command.TransitionRequestJson!);
         Assert.True(JsonElement.DeepEquals(expected.RootElement, actual.RootElement));
+    }
+
+    [Fact]
+    public async Task DowngradingAfterExpressionChangeCannotDiscardItsImmutableAudit()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var acquired = Write(id, digest) with
+        {
+            PersistentInfluencesJson = SyntheticInfluence("1", "fixture:stage1")
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(acquired)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 1, "2"))).Status);
+
+        var migrator = db.Database.GetService<IMigrator>();
+        var downgrade = await Record.ExceptionAsync(() =>
+            migrator.MigrateAsync("20261115020000_AddSupernaturalTransitionRequestAudit"));
+        Assert.NotNull(downgrade);
+        Assert.Contains("Cannot discard durable influence expression-change history",
+            downgrade.ToString(), StringComparison.Ordinal);
+        Assert.Contains("20261117090000_AddInfluenceExpressionChangeAudit",
+            await db.Database.GetAppliedMigrationsAsync());
+        var persisted = await store.GetEventsAsync(id);
+        Assert.Equal("expression-change", persisted[1].Kind);
+        Assert.NotNull(persisted[1].ExpressionChangeJson);
     }
 
     [Fact]
@@ -765,6 +799,442 @@ public sealed class CharacterSupernaturalPersistenceTests
                 "revert:wolf", transition: true, ledger: nextLedger.ToJsonString())));
         Assert.Equal(2, (await store.GetAsync(id))!.Revision);
         Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
+    }
+
+
+    private static string SyntheticInfluence(string severity, string evidence) =>
+        JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                id = "curse.influence", definitionId = "test.curse",
+                acquisitionEvidenceId = "fixture:acquired",
+                expressionEvidenceId = evidence,
+                expression = new Dictionary<string, string> { ["severity"] = severity },
+                effects = Array.Empty<object>(),
+                progression = new[] { new { id = "curse.earned", grants = Array.Empty<object>() } },
+                grantApplicability = Array.Empty<object>()
+            }
+        });
+
+    private static VerifiedSupernaturalStateWrite ExpressionChange(
+        Guid id, string digest, long expectedRevision, string severity,
+        string previousSeverity = "1", string previousEvidence = "fixture:stage1",
+        string nextEvidence = "fixture:stage2")
+    {
+        var eventId = "expression:curse:" + expectedRevision;
+        var audit = JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), eventId, influenceId = "curse.influence",
+            previousExpressionEvidenceId = previousEvidence,
+            nextExpressionEvidenceId = nextEvidence,
+            previousExpression = new { severity = previousSeverity },
+            nextExpression = new { severity }
+        });
+        return Write(id, digest, expectedRevision, 0, 0, eventId) with
+        {
+            PersistentInfluencesJson = SyntheticInfluence(severity, nextEvidence),
+            IsExpressionChange = true, ExpressionChangeJson = audit
+        };
+    }
+
+    [Fact]
+    public async Task ExpressionChangePreservesEarnedProgressionAndSurvivesReload()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var acquired = Write(id, digest) with
+        {
+            PersistentInfluencesJson = SyntheticInfluence("1", "fixture:stage1")
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(acquired)).Status);
+
+        var increase = ExpressionChange(id, digest, 1, "3");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(increase)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.DuplicateEvent,
+            (await store.CommitVerifiedAsync(increase)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.RevisionConflict,
+            (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 1, "4") with
+            {
+                EventId = "expression:stale",
+                ExpressionChangeJson = ExpressionChange(id, digest, 1, "4")
+                    .ExpressionChangeJson!.Replace("expression:curse:1",
+                        "expression:stale", StringComparison.Ordinal)
+            })).Status);
+
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(reloaded);
+        var updated = (await fresh.GetAsync(id))!;
+        Assert.Equal(2, updated.Revision);
+        Assert.Equal(0, updated.LedgerRevision);
+        Assert.Contains("curse.earned", updated.PersistentInfluencesJson);
+        using var influence = JsonDocument.Parse(updated.PersistentInfluencesJson);
+        Assert.Equal("3", influence.RootElement[0]
+            .GetProperty("expression").GetProperty("severity").GetString());
+        var receipts = await fresh.GetEventsAsync(id);
+        Assert.Equal(2, receipts.Count);
+        Assert.Equal("expression-change", receipts[1].Kind);
+        Assert.Null(receipts[1].TransitionRequestJson);
+        using var audit = JsonDocument.Parse(receipts[1].ExpressionChangeJson!);
+        Assert.Equal("curse.influence",
+            audit.RootElement.GetProperty("influenceId").GetString());
+        Assert.Equal("3",
+            audit.RootElement.GetProperty("nextExpression").GetProperty("severity").GetString());
+
+        var decrease = ExpressionChange(id, digest, 2, "0", "3",
+            "fixture:stage2", "fixture:stage3");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await fresh.CommitVerifiedAsync(decrease)).Status);
+        Assert.Contains("curse.earned", (await fresh.GetAsync(id))!.PersistentInfluencesJson);
+        Assert.Equal(3, (await fresh.GetEventsAsync(id)).Count);
+    }
+
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("wrong-character")]
+    [InlineData("wrong-event")]
+    [InlineData("wrong-influence")]
+    [InlineData("wrong-evidence")]
+    [InlineData("invalid-dimension")]
+    [InlineData("broken-expression-chain")]
+    [InlineData("broken-evidence-chain")]
+    [InlineData("latest-audit-current-mismatch")]
+    [InlineData("ambiguous-audit-field")]
+    [InlineData("missing-expression-field")]
+    public async Task CorruptHistoricalExpressionAuditBlocksNextPostgreSqlCommit(string mutation)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var acquired = Write(id, digest) with
+        {
+            PersistentInfluencesJson = SyntheticInfluence("1", "fixture:stage1")
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(acquired)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 1, "3"))).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 2, "0", "3",
+                "fixture:stage2", "fixture:stage3"))).Status);
+
+        var tamperLatest = mutation is "latest-audit-current-mismatch"
+            or "broken-evidence-chain" or "ambiguous-audit-field"
+            or "missing-expression-field";
+        var targetEvent = tamperLatest ? "expression:curse:2" : "expression:curse:1";
+        var original = Assert.Single((await store.GetEventsAsync(id)),
+            receipt => receipt.EventId == targetEvent);
+        var audit = JsonNode.Parse(original.ExpressionChangeJson!)!.AsObject();
+        switch (mutation)
+        {
+            case "empty":
+                audit = new JsonObject();
+                break;
+            case "wrong-character":
+                audit["characterId"] = Guid.NewGuid().ToString("D");
+                break;
+            case "wrong-event":
+                audit["eventId"] = "forged:event";
+                break;
+            case "wrong-influence":
+                audit["influenceId"] = "forged:influence";
+                break;
+            case "wrong-evidence":
+                audit["nextExpressionEvidenceId"] = "forged:evidence";
+                break;
+            case "invalid-dimension":
+                audit["nextExpression"]!["severity"] = 42;
+                break;
+            case "broken-expression-chain":
+                audit["nextExpression"]!["severity"] = "9";
+                break;
+            case "broken-evidence-chain":
+                audit["previousExpressionEvidenceId"] = "forged:previous";
+                break;
+            case "latest-audit-current-mismatch":
+                audit["nextExpression"]!["severity"] = "9";
+                break;
+            case "ambiguous-audit-field":
+                audit["EventId"] = "forged:alias";
+                break;
+            case "missing-expression-field":
+                audit.Remove("previousExpression");
+                break;
+            default:
+                throw new InvalidOperationException("Unknown adversarial mutation.");
+        }
+
+        var corrupt = audit.ToJsonString();
+        Assert.Equal(1, await db.SupernaturalEventReceipts
+            .Where(x => x.CharacterId == id && x.EventId == targetEvent)
+            .ExecuteUpdateAsync(update => update
+                .SetProperty(x => x.ExpressionChangeJson, corrupt)));
+
+        // Reload the corrupted receipt with a genuinely fresh EF context.
+        await using var freshDb = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(freshDb);
+        var snapshot = (await fresh.GetAsync(id))!;
+        var attempted = ExpressionChange(id, digest, 3, "5", "0",
+            "fixture:stage3", "fixture:stage4");
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => fresh.CommitVerifiedAsync(attempted));
+        var unchanged = (await fresh.GetAsync(id))!;
+        Assert.Equal(3, unchanged.Revision);
+        Assert.Equal(snapshot.PersistentInfluencesJson, unchanged.PersistentInfluencesJson);
+        Assert.Equal(3, (await fresh.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task ValidHistoricalExpressionEvidenceChainSurvivesFreshContextReload()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest) with
+            {
+                PersistentInfluencesJson = SyntheticInfluence("1", "fixture:stage1")
+            })).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 1, "3"))).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(ExpressionChange(id, digest, 2, "0", "3",
+                "fixture:stage2", "fixture:stage3"))).Status);
+        await using var freshDb = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(freshDb);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await fresh.CommitVerifiedAsync(ExpressionChange(id, digest, 3, "4", "0",
+                "fixture:stage3", "fixture:stage4"))).Status);
+        var state = (await fresh.GetAsync(id))!;
+        Assert.Equal(4, state.Revision);
+        Assert.Equal(0, state.LedgerRevision);
+        Assert.Contains("curse.earned", state.PersistentInfluencesJson);
+        Assert.Equal(4, (await fresh.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task InterleavedExpressionHistoriesValidateIndependentlyAfterDatabaseReload()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+
+        var influences = JsonNode.Parse(SyntheticInfluence("1", "fixture:stage1"))!.AsArray();
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest) with
+            {
+                PersistentInfluencesJson = influences.ToJsonString()
+            })).Status);
+
+        // The second influence is acquired independently in a later event.
+        var other = influences[0]!.DeepClone().AsObject();
+        other["id"] = "curse.second";
+        other["acquisitionEvidenceId"] = "fixture:acquired-second";
+        other["expressionEvidenceId"] = "fixture:other-stage1";
+        other["progression"]![0]!["id"] = "curse.other-earned";
+        influences.Add(other);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 0,
+                "acquire:second") with
+            {
+                PersistentInfluencesJson = influences.ToJsonString()
+            })).Status);
+
+        string current = influences.ToJsonString();
+        VerifiedSupernaturalStateWrite Change(
+            long revision, string target, string eventId, string severity, string evidence)
+        {
+            var items = JsonNode.Parse(current)!.AsArray();
+            var owner = Assert.Single(items.OfType<JsonObject>(),
+                value => value["id"]!.GetValue<string>() == target);
+            var oldExpression = owner["expression"]!.DeepClone();
+            var oldEvidence = owner["expressionEvidenceId"]!.GetValue<string>();
+            var newExpression = new JsonObject { ["severity"] = severity };
+            owner["expression"] = newExpression.DeepClone();
+            owner["expressionEvidenceId"] = evidence;
+            var audit = new JsonObject
+            {
+                ["characterId"] = id.ToString("D"),
+                ["eventId"] = eventId,
+                ["influenceId"] = target,
+                ["previousExpressionEvidenceId"] = oldEvidence,
+                ["nextExpressionEvidenceId"] = evidence,
+                ["previousExpression"] = oldExpression,
+                ["nextExpression"] = newExpression
+            };
+            current = items.ToJsonString();
+            return Write(id, digest, revision, 0, 0, eventId) with
+            {
+                PersistentInfluencesJson = current,
+                IsExpressionChange = true,
+                ExpressionChangeJson = audit.ToJsonString()
+            };
+        }
+
+        var first = Change(2, "curse.influence", "change:first:1",
+            "3", "fixture:stage2");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(first)).Status);
+        var second = Change(3, "curse.second", "change:second:1",
+            "2", "fixture:other-stage2");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(second)).Status);
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(reload);
+        var third = Change(4, "curse.influence", "change:first:2",
+            "0", "fixture:stage3");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await fresh.CommitVerifiedAsync(third)).Status);
+        var fourth = Change(5, "curse.second", "change:second:2",
+            "4", "fixture:other-stage3");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await fresh.CommitVerifiedAsync(fourth)).Status);
+
+        var saved = (await fresh.GetAsync(id))!;
+        Assert.Equal(6, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        using var document = JsonDocument.Parse(saved.PersistentInfluencesJson);
+        Assert.Equal("0", document.RootElement[0].GetProperty("expression")
+            .GetProperty("severity").GetString());
+        Assert.Equal("4", document.RootElement[1].GetProperty("expression")
+            .GetProperty("severity").GetString());
+        Assert.Equal(6, (await fresh.GetEventsAsync(id)).Count);
+    }
+
+    [Fact]
+    public async Task ExpressionChangeRejectsForgedScopeAndUnauditedMutations()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var acquired = Write(id, digest) with
+        {
+            PersistentInfluencesJson = SyntheticInfluence("1", "fixture:stage1")
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(acquired)).Status);
+
+        var changed = ExpressionChange(id, digest, 1, "2");
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with { ExpressionChangeJson = null }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with { IsExpressionChange = false }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with { IsTransition = true }));
+        var forgedAudit = JsonNode.Parse(changed.ExpressionChangeJson!)!.AsObject();
+        forgedAudit["previousExpression"]!["severity"] = "9";
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with
+            {
+                ExpressionChangeJson = forgedAudit.ToJsonString()
+            }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with
+            {
+                PersistentInfluencesJson = changed.PersistentInfluencesJson.Replace(
+                    "curse.earned", "forged.earned", StringComparison.Ordinal)
+            }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with
+            {
+                AlternateSheetsJson = "[]"
+            }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with
+            {
+                LedgerJson = Ledger(id, 0, "forged:transition")
+            }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.CommitVerifiedAsync(changed with
+            {
+                PersistentInfluencesJson = SyntheticInfluence("1", "fixture:stage2")
+            }));
+        Assert.Equal(1, (await store.GetAsync(id))!.Revision);
+        Assert.Single(await store.GetEventsAsync(id));
+    }
+
+
+    [Fact]
+    public async Task InfluenceExpressionChangesDuringActiveFormWithoutMutatingResourcesOrReversion()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var expressionAtAcquisition = SyntheticInfluence("1", "fixture:stage1");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest) with
+            {
+                PersistentInfluencesJson = expressionAtAcquisition
+            })).Status);
+
+        var active = ActivationLedger(id, 1,
+            ["enter:wolf"], [Instance(id, "enter:wolf")], [Resource()]);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 1, 0, 1,
+                "enter:wolf", transition: true, ledger: active) with
+            {
+                PersistentInfluencesJson = expressionAtAcquisition
+            })).Status);
+
+        // A form transition retains the influence's acquisition and expression
+        // while the separate expression event retains the activation and pool.
+        var increased = ExpressionChange(id, digest, 2, "4") with
+        {
+            ExpectedLedgerRevision = 1, NextLedgerRevision = 1,
+            LedgerJson = active
+        };
+        var changedLedger = JsonNode.Parse(active)!.AsObject();
+        changedLedger["resources"]![0]!["current"] = 8;
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            increased with { LedgerJson = changedLedger.ToJsonString() }));
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(increased)).Status);
+
+        var changed = (await store.GetAsync(id))!;
+        Assert.Equal(3, changed.Revision);
+        Assert.Equal(1, changed.LedgerRevision);
+        using (var ledger = JsonDocument.Parse(changed.LedgerJson))
+        {
+            Assert.Equal("manifest.wolf", ledger.RootElement
+                .GetProperty("instances")[0].GetProperty("id").GetString());
+            Assert.Equal(4, ledger.RootElement
+                .GetProperty("resources")[0].GetProperty("current").GetInt32());
+            Assert.Equal(1, ledger.RootElement
+                .GetProperty("processedEventIds").GetArrayLength());
+        }
+
+        var ended = ActivationLedger(id, 2,
+            ["enter:wolf", "revert:wolf"],
+            [Instance(id, "revert:wolf", lifecycle: 1)], [Resource()]);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest, 3, 1, 2,
+                "revert:wolf", transition: true, ledger: ended) with
+            {
+                PersistentInfluencesJson = SyntheticInfluence("4", "fixture:stage2")
+            })).Status);
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var durable = new PostgresCharacterSupernaturalStateStore(reloaded);
+        var snapshot = (await durable.GetAsync(id))!;
+        Assert.Equal(4, snapshot.Revision);
+        Assert.Equal(2, snapshot.LedgerRevision);
+        Assert.Contains("curse.earned", snapshot.PersistentInfluencesJson);
+        Assert.Contains("fixture:stage2", snapshot.PersistentInfluencesJson);
+        var receipts = await durable.GetEventsAsync(id);
+        Assert.Equal(new[] { "acquisition", "transition", "expression-change", "transition" },
+            receipts.Select(x => x.Kind));
+        Assert.Null(receipts[2].TransitionRequestJson);
+        Assert.NotNull(receipts[2].ExpressionChangeJson);
+        Assert.Equal("revert:wolf", receipts[3].EventId);
     }
 
     [Fact]

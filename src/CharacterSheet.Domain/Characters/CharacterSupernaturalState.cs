@@ -103,7 +103,8 @@ public sealed class CharacterSupernaturalEventReceipt
     public CharacterSupernaturalEventReceipt(Guid characterId, string eventId,
         long committedRevision, long ledgerRevision, string kind,
         string authorizationEvidenceId, DateTimeOffset createdAt,
-        string? transitionRequestJson = null)
+        string? transitionRequestJson = null,
+        string? expressionChangeJson = null)
     {
         if (characterId == Guid.Empty || committedRevision < 1 || ledgerRevision < 0 ||
             string.IsNullOrWhiteSpace(eventId) || eventId.Length > 160 ||
@@ -120,6 +121,9 @@ public sealed class CharacterSupernaturalEventReceipt
         TransitionRequestJson = transitionRequestJson is null ? null :
             CharacterSupernaturalState.CheckJson(transitionRequestJson,
                 JsonValueKind.Object, "transitionRequest");
+        ExpressionChangeJson = expressionChangeJson is null ? null :
+            CharacterSupernaturalState.CheckJson(expressionChangeJson,
+                JsonValueKind.Object, "expressionChange");
         CreatedAt = createdAt;
     }
 
@@ -137,5 +141,11 @@ public sealed class CharacterSupernaturalEventReceipt
     /// migration. Persistence is not independent proof of authorization.
     /// </summary>
     public string? TransitionRequestJson { get; private set; }
+
+    /// <summary>
+    /// Immutable expression-change evidence. A receipt records the exact
+    /// before/after expression but never authenticates its own source.
+    /// </summary>
+    public string? ExpressionChangeJson { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 }

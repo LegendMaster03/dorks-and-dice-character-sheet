@@ -805,6 +805,65 @@ public sealed class CharacterStateCrossRepositoryTests
             "receipt.expression.influence.synthetic.pool",
             new Dictionary<string, string>(), []);
 
+    /// <summary>
+    /// Source-defined fixture, not first-party supernatural gameplay. The
+    /// adjustment is gated both by the current expression and an independently
+    /// earned progression; expression changes never create the earned record.
+    /// </summary>
+    private static NativeCharacterPersistentInfluence GatedProgressiveInfluence(
+        string phase = "dormant", string evidence = "fixture:expression:dormant") =>
+        new("influence.synthetic.pool", "definition.influence.synthetic.pool",
+            SyntheticSource(), "receipt.acquire.influence.synthetic.pool",
+            evidence, new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["phase"] = phase
+            },
+            [
+                new NativeCharacterInfluenceEffect("effect.synthetic.dexterity",
+                    Occurrence("effects.synthetic.dexterity"),
+                    "receipt.effect.synthetic.dexterity", SyntheticRule(),
+                    new Dictionary<string, string> { ["phase"] = "active" },
+                    ["@primary", "wolf"], NativeInfluenceCharacteristic.AbilityScore,
+                    NativeInfluenceOperation.Adjust, "dexterity", 2,
+                    RequiredEarned:
+                    [
+                        new NativeInfluenceEarnedRequirement(
+                            NativeInfluenceEarnedKind.Progression,
+                            "progress.definition.curse", Occurrence("progress.curse"))
+                    ])
+            ], [Earned("curse")]);
+
+    private sealed class TrustedGatedExpressionSource : ITrustedCharacterInfluenceExpressionSource
+    {
+        public Task<TrustedInfluenceExpressionChange?> PrepareAsync(
+            Guid characterId, SiteCharacterProjection authorizedCharacter,
+            CharacterSupernaturalState committed, string influenceId,
+            string intentId, string eventId, CancellationToken ct)
+        {
+            if (authorizedCharacter.CharacterId != characterId ||
+                !authorizedCharacter.AllowsOrdinaryEditingByLifecycle ||
+                influenceId != "influence.synthetic.pool" ||
+                intentId != "expression:activate" || eventId != intentId)
+                return Task.FromResult<TrustedInfluenceExpressionChange?>(null);
+
+            using var document = JsonDocument.Parse(committed.PersistentInfluencesJson);
+            var influences = document.RootElement;
+            if (influences.GetArrayLength() != 1 ||
+                influences[0].GetProperty("id").GetString() != influenceId ||
+                influences[0].GetProperty("acquisitionEvidenceId").GetString() !=
+                    "receipt.acquire.influence.synthetic.pool" ||
+                influences[0].GetProperty("expressionEvidenceId").GetString() !=
+                    "fixture:expression:dormant" ||
+                influences[0].GetProperty("expression").GetProperty("phase").GetString()
+                    != "dormant")
+                return Task.FromResult<TrustedInfluenceExpressionChange?>(null);
+
+            return Task.FromResult<TrustedInfluenceExpressionChange?>(
+                new(new Dictionary<string, string> { ["phase"] = "active" },
+                    "fixture:expression:active", "fixture:verified-expression-rule"));
+        }
+    }
+
     private static NativeManifestationResourcePolicy[] FourOwnerPolicies() =>
     [
         new("resource.primary.1", NativeManifestationResourceMode.Inherit),
@@ -887,6 +946,54 @@ public sealed class CharacterStateCrossRepositoryTests
             if (!receipts.Any(x => x.EventId == "fixture:acquire-werewolf" &&
                 x.AuthorizationEvidenceId == "fixture:verified-source"))
                 return null;
+            // This test-only policy accepts the changed expression only when
+            // PostgreSQL contains the exact independently recorded audit.
+            // A persisted expression or delegated ticket alone is insufficient.
+            var gated = (state.PersistentInfluences ?? []).SingleOrDefault(x =>
+                x.Id == "influence.synthetic.pool" && x.Effects.Count > 0);
+            if (gated is not null)
+            {
+                var expressionReceipts = receipts.Where(x =>
+                    x.Kind == "expression-change").ToArray();
+                if (!gated.Expression.TryGetValue("phase", out var phase))
+                    return null;
+                if (phase == "dormant")
+                {
+                    if (expressionReceipts.Length != 0 ||
+                        gated.ExpressionEvidenceId != "fixture:expression:dormant")
+                        return null;
+                }
+                else if (phase == "active")
+                {
+                    if (expressionReceipts.Length != 1 ||
+                        expressionReceipts[0].EventId != "expression:activate" ||
+                        expressionReceipts[0].AuthorizationEvidenceId !=
+                            "fixture:verified-expression-rule" ||
+                        expressionReceipts[0].ExpressionChangeJson is null)
+                        return null;
+                    using var document = JsonDocument.Parse(
+                        expressionReceipts[0].ExpressionChangeJson);
+                    var audit = document.RootElement;
+                    if (audit.GetProperty("characterId").GetString() !=
+                            characterId.ToString("D") ||
+                        audit.GetProperty("eventId").GetString() !=
+                            "expression:activate" ||
+                        audit.GetProperty("intentId").GetString() !=
+                            "expression:activate" ||
+                        audit.GetProperty("influenceId").GetString() != gated.Id ||
+                        audit.GetProperty("previousExpressionEvidenceId").GetString()
+                            != "fixture:expression:dormant" ||
+                        audit.GetProperty("nextExpressionEvidenceId").GetString()
+                            != gated.ExpressionEvidenceId ||
+                        audit.GetProperty("previousExpression").GetProperty("phase")
+                            .GetString() != "dormant" ||
+                        audit.GetProperty("nextExpression").GetProperty("phase")
+                            .GetString() != "active" ||
+                        gated.ExpressionEvidenceId != "fixture:expression:active")
+                        return null;
+                }
+                else return null;
+            }
             var scores = await db.BaseAbilityScoreInputs.AsNoTracking()
                 .Where(x => x.CharacterId == characterId)
                 .ToDictionaryAsync(x => x.AbilityKey, x => x.Score, ct);
@@ -1000,20 +1107,32 @@ public sealed class CharacterStateCrossRepositoryTests
             decision.DefinitionOccurrence == Occurrence("interactions.replace") &&
             decision.Basis == SyntheticRule() &&
             decision.AuthorizationEvidenceId == "receipt.interaction.overlap";
+        private static bool ExactFixture(object actual, object expected) =>
+            JsonElement.DeepEquals(JsonSerializer.SerializeToElement(actual, Wire),
+                JsonSerializer.SerializeToElement(expected, Wire));
+
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
-            Character(id) && JsonElement.DeepEquals(
-                JsonSerializer.SerializeToElement(influence, Wire),
-                JsonSerializer.SerializeToElement(PassiveResourceInfluence(), Wire));
+            Character(id) &&
+            (ExactFixture(influence, PassiveResourceInfluence()) ||
+             (influence.Expression.TryGetValue("phase", out var phase) &&
+              phase is "dormant" or "active" &&
+              ExactFixture(influence, GatedProgressiveInfluence(phase,
+                  phase == "dormant" ? "fixture:expression:dormant" :
+                      "fixture:expression:active"))));
         public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) =>
-            Character(id) && JsonElement.DeepEquals(
-                JsonSerializer.SerializeToElement(influence, Wire),
-                JsonSerializer.SerializeToElement(PassiveResourceInfluence(), Wire));
+            AuthorizesInfluence(id, influence);
         public bool AuthorizesEffect(string id, string influenceId,
-            NativeCharacterInfluenceEffect effect) => false;
+            NativeCharacterInfluenceEffect effect) =>
+            Character(id) && influenceId == "influence.synthetic.pool" &&
+            ExactFixture(effect, GatedProgressiveInfluence().Effects.Single());
         public bool AuthorizesInfluenceProgression(string id, string influenceId,
-            NativeSheetEarnedProgression progression) => false;
+            NativeSheetEarnedProgression progression) =>
+            Character(id) && influenceId == "influence.synthetic.pool" &&
+            ExactFixture(progression, Earned("curse"));
         public bool AuthorizesInfluenceGrant(string id, string influenceId,
-            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
+            AuthorizesInfluenceProgression(id, influenceId, progression) &&
+            ExactFixture(grant, Earned("curse").Grants.Single());
         public bool AuthorizesInfluenceApplicability(string id, string influenceId,
             NativeInfluenceGrantApplicability decision) => false;
     }
@@ -1503,6 +1622,109 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExpressionCoordinatorUsesRealCoreForGatedEarnedProgression(
+        bool activeAlternateManifestation)
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticAuthorityProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(provider, provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+        var state = TestCharacter(id, fingerprint, TestOwnedForms()) with
+        {
+            PersistentInfluences = [GatedProgressiveInfluence()]
+        };
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var (key, score) in state.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, key, score, DateTimeOffset.UtcNow);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(state.AlternateSheets, Wire),
+                JsonSerializer.Serialize(state.PersistentInfluences, Wire),
+                JsonSerializer.Serialize(new NativeManifestationLedger(
+                    id.ToString("D"), 0, [], [], []), Wire),
+                0, 0, 0, digest, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        if (activeAlternateManifestation)
+        {
+            var transition = await TransitionRunner(db, new OwnerAccess(id), store,
+                gateway, new SyntheticTrustedSource(state)).ApplyAsync(
+                    id, 1, 0, "enter:wolf", "enter:wolf");
+            Assert.Equal(CharacterManifestationApplyStatus.Applied, transition.Status);
+        }
+
+        var before = (await store.GetAsync(id))!;
+        var baseline = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", baseline.View!.Status);
+        Assert.Empty((JsonArray)baseline.View.NativeProjection!["effectiveCharacter"]!
+            ["appliedEffects"]!);
+        Assert.Equal(activeAlternateManifestation ? 17 : 10,
+            baseline.View.NativeProjection!["effectiveCharacter"]!
+                ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        Assert.Equal(12, baseline.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["dexterity"]!.GetValue<int>());
+
+        var site = new OwnerAccess(id);
+        var coordinator = new CharacterInfluenceExpressionChangeService(
+            site, site, store, new TrustedGatedExpressionSource(), gateway,
+            Reader(db, id, gateway));
+        var result = await coordinator.ApplyAsync(id, before.Revision,
+            before.LedgerRevision, "influence.synthetic.pool",
+            "expression:activate", "expression:activate");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, result.Status);
+        Assert.Equal(CharacterInfluenceProjectionOutcome.Available,
+            result.ProjectionOutcome);
+        Assert.Equal("partial", result.EffectiveStatus);
+        Assert.Equal(before.Revision + 1, result.StateRevision);
+        Assert.Equal(before.LedgerRevision, result.LedgerRevision);
+        Assert.Equal(14, result.EffectiveProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["dexterity"]!.GetValue<int>());
+        Assert.Equal(activeAlternateManifestation ? 17 : 10,
+            result.EffectiveProjection!["effectiveCharacter"]!
+                ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        Assert.Single((JsonArray)result.EffectiveProjection!["effectiveCharacter"]!
+            ["appliedEffects"]!);
+        Assert.Equal("progress.curse", result.EffectiveProjection!
+            ["effectiveCharacter"]!["influenceProgression"]![0]!
+            ["record"]!["id"]!.GetValue<string>());
+        Assert.True(gateway.VerifiedReadRequests >= 2);
+
+        var saved = (await store.GetAsync(id))!;
+        Assert.Equal(before.LedgerJson, saved.LedgerJson);
+        Assert.Equal(before.LedgerRevision, saved.LedgerRevision);
+        Assert.Equal(before.AlternateSheetsJson, saved.AlternateSheetsJson);
+        using (var original = JsonDocument.Parse(before.PersistentInfluencesJson))
+        using (var changed = JsonDocument.Parse(saved.PersistentInfluencesJson))
+        {
+            Assert.True(JsonElement.DeepEquals(
+                original.RootElement[0].GetProperty("progression"),
+                changed.RootElement[0].GetProperty("progression")));
+            Assert.True(JsonElement.DeepEquals(
+                original.RootElement[0].GetProperty("effects"),
+                changed.RootElement[0].GetProperty("effects")));
+            Assert.Equal("active", changed.RootElement[0]
+                .GetProperty("expression").GetProperty("phase").GetString());
+        }
+        var receipts = await store.GetEventsAsync(id);
+        Assert.Equal(activeAlternateManifestation ? 3 : 2, receipts.Count);
+        Assert.Equal("expression-change", receipts[^1].Kind);
+        Assert.NotNull(receipts[^1].ExpressionChangeJson);
+    }
+
     [Fact]
     public async Task CanonicalBackgroundAndHitPointsBlockUnverifiedFormTransition()
     {
@@ -1728,7 +1950,10 @@ public sealed class CharacterStateCrossRepositoryTests
         var gateway = new RealGateway(core.Client);
         var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
             ["fingerprint"]!.GetValue<string>();
-        var state = TestCharacter(id, fingerprint, TestOwnedForms());
+        var state = TestCharacter(id, fingerprint, TestOwnedForms()) with
+        {
+            PersistentInfluences = [GatedProgressiveInfluence()]
+        };
         string ledgerBeforeRestart = "";
         string sheetsBeforeRestart = "";
         string influencesBeforeRestart = "";
@@ -1748,7 +1973,8 @@ public sealed class CharacterStateCrossRepositoryTests
             Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
                 (await owned.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
                     id, "first-party-001", fingerprint,
-                    JsonSerializer.Serialize(state.AlternateSheets, Wire), "[]",
+                    JsonSerializer.Serialize(state.AlternateSheets, Wire),
+                    JsonSerializer.Serialize(state.PersistentInfluences, Wire),
                     JsonSerializer.Serialize(initial, Wire),
                     0, 0, 0, digest, "fixture:acquire-werewolf",
                     "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
@@ -1757,12 +1983,8 @@ public sealed class CharacterStateCrossRepositoryTests
                     id, 1, 0, "enter:resource-wolf", "enter:resource-wolf");
             Assert.Equal(CharacterManifestationApplyStatus.Applied, transition.Status);
             var committed = (await owned.GetAsync(id))!;
-            ledgerBeforeRestart = committed.LedgerJson;
-            sheetsBeforeRestart = committed.AlternateSheetsJson;
-            influencesBeforeRestart = committed.PersistentInfluencesJson;
-            receiptsBeforeRestart = (await owned.GetEventsAsync(id))
-                .Select(x => (x.EventId, x.CommittedRevision,
-                    x.AuthorizationEvidenceId, x.TransitionRequestJson)).ToArray();
+            Assert.Equal(2, committed.Revision);
+            Assert.Equal(1, committed.LedgerRevision);
         }
 
         // Host-only Site fixture: a caller must redeem a concrete ticket,
@@ -1926,11 +2148,55 @@ public sealed class CharacterStateCrossRepositoryTests
         {
             try
             {
+                var dormant = await AuthorizedFormRead();
+                Assert.Equal(17, dormant["nativeProjection"]?
+                    ["effectiveCharacter"]?["effectiveMechanics"]?
+                    ["abilityScores"]?["strength"]?.GetValue<int>());
+                Assert.Equal(12, dormant["nativeProjection"]?
+                    ["effectiveCharacter"]?["effectiveMechanics"]?
+                    ["abilityScores"]?["dexterity"]?.GetValue<int>());
+
+                // Commit the expression while the first real web host is
+                // running. The host must observe it before shutdown; the
+                // restarted process must independently reconstruct that same
+                // verified state from PostgreSQL.
+                await using (var writerDb =
+                    new CharacterSheetDbContext(database.CreateOptions()))
+                {
+                    var writerStore = new PostgresCharacterSupernaturalStateStore(writerDb);
+                    var owner = new OwnerAccess(id);
+                    var expression = new CharacterInfluenceExpressionChangeService(
+                        owner, owner, writerStore, new TrustedGatedExpressionSource(),
+                        gateway, Reader(writerDb, id, gateway));
+                    var applied = await expression.ApplyAsync(id, 2, 1,
+                        "influence.synthetic.pool",
+                        "expression:activate", "expression:activate");
+                    Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied,
+                        applied.Status);
+                    Assert.Equal(CharacterInfluenceProjectionOutcome.Available,
+                        applied.ProjectionOutcome);
+                    Assert.Equal(3, applied.StateRevision);
+                    Assert.Equal(1, applied.LedgerRevision);
+                    var committed = (await writerStore.GetAsync(id))!;
+                    ledgerBeforeRestart = committed.LedgerJson;
+                    sheetsBeforeRestart = committed.AlternateSheetsJson;
+                    influencesBeforeRestart = committed.PersistentInfluencesJson;
+                    receiptsBeforeRestart = (await writerStore.GetEventsAsync(id))
+                        .Select(x => (x.EventId, x.CommittedRevision,
+                            x.AuthorizationEvidenceId, x.TransitionRequestJson)).ToArray();
+                }
+
                 firstProjection = await AuthorizedFormRead();
                 Assert.Equal("wolf",
                     firstProjection["effectiveSheetId"]?.GetValue<string>());
                 Assert.Equal("manifest.wolf.1",
                     firstProjection["activeManifestationId"]?.GetValue<string>());
+                Assert.Equal(17, firstProjection["nativeProjection"]?
+                    ["effectiveCharacter"]?["effectiveMechanics"]?
+                    ["abilityScores"]?["strength"]?.GetValue<int>());
+                Assert.Equal(14, firstProjection["nativeProjection"]?
+                    ["effectiveCharacter"]?["effectiveMechanics"]?
+                    ["abilityScores"]?["dexterity"]?.GetValue<int>());
                 before = authentications;
                 Assert.True(before > 0);
             }
@@ -1963,7 +2229,7 @@ public sealed class CharacterStateCrossRepositoryTests
         await using var inspected = new CharacterSheetDbContext(database.CreateOptions());
         var persisted = new PostgresCharacterSupernaturalStateStore(inspected);
         var saved = (await persisted.GetAsync(id))!;
-        Assert.Equal(2, saved.Revision);
+        Assert.Equal(3, saved.Revision);
         Assert.Equal(1, saved.LedgerRevision);
         Assert.Equal(ledgerBeforeRestart, saved.LedgerJson);
         Assert.Equal(sheetsBeforeRestart, saved.AlternateSheetsJson);
@@ -1980,9 +2246,17 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(receiptsBeforeRestart,
             receipts.Select(x => (x.EventId, x.CommittedRevision,
                 x.AuthorizationEvidenceId, x.TransitionRequestJson)).ToArray());
-        Assert.Equal(2, receipts.Count);
+        Assert.Equal(3, receipts.Count);
         Assert.Equal("fixture:acquire-werewolf", receipts[0].EventId);
         Assert.Equal("enter:resource-wolf", receipts[1].EventId);
+        Assert.Equal("expression:activate", receipts[2].EventId);
+        Assert.Equal("expression-change", receipts[2].Kind);
+        Assert.NotNull(receipts[2].ExpressionChangeJson);
+        using var persistedExpression = JsonDocument.Parse(saved.PersistentInfluencesJson);
+        Assert.Equal("active", persistedExpression.RootElement[0]
+            .GetProperty("expression").GetProperty("phase").GetString());
+        Assert.Equal("progress.curse", persistedExpression.RootElement[0]
+            .GetProperty("progression")[0].GetProperty("id").GetString());
         using var ledger = JsonDocument.Parse(saved.LedgerJson);
         Assert.Equal(1, ledger.RootElement.GetProperty("processedEventIds")
             .GetArrayLength());
