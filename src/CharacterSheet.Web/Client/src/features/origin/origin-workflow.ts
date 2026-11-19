@@ -25,12 +25,16 @@ import {
     changeDirectOriginChoice,
     changeDirectOriginIdentity,
     changeMixedNativeParent,
+    changeMixedNativeCandidate,
+    changeMixedNativeFiniteChoice,
     changeNativeOriginMode,
     createInitialOriginProposal,
     canActivateDirectNativeOrigin,
     isEditableDirectNativeOrigin,
     isEditableMixedNativeOrigin,
     mixedNativeParentSources,
+    originPreviewCandidates,
+    requiredDraftOriginChoices,
     type MixedNativeParentSlot
 } from "./origin-builder-model.js";
 
@@ -68,7 +72,9 @@ export interface OriginWorkflow {
     setMode(characterId: string, mode: "direct" | "mixed"): Promise<void>;
     clearMixedParent(characterId: string, slot: MixedNativeParentSlot): Promise<void>;
     setFiniteChoice(characterId: string, candidateId: string,
-        requirementId: string, id: string | null): Promise<void>;
+        requirementId: string, ids: string | null | readonly string[]): Promise<void>;
+    toggleMixedCandidate(characterId: string, candidateId: string,
+        selected: boolean): Promise<void>;
     activate(characterId: string): Promise<void>;
     refreshDraft(characterId: string): Promise<void>;
     loadParentOptions(characterId: string): Promise<void>;
@@ -148,6 +154,17 @@ export function createOriginWorkflow(
         }
     }
 
+    /** An older draft or stale native response must not be used as an offer list. */
+    function currentPreviewReady(): boolean {
+        return state.draft !== null && state.catalog !== null &&
+            state.preview?.previewOnly === true &&
+            state.preview.contentChangedSinceRequest !== true &&
+            state.preview.rulesetId === state.catalog.rulesetId &&
+            state.preview.fingerprint === state.catalog.fingerprint &&
+            state.draft.rulesetId === state.catalog.rulesetId &&
+            state.draft.fingerprint === state.catalog.fingerprint;
+    }
+
     async function searchChooser(query: string): Promise<void> {
         const chooser = state.chooser;
         if (chooser.kind !== "open" || state.catalog === null) return;
@@ -183,7 +200,11 @@ export function createOriginWorkflow(
             state.savedState !== null || state.catalog === null ||
             (!editableDirect && !editableMixed) ||
             (editableMixed && (category === "skill" || parentSlot === undefined)) ||
-            (editableDirect && parentSlot !== undefined)) return;
+            (editableDirect && parentSlot !== undefined) ||
+            (category === "skill" && (!currentPreviewReady() ||
+                !requiredDraftOriginChoices(state.preview, proposal).some(c =>
+                    c.candidateId === candidateId && c.requirementId === requirementId &&
+                    c.optionCatalogId === "any-native-skill")))) return;
         ++searchSequence;
         update({ chooser: { kind: "open", category, candidateId, requirementId,
             parentSlot, query: "", status: "loading", options: [] },
@@ -259,7 +280,13 @@ export function createOriginWorkflow(
         }
         if (!isEditableDirectNativeOrigin(draft)) return;
         if (chooser.category === "skill") {
-            if (!chooser.candidateId || !chooser.requirementId) return;
+            if (!chooser.candidateId || !chooser.requirementId ||
+                !currentPreviewReady() ||
+                !requiredDraftOriginChoices(state.preview, draft).some(choice =>
+                    choice.candidateId === chooser.candidateId &&
+                    choice.requirementId === chooser.requirementId &&
+                    choice.optionCatalogId === "any-native-skill" &&
+                    choice.minimum === 1 && choice.maximum === 1)) return;
             await saveProposal(characterId, changeDirectOriginChoice(draft,
                 chooser.candidateId, chooser.requirementId, [id]));
         } else {
@@ -295,18 +322,45 @@ export function createOriginWorkflow(
     }
 
     async function setFiniteChoice(characterId: string, candidateId: string,
-        requirementId: string, id: string | null): Promise<void> {
+        requirementId: string, ids: string | null | readonly string[]): Promise<void> {
         const proposal = state.draft?.proposal;
-        if (!proposal || !isEditableDirectNativeOrigin(proposal)) return;
-        await saveProposal(characterId, changeDirectOriginChoice(
-            proposal, candidateId, requirementId, id === null ? [] : [id]));
+        if (!proposal || !currentPreviewReady()) return;
+        const chosen = ids === null ? [] : typeof ids === "string" ? [ids] : [...ids];
+        const choice = requiredDraftOriginChoices(state.preview, proposal).find(c =>
+            c.candidateId === candidateId && c.requirementId === requirementId);
+        if (!choice || choice.finiteOptions === null || choice.optionCatalogId !== null ||
+            chosen.length > choice.maximum || new Set(chosen).size !== chosen.length ||
+            !chosen.every(id => choice.finiteOptions?.includes(id))) return;
+        if (isEditableDirectNativeOrigin(proposal)) {
+            await saveProposal(characterId, changeDirectOriginChoice(
+                proposal, candidateId, requirementId, chosen));
+        } else if (isEditableMixedNativeOrigin(proposal) && state.preview !== null) {
+            await saveProposal(characterId, changeMixedNativeFiniteChoice(
+                proposal, state.preview, candidateId, requirementId, chosen));
+        }
+    }
+
+    async function toggleMixedCandidate(characterId: string, candidateId: string,
+        selected: boolean): Promise<void> {
+        const proposal = state.draft?.proposal;
+        if (!proposal || !isEditableMixedNativeOrigin(proposal) ||
+            !currentPreviewReady() || state.preview === null) return;
+        const offered = originPreviewCandidates(state.preview, proposal).find(c =>
+            c.id === candidateId);
+        if (!offered || offered.selectedDraft === selected) return;
+        try {
+            await saveProposal(characterId, changeMixedNativeCandidate(
+                proposal, state.preview, candidateId, selected));
+        } catch (error) {
+            update({ message: requestErrorMessage(error) });
+        }
     }
 
     async function activate(characterId: string): Promise<void> {
         if (state.status !== "ready" || state.savedState !== null || state.readOnly ||
             state.busy || state.draft === null ||
             !canActivateDirectNativeOrigin(state.draft.proposal, state.preview) ||
-            currentCharacterId !== characterId) return;
+            !currentPreviewReady() || currentCharacterId !== characterId) return;
         const token = ++sequence;
         update({ busy: true, message: undefined });
         try {
@@ -376,7 +430,8 @@ export function createOriginWorkflow(
     return {
         current: () => state, load, openChooser, searchChooser, closeChooser,
         chooseOption, clearAncestry, setMode, clearMixedParent,
-        setFiniteChoice, activate, refreshDraft, loadParentOptions, selectParentSource,
+        setFiniteChoice, toggleMixedCandidate, activate, refreshDraft,
+        loadParentOptions, selectParentSource,
         reviewParentSources
     };
 }

@@ -389,6 +389,9 @@ function renderWorkspace(
             setFiniteChoice: (candidateId, requirementId, id) =>
                 void originWorkflow.setFiniteChoice(character.characterId,
                     candidateId, requirementId, id),
+            toggleMixedCandidate: (candidateId, selected) =>
+                void originWorkflow.toggleMixedCandidate(character.characterId,
+                    candidateId, selected),
             activate: () => void originWorkflow.activate(character.characterId),
             refreshDraft: () => void originWorkflow.refreshDraft(character.characterId),
             reload: () => void originWorkflow.load(character.characterId),
