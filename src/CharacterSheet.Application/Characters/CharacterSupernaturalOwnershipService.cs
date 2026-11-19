@@ -324,13 +324,33 @@ public sealed class CharacterSupernaturalOwnershipService(
                 source.GetProperty("fingerprint").GetString() == fingerprint &&
                 source.GetProperty("authorizationEvidenceId").GetString() ==
                     material.AuthorizationEvidenceId &&
-                source.GetProperty("sourceOccurrence").ValueKind == JsonValueKind.Object;
+                ValidSourceOccurrence(source.GetProperty("sourceOccurrence"));
         }
         catch (Exception e) when (e is JsonException or InvalidOperationException
             or KeyNotFoundException or FormatException)
         {
             return false;
         }
+    }
+
+    private static bool ValidSourceOccurrence(JsonElement occurrence)
+    {
+        if (occurrence.ValueKind != JsonValueKind.Object ||
+            !occurrence.TryGetProperty("occurrencePath", out var path) ||
+            path.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(path.GetString()) ||
+            !occurrence.TryGetProperty("source", out var source) ||
+            source.ValueKind != JsonValueKind.Object ||
+            !source.TryGetProperty("id", out var id) ||
+            id.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(id.GetString()) ||
+            !source.TryGetProperty("version", out var version) ||
+            version.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(version.GetString()) ||
+            !source.TryGetProperty("kind", out var kind) ||
+            kind.ValueKind is not (JsonValueKind.String or JsonValueKind.Number))
+            return false;
+        return true;
     }
 
     /// <summary>
@@ -371,7 +391,10 @@ public sealed class CharacterSupernaturalOwnershipService(
                 plan["persistentInfluences"] is not JsonArray sources ||
                 plan["ledger"] is not JsonObject proposed ||
                 proposed["characterId"]?.GetValue<string>() != characterId.ToString("D") ||
-                proposed["revision"]?.GetValue<long>() != expectedLedgerRevision)
+                proposed["revision"]?.GetValue<long>() != expectedLedgerRevision ||
+                proposed["instances"] is not JsonArray ||
+                proposed["resources"] is not JsonArray ||
+                proposed["processedEventIds"] is not JsonArray)
                 return false;
             alternateSheets = (JsonArray)sheets.DeepClone();
             influences = (JsonArray)sources.DeepClone();

@@ -174,6 +174,21 @@ public sealed class CharacterSupernaturalOwnershipContractTests
         // The PostgreSQL guard, not the wire correlator, validates the full
         // ledger body. This test ensures that structure is not misclassified
         // as successful native entitlement by a pure response check.
-        Assert.True(Accept(response));
+        Assert.False(Accept(response));
+    }
+
+    [Fact]
+    public void MalformedSourceOccurrenceIsRejectedBeforeCoreDelegation()
+    {
+        var invalid = new TrustedSupernaturalOwnershipMaterial(
+            JsonSerializer.SerializeToElement(new
+            {
+                characterId = Character.ToString("D"),
+                operation = "Acquire", eventId = "acq-1",
+                rulesetId = "rules", fingerprint = "catalog",
+                authorizationEvidenceId = "fixture:trusted",
+                sourceOccurrence = new { occurrencePath = "fixture.invalid", source = new { id = "wolf" } }
+            }), "fixture:trusted");
+        Assert.False(Matches(invalid));
     }
 }

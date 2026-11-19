@@ -46,3 +46,7 @@ The existing immutable receipt stream distinguishes `acquisition` and `progressi
 ## Synthetic progression and response-integrity tests
 
 The new internal source/plan tests verify exact identity, event, catalog, evidence, and revision bindings. A PostgreSQL regression verifies a separate immutable `progression` receipt, preserved earlier earned progression, duplicate-event rejection, and persistence after reloading the DbContext. These tests verify the adapter and storage boundary only; production authority remains deferred.
+
+## Deferred R3 contract compatibility
+
+The unmerged R3 branch adds a `ProtectedMutationTerminal` journal and migration `20261117040000_AddProtectedMutationTerminals` with admission/command digests, irrevocable `Committed`/`Aborted` outcomes, and a character-scope root-lock ordering proposal. The approved revocation behavior blocks newly conflicting admissions when a request is durable, then waits for earlier admitted operations to reach terminal outcomes before reporting revocation effective. The exact cross-service protocol remains a separate approval item. This branch adds neither the R3 table nor its migration, and no result here is evidence of commit-time revocation fencing. A later integration must tie the new ownership coordinator's event and digest to a Site-owned admitted operation under that protocol.
