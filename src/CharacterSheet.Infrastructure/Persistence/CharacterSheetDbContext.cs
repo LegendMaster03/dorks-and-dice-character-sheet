@@ -459,6 +459,7 @@ public sealed class CharacterSheetDbContext(DbContextOptions<CharacterSheetDbCon
             .HasDatabaseName("UX_character_innate_spell_ledger_receipts_Revision")
             .IsUnique();
         innateReceipt.HasOne<CharacterInnateSpellLedgerState>().WithMany()
+            .HasForeignKey(value => value.CharacterId).OnDelete(DeleteBehavior.Cascade);
 
         // Server-verified character-owned state uses bounded versioned JSONB
         // documents. Transactional CAS and unique event identities live in
