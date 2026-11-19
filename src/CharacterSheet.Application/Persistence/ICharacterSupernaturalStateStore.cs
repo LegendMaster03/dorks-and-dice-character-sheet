@@ -22,7 +22,14 @@ public sealed record VerifiedSupernaturalStateWrite(
     string AuthorizationEvidenceId, bool IsTransition, DateTimeOffset RecordedAt,
     string? TransitionRequestJson = null,
     bool IsExpressionChange = false, string? ExpressionChangeJson = null,
-    bool IsProgression = false);
+    bool IsProgression = false,
+    /// <summary>
+    /// These optional receipts are accepted only from independently verified
+    /// Core plans; persisted bytes do not confer source or table authority.
+    /// </summary>
+    bool IsOwnershipPlan = false,
+    string? ProgressionJournalJson = null,
+    string? InfluenceOverlapSelectionsJson = null);
 
 public sealed record CharacterSupernaturalWriteResult(
     CharacterSupernaturalWriteStatus Status, long? Revision = null,

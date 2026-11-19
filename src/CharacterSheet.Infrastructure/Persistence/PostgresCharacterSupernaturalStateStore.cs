@@ -44,7 +44,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             (!command.IsTransition && command.NextLedgerRevision != command.ExpectedLedgerRevision) ||
             (command.IsExpressionChange && (command.IsTransition || command.ExpectedRevision == 0)) ||
             (command.IsProgression && (command.IsTransition || command.IsExpressionChange ||
-                command.ExpectedRevision == 0)))
+                command.ExpectedRevision == 0)) ||
+            (command.IsOwnershipPlan && (command.IsTransition || command.IsExpressionChange)))
             throw new ArgumentException("Invalid supernatural write revision.", nameof(command));
 
         // Shape checks never confer entitlement. The application must have
@@ -53,12 +54,15 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             command.RulesetId, command.Fingerprint, command.AlternateSheetsJson,
             command.PersistentInfluencesJson, command.LedgerJson,
             command.NextLedgerRevision, command.ExpectedDependencyFingerprint,
-            command.RecordedAt);
+            command.RecordedAt, command.ProgressionJournalJson,
+            command.InfluenceOverlapSelectionsJson);
         _ = new CharacterSupernaturalEventReceipt(command.CharacterId,
             command.EventId, command.ExpectedRevision + 1,
             command.NextLedgerRevision, ReceiptKind(command),
             command.AuthorizationEvidenceId, command.RecordedAt,
-            command.TransitionRequestJson, command.ExpressionChangeJson);
+            command.TransitionRequestJson, command.ExpressionChangeJson,
+            command.IsOwnershipPlan ? command.ProgressionJournalJson : null,
+            command.InfluenceOverlapSelectionsJson);
         ValidateLedger(command);
         ValidateTransitionAudit(command);
         ValidateExpressionChangeAudit(command);
@@ -111,6 +115,13 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             // the same lock. Revision checks alone can not detect rewritten
             // acquisition history or dropped manifestation event identities.
             CharacterSupernaturalHistoryGuard.Validate(existing, command);
+            var committedProgression = ValidateProgressionJournal(
+                existing?.ProgressionJournalJson ?? next.ProgressionJournalJson,
+                command, existing is not null);
+            var committedOverlapSelections = command.InfluenceOverlapSelectionsJson ??
+                existing?.InfluenceOverlapSelectionsJson ?? next.InfluenceOverlapSelectionsJson;
+            if (command.InfluenceOverlapSelectionsJson is not null)
+                ValidateOverlapDecisionShape(committedOverlapSelections, command.CharacterId);
 
             if (existing is null)
             {
@@ -128,6 +139,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                         .SetProperty(x => x.AlternateSheetsJson, next.AlternateSheetsJson)
                         .SetProperty(x => x.PersistentInfluencesJson, next.PersistentInfluencesJson)
                         .SetProperty(x => x.LedgerJson, next.LedgerJson)
+                        .SetProperty(x => x.ProgressionJournalJson, committedProgression)
+                        .SetProperty(x => x.InfluenceOverlapSelectionsJson, committedOverlapSelections)
                         .SetProperty(x => x.LedgerRevision, next.LedgerRevision)
                         .SetProperty(x => x.DependencyFingerprint, next.DependencyFingerprint)
                         .SetProperty(x => x.Revision, command.ExpectedRevision + 1)
@@ -141,7 +154,10 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 command.CharacterId, command.EventId, command.ExpectedRevision + 1,
                 command.NextLedgerRevision, ReceiptKind(command),
                 command.AuthorizationEvidenceId, command.RecordedAt,
-                command.TransitionRequestJson, command.ExpressionChangeJson));
+                command.TransitionRequestJson, command.ExpressionChangeJson,
+                command.IsOwnershipPlan ? committedProgression : null,
+                command.InfluenceOverlapSelectionsJson is null
+                    ? null : committedOverlapSelections));
 
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -201,6 +217,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
         // predate expression snapshots and cannot supply a fabricated baseline.
         var expressionHistory = new Dictionary<string, ExpressionAudit>(StringComparer.Ordinal);
         long ledgerRevision = 0;
+        string? lastProgressionJournal = null;
+        string? lastOverlapSelections = null;
         for (var index = 0; index < receipts.Count; index++)
         {
             var receipt = receipts[index];
@@ -249,7 +267,35 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             if (receipt.LedgerRevision != ledgerRevision)
                 throw new ArgumentException(
                     "Supernatural event receipt ledger revisions are not sequential.");
+            if (receipt.ProgressionJournalSnapshotJson is not null)
+            {
+                var journal = ParseProgressionJournal(receipt.ProgressionJournalSnapshotJson,
+                    receipt.CharacterId);
+                if (journal.Revision <= 0 || journal.Events.LastOrDefault() != receipt.EventId ||
+                    lastProgressionJournal is not null &&
+                    journal.Revision != ParseProgressionJournal(
+                        lastProgressionJournal, receipt.CharacterId).Revision + 1)
+                    throw new ArgumentException(
+                        "Immutable supernatural progression receipts are not sequential.");
+                lastProgressionJournal = receipt.ProgressionJournalSnapshotJson;
+            }
+            if (receipt.OverlapSelectionsSnapshotJson is not null)
+            {
+                ValidateOverlapDecisionShape(receipt.OverlapSelectionsSnapshotJson,
+                    receipt.CharacterId);
+                lastOverlapSelections = receipt.OverlapSelectionsSnapshotJson;
+            }
         }
+
+        if (lastProgressionJournal is not null &&
+            !SameJournal(lastProgressionJournal, existing.ProgressionJournalJson,
+                existing.CharacterId))
+            throw new ArgumentException(
+                "The persisted progression journal differs from its latest immutable receipt.");
+        if (lastOverlapSelections is not null &&
+            !SameJson(lastOverlapSelections, existing.InfluenceOverlapSelectionsJson))
+            throw new ArgumentException(
+                "The persisted overlap decisions differ from the latest immutable receipt.");
 
         if (ledgerRevision != existing.LedgerRevision)
             throw new ArgumentException(
@@ -497,6 +543,144 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             action.TryGetInt32(out var number) && number is >= 0 and <= 3 ||
         action.ValueKind == JsonValueKind.String &&
             action.GetString() is "Activate" or "End" or "Suppress" or "Restore";
+
+
+    private sealed record ProgressionJournal(long Revision, string[] Events,
+        string[] ConsumedEvidence);
+
+    private static ProgressionJournal ParseProgressionJournal(
+        string json, Guid characterId)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        RejectDuplicateJsonKeys(root);
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("characterId", out var id) ||
+            id.ValueKind != JsonValueKind.String ||
+            id.GetString() != characterId.ToString("D") ||
+            !root.TryGetProperty("revision", out var number) ||
+            number.ValueKind != JsonValueKind.Number ||
+            !number.TryGetInt64(out var revision) || revision < 0 ||
+            !root.TryGetProperty("processedEventIds", out var events) ||
+            !ReadDistinctIds(events, 160, out var eventIds) ||
+            !root.TryGetProperty("consumedEligibilityEvidenceIds", out var evidence) ||
+            !ReadDistinctIds(evidence, 320, out var evidenceIds))
+            throw new ArgumentException("Malformed source-specific supernatural progression journal.");
+        return new(revision, eventIds!, evidenceIds!);
+    }
+
+    private static bool ReadDistinctIds(JsonElement array, int maximum, out string[]? result)
+    {
+        result = null;
+        if (array.ValueKind != JsonValueKind.Array || array.GetArrayLength() > 16384)
+            return false;
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        var ids = new List<string>();
+        foreach (var value in array.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.String ||
+                value.GetString() is not { } id ||
+                string.IsNullOrWhiteSpace(id) || id.Length > maximum ||
+                !found.Add(id))
+                return false;
+            ids.Add(id);
+        }
+        result = ids.ToArray();
+        return true;
+    }
+
+    private static bool SameJournal(string left, string right, Guid characterId)
+    {
+        var a = ParseProgressionJournal(left, characterId);
+        var b = ParseProgressionJournal(right, characterId);
+        return a.Revision == b.Revision &&
+            a.Events.SequenceEqual(b.Events, StringComparer.Ordinal) &&
+            a.ConsumedEvidence.ToHashSet(StringComparer.Ordinal)
+                .SetEquals(b.ConsumedEvidence);
+    }
+
+    private static bool SameJson(string left, string right)
+    {
+        using var a = JsonDocument.Parse(left);
+        using var b = JsonDocument.Parse(right);
+        return JsonElement.DeepEquals(a.RootElement, b.RootElement);
+    }
+
+    /// <summary>
+    /// The verified Core proposal must append one event without replacing any
+    /// previously consumed eligibility receipt. This check is performed while
+    /// PostgreSQL holds the character lock; source verification is separate.
+    /// </summary>
+    private static string ValidateProgressionJournal(string oldJson,
+        VerifiedSupernaturalStateWrite command, bool existing)
+    {
+        var previous = ParseProgressionJournal(oldJson, command.CharacterId);
+        if (command.ProgressionJournalJson is null)
+        {
+            if (command.IsOwnershipPlan)
+                throw new ArgumentException("A verified acquisition requires a progression journal.");
+            return oldJson;
+        }
+        var proposed = ParseProgressionJournal(command.ProgressionJournalJson,
+            command.CharacterId);
+        if (!command.IsOwnershipPlan)
+        {
+            if (!SameJournal(oldJson, command.ProgressionJournalJson, command.CharacterId))
+                throw new ArgumentException(
+                    "An unrelated manifestation or expression write can not change progression history.");
+            return oldJson;
+        }
+        if (previous.Revision == long.MaxValue ||
+            proposed.Revision != previous.Revision + 1 ||
+            proposed.Events.Length != previous.Events.Length + 1 ||
+            !proposed.Events.Take(previous.Events.Length).SequenceEqual(
+                previous.Events, StringComparer.Ordinal) ||
+            proposed.Events[^1] != command.EventId ||
+            !previous.ConsumedEvidence.ToHashSet(StringComparer.Ordinal)
+                .IsSubsetOf(proposed.ConsumedEvidence))
+            throw new ArgumentException(
+                "A source-verified progression transition must append one event and preserve all consumed evidence.");
+        return command.ProgressionJournalJson;
+    }
+
+    /// <summary>
+    /// Validate storage shape only. Rule and scope authority must be checked
+    /// independently by Rules Core before the application accepts the command.
+    /// </summary>
+    private static void ValidateOverlapDecisionShape(string json, Guid characterId)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        RejectDuplicateJsonKeys(root);
+        if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() > 1024)
+            throw new ArgumentException("Malformed overlap decision collection.");
+        var decisionIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in root.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("id", out var id) ||
+                id.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(id.GetString()) ||
+                !decisionIds.Add(id.GetString()!) ||
+                !item.TryGetProperty("targetSheetId", out var sheet) ||
+                sheet.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(sheet.GetString()) ||
+                !item.TryGetProperty("effectIds", out var effects) ||
+                !ReadDistinctIds(effects, 160, out var effectIds) ||
+                effectIds!.Length is < 2 or > 64 ||
+                !item.TryGetProperty("selectedEffectId", out var winner) ||
+                winner.ValueKind != JsonValueKind.String ||
+                !effectIds.Contains(winner.GetString(), StringComparer.Ordinal) ||
+                !item.TryGetProperty("ruleOccurrence", out var source) ||
+                source.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("basis", out var basis) ||
+                basis.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("authorizationEvidenceId", out var evidence) ||
+                evidence.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(evidence.GetString()))
+                throw new ArgumentException("Malformed source-scoped overlap decision.");
+        }
+    }
 
     private static void ValidateLedger(VerifiedSupernaturalStateWrite command)
     {
