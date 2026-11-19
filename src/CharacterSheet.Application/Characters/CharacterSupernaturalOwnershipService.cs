@@ -172,22 +172,35 @@ public sealed class CharacterSupernaturalOwnershipService(
                 eventId, rulesetId, catalogFingerprint))
             return new(CharacterSupernaturalOwnershipApplyStatus.SourceUnauthorized);
 
+        var manifestationLedgerJson = saved?.LedgerJson ??
+            JsonSerializer.Serialize(new
+            {
+                characterId = characterId.ToString("D"), revision = 0,
+                instances = Array.Empty<object>(),
+                resources = Array.Empty<object>(),
+                processedEventIds = Array.Empty<string>()
+            }, Wire);
+        var progressionJournalJson = saved?.ProgressionJournalJson ??
+            JsonSerializer.Serialize(new
+            {
+                characterId = characterId.ToString("D"), revision = 0,
+                processedEventIds = Array.Empty<string>(),
+                consumedEligibilityEvidenceIds = Array.Empty<string>()
+            }, Wire);
         JsonElement request;
+        long expectedProgressionRevision;
         try
         {
             using var sheets = JsonDocument.Parse(saved?.AlternateSheetsJson ?? "[]");
             using var influences = JsonDocument.Parse(saved?.PersistentInfluencesJson ?? "[]");
-            using var ledger = JsonDocument.Parse(saved?.LedgerJson ??
-                JsonSerializer.Serialize(new
-                {
-                    characterId = characterId.ToString("D"), revision = 0,
-                    instances = Array.Empty<object>(),
-                    resources = Array.Empty<object>(),
-                    processedEventIds = Array.Empty<string>()
-                }, Wire));
+            using var overlap = JsonDocument.Parse(saved?.InfluenceOverlapSelectionsJson ?? "[]");
+            using var ledger = JsonDocument.Parse(manifestationLedgerJson);
+            using var progression = JsonDocument.Parse(progressionJournalJson);
+            expectedProgressionRevision = progression.RootElement
+                .GetProperty("revision").GetInt64();
             request = JsonSerializer.SerializeToElement(new
             {
-                contractVersion = 1,
+                contractVersion = 2,
                 operation = operation.ToString(),
                 characterId = characterId.ToString("D"),
                 eventId, intentId, rulesetId,
@@ -200,9 +213,11 @@ public sealed class CharacterSupernaturalOwnershipService(
                     characterId = characterId.ToString("D"),
                     primaryMechanics = primary.Mechanics.Value,
                     alternateSheets = sheets.RootElement,
-                    persistentInfluences = influences.RootElement
+                    persistentInfluences = influences.RootElement,
+                    influenceOverlapSelections = overlap.RootElement
                 },
                 ledger = ledger.RootElement,
+                progressionJournal = progression.RootElement,
                 verifiedSource = material.VerifiedSource,
                 authorizationEvidenceId = material.AuthorizationEvidenceId
             }, Wire);
@@ -239,8 +254,9 @@ public sealed class CharacterSupernaturalOwnershipService(
         if (!TryReadVerifiedPlan(response, characterId, operation,
                 eventId, rulesetId, catalogFingerprint,
                 expectedStateRevision, expectedLedgerRevision,
-                material.AuthorizationEvidenceId,
-                out var nextSheets, out var nextInfluences, out var nextLedger))
+                expectedProgressionRevision, material.AuthorizationEvidenceId,
+                out var nextSheets, out var nextInfluences,
+                out var nextProgression, out var nextOverlap))
             return new(CharacterSupernaturalOwnershipApplyStatus.PlanUnresolved);
 
         var after = await store.GetAuthoritativeInputsFingerprintAsync(
@@ -272,11 +288,14 @@ public sealed class CharacterSupernaturalOwnershipService(
             commit = await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
                 characterId, rulesetId, catalogFingerprint,
                 nextSheets!.ToJsonString(Wire), nextInfluences!.ToJsonString(Wire),
-                nextLedger!.ToJsonString(Wire),
+                manifestationLedgerJson,
                 expectedStateRevision, expectedLedgerRevision,
                 expectedLedgerRevision, before, eventId,
                 material.AuthorizationEvidenceId, false, DateTimeOffset.UtcNow,
-                IsProgression: operation == CharacterSupernaturalOwnershipOperation.Advance),
+                IsProgression: operation == CharacterSupernaturalOwnershipOperation.Advance,
+                IsOwnershipPlan: true,
+                ProgressionJournalJson: nextProgression!.ToJsonString(Wire),
+                InfluenceOverlapSelectionsJson: nextOverlap!.ToJsonString(Wire)),
                 cancellationToken);
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException
@@ -354,26 +373,27 @@ public sealed class CharacterSupernaturalOwnershipService(
     }
 
     /// <summary>
-    /// Strict wire-validation of the provisional delegated result. Structural
-    /// validation is not acquisition eligibility: the Core host must verify
-    /// the source independently and refuse arbitrary caller-supplied grants.
+    /// Strict correlation of canonical version-2 verified planner results. The
+    /// host independently authenticates source occurrences and exact evidence;
+    /// the PostgreSQL guard separately enforces immutable ownership history.
     /// </summary>
     internal static bool TryReadVerifiedPlan(
         JsonNode? response, Guid characterId,
         CharacterSupernaturalOwnershipOperation operation,
         string eventId, string rulesetId, string fingerprint,
-        long expectedStateRevision, long expectedLedgerRevision,
-        string evidenceId,
+        long expectedStateRevision, long expectedManifestationRevision,
+        long expectedProgressionRevision, string evidenceId,
         out JsonArray? alternateSheets, out JsonArray? influences,
-        out JsonObject? ledger)
+        out JsonObject? progressionJournal, out JsonArray? overlapSelections)
     {
         alternateSheets = null;
         influences = null;
-        ledger = null;
+        progressionJournal = null;
+        overlapSelections = null;
         try
         {
             if (response is not JsonObject ||
-                response["contractVersion"]?.GetValue<int>() != 1 ||
+                response["contractVersion"]?.GetValue<int>() != 2 ||
                 response["rulesetId"]?.GetValue<string>() != rulesetId ||
                 response["fingerprint"]?.GetValue<string>() != fingerprint ||
                 response["status"]?.GetValue<string>() != "planned" ||
@@ -386,19 +406,29 @@ public sealed class CharacterSupernaturalOwnershipService(
                 plan["eventId"]?.GetValue<string>() != eventId ||
                 plan["authorizationEvidenceId"]?.GetValue<string>() != evidenceId ||
                 plan["expectedSupernaturalRevision"]?.GetValue<long>() != expectedStateRevision ||
-                plan["expectedLedgerRevision"]?.GetValue<long>() != expectedLedgerRevision ||
-                plan["alternateSheets"] is not JsonArray sheets ||
-                plan["persistentInfluences"] is not JsonArray sources ||
-                plan["ledger"] is not JsonObject proposed ||
+                plan["expectedManifestationRevision"]?.GetValue<long>() !=
+                    expectedManifestationRevision ||
+                plan["expectedProgressionRevision"]?.GetValue<long>() !=
+                    expectedProgressionRevision ||
+                plan["proposedState"] is not JsonObject state ||
+                state["characterId"]?.GetValue<string>() != characterId.ToString("D") ||
+                state["primaryMechanics"] is not JsonObject ||
+                state["alternateSheets"] is not JsonArray sheets ||
+                state["persistentInfluences"] is not JsonArray sources ||
+                plan["proposedJournal"] is not JsonObject proposed ||
                 proposed["characterId"]?.GetValue<string>() != characterId.ToString("D") ||
-                proposed["revision"]?.GetValue<long>() != expectedLedgerRevision ||
-                proposed["instances"] is not JsonArray ||
-                proposed["resources"] is not JsonArray ||
-                proposed["processedEventIds"] is not JsonArray)
+                expectedProgressionRevision == long.MaxValue ||
+                proposed["revision"]?.GetValue<long>() != expectedProgressionRevision + 1 ||
+                proposed["processedEventIds"] is not JsonArray processed ||
+                processed.Count is < 1 or > 16384 ||
+                processed[^1]?.GetValue<string>() != eventId ||
+                proposed["consumedEligibilityEvidenceIds"] is not JsonArray)
                 return false;
             alternateSheets = (JsonArray)sheets.DeepClone();
             influences = (JsonArray)sources.DeepClone();
-            ledger = (JsonObject)proposed.DeepClone();
+            progressionJournal = (JsonObject)proposed.DeepClone();
+            overlapSelections = state["influenceOverlapSelections"] is JsonArray decisions
+                ? (JsonArray)decisions.DeepClone() : new JsonArray();
             return true;
         }
         catch (Exception e) when (e is InvalidOperationException or FormatException
