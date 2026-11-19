@@ -85,7 +85,7 @@ internal static class CharacterSupernaturalHistoryGuard
             PreserveAcquiredOwners(existing.AlternateSheetsJson, command.AlternateSheetsJson,
                 "alternate sheets");
             PreserveAcquiredOwners(existing.PersistentInfluencesJson, command.PersistentInfluencesJson,
-                "persistent influences");
+                "persistent influences", allowEarnedEffects: command.IsOwnershipPlan);
         }
     }
 
@@ -516,7 +516,7 @@ internal static class CharacterSupernaturalHistoryGuard
     }
 
     private static void PreserveAcquiredOwners(string previousJson, string proposedJson,
-        string kind)
+        string kind, bool allowEarnedEffects = false)
     {
         using var previousDoc = JsonDocument.Parse(previousJson);
         using var nextDoc = JsonDocument.Parse(proposedJson);
@@ -534,7 +534,9 @@ internal static class CharacterSupernaturalHistoryGuard
             // require their own explicitly authorized transition contract.
             foreach (var field in oldOwner.EnumerateObject())
             {
-                if (field.NameEquals("progression")) continue;
+                if (field.NameEquals("progression") ||
+                    allowEarnedEffects && field.NameEquals("effects") ||
+                    allowEarnedEffects && field.NameEquals("grantApplicability")) continue;
                 if (!candidate.TryGetProperty(field.Name, out var value) ||
                     !JsonElement.DeepEquals(field.Value, value))
                     throw new ArgumentException(
@@ -542,14 +544,40 @@ internal static class CharacterSupernaturalHistoryGuard
             }
             foreach (var field in candidate.EnumerateObject())
             {
-                if (field.NameEquals("progression")) continue;
+                if (field.NameEquals("progression") ||
+                    allowEarnedEffects && field.NameEquals("effects") ||
+                    allowEarnedEffects && field.NameEquals("grantApplicability")) continue;
                 if (!oldOwner.TryGetProperty(field.Name, out var value) ||
                     !JsonElement.DeepEquals(field.Value, value))
                     throw new ArgumentException(
                         "An acquisition can not introduce unverified changes to existing " + kind + " state.");
             }
             PreserveRecords(oldOwner, candidate, "progression", "earned progression");
+            if (allowEarnedEffects)
+            {
+                // Native progression can append newly earned effects and grant
+                // use rules. Never allow a verified event to rewrite existing
+                // effect bodies or alter previously recorded applicability.
+                PreserveRecords(oldOwner, candidate, "effects", "earned effects");
+                PreserveArrayPrefix(oldOwner, candidate,
+                    "grantApplicability", "grant applicability");
+            }
         }
+    }
+
+    private static void PreserveArrayPrefix(JsonElement before, JsonElement after,
+        string field, string label)
+    {
+        if (!before.TryGetProperty(field, out var previous) ||
+            previous.ValueKind == JsonValueKind.Null) return;
+        if (previous.ValueKind != JsonValueKind.Array ||
+            !after.TryGetProperty(field, out var current) ||
+            current.ValueKind != JsonValueKind.Array ||
+            current.GetArrayLength() < previous.GetArrayLength())
+            throw new ArgumentException("A verified progression can not remove existing " + label + ".");
+        for (var index = 0; index < previous.GetArrayLength(); index++)
+            if (!JsonElement.DeepEquals(previous[index], current[index]))
+                throw new ArgumentException("A verified progression can not rewrite existing " + label + ".");
     }
 
     private static void PreserveRecords(JsonElement oldOwner, JsonElement nextOwner,
