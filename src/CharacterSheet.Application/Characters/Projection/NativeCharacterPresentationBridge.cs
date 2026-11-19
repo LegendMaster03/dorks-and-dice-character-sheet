@@ -34,7 +34,8 @@ public static class NativeCharacterPresentationBridge
         CharacterStateView? state,
         CancellationToken cancellationToken,
         bool hasCommittedOrigin = false,
-        VerifiedOriginProjectionContext? originProjection = null)
+        VerifiedOriginProjectionContext? originProjection = null,
+        long? committedOriginRevision = null)
     {
         ArgumentNullException.ThrowIfNull(gateway);
         ArgumentNullException.ThrowIfNull(build);
@@ -42,8 +43,16 @@ public static class NativeCharacterPresentationBridge
         // The caller may only use these native scalars alongside authenticated
         // committed Origin state. Exact catalog identity is checked again
         // below when the character projector independently loads its snapshot.
-        var originIntrinsics = hasCommittedOrigin ? originProjection?.Intrinsics : null;
-        var lowLightVision = hasCommittedOrigin ? originProjection?.LowLightVision : null;
+        // The authenticated presentation path supplies the current saved
+        // revision. Never reuse a previously verified grant after a new commit.
+        var originRevisionChanged = hasCommittedOrigin && originProjection is not null &&
+            committedOriginRevision is not null &&
+            (committedOriginRevision <= 0 ||
+             originProjection.CommittedRevision != committedOriginRevision);
+        var originIntrinsics = hasCommittedOrigin && !originRevisionChanged
+            ? originProjection?.Intrinsics : null;
+        var lowLightVision = hasCommittedOrigin && !originRevisionChanged
+            ? originProjection?.LowLightVision : null;
 
         // Even with no Class or abilities, an authorized native Origin's
         // walking speed must go through the Core kernel: active conditions can
@@ -335,8 +344,10 @@ public static class NativeCharacterPresentationBridge
         return new(partial ? "partial" : "resolved", mechanics,
             partial
                 ? hasCommittedOrigin
-                    ? originCatalogChanged
-                        ? "Native rules changed after Origin verification. Origin-dependent values are withheld pending revalidation; independently calculated Class values remain available."
+                    ? originRevisionChanged
+                        ? "The verified Origin revision does not match the committed Origin. Origin-dependent values are withheld pending revalidation."
+                        : originCatalogChanged
+                            ? "Native rules changed after Origin verification. Origin-dependent values are withheld pending revalidation; independently calculated Class values remain available."
                         : originIntrinsics is null
                             ? "The committed Origin's Species/Ancestry characteristics and trait effects have not been verified for native character projection."
                             : "Verified base Species/Ancestry characteristics, supported passive senses and any resolved native movement are shown. Other Origin traits and dependent mechanics remain unresolved."
@@ -348,11 +359,25 @@ public static class NativeCharacterPresentationBridge
     private static IReadOnlyList<CalculatedMechanicalValuePresentationView>
         IntrinsicMetadata(VerifiedOriginIntrinsics intrinsics) =>
         [
-            new("origin.base-creature-type", "Base Creature Type", intrinsics.CreatureType),
-            new("origin.base-size", "Base Size", intrinsics.Size),
+            new("origin.base-creature-type", "Base Creature Type",
+                intrinsics.CreatureType,
+                SourceAttributions: IntrinsicGrantSource(intrinsics.CreatureTypeGrant)),
+            new("origin.base-size", "Base Size", intrinsics.Size,
+                SourceAttributions: IntrinsicGrantSource(intrinsics.SizeGrant)),
             new("origin.base-walk-speed", "Base Walking Speed",
-                intrinsics.BaseWalkingSpeedFeet, Unit: "ft")
+                intrinsics.BaseWalkingSpeedFeet, Unit: "ft",
+                SourceAttributions: IntrinsicGrantSource(intrinsics.WalkingSpeedGrant))
         ];
+
+    // Attribution describes the Origin baseline, not effective movement.
+    // Rules Core still evaluates conditions and other movement effects.
+    private static IReadOnlyList<SourceAttributionPresentationView>?
+        IntrinsicGrantSource(VerifiedOriginIntrinsicGrant? grant) =>
+        grant is null ? null :
+        [new SourceAttributionPresentationView(
+            "origin-grant:" + grant.GrantId, "Native Species/Ancestry intrinsic",
+            Detail: grant.SourceId + grant.OccurrencePath,
+            PresentationRequired: true)];
 
     private sealed record NativeTrainingSummary(
         string Id, string Name, string Kind, string? GoverningAbility = null,

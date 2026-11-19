@@ -67,7 +67,16 @@ public sealed class VerifiedOriginIntrinsicReaderTests
     [Fact]
     public void MatchingLatestNativeIntrinsicGrantsProduceTypedScalars()
     {
-        Assert.Equal(new VerifiedOriginIntrinsics("humanoid", "medium", 30), Read());
+        var verified = Assert.IsType<VerifiedOriginIntrinsics>(Read());
+        Assert.Equal("humanoid", verified.CreatureType);
+        Assert.Equal("medium", verified.Size);
+        Assert.Equal(30, verified.BaseWalkingSpeedFeet);
+        Assert.Equal(new VerifiedOriginIntrinsicGrant(
+            "grant:type", "species.orc", "/creatureType"), verified.CreatureTypeGrant);
+        Assert.Equal(new VerifiedOriginIntrinsicGrant(
+            "grant:size", "species.orc", "/size"), verified.SizeGrant);
+        Assert.Equal(new VerifiedOriginIntrinsicGrant(
+            "grant:walk", "species.orc", "/walkingSpeedFeet"), verified.WalkingSpeedGrant);
         Assert.Null(VerifiedOriginIntrinsicReader.Read(null, Profile));
     }
 

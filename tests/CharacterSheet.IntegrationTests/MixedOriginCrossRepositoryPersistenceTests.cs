@@ -428,8 +428,11 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 .GetString());
             var supportedScalars = VerifiedOriginIntrinsicReader.Read(
                 projection.RootElement.GetProperty("intrinsics"), saved.ProfileJson);
-            Assert.Equal(new VerifiedOriginIntrinsics("humanoid", "medium", 30),
-                supportedScalars);
+            Assert.NotNull(supportedScalars);
+            Assert.Equal("humanoid", supportedScalars.CreatureType);
+            Assert.Equal("medium", supportedScalars.Size);
+            Assert.Equal(30, supportedScalars.BaseWalkingSpeedFeet);
+            Assert.NotNull(supportedScalars.SizeGrant);
             var supportedVision = VerifiedOriginVisionReader.Read(
                 projection.RootElement.GetProperty("vision"), saved.ProfileJson);
             Assert.NotNull(supportedVision);
@@ -471,8 +474,11 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             var verified = VerifiedCommittedMixedOriginReader.Read(
                 saved, receipts, activeRuleset);
             Assert.NotNull(verified);
-            Assert.Equal(new VerifiedOriginIntrinsics("humanoid", "medium", 30),
-                verified.Intrinsics);
+            Assert.Equal("humanoid", verified.Intrinsics.CreatureType);
+            Assert.Equal("medium", verified.Intrinsics.Size);
+            Assert.Equal(30, verified.Intrinsics.BaseWalkingSpeedFeet);
+            Assert.Equal(saved.Revision, verified.CommittedRevision);
+            Assert.NotNull(verified.Intrinsics.WalkingSpeedGrant);
             Assert.Equal("species.elf", verified.LowLightVision?.SourceId);
             Assert.Null(VerifiedCommittedMixedOriginReader.Read(
                 saved, [], activeRuleset));

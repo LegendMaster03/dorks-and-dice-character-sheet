@@ -162,6 +162,59 @@ public sealed class NativeCharacterPresentationBridgeTests
         Assert.Contains("rules changed", result.Message!, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task VerifiedIntrinsicMetadataRetainsGrantSourcesWithoutCreatingActions()
+    {
+        var gateway = new FixtureGateway();
+        var origin = new VerifiedOriginIntrinsics(
+            "humanoid", "medium", 30,
+            new("grant:type", "species.orc", "/creatureType"),
+            new("grant:size", "species.orc", "/size"),
+            new("grant:walk", "species.orc", "/walkingSpeedFeet"));
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, Build(), null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originProjection: new VerifiedOriginProjectionContext(
+                "first-party-001", Fingerprint, origin, CommittedRevision: 1),
+            committedOriginRevision: 1);
+
+        Assert.Equal("partial", result.Status);
+        var metadata = result.Mechanics!.CharacterMetadata!;
+        var size = Assert.Single(metadata, value => value.Key == "origin.base-size");
+        var source = Assert.Single(size.SourceAttributions!);
+        Assert.Equal("origin-grant:grant:size", source.Key);
+        Assert.Equal("species.orc/size", source.Detail);
+        Assert.True(source.PresentationRequired);
+        Assert.All(metadata, value => Assert.Single(value.SourceAttributions!));
+        Assert.Null(result.Mechanics.Actions);
+        Assert.Null(result.Mechanics.SpellcastingProfiles);
+    }
+
+    [Fact]
+    public async Task StaleCommittedOriginRevisionWithholdsScalarsAndPassiveSense()
+    {
+        var gateway = new FixtureGateway();
+        var build = Build(new CharacterAdvancementEntryView(
+            Guid.NewGuid(), 0, "class", "class.warlock", null, Now, Now, 1));
+        var origin = new VerifiedOriginIntrinsics("humanoid", "medium", 30);
+        var vision = new VerifiedOriginLowLightVision(
+            "grant:vision", "species.orc", "/traits/0", "dim", "bright");
+        var result = await NativeCharacterPresentationBridge.ProjectAsync(
+            gateway, build, null, CancellationToken.None,
+            hasCommittedOrigin: true,
+            originProjection: new VerifiedOriginProjectionContext(
+                "first-party-001", Fingerprint, origin, vision, CommittedRevision: 1),
+            committedOriginRevision: 2);
+
+        Assert.Equal("partial", result.Status);
+        Assert.Null(gateway.LastBaseWalkSpeed);
+        Assert.Null(result.Mechanics!.Movement);
+        Assert.Null(result.Mechanics.CharacterMetadata);
+        Assert.Null(result.Mechanics.Senses);
+        Assert.Equal(2, Assert.Single(result.Mechanics.Training!).EffectiveValue);
+        Assert.Contains("revision", result.Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("class:wizard")]
     [InlineData("feat:alert")]
