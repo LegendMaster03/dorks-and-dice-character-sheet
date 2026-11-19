@@ -731,7 +731,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         Assert.Single(await origins.GetEventsAsync(characterId));
     }
 
-    [Fact]
+    [Fact(Skip = "Historical S04 characterization. Mixed approval is deferred.")]
     [Trait("OpenSecurityAcceptanceGap", "S04")]
     public async Task S04CurrentBehaviorCharacterization_RevocationAfterCoreApprovalStillCommits()
     {
@@ -1339,7 +1339,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             builder.Services.AddScoped<CharacterOriginParentSourceAlignmentService>();
             builder.Services.AddScoped<CharacterOriginMixedActivationService>();
             var app = builder.Build();
-            app.MapCharacterOriginDraftEndpoints();
+            app.MapDeferredMixedOriginPrototypeEndpoints();
             await app.StartAsync();
             var server = app.Services.GetRequiredService<IServer>();
             var url = server.Features.Get<IServerAddressesFeature>()!.Addresses.Single();

@@ -1,8 +1,7 @@
 /**
  * Native Origin editor for direct initial construction. The user can save
  * incomplete proposals; a preview profile is never displayed as active grants.
- * A separate, Site-scoped DM route handles the narrow Human–Elf approval;
- * this owner editor never grants mixed Origin authority or changes forms.
+ * This owner editor never grants mixed Origin authority or changes forms.
  */
 import type { CharacterBuildResponse } from "../../builder-api.js";
 import { createButton, createElement, createInlineState,
@@ -445,7 +444,7 @@ export function renderOriginBuilder(
         // These are source exemplars, not trusted identities of existing
         // parent characters. Do not invent a manifested parent profile.
         section.append(createInlineState(
-            "Mixed biological Origin is evidence-only. Native source references do not identify or authenticate parent Characters. Additional sources and explicit characteristic selections are for draft evaluation, not the restricted two-source DM activation route. Biological compatibility, inheritance, reconciliation, and trait stacking require native adjudication; this owner editor cannot activate mixed Origins.",
+            "Mixed biological Origin is evidence-only. Native source references do not identify or authenticate parent Characters. Additional sources and characteristic selections are saved for draft evaluation. Mixed Origin activation is unavailable.",
             "warning"));
         const parents = createElement("div", "dd-build__grid");
         for (const parent of mixedNativeParentSources(proposal)) {

@@ -1,6 +1,6 @@
 name: Pillar 2 / Isolated Three-Service Browser Acceptance
 
-# This is an opt-in, nonproduction validation. There are no real user records,
+# This is isolated nonproduction validation. There are no real user records,
 # external credentials or deploy steps. Exact source revisions are pinned.
 on:
   workflow_dispatch:
@@ -37,14 +37,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LegendMaster03/dorks-and-dice-rules-core
-          ref: 23919c3ce00825f2da6204f218786957e9f1f1c2
+          ref: 541e8d818da0e925dfede0708aebe9ab62a8ba6c
           path: rules-core
           persist-credentials: false
-      - name: Checkout Site's actual DM/campaign/character authority branch
+      - name: Check out compatible Site main for Tool Host authentication
         uses: actions/checkout@v4
         with:
           repository: LegendMaster03/dorks-and-dice-site
-          ref: e8d0cb7d89de71aa337293b8f36d22bac98687c3
+          ref: aa15e85c5edf032275320b20442fe6c09501be5f
           path: site
           persist-credentials: false
       - name: Verify exact checked-out Core and Site SHA
@@ -54,8 +54,8 @@ jobs:
           echo "SHEET_SOURCE_SHA=$(git rev-parse HEAD)"
           echo "CORE_SOURCE_SHA=$(git -C rules-core rev-parse HEAD)"
           echo "SITE_SOURCE_SHA=$(git -C site rev-parse HEAD)"
-          test "$(git -C rules-core rev-parse HEAD)" = "23919c3ce00825f2da6204f218786957e9f1f1c2"
-          test "$(git -C site rev-parse HEAD)" = "e8d0cb7d89de71aa337293b8f36d22bac98687c3"
+          test "$(git -C rules-core rev-parse HEAD)" = "541e8d818da0e925dfede0708aebe9ab62a8ba6c"
+          test "$(git -C site rev-parse HEAD)" = "aa15e85c5edf032275320b20442fe6c09501be5f"
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -96,27 +96,10 @@ jobs:
             -inkey .pillar2-browser/localhost.key \
             -in .pillar2-browser/localhost.crt \
             -passout pass:local-review-only >/dev/null 2>&1
-      - name: Exercise supported UI and characterize in-flight Site revocation
+      - name: Exercise supported Origins and verify deferred routes are unavailable
         env:
           PILLAR2_RUN: ${{ github.run_id }}
         run: python tests/browser/pillar2_acceptance.py
-      - name: Require S04 to remain explicitly marked as an open security gap
-        shell: bash
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          evidence = json.loads(Path(".pillar2-browser/result.json").read_text())
-          for scenario in ("s04-security-acceptance",
-                           "s04-unlink-security-acceptance"):
-              matching = [entry for entry in evidence if entry["name"] == scenario]
-              assert len(matching) == 1 and matching[0]["status"] == "OPEN-GAP", (
-                  f"Missing or incorrectly classified S04 diagnostic: {scenario}"
-              )
-          print("S04: CHARACTERIZED, NOT ACCEPTED — actual Site DM-role "
-                "revocation and target unlink after native evaluation both "
-                "permit the original commit.")
-          PY
       - name: Print isolated service diagnostics if browser run fails
         if: failure()
         shell: bash

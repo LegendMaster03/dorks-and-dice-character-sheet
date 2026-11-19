@@ -2,8 +2,7 @@
 
 Only disposable Site SQLite records, local PostgreSQL, three feature-head
 binaries, and a locally trusted test certificate are used. Never point this
-script at a deployed Site or a shared database. Browser observations do not
-establish commit-time atomic Site authorization (S04).
+script at a deployed Site or a shared database.
 """
 import json
 import os
@@ -21,7 +20,6 @@ import base64
 import secrets
 from pathlib import Path
 from playwright.sync_api import sync_playwright
-from s04_site_delegation_barrier import S04SiteDelegationBarrier
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / ".pillar2-browser"
@@ -34,7 +32,6 @@ LOGS = []
 EVENTS = []
 UUIDS = {}
 PASSWORD = "LocalReview123!"  # Disposable fixture account only.
-S04_BARRIER = None
 
 
 def launch(name, command, settings=None, cwd=None):
@@ -68,7 +65,7 @@ def seed_site():
     """Use only the disposable Site schema created by its actual startup."""
     run_key = os.environ.get("PILLAR2_RUN", "local")
     for name in ["owner", "dm", "unrelated", "campaign", "direct", "mixed",
-                 "race", "race-unlink", "outsider", "membership-owner", "membership-dm"]:
+                 "drow", "red", "human", "drow-mixed", "outsider", "membership-owner", "membership-dm"]:
         UUIDS[name] = str(uuid.uuid5(
             uuid.NAMESPACE_DNS, "pillar2-browser-" + run_key + "-" + name)).upper()
     now = "2026-11-17 14:10:00+00:00"
@@ -90,10 +87,7 @@ def seed_site():
                  email, email.upper(), password_hash,
                  str(uuid.uuid4()), str(uuid.uuid4())))
     with sqlite3.connect(OUT / "site-content.db") as db:
-        # Only Site -> Rules Core traffic uses the delay relay. Sheet's
-        # ordinary Site ticket redemption and other browser flows retain
-        # their previously validated direct path to the actual Site.
-        for key, port in [("character-sheet", 5158), ("rules-core", 5160)]:
+        for key, port in [("character-sheet", 5158), ("rules-core", 5159)]:
             is_application = key == "character-sheet"
             fields = {
                 "tool_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, "browser-" + key)),
@@ -122,7 +116,7 @@ def seed_site():
             "(Id,Name,CreatedByUserId,Status,CreatedAt,UpdatedAt) "
             "VALUES (?,?,?,0,?,?)",
             (UUIDS["campaign"], "Browser Review Campaign", UUIDS["dm"], now, now))
-        for name in ["direct", "mixed", "race", "race-unlink", "outsider"]:
+        for name in ["direct", "mixed", "drow", "red", "human", "drow-mixed", "outsider"]:
             owner = "unrelated" if name == "outsider" else "owner"
             db.execute(
                 "INSERT INTO dd_character "
@@ -147,24 +141,6 @@ def seed_site():
                 "VALUES (?,?,?,?,?)",
                 (str(uuid.uuid4()), member,
                  "dm" if name == "dm" else "player", now, UUIDS["dm"]))
-
-
-def set_dm_role(role):
-    with sqlite3.connect(OUT / "site-content.db") as db:
-        db.execute("UPDATE dd_campaign_membership_role SET Role=? "
-                   "WHERE CampaignMembershipId=?",
-                   (role, UUIDS["membership-dm"]))
-
-
-def unlink_campaign_character(character_key):
-    """Remove an active Site campaign link while keeping owner identity intact."""
-    with sqlite3.connect(OUT / "site-content.db") as db:
-        cursor = db.execute(
-            "UPDATE dd_campaign_character SET Status=1 "
-            "WHERE CampaignId=? AND CharacterId=? AND Status=0",
-            (UUIDS["campaign"], UUIDS[character_key]))
-        if cursor.rowcount != 1:
-            raise AssertionError("Could not revoke exactly one active Site link")
 
 
 def expect_event(name, predicate, evidence=None):
@@ -209,13 +185,6 @@ def request_on_page(page, name, path, method="GET", body=None, expected=200):
 
 
 def run_browser():
-    global S04_BARRIER
-    # The real Site routes its Rules Core registration through a
-    # localhost-only pass-through. This isolates all normal Sheet ticket
-    # redemption, Site login and browser interactions from the S04 barrier.
-    # The delay is armed only for the final S04 characterization.
-    S04_BARRIER = S04SiteDelegationBarrier()
-    S04_BARRIER.start()
     launch("site",
            ["dotnet", str(ROOT / "site/dorks-and-dice-site/bin/Release/net10.0/dorks-and-dice-site.dll")],
            {"ASPNETCORE_ENVIRONMENT": "Development",
@@ -254,7 +223,9 @@ def run_browser():
     wait_ready("http://127.0.0.1:5159/ready")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome", headless=True, args=["--no-sandbox"])
+        chromium_path = os.environ.get("PILLAR2_CHROMIUM_PATH")
+        browser = p.chromium.launch(
+            executable_path=chromium_path, channel=None if chromium_path else "chrome")
         owner_context, owner = login(browser, "owner")
         dm_context, dm = login(browser, "dm")
         unrelated_context, unrelated = login(browser, "unrelated")
@@ -276,13 +247,14 @@ def run_browser():
         # Set up previously seeded Site Characters through the same browser
         # credentials. These API calls are fixture setup, not assertions that
         # every builder control has been exercised.
-        for name in ["direct", "mixed", "race", "race-unlink"]:
+        for name in ["direct", "mixed", "drow", "red", "human", "drow-mixed"]:
             request_on_page(owner, "browser-bootstrap-" + name,
                             API + "/characters/" + UUIDS[name] + "/sheet",
                             "POST", {}, 200)
         catalog = request_on_page(owner, "browser-delegated-native-catalog",
                                   API + "/native-rules/ruleset")
-        fp = catalog["fingerprint"]
+        expect_event("browser-catalog-fingerprint", bool(catalog["fingerprint"]),
+                     {"fingerprint": catalog["fingerprint"]})
 
         # Exercise the actual owner Species chooser, native option search,
         # save-draft workflow and native activation button. These previously
@@ -314,247 +286,158 @@ def run_browser():
         expect_event("browser-direct-persisted",
                      state["savedState"]["revision"] == 1)
 
-        mixed = {
-            "id": "browser-mixed", "intent": 1,
-            "method": {"ruleId": "rule.creature-origination",
-                       "methodId": "biological"},
-            "contributors": [
-                {"id": "parent-one", "role": {"kind": 0},
-                 "source": {"kind": 0, "id": "species.human"}},
-                {"id": "parent-two", "role": {"kind": 0},
-                 "source": {"kind": 0, "id": "species.elf"}}
-            ],
-            "candidates": [], "manifestations": []
-        }
-        request_on_page(owner, "browser-save-mixed", API + "/characters/" +
-                        UUIDS["mixed"] + "/origin/draft", "PUT",
-                        {"rulesetId": "first-party-001", "fingerprint": fp,
-                         "proposal": mixed, "expectedRevision": 0})
-        review_url = (BASE + "/tools/character-sheet/dm-origin-review/" +
-                      UUIDS["campaign"] + "/" + UUIDS["mixed"])
-        dm.goto(review_url)
-        dm.locator('[data-dm-origin-review]').wait_for(timeout=30000)
-        dm.get_by_text("Selected offers: 0 of 5").wait_for(timeout=30000)
+        expect_event("browser-orc-origin-resolved",
+                     owner.locator('[data-guided-builder-section="species"]')
+                     .get_attribute("data-guided-builder-status") == "resolved")
+        orc_grants = state["savedState"]["profile"]["underlying"]["inherentGrants"]
+        expect_event("browser-orc-native-characteristics",
+                     len(orc_grants) == 9 and
+                     all(grant["sourceCandidateIds"] for grant in orc_grants))
 
-        # A DM who has been demoted since the initial loaded page must not
-        # receive offers on a new navigation.
-        set_dm_role("player")
-        dm.reload()
-        dm.get_by_role("button", name="Retry DM review").wait_for(timeout=30000)
-        expect_event("browser-revoked-dm-review-denied", True)
-        set_dm_role("dm")
-        dm.reload()
-        dm.get_by_text("Selected offers: 0 of 5").wait_for(timeout=30000)
-        for source, path in [
-            ("species.elf", "/creatureType"),
-            ("species.elf", "/size"),
-            ("species.elf", "/walkingSpeedFeet"),
-            ("species.elf", "/traits/0"),
-            ("species.human", "/traits/2"),
+        def origin_url(name, action):
+            return API + "/characters/" + UUIDS[name] + "/origin/" + action
+
+        def open_origin(name):
+            owner.goto(BASE + "/tools/character-sheet/characters/" + UUIDS[name])
+            owner.locator('[data-character-sheet-state="rich-character"]').wait_for()
+            owner.locator('[data-sheet-mode-control="guided"]').click()
+            owner.locator('[data-guided-builder-section="species"]').click()
+
+        def choose(trigger, category, name):
+            trigger.click()
+            chooser = owner.locator(f'[data-origin-chooser="{category}"]')
+            chooser.get_by_role("button", name=name, exact=True).click()
+            chooser.wait_for(state="hidden")
+
+        def choose_direct(category, name):
+            row = owner.locator(f'[data-origin-identity="{category}"]')
+            choose(row.get_by_role("button", name="Choose"), category, name)
+
+        charisma = owner.locator('[data-origin-choice] select').filter(
+            has=owner.locator('option[value="charisma"]'))
+
+        for fixture, species, ancestry in [
+            ("drow", "Elf", "Drow"),
+            ("red", "Dragonborn", "Red Dragonborn"),
         ]:
-            dm.get_by_role("checkbox", name=f"Select {source} {path}").check()
-        dm.get_by_text("Selected offers: 5 of 5").wait_for(timeout=15000)
-        dm.screenshot(path=str(OUT / "browser-dm-selections.png"), full_page=True)
-        dm.get_by_role("button", name="Commit DM-approved mixed Origin").click()
-        dm.get_by_text("Origin construction committed at revision 1",
-                       exact=False).wait_for(timeout=45000)
-        dm.screenshot(path=str(OUT / "browser-mixed-committed.png"), full_page=True)
+            open_origin(fixture)
+            choose_direct("species", species)
+            choose_direct("ancestry", ancestry)
+            if fixture == "drow":
+                charisma.select_option("charisma")
+            owner.get_by_role("button", name="Activate Native Origin").click()
+            owner.get_by_text("Origin construction is committed at revision 1",
+                              exact=False).wait_for()
+            open_origin(fixture)
+            owner.get_by_text("Origin construction is committed at revision 1",
+                              exact=False).wait_for()
+            committed = request_on_page(owner, f"browser-{fixture}-origin-reload",
+                                        origin_url(fixture, "state"))
+            profile = committed["savedState"]["profile"]["underlying"]
+            expect_event(f"browser-{fixture}-native-source",
+                         profile["ancestryId"] == {
+                             "drow": "ancestry.elf.drow",
+                             "red": "ancestry.dragonborn.red"
+                         }[fixture] and bool(profile["inherentGrants"]) and
+                         all(grant["sourceCandidateIds"]
+                             for grant in profile["inherentGrants"]),
+                         {"ancestry": profile["ancestryId"],
+                          "grants": profile["inherentGrants"]})
 
-        owner.goto(BASE + "/tools/character-sheet/characters/" + UUIDS["mixed"])
-        owner.locator('[data-character-sheet-state="rich-character"]').wait_for(timeout=30000)
-        persisted = request_on_page(owner, "browser-mixed-owner-reload",
-                                    API + "/characters/" + UUIDS["mixed"] + "/origin/state")
-        expect_event("browser-mixed-persisted",
-                     persisted["savedState"]["revision"] == 1 and
-                     persisted["savedState"]["profile"]["underlying"]["speciesId"]
-                     == "custom.human-elf")
-        owner.locator('[data-sheet-mode-control="guided"]').click()
-        owner.locator('[data-guided-builder-section="species"]').click()
-        owner.get_by_text("Origin construction is committed at revision 1",
-                          exact=False).wait_for(timeout=30000)
-        expect_event("browser-owner-mixed-committed-presentation", True)
-        owner.screenshot(path=str(OUT / "browser-mixed-owner.png"), full_page=True)
-        denied = request_on_page(unrelated, "browser-unrelated-owner-denied",
-                                 API + "/characters/" + UUIDS["mixed"] +
-                                 "/origin/draft", expected=404)
-        # S04 characterization with the actual Site source of authority.
-        # Hold the response AFTER real Site -> Rules Core approval evaluation,
-        # but BEFORE the Sheet receives it and persists the Origin. Revoke
-        # the real Site DM role in SQLite while the original HTTP request
-        # is still suspended. This is NOT a test that the behavior is safe.
-        race_proposal = dict(mixed, id="browser-s04-race")
-        race_saved = request_on_page(
-            owner, "s04-owner-save-race-draft",
-            API + "/characters/" + UUIDS["race"] + "/origin/draft",
-            "PUT", {"rulesetId": "first-party-001", "fingerprint": fp,
-                    "proposal": race_proposal, "expectedRevision": 0})
-        race_revision = race_saved["draft"]["revision"]
-        review_path = (API + "/characters/" + UUIDS["race"] +
-                       "/origin/mixed-review?campaignId=" + UUIDS["campaign"])
-        offers = request_on_page(dm, "s04-genuine-site-dm-review", review_path)
-        wanted = {
-            ("species.elf", "/creatureType"),
-            ("species.elf", "/size"),
-            ("species.elf", "/walkingSpeedFeet"),
-            ("species.elf", "/traits/0"),
-            ("species.human", "/traits/2"),
-        }
-        selected = [candidate["id"] for candidate in offers["candidates"]
-                    if (candidate["sourceId"], candidate["occurrencePath"]) in wanted]
-        expect_event("s04-five-native-offers-verified", len(selected) == 5)
+        open_origin("human")
+        choose_direct("species", "Human")
+        owner.get_by_text("Origin Feat selection awaits", exact=False).wait_for()
+        expect_event("browser-human-origin-feat-deferred",
+                     owner.locator('[data-guided-builder-section="species"]')
+                     .get_attribute("data-guided-builder-status") == "incomplete")
+        human = request_on_page(owner, "browser-human-origin-state",
+                                origin_url("human", "state"))
+        expect_event("browser-human-origin-uncommitted", human["savedState"] is None)
 
-        activation_path = (API + "/characters/" + UUIDS["race"] +
-                           "/origin/activate-mixed-approved")
-        activation_command = {
-            "campaignId": UUIDS["campaign"],
-            "expectedDraftRevision": race_revision,
-            "candidateIds": selected,
-        }
-        S04_BARRIER.arm()
-        dm.evaluate("""({path, body}) => {
-            window.__s04RaceResult = null;
-            fetch(path, {
-                method: "POST",
-                credentials: "same-origin",
-                headers: {"Content-Type": "application/json",
-                          "Accept": "application/json"},
-                body: JSON.stringify(body)
-            }).then(async response => {
-                window.__s04RaceResult = {
-                    status: response.status,
-                    text: (await response.text()).slice(0, 350)
-                };
-            }).catch(error => {
-                window.__s04RaceResult = {status: 0,
-                                         text: String(error).slice(0, 350)};
-            });
-        }""", {"path": activation_path, "body": activation_command})
-        try:
-            expect_event("s04-real-core-evaluation-held",
-                         S04_BARRIER.reached.wait(timeout=22),
-                         {"siteDelegatedEvaluationStatus": S04_BARRIER.status})
-            # No browser-visible tokens or synthetic Site permissions are
-            # used to revoke this membership. It is the actual Site store.
-            set_dm_role("player")
-            request_on_page(dm, "s04-fresh-site-denies-revoked-dm",
-                            review_path, expected=404)
-            before_release = request_on_page(
-                owner, "s04-no-commit-while-core-response-held",
-                API + "/characters/" + UUIDS["race"] + "/origin/state")
-            expect_event("s04-still-uncommitted-at-revocation",
-                         before_release["savedState"] is None and
-                         len(before_release.get("events") or []) == 0)
-        finally:
-            # Always release the suspended request; never strand a runner.
-            S04_BARRIER.release.set()
+        def choose_source(slot, category, name):
+            parent = owner.locator(f'[data-mixed-origin-parent="{slot}"]')
+            choose(parent.get_by_role("button", name=f"Choose {category.title()} source"),
+                   category, name)
 
-        dm.wait_for_function("window.__s04RaceResult !== null", timeout=40000)
-        race_result = dm.evaluate("window.__s04RaceResult")
-        expect_event("s04-original-request-status-after-site-revocation",
-                     race_result["status"] == 200,
-                     {"httpStatus": race_result["status"]})
-        after = request_on_page(owner, "s04-owner-reload-after-revocation",
-                                API + "/characters/" + UUIDS["race"] + "/origin/state")
-        expect_event("s04-confirm-current-commit-after-site-revocation",
-                     after["savedState"] is not None and
-                     after["savedState"]["revision"] == 1)
-        receipts = after.get("events") or []
-        expect_event("s04-immutable-audit-receipt-after-site-revocation",
-                     len(receipts) == 1 and
-                     receipts[0]["committedRevision"] == 1)
-        # Passing here is a confirmed Site/Sheet/Core security RACE
-        # CHARACTERIZATION. S04 acceptance remains blocked, and policy is
-        # intentionally not changed by this test.
-        EVENTS.append({
-            "name": "s04-security-acceptance",
-            "status": "OPEN-GAP",
-            "detail": "Real Site DM revoked after native evaluation; original "
-                      "activation still committed at revision 1"
-        })
+        def select_offer(fixture, name):
+            offer = owner.locator("[data-origin-native-candidate]").filter(
+                has=owner.get_by_role("heading", name=name, exact=True))
+            candidate_id = offer.get_attribute("data-origin-native-candidate")
+            offer.get_by_role("button", name="Select characteristic for draft").click()
+            offer.get_by_role("button", name="Remove draft selection").wait_for()
+            request_on_page(owner, f"browser-{fixture}-selected-draft",
+                                    origin_url(fixture, "draft"))
+            return candidate_id
 
-        # Second independent live race: the DM still has the role, but the
-        # target character becomes ineligible when its active campaign link
-        # is removed. The original request must remain in flight across a
-        # genuine Site data change, not a constructed/mock scope.
-        set_dm_role("dm")
-        unlink_draft = dict(mixed, id="browser-s04-unlink")
-        unlink_saved = request_on_page(
-            owner, "s04-unlink-owner-save-draft",
-            API + "/characters/" + UUIDS["race-unlink"] + "/origin/draft",
-            "PUT", {"rulesetId": "first-party-001", "fingerprint": fp,
-                    "proposal": unlink_draft, "expectedRevision": 0})
-        unlink_revision = unlink_saved["draft"]["revision"]
-        unlink_review = (API + "/characters/" + UUIDS["race-unlink"] +
-                         "/origin/mixed-review?campaignId=" + UUIDS["campaign"])
-        unlink_offers = request_on_page(
-            dm, "s04-unlink-genuine-site-review", unlink_review)
-        unlink_selected = [
-            candidate["id"] for candidate in unlink_offers["candidates"]
-            if (candidate["sourceId"], candidate["occurrencePath"]) in wanted
-        ]
-        expect_event("s04-unlink-five-native-offers-verified",
-                     len(unlink_selected) == 5)
-        unlink_activation = (API + "/characters/" + UUIDS["race-unlink"] +
-                             "/origin/activate-mixed-approved")
-        S04_BARRIER.arm()
-        dm.evaluate("""({path, body}) => {
-            window.__s04UnlinkResult = null;
-            fetch(path, {
-                method: "POST", credentials: "same-origin",
-                headers: {"Content-Type": "application/json",
-                          "Accept": "application/json"},
-                body: JSON.stringify(body)
-            }).then(async response => {
-                window.__s04UnlinkResult = {
-                    status: response.status,
-                    text: (await response.text()).slice(0, 350)
-                };
-            }).catch(error => {
-                window.__s04UnlinkResult = {status: 0,
-                                           text: String(error).slice(0, 350)};
-            });
-        }""", {"path": unlink_activation,
-               "body": {"campaignId": UUIDS["campaign"],
-                        "expectedDraftRevision": unlink_revision,
-                        "candidateIds": unlink_selected}})
-        try:
-            expect_event("s04-unlink-real-core-evaluation-held",
-                         S04_BARRIER.reached.wait(timeout=22),
-                         {"siteDelegatedEvaluationStatus": S04_BARRIER.status})
-            unlink_campaign_character("race-unlink")
-            request_on_page(dm, "s04-unlink-fresh-site-review-denied",
-                            unlink_review, expected=404)
-            uncommitted = request_on_page(
-                owner, "s04-unlink-no-commit-before-release",
-                API + "/characters/" + UUIDS["race-unlink"] + "/origin/state")
-            expect_event("s04-unlink-state-and-event-absent-at-revocation",
-                         uncommitted["savedState"] is None and
-                         len(uncommitted.get("events") or []) == 0)
-        finally:
-            S04_BARRIER.release.set()
+        def saved_selection(fixture, candidate_id, count):
+            open_origin(fixture)
+            draft = request_on_page(owner, f"browser-{fixture}-{count}-source-reload",
+                                    origin_url(fixture, "draft"))
+            proposal = draft["draft"]["proposal"]
+            selection, = [entry for entry in proposal["manifestations"]
+                          if entry["candidateId"] == candidate_id]
+            expect_event(f"browser-{fixture}-{count}-source-retention",
+                         len(proposal["contributors"]) == count
+                         and draft["activeGrants"] is False,
+                         {"candidateId": candidate_id, "selection": selection,
+                          "contributors": proposal["contributors"]})
+            return selection
 
-        dm.wait_for_function("window.__s04UnlinkResult !== null", timeout=40000)
-        unlink_response = dm.evaluate("window.__s04UnlinkResult")
-        expect_event("s04-unlink-original-request-commits-after-removal",
-                     unlink_response["status"] == 200,
-                     {"httpStatus": unlink_response["status"]})
-        linked_after = request_on_page(
-            owner, "s04-unlink-owner-reload-after-removal",
-            API + "/characters/" + UUIDS["race-unlink"] + "/origin/state")
-        unlink_events = linked_after.get("events") or []
-        expect_event("s04-unlink-origin-and-audit-receipt-persisted",
-                     linked_after["savedState"] is not None and
-                     linked_after["savedState"]["revision"] == 1 and
-                     len(unlink_events) == 1 and
-                     unlink_events[0]["committedRevision"] == 1)
-        EVENTS.append({
-            "name": "s04-unlink-security-acceptance", "status": "OPEN-GAP",
-            "detail": "Real Site campaign-character link removed after Core "
-                      "evaluation; original activation still committed"
-        })
+        open_origin("mixed")
+        owner.get_by_role("button", name="Mixed biological sources").click()
+        choose_source("parent-one", "species", "Human")
+        choose_source("parent-two", "species", "Elf")
+        elf_id = select_offer("mixed", "Low-Light Vision")
+        elf_selection = saved_selection("mixed", elf_id, 2)
+        for count, next_species in [(3, "Orc"), (4, "Dragonborn")]:
+            choose(owner.get_by_role("button", name="Add another native source (draft only)"),
+                   "species", next_species)
+            retained = saved_selection("mixed", elf_id, count)
+            expect_event(f"browser-elf-exact-selection-{count}", retained == elf_selection)
+        draft = request_on_page(owner, "browser-mixed-before-activation-denial",
+                                origin_url("mixed", "draft"))
+        request_on_page(owner, "browser-native-activation-refuses-mixed",
+                        origin_url("mixed", "activate-native"), "POST",
+                        {"expectedDraftRevision": draft["draft"]["revision"]}, expected=422)
+        expect_event("browser-no-mixed-activation-control",
+                     owner.get_by_role("button", name="Activate Native Origin").count() == 0)
+        mixed_state = request_on_page(owner, "browser-mixed-origin-state",
+                                      origin_url("mixed", "state"))
+        expect_event("browser-mixed-origin-uncommitted",
+                     mixed_state["savedState"] is None and not mixed_state.get("events"))
 
-        expect_event("browser-no-script-exceptions", not page_errors,
-                     {"exceptions": page_errors})
+        open_origin("drow-mixed")
+        owner.get_by_role("button", name="Mixed biological sources").click()
+        choose_source("parent-one", "species", "Human")
+        choose_source("parent-two", "ancestry", "Drow")
+        drow_offer = owner.locator(
+            '[data-origin-native-candidate="contributor:parent-two:ancestry.elf.drow:/traits/4"]')
+        drow_id = drow_offer.get_attribute("data-origin-native-candidate")
+        drow_offer.get_by_role("button", name="Select characteristic for draft").click()
+        charisma.select_option("charisma")
+        original = saved_selection("drow-mixed", drow_id, 2)
+        choose_source("parent-one", "species", "Orc")
+        retained = saved_selection("drow-mixed", drow_id, 2)
+        expect_event("browser-drow-finite-choice-retained",
+                     retained == original and
+                     retained["choices"][0]["selectedOptionIds"] == ["charisma"])
+
+        request_on_page(unrelated, "browser-cross-owner-draft-denied",
+                        origin_url("mixed", "draft"), expected=404)
+        request_on_page(dm, "browser-campaign-dm-owner-draft-denied",
+                        origin_url("mixed", "draft"), expected=404)
+        request_on_page(dm, "browser-deferred-mixed-review-unavailable",
+                        origin_url("mixed", "mixed-review") + "?campaignId=" +
+                        UUIDS["campaign"], expected=404)
+        request_on_page(dm, "browser-deferred-mixed-activation-unavailable",
+                        origin_url("mixed", "activate-mixed-approved"), "POST", {},
+                        expected=404)
+        dm.goto(BASE + "/tools/character-sheet/dm-origin-review/" +
+                UUIDS["campaign"] + "/" + UUIDS["mixed"])
+        expect_event("browser-deferred-dm-review-ui-unavailable",
+                     dm.get_by_role("button", name="Commit DM-approved mixed Origin").count() == 0
+                     and dm.locator("[data-dm-origin-review]").count() == 0)
+        expect_event("browser-no-page-errors", not page_errors, {"exceptions": page_errors})
         browser.close()
 
 
@@ -566,8 +449,6 @@ def main():
                        "detail": type(error).__name__ + ": " + str(error)})
         raise
     finally:
-        if S04_BARRIER is not None:
-            S04_BARRIER.close()
         (OUT / "result.json").write_text(json.dumps(EVENTS, indent=2))
         # Terminate independent disposable processes, not system services.
         for proc in reversed(PROCS):
