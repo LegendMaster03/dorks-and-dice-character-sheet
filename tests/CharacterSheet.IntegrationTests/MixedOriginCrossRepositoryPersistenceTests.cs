@@ -817,7 +817,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
         var builds = new PostgresCharacterBuildStore(db);
         var origins = new PostgresCharacterAuthorizedOriginStore(db);
         var service = new CharacterOriginMixedActivationService(
-            scoped, builds, drafts, origins, native, TimeProvider.System);
+            scoped, scoped, builds, drafts, origins, native, TimeProvider.System);
 
         var result = await service.ApplyAsync(characterId, Campaign, 1, offers);
         Assert.False(scoped.Allow);
