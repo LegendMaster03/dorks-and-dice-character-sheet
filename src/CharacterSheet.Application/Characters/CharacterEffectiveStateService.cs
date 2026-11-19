@@ -18,7 +18,10 @@ public sealed record CharacterEffectiveStateView(
     string? Fingerprint, long? OriginRevision, long? SupernaturalRevision,
     long ManifestationRevision, string EffectiveSheetId,
     string? ActiveManifestationId, bool EffectiveMechanicsReady,
-    JsonNode? NativeProjection, IReadOnlyList<string> Unresolved);
+    JsonNode? NativeProjection, IReadOnlyList<string> Unresolved,
+    // Composite partial transformations retain every contributing instance
+    // identity. ActiveManifestationId remains the legacy single-form field.
+    IReadOnlyList<string>? ActiveManifestationIds = null);
 
 public sealed record CharacterEffectiveStateResult(
     CharacterEffectiveStateStatus Status, CharacterEffectiveStateView? View = null);
@@ -104,6 +107,7 @@ public sealed class CharacterEffectiveStateService(
         JsonNode? projection = null;
         string effectiveSheetId = "@primary";
         string? activeManifestationId = null;
+        IReadOnlyList<string>? activeManifestationIds = null;
         string? ruleset = persisted?.RulesetId;
         string? fingerprint = persisted?.Fingerprint;
         var supernaturalChanged = false;
@@ -181,7 +185,8 @@ public sealed class CharacterEffectiveStateService(
                             native["effectiveCharacter"]?["effectiveSheetId"] is not JsonValue selected ||
                             !selected.TryGetValue<string>(out var sheetId) ||
                             !VerifySelectedManifestation(sheetId, native["effectiveCharacter"],
-                                sheets.RootElement, ledger.RootElement, out var instanceId))
+                                sheets.RootElement, ledger.RootElement,
+                                out var instanceId, out var compositeIds))
                             issues.Add("native-state-response-unverified");
                         else
                         {
@@ -191,6 +196,8 @@ public sealed class CharacterEffectiveStateService(
                             projection = native.DeepClone();
                             effectiveSheetId = sheetId;
                             activeManifestationId = instanceId;
+                            activeManifestationIds = compositeIds ?? (instanceId is null
+                                ? null : [instanceId]);
                             issues.Remove("supernatural-acquisition-authority-unavailable");
                         }
                     }
@@ -301,7 +308,8 @@ public sealed class CharacterEffectiveStateService(
             ruleset, fingerprint, origin.SavedState?.Revision,
             supernaturalChanged ? null : persisted?.Revision,
             supernaturalChanged ? 0 : persisted?.LedgerRevision ?? 0,
-            effectiveSheetId, activeManifestationId, false, projection, issues));
+            effectiveSheetId, activeManifestationId, false, projection, issues,
+            activeManifestationIds));
     }
 
     internal static CharacterEffectiveStateStatus FromFreshStatus(
@@ -344,18 +352,20 @@ public sealed class CharacterEffectiveStateService(
         before.Fingerprint == after.Fingerprint &&
         before.DependencyFingerprint == after.DependencyFingerprint;
 
-    private static bool VerifySelectedManifestation(
+    internal static bool VerifySelectedManifestation(
         string effectiveSheetId, JsonNode? effective,
-        JsonElement sheets, JsonElement ledger, out string? instanceId)
+        JsonElement sheets, JsonElement ledger, out string? instanceId,
+        out IReadOnlyList<string>? compositeIds)
     {
         instanceId = null;
+        compositeIds = null;
         if (effective is not JsonObject || sheets.ValueKind != JsonValueKind.Array ||
             ledger.ValueKind != JsonValueKind.Object ||
             !ledger.TryGetProperty("instances", out var instances) ||
             instances.ValueKind != JsonValueKind.Array)
             return false;
 
-        if (effectiveSheetId != "@primary" &&
+        if (effectiveSheetId is not ("@primary" or "@composite") &&
             !sheets.EnumerateArray().Any(sheet =>
                 sheet.ValueKind == JsonValueKind.Object &&
                 sheet.TryGetProperty("id", out var id) &&
@@ -380,6 +390,27 @@ public sealed class CharacterEffectiveStateService(
             EnumIsContributing(item.GetProperty("contribution"))).ToArray();
 
         var value = effective["manifestationInstanceId"];
+        var combined = effective["contributingManifestationInstanceIds"];
+        if (value is null && effectiveSheetId == "@composite")
+        {
+            if (contributing.Length < 2 || combined is not JsonArray ids ||
+                ids.Count != contributing.Length || ids.Any(item =>
+                    item is not JsonValue text ||
+                    !text.TryGetValue<string>(out var id) ||
+                    string.IsNullOrWhiteSpace(id)))
+                return false;
+            var actual = ids.Select(item => item!.GetValue<string>()).ToArray();
+            var expected = contributing.Select(item =>
+                item.GetProperty("id").GetString()!).OrderBy(id => id,
+                StringComparer.Ordinal).ToArray();
+            if (!actual.SequenceEqual(expected, StringComparer.Ordinal) ||
+                !MatchesContributingCoexistence(ledger, contributing))
+                return false;
+            compositeIds = Array.AsReadOnly(actual);
+            return true;
+        }
+        if (combined is not null)
+            return false;
         if (value is null)
             return effectiveSheetId == "@primary" && contributing.Length == 0;
         if (value is not JsonValue selected ||
@@ -417,6 +448,94 @@ public sealed class CharacterEffectiveStateService(
         instanceId = idValue;
         return true;
     }
+
+    /// <summary>
+    /// Validate only the transformation result's correspondence to the
+    /// already persisted activation ledger. Mechanics and effect eligibility
+    /// are evaluated by Rules Core, not guessed by this presentation adapter.
+    /// Every contributor must declare a distinct, typed property slot.
+    /// </summary>
+    private static bool MatchesContributingCoexistence(
+        JsonElement ledger, JsonElement[] contributing)
+    {
+        var claimedSlots = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var instance in contributing)
+        {
+            if (!instance.TryGetProperty("contributionSlots", out var slots) ||
+                slots.ValueKind != JsonValueKind.Array || slots.GetArrayLength() is < 1 or > 128)
+                return false;
+            foreach (var slot in slots.EnumerateArray())
+            {
+                if (slot.ValueKind != JsonValueKind.Object ||
+                    !slot.TryGetProperty("characteristic", out var characteristic))
+                    return false;
+                var characteristicId = characteristic.ValueKind switch
+                {
+                    JsonValueKind.Number when characteristic.TryGetInt32(out var number) &&
+                        number is >= 0 and <= 12 => number,
+                    JsonValueKind.String => CharacteristicId(characteristic.GetString()),
+                    _ => -1
+                };
+                if (characteristicId < 0) return false;
+                string? key = null;
+                if (slot.TryGetProperty("key", out var value))
+                {
+                    if (value.ValueKind == JsonValueKind.String)
+                        key = value.GetString();
+                    else if (value.ValueKind != JsonValueKind.Null)
+                        return false;
+                }
+                if (characteristicId == 11 ? key is not null :
+                    string.IsNullOrWhiteSpace(key) || key.Length > 160)
+                    return false;
+                if (!claimedSlots.Add(characteristicId + ":" + (key ?? "")))
+                    return false;
+            }
+        }
+
+        if (!ledger.TryGetProperty("interactions", out var interactions) ||
+            interactions.ValueKind != JsonValueKind.Array)
+            return false;
+        var ids = contributing.Select(item =>
+            item.GetProperty("id").GetString()).ToHashSet(StringComparer.Ordinal);
+        var matches = interactions.EnumerateArray().Where(decision =>
+            decision.ValueKind == JsonValueKind.Object &&
+            decision.TryGetProperty("kind", out var kind) &&
+            (kind.ValueKind == JsonValueKind.Number && kind.TryGetInt32(out var n) &&
+                 n == 0 ||
+             kind.ValueKind == JsonValueKind.String &&
+                 kind.GetString() == "Coexist") &&
+            (!decision.TryGetProperty("selectedInstanceId", out var selected) ||
+                selected.ValueKind == JsonValueKind.Null) &&
+            decision.TryGetProperty("instanceIds", out var participants) &&
+            participants.ValueKind == JsonValueKind.Array &&
+            participants.GetArrayLength() == ids.Count &&
+            participants.EnumerateArray().All(item =>
+                item.ValueKind == JsonValueKind.String &&
+                ids.Contains(item.GetString())) &&
+            participants.EnumerateArray().Select(item => item.GetString())
+                .Distinct(StringComparer.Ordinal).Count() == ids.Count)
+            .Take(2).ToArray();
+        return matches.Length == 1;
+    }
+
+    private static int CharacteristicId(string? name) => name switch
+    {
+        "AbilityScore" => 0,
+        "SkillRanks" => 1,
+        "SkillProficient" => 2,
+        "SkillMiscModifier" => 3,
+        "SkillAbility" => 4,
+        "CompetencyRanks" => 5,
+        "CompetencyProficient" => 6,
+        "CompetencyMiscModifier" => 7,
+        "CompetencyAbility" => 8,
+        "DefenseContribution" => 9,
+        "HitPointGain" => 10,
+        "BaseWalkSpeed" => 11,
+        "ConditionId" => 12,
+        _ => -1
+    };
 
     private static bool MatchesContributingSelection(
         JsonElement ledger, JsonElement[] contributing, string instanceId)

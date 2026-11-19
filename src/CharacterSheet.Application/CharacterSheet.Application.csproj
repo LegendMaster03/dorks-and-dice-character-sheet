@@ -3,6 +3,9 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Pure projection-integrity tests; does not export additional public
+         authority or mutation APIs. -->
+    <InternalsVisibleTo Include="CharacterSheet.UnitTests" />
     <ProjectReference Include="../CharacterSheet.Domain/CharacterSheet.Domain.csproj" />
   </ItemGroup>
 </Project>
