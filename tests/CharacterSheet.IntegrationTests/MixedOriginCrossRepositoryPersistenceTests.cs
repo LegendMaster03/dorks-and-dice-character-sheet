@@ -1467,7 +1467,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
 
     private sealed class HttpNativeGateway(HttpClient http, string? malformedReply = null,
         Func<int, Task>? afterPreview = null,
-        Func<Task>? afterEvaluation = null, : INativeRulesCoreGateway
+        Func<Task>? afterEvaluation = null,
         Func<Task>? afterApproval = null) : INativeRulesCoreGateway
     {
         private int _previewCount;
