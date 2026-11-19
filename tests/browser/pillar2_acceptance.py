@@ -413,8 +413,13 @@ def run_browser():
         human_card = owner.locator(
             '[data-origin-native-candidate="' + candidate["id"] + '"]')
         human_card.get_by_role("button", name="Select characteristic for draft").click()
-        owner.locator('[data-origin-choice="' + requirement["id"] + '"] select').select_option(
-            option)
+        choice_card = owner.locator(
+            '[data-origin-choice="' + requirement["id"] + '"]')
+        choice_card.locator("select").select_option(option)
+        # The change handler persists asynchronously. Check the returned
+        # saved-draft rendering before inspecting the durable server record.
+        choice_card.get_by_text("Currently selected: 1", exact=False).wait_for(
+            timeout=30000)
         stored_choice = request_on_page(
             owner, "browser-b-finite-choice-persisted", editor_path)
         matches = [m for m in stored_choice["draft"]["proposal"]["manifestations"]
@@ -423,7 +428,13 @@ def run_browser():
                      len(matches) == 1 and
                      any(c["requirementId"] == requirement["id"] and
                          c["selectedOptionIds"] == [option]
-                         for c in matches[0].get("choices") or []))
+                         for c in matches[0].get("choices") or []),
+                     {"candidateId": candidate["id"],
+                      "requirementId": requirement["id"],
+                      "option": option,
+                      "storedManifestations": stored_choice["draft"]
+                          ["proposal"]["manifestations"],
+                      "revision": stored_choice["draft"]["revision"]})
         editor_revision = stored_choice["draft"]["revision"]
         request_on_page(owner, "browser-b-stale-revision-conflict",
                         editor_path, "PUT",
