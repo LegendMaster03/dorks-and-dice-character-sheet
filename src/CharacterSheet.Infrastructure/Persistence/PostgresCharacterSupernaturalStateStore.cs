@@ -115,17 +115,34 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             // the same lock. Revision checks alone can not detect rewritten
             // acquisition history or dropped manifestation event identities.
             CharacterSupernaturalHistoryGuard.Validate(existing, command);
+            var initialProgression = JsonSerializer.Serialize(new
+            {
+                characterId = command.CharacterId.ToString("D"),
+                revision = 0,
+                processedEventIds = Array.Empty<string>(),
+                consumedEligibilityEvidenceIds = Array.Empty<string>()
+            });
             var committedProgression = ValidateProgressionJournal(
-                existing?.ProgressionJournalJson ?? next.ProgressionJournalJson,
-                command, existing is not null);
+                existing?.ProgressionJournalJson ?? initialProgression,
+                command);
             var committedOverlapSelections = command.InfluenceOverlapSelectionsJson ??
                 existing?.InfluenceOverlapSelectionsJson ?? next.InfluenceOverlapSelectionsJson;
             if (command.InfluenceOverlapSelectionsJson is not null)
+            {
+                if (!command.IsOwnershipPlan)
+                    throw new ArgumentException(
+                        "Overlap authorizations require a verified Rules Core ownership plan.");
                 ValidateOverlapDecisionShape(committedOverlapSelections, command.CharacterId);
+            }
 
             if (existing is null)
             {
-                db.SupernaturalStates.Add(next);
+                db.SupernaturalStates.Add(new CharacterSupernaturalState(
+                    command.CharacterId, command.RulesetId, command.Fingerprint,
+                    command.AlternateSheetsJson, command.PersistentInfluencesJson,
+                    command.LedgerJson, command.NextLedgerRevision,
+                    command.ExpectedDependencyFingerprint, command.RecordedAt,
+                    committedProgression, committedOverlapSelections));
             }
             else
             {
@@ -269,11 +286,11 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                     "Supernatural event receipt ledger revisions are not sequential.");
             if (receipt.ProgressionJournalSnapshotJson is not null)
             {
-                var journal = ParseProgressionJournal(receipt.ProgressionJournalSnapshotJson,
+                var progression = ParseProgressionJournal(receipt.ProgressionJournalSnapshotJson,
                     receipt.CharacterId);
-                if (journal.Revision <= 0 || journal.Events.LastOrDefault() != receipt.EventId ||
+                if (progression.Revision <= 0 || progression.Events.LastOrDefault() != receipt.EventId ||
                     lastProgressionJournal is not null &&
-                    journal.Revision != ParseProgressionJournal(
+                    progression.Revision != ParseProgressionJournal(
                         lastProgressionJournal, receipt.CharacterId).Revision + 1)
                     throw new ArgumentException(
                         "Immutable supernatural progression receipts are not sequential.");
@@ -612,7 +629,7 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
     /// PostgreSQL holds the character lock; source verification is separate.
     /// </summary>
     private static string ValidateProgressionJournal(string oldJson,
-        VerifiedSupernaturalStateWrite command, bool existing)
+        VerifiedSupernaturalStateWrite command)
     {
         var previous = ParseProgressionJournal(oldJson, command.CharacterId);
         if (command.ProgressionJournalJson is null)
