@@ -203,12 +203,16 @@ export function changeMixedNativeParent(
     }
     return {
         ...proposal,
-        // A changed parent cannot reuse earlier manifestation evidence,
-        // native relationship suggestions, or independently claimed outcomes.
+        // Retain the exact requests and finite choices for unchanged source
+        // contributors. A changed slot loses every selection tied to its old
+        // occurrence, even when a later source happens to reuse a candidate ID.
+        // Unrecognized historical IDs remain inert and removable. Only a fresh
+        // Rules Core preview can establish whether retained evidence is valid.
         contributors: contributors.sort((a, b) =>
             String((a as Record<string, unknown>).id).localeCompare(
                 String((b as Record<string, unknown>).id))),
-        manifestations: [],
+        manifestations: proposal.manifestations.filter(manifestation =>
+            !manifestation.candidateId.startsWith(`contributor:${slot}:`)),
         candidates: [],
         selectedSpeciesId: null,
         selectedAncestryId: null
