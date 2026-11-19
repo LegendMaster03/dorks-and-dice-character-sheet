@@ -1,0 +1,76 @@
+name: Pillar 4 Integrated Character Sheet / Real Core and PostgreSQL
+
+# Character State integration regression: real Core and Character Sheet
+# persistence. Synthetic test-source fixtures; no production gameplay policy.
+on:
+  push:
+    branches:
+      - integration/pillar4-character-state-remediation-20261119
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-core-state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out exact integrated Pillar 4 Rules Core revision
+        uses: actions/checkout@v4
+        with:
+          repository: LegendMaster03/dorks-and-dice-rules-core
+          ref: 2759ac2f63f04b15b2062ab01fd5ac3561d037b0
+          path: rules-core
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Start disposable PostgreSQL
+        run: |
+          docker run -d --name character-state-increment4-postgres \
+            -p 127.0.0.1:55434:5432 \
+            -e POSTGRES_DB=character_sheet_test \
+            -e POSTGRES_USER=character_sheet_test \
+            -e POSTGRES_PASSWORD=character_sheet_test \
+            postgres:18
+          for i in {1..40}; do
+            if docker exec character-state-increment4-postgres \
+              pg_isready -U character_sheet_test -d character_sheet_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs character-state-increment4-postgres
+          exit 1
+      - name: Test actual delegated Core HTTP with Character Sheet ownership and PostgreSQL
+        env:
+          RULES_CORE_CONTENT_ROOT: ${{ github.workspace }}/rules-core/data/rulesets
+          ConnectionStrings__CharacterSheet: Host=127.0.0.1;Port=55434;Database=character_sheet_test;Username=character_sheet_test;Password=character_sheet_test
+        run: >-
+          dotnet test
+          tests/CharacterSheet.IntegrationTests/CharacterSheet.IntegrationTests.csproj
+          --configuration Release
+          --filter FullyQualifiedName~CharacterStateCrossRepositoryTests
+          -p:BuildClient=false
+          -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          -p:DefineConstants=CHARACTER_STATE_INCREMENT4
+      # Compile and execute the previously excluded Pillar 2 acceptance
+      # suite against the same current paired feature branches. The distinct
+      # conditional symbol ensures test discovery rather than a false green.
+      - name: Test Mixed-Origin real Core HTTP and PostgreSQL compatibility
+        env:
+          RULES_CORE_CONTENT_ROOT: ${{ github.workspace }}/rules-core/data/rulesets
+          ConnectionStrings__CharacterSheet: Host=127.0.0.1;Port=55434;Database=character_sheet_test;Username=character_sheet_test;Password=character_sheet_test
+        run: >-
+          dotnet test
+          tests/CharacterSheet.IntegrationTests/CharacterSheet.IntegrationTests.csproj
+          --configuration Release
+          --filter FullyQualifiedName~MixedOriginCrossRepositoryPersistenceTests
+          -p:BuildClient=false
+          -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
+          -p:DefineConstants=PILLAR2_PHASE5_ORIGIN
+      - name: Cleanup disposable PostgreSQL
+        if: always()
+        run: docker rm -f character-state-increment4-postgres 2>/dev/null || true
