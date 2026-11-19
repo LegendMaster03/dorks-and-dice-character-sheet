@@ -15,6 +15,7 @@ import {
     isEditableMixedNativeOrigin,
     mixedNativeParentSources,
     nextMixedNativeSourceSlot,
+    mixedNativePreviewMatchesDraft,
     originPreviewCandidates,
     requiredDraftOriginChoices,
     type MixedNativeParentSlot
@@ -80,6 +81,7 @@ function renderSelectedIdentity(
 function renderRequiredChoice(
     choice: NativeOriginRequiredChoice,
     disabled: boolean,
+    mixed: boolean,
     handlers: OriginBuilderHandlers
 ): HTMLElement {
     const article = createElement("article", "dd-build-choice");
@@ -142,6 +144,12 @@ function renderRequiredChoice(
             "warning"));
         return article;
     }
+    if (choice.optionCatalogId === "any-native-skill" && mixed) {
+        article.append(createInlineState(
+            "The mixed-source Skill choice requires a separately trusted native eligibility adapter. It cannot be configured through the direct Species Skill chooser.",
+            "warning"));
+        return article;
+    }
     if (choice.optionCatalogId === "any-native-skill") {
         article.append(createElement("p", "dd-build-choice__value",
             choice.selectedOptionIds.length === 0
@@ -165,11 +173,21 @@ function renderRequiredChoice(
 function originEvidenceLabel(value: unknown): string {
     if (value === null || value === undefined) return "Not specified";
     try {
-        const json = JSON.stringify(value);
-        return json;
+        return JSON.stringify(value, null, 2) ?? "Not specified";
     } catch {
         return "Native value could not be displayed";
     }
+}
+
+function appendNativeEvidence(
+    parent: HTMLElement, label: string, value: unknown
+): void {
+    parent.append(createElement("p", "dd-build__meta", label));
+    const display = createElement("pre", "dd-origin-builder__evidence",
+        originEvidenceLabel(value));
+    display.style.whiteSpace = "pre-wrap";
+    display.style.overflowWrap = "anywhere";
+    parent.append(display);
 }
 
 function renderNativeCandidateReview(
@@ -190,7 +208,11 @@ function renderNativeCandidateReview(
         origin.draft.fingerprint === origin.catalog.fingerprint &&
         origin.preview.rulesetId === origin.catalog.rulesetId &&
         origin.preview.fingerprint === origin.catalog.fingerprint &&
-        origin.preview.contentChangedSinceRequest !== true;
+        origin.preview.contentChangedSinceRequest !== true &&
+        origin.previewDraftRevision === origin.draft.revision &&
+        isRecord(origin.preview.result.evaluatedProposal) &&
+        origin.preview.result.evaluatedProposal.id === proposal.id &&
+        (direct || mixedNativePreviewMatchesDraft(origin.preview, proposal));
     if (!current) {
         area.append(createInlineState(
             "A current native preview is required to inspect or revise characteristic offers. Reload or refresh the draft; earlier offers cannot be selected.",
@@ -199,7 +221,26 @@ function renderNativeCandidateReview(
     }
     const candidates = originPreviewCandidates(origin.preview, proposal);
     area.append(createElement("p", "dd-build__meta",
-        `${candidates.length} native offer(s) · ${candidates.filter(c => c.selectedDraft).length} explicitly selected in this draft`));
+        `${candidates.length} native offer(s) · ${proposal.manifestations.length} explicitly selected in this draft · ${candidates.filter(c => c.manifestedPreview).length} projected native grant(s), preview only`));
+    const offeredIds = new Set(candidates.map(c => c.id));
+    const missing = proposal.manifestations.filter(m => !offeredIds.has(m.candidateId));
+    if (missing.length > 0) {
+        area.append(createInlineState(
+            "Some persisted draft selections are no longer present in the current native offers. They remain stored but are unresolved, not granted.",
+            "warning"));
+        const missingList = createElement("ul", "dd-guided-builder__review-list");
+        for (const manifestation of missing) {
+            const item = createElement("li", "dd-guided-builder__review-item");
+            item.append(createElement("span", "", manifestation.candidateId));
+            if (!direct) item.append(createButton(
+                "Remove unavailable draft selection",
+                "dd-button dd-button--ghost",
+                () => handlers.toggleMixedCandidate(manifestation.candidateId, false),
+                disabled));
+            missingList.append(item);
+        }
+        area.append(missingList);
+    }
     if (candidates.length === 0) {
         area.append(createInlineState(
             "The native evaluator returned no inspectable characteristic candidates for this configuration.",
@@ -217,10 +258,16 @@ function renderNativeCandidateReview(
         card.append(createElement("p", "dd-build__meta",
             `Native eligibility: ${candidate.eligibility}. ${candidate.contributorId === null ?
                 "Preset source" : "Contributor " + candidate.contributorId}.`));
-        const status = candidate.selectedDraft ? "Selected draft characteristic — not active" :
-            candidate.manifestedPreview ? "In native preview only — not saved as a selection" :
-                "Available offer — not selected";
-        card.append(createElement("p", "dd-build__meta", status));
+        card.append(createElement("p", "dd-build__meta",
+            candidate.selectedDraft ? "Selected draft characteristic — not active" :
+                "Available offer — not selected"));
+        if (candidate.evaluatedManifestation)
+            card.append(createElement("p", "dd-build__meta",
+                "Present in native evaluated manifestation requests; this does not prove eligibility."));
+        if (candidate.manifestedPreview)
+            card.append(createInlineState(
+                "A native preview profile includes this characteristic, but its grant is not committed or effective on this Character.",
+                "neutral"));
         if (candidate.explanation) card.append(createElement("p", "dd-build__meta",
             candidate.explanation));
         if (candidate.unresolvedEvidence.length) card.append(createInlineState(
@@ -234,12 +281,9 @@ function renderNativeCandidateReview(
         details.append(createElement("p", "dd-build__meta", `Candidate ID: ${candidate.id}`));
         details.append(createElement("p", "dd-build__meta",
             `Mechanical definition: ${candidate.characteristic}`));
-        details.append(createElement("p", "dd-build__meta",
-            `Native offered value: ${originEvidenceLabel(candidate.offeredValue)}`));
-        details.append(createElement("p", "dd-build__meta",
-            `Native offered parameters: ${originEvidenceLabel(candidate.offeredParameters)}`));
-        details.append(createElement("p", "dd-build__meta",
-            `Saved selected parameters: ${originEvidenceLabel(candidate.selectedParameters)}`));
+        appendNativeEvidence(details, "Native offered value", candidate.offeredValue);
+        appendNativeEvidence(details, "Native offered parameters", candidate.offeredParameters);
+        appendNativeEvidence(details, "Saved selected parameters", candidate.selectedParameters);
         details.append(createElement("p", "dd-build__meta",
             "Progression and parameters appear only to the extent the current native offer exposes them. No alternative parameter values are inferred."));
         card.append(details);
@@ -348,6 +392,22 @@ export function renderOriginBuilder(
         (origin.draft.rulesetId !== origin.catalog.rulesetId ||
          origin.draft.fingerprint !== origin.catalog.fingerprint ||
          origin.preview?.contentChangedSinceRequest === true);
+    const evaluatedProposal = origin.preview?.result.evaluatedProposal;
+    const nativePreviewMismatch = origin.draft !== null && origin.preview !== null &&
+        (origin.previewDraftRevision !== origin.draft.revision ||
+         origin.preview.rulesetId !== origin.catalog.rulesetId ||
+         origin.preview.fingerprint !== origin.catalog.fingerprint ||
+         !isRecord(evaluatedProposal) ||
+         evaluatedProposal.id !== origin.draft.proposal.id ||
+         (basicMixed && !mixedNativePreviewMatchesDraft(
+             origin.preview, origin.draft.proposal)));
+    if (nativePreviewMismatch && !nativeSnapshotChanged) {
+        section.append(createInlineState(
+            "The native preview does not match this saved Origin draft and its revision. Reload before making choices or activating.",
+            "warning"));
+        section.append(createButton("Reload current native preview",
+            "dd-button dd-button--secondary", handlers.reload, locked));
+    }
     if (nativeSnapshotChanged) {
         const refresh = createElement("div", "dd-origin-native-re-review");
         refresh.setAttribute("data-origin-native-re-review", "required");
@@ -534,20 +594,21 @@ export function renderOriginBuilder(
     const candidateReview = renderNativeCandidateReview(origin, direct,
         locked || nativeSnapshotChanged, handlers);
     if (candidateReview !== null) section.append(candidateReview);
-    const choices = nativeSnapshotChanged ? [] :
+    const choices = nativeSnapshotChanged || nativePreviewMismatch ? [] :
         requiredDraftOriginChoices(origin.preview, proposal);
     if (choices.length > 0) {
         const group = createElement("div", "dd-origin-builder__choices");
         group.append(createElement("h3", "dd-build-choice__label",
             "Required native creation choices"));
         for (const choice of choices) {
-            group.append(renderRequiredChoice(choice, locked, handlers));
+            group.append(renderRequiredChoice(choice, locked, !direct, handlers));
         }
         section.append(group);
     }
 
     if (origin.preview !== null) {
-        const authorized = direct && canActivateDirectNativeOrigin(proposal, origin.preview);
+        const authorized = direct && !nativeSnapshotChanged && !nativePreviewMismatch &&
+            canActivateDirectNativeOrigin(proposal, origin.preview);
         section.append(createInlineState(
             !direct
                 ? "Native mixed-source preview preserves the offered candidates but does not authorize inheritance or activation."

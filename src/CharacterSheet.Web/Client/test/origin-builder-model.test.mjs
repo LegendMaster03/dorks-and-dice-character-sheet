@@ -11,6 +11,7 @@ import {
     isEditableDirectNativeOrigin,
     isEditableMixedNativeOrigin,
     mixedNativeParentSources,
+    mixedNativePreviewMatchesDraft,
     nextMixedNativeSourceSlot,
     originPreviewCandidates,
     requiredDraftOriginChoices,
@@ -252,8 +253,10 @@ function mixedNativeOfferPreview(proposal) {
         result: {
             status: 2, profile: null, issues: [],
             evaluatedProposal: {
-                id: proposal.id,
-                manifestations: [],
+                id: proposal.id, intent: proposal.intent,
+                method: structuredClone(proposal.method),
+                contributors: structuredClone(proposal.contributors),
+                manifestations: structuredClone(proposal.manifestations),
                 candidates: [{
                     id: "contributor:parent-one:species.human:/traits/0",
                     contributorId: "parent-one",
@@ -281,7 +284,7 @@ function mixedNativeOfferPreview(proposal) {
                     },
                     selectionBasis: { eligibility: 0 },
                     offeredValue: 30
-                }]
+                }].filter(c => proposal.contributors.some(x => x.id === c.contributorId))
             }
         }
     };
@@ -299,7 +302,8 @@ test("mixed draft selects multiple native offers by reference without copying gr
     assert.equal(offers[0].offeredParameters.tier, 3);
     assert.deepEqual(offers[0].unresolvedEvidence, ["Inheritance is unresolved."]);
     let selected = changeMixedNativeCandidate(base, preview, offers[0].id, true);
-    selected = changeMixedNativeCandidate(selected, preview, offers[1].id, true);
+    selected = changeMixedNativeCandidate(
+        selected, mixedNativeOfferPreview(selected), offers[1].id, true);
     assert.deepEqual(selected.manifestations, [
         { id: "selection:" + offers[0].id, candidateId: offers[0].id },
         { id: "selection:" + offers[1].id, candidateId: offers[1].id }
@@ -312,8 +316,11 @@ test("mixed draft selects multiple native offers by reference without copying gr
     assert.equal(canActivateDirectNativeOrigin(selected, {
         previewOnly: true, result: { status: 4, issues: [] }
     }), false);
-    assert.equal(originPreviewCandidates(preview, selected)[0].selectedDraft, true);
-    const removed = changeMixedNativeCandidate(selected, preview, offers[0].id, false);
+    assert.deepEqual(originPreviewCandidates(preview, selected), [],
+        "An earlier preview is not valid after the draft gains selections.");
+    const currentPreview = mixedNativeOfferPreview(selected);
+    assert.equal(originPreviewCandidates(currentPreview, selected)[0].selectedDraft, true);
+    const removed = changeMixedNativeCandidate(selected, currentPreview, offers[0].id, false);
     assert.deepEqual(removed.manifestations.map(x => x.candidateId), [offers[1].id]);
 });
 
@@ -324,25 +331,27 @@ test("mixed finite choices persist, revise and obey current native offer boundar
     const preview = mixedNativeOfferPreview(base);
     const candidateId = preview.result.evaluatedProposal.candidates[0].id;
     const selected = changeMixedNativeCandidate(base, preview, candidateId, true);
-    const required = requiredDraftOriginChoices(preview, selected);
+    const selectedPreview = mixedNativeOfferPreview(selected);
+    const required = requiredDraftOriginChoices(selectedPreview, selected);
     assert.equal(required.length, 1);
     assert.deepEqual(required[0].finiteOptions, ["red", "blue", "green"]);
-    let updated = changeMixedNativeFiniteChoice(selected, preview, candidateId,
+    let updated = changeMixedNativeFiniteChoice(selected, selectedPreview, candidateId,
         "selection", ["red", "blue"]);
-    assert.deepEqual(requiredDraftOriginChoices(preview, updated)[0].selectedOptionIds,
+    assert.deepEqual(requiredDraftOriginChoices(mixedNativeOfferPreview(updated), updated)[0].selectedOptionIds,
         ["red", "blue"]);
     assert.equal(isEditableMixedNativeOrigin(structuredClone(updated)), true,
         "Persisted JSON must remain an editable draft.");
-    assert.throws(() => changeMixedNativeFiniteChoice(updated, preview, candidateId,
+    const currentPreview = mixedNativeOfferPreview(updated);
+    assert.throws(() => changeMixedNativeFiniteChoice(updated, currentPreview, candidateId,
         "selection", ["red", "blue", "green"]), /finite native offer/);
-    assert.throws(() => changeMixedNativeFiniteChoice(updated, preview, candidateId,
+    assert.throws(() => changeMixedNativeFiniteChoice(updated, currentPreview, candidateId,
         "selection", ["red", "red"]), /finite native offer/);
-    assert.throws(() => changeMixedNativeFiniteChoice(updated, preview, candidateId,
+    assert.throws(() => changeMixedNativeFiniteChoice(updated, currentPreview, candidateId,
         "selection", ["not-authored"]), /finite native offer/);
-    updated = changeMixedNativeFiniteChoice(updated, preview, candidateId,
+    updated = changeMixedNativeFiniteChoice(updated, currentPreview, candidateId,
         "selection", []);
     assert.deepEqual(updated.manifestations[0].choices, []);
-    assert.equal(requiredDraftOriginChoices(preview, updated)[0].selectedOptionIds.length, 0);
+    assert.equal(requiredDraftOriginChoices(mixedNativeOfferPreview(updated), updated)[0].selectedOptionIds.length, 0);
 });
 
 test("mixed native preview mismatch and forged selection payloads remain uneditable", () => {
@@ -405,4 +414,107 @@ test("ancestor Species candidate remains selectable from an Ancestry source chai
     const switched = changeMixedNativeParent(selected, "parent-one", "species.orc");
     assert.deepEqual(switched.manifestations, [],
         "Source revision must invalidate candidate selections and their choices.");
+});
+
+test("mixed native preview rejects mismatched source snapshots and malformed offer provenance", () => {
+    const proposal = changeMixedNativeParent(changeMixedNativeParent(
+        changeNativeOriginMode(createInitialOriginProposal(id), "mixed"),
+        "parent-one", "species.human"), "parent-two", "species.elf");
+    const preview = mixedNativeOfferPreview(proposal);
+    const candidate = preview.result.evaluatedProposal.candidates[0].id;
+    assert.equal(mixedNativePreviewMatchesDraft(preview, proposal), true);
+    for (const altered of [
+        p => p.result.evaluatedProposal.contributors[0].source.id = "species.orc",
+        p => p.result.evaluatedProposal.contributors[0].role.kind = 4,
+        p => p.result.evaluatedProposal.contributors.shift(),
+        p => p.result.evaluatedProposal.intent = 0,
+        p => p.result.evaluatedProposal.method.methodId = "magical",
+        p => p.result.evaluatedProposal.id = "other-origin"
+    ]) {
+        const forged = structuredClone(preview);
+        altered(forged);
+        assert.equal(mixedNativePreviewMatchesDraft(forged, proposal), false);
+        assert.deepEqual(originPreviewCandidates(forged, proposal), []);
+        assert.throws(() => changeMixedNativeCandidate(proposal, forged, candidate, true),
+            /does not belong/);
+    }
+
+    const malformed = [
+        p => p.result.evaluatedProposal.candidates[0].id = "contributor:parent-two:species.human:/traits/0",
+        p => p.result.evaluatedProposal.candidates[0].identity.occurrence.source.id = "species.unknown",
+        p => p.result.evaluatedProposal.candidates[0].identity.occurrence.source.kind = 2,
+        p => p.result.evaluatedProposal.candidates[0].identity.occurrence.occurrencePath = "/traits/99",
+        p => p.result.evaluatedProposal.candidates[0].contributorId = "unrelated",
+        p => p.result.evaluatedProposal.candidates.push(
+            structuredClone(p.result.evaluatedProposal.candidates[0]))
+    ];
+    for (const altered of malformed) {
+        const forged = structuredClone(preview);
+        altered(forged);
+        assert.deepEqual(originPreviewCandidates(forged, proposal), []);
+        assert.throws(() => changeMixedNativeCandidate(proposal, forged, candidate, true),
+            /does not belong/);
+    }
+});
+
+test("native evaluated manifestation requests are not confused with preview grants", () => {
+    const base = changeMixedNativeParent(
+        changeNativeOriginMode(createInitialOriginProposal(id), "mixed"),
+        "parent-one", "species.human");
+    const raw = mixedNativeOfferPreview(base);
+    const candidateId = raw.result.evaluatedProposal.candidates[0].id;
+    const selected = changeMixedNativeCandidate(base, raw, candidateId, true);
+    const evaluated = mixedNativeOfferPreview(selected);
+    const unresolved = originPreviewCandidates(evaluated, selected)[0];
+    assert.equal(unresolved.selectedDraft, true);
+    assert.equal(unresolved.evaluatedManifestation, true);
+    assert.equal(unresolved.manifestedPreview, false,
+        "A persisted manifestation request was rejected by native eligibility.");
+    evaluated.result.profile = { underlying: {
+        inherentGrants: [{ id: "preview-only-grant", sourceCandidateIds: [candidateId] }]
+    }, independentGrants: [] };
+    const grantedPreview = originPreviewCandidates(evaluated, selected)[0];
+    assert.equal(grantedPreview.manifestedPreview, true);
+    assert.equal(grantedPreview.selectedDraft, true);
+});
+
+test("choosing the unchanged source preserves already saved draft choices", () => {
+    const direct = changeDirectOriginChoice({
+        ...createInitialOriginProposal(id), selectedSpeciesId: "species.human"
+    }, "direct:species.human:/sizeChoice", "size", ["small"]);
+    assert.strictEqual(changeDirectOriginIdentity(direct, "species", "species.human"),
+        direct);
+    const mixed = changeMixedNativeParent(changeNativeOriginMode(
+        createInitialOriginProposal(id), "mixed"), "parent-one", "species.human");
+    const preview = mixedNativeOfferPreview(mixed);
+    const selected = changeMixedNativeCandidate(mixed, preview,
+        preview.result.evaluatedProposal.candidates[0].id, true);
+    assert.strictEqual(changeMixedNativeParent(selected, "parent-one", "species.human"),
+        selected);
+});
+
+test("selected characteristic absent from current native offers can be removed without losing others", () => {
+    const base = changeMixedNativeParent(changeMixedNativeParent(
+        changeNativeOriginMode(createInitialOriginProposal(id), "mixed"),
+        "parent-one", "species.human"), "parent-two", "species.elf");
+    const original = mixedNativeOfferPreview(base);
+    const [first, second] = original.result.evaluatedProposal.candidates.map(c => c.id);
+    const one = changeMixedNativeCandidate(base, original, first, true);
+    const both = changeMixedNativeCandidate(one, mixedNativeOfferPreview(one), second, true);
+    assert.strictEqual(changeMixedNativeCandidate(both, mixedNativeOfferPreview(both),
+        first, true), both, "Re-selecting an existing draft candidate must not lose choices.");
+    const staleOffer = mixedNativeOfferPreview(both);
+    staleOffer.result.evaluatedProposal.candidates =
+        staleOffer.result.evaluatedProposal.candidates.filter(c => c.id !== first);
+    assert.equal(mixedNativePreviewMatchesDraft(staleOffer, both), true,
+        "A selected offer may legitimately become unavailable while its inert request persists.");
+    assert.deepEqual(originPreviewCandidates(staleOffer, both).map(c => c.id), [second]);
+    const revised = changeMixedNativeCandidate(both, staleOffer, first, false);
+    assert.deepEqual(revised.manifestations.map(m => m.candidateId), [second]);
+    assert.deepEqual(both.manifestations.map(m => m.candidateId), [first, second]);
+    assert.throws(() => changeMixedNativeCandidate(revised,
+        mixedNativeOfferPreview(revised), first, false), /not selected in the draft/);
+    assert.throws(() => changeMixedNativeCandidate(revised,
+        mixedNativeOfferPreview(revised), "unoffered-new-candidate", true),
+    /does not belong/);
 });

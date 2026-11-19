@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createOriginWorkflow } from "../.test-dist/features/origin/origin-workflow.js";
+import {
+    mixedNativePreviewMatchesDraft, originPreviewCandidates
+} from "../.test-dist/features/origin/origin-builder-model.js";
 
 const characterId = "54bb0d47-38d1-4ce4-9cbf-fcb8753e3140";
 const oldFingerprint = "a".repeat(64);
@@ -194,15 +197,18 @@ function candidateReviewPreview(proposal, fingerprint = currentFingerprint) {
                 path: "manifestations", severity: 1,
                 detail: "Inheritance requires a trusted native rule." }],
             evaluatedProposal: {
-                id: proposal.id, candidates,
-                manifestations: structuredClone(proposal.manifestations)
+                id: proposal.id, intent: proposal.intent,
+                method: structuredClone(proposal.method),
+                contributors: structuredClone(proposal.contributors),
+                candidates, manifestations: structuredClone(proposal.manifestations)
             }
         }
     };
 }
 
 function candidateDraftBackend({ outdated = false, conflict = false,
-    failNativePreview = false } = {}) {
+    failNativePreview = false, mismatchedPreview = false,
+    readOnly = false } = {}) {
     const requests = [], writes = [];
     let draft = makeDraft(1, outdated ? oldFingerprint : currentFingerprint);
     const fetch = async (url, init) => {
@@ -215,15 +221,18 @@ function candidateDraftBackend({ outdated = false, conflict = false,
         });
         if (path.endsWith("/origin/state")) return Response.json({
             status: "ready", savedState: null, events: [],
-            readOnly: false, effectiveMechanicsReady: false
+            readOnly, effectiveMechanicsReady: false
         });
-        if (path.endsWith("/origin/draft") && init.method === "GET") return Response.json({
-            status: "ready", draft: structuredClone(draft),
-            preview: failNativePreview ? null :
-                candidateReviewPreview(draft.proposal,
-                    outdated ? oldFingerprint : currentFingerprint),
-            activeGrants: false
-        });
+        if (path.endsWith("/origin/draft") && init.method === "GET") {
+            const preview = candidateReviewPreview(draft.proposal,
+                outdated ? oldFingerprint : currentFingerprint);
+            if (mismatchedPreview)
+                preview.result.evaluatedProposal.contributors[0].source.id = "species.orc";
+            return Response.json({
+                status: "ready", draft: structuredClone(draft),
+                preview: failNativePreview ? null : preview, activeGrants: false
+            });
+        }
         if (path.endsWith("/api/native-rules/origins/preview")) return failNativePreview
             ? Response.json({ error: "preview_unavailable" }, { status: 503 })
             : Response.json(candidateReviewPreview(draft.proposal));
@@ -253,6 +262,12 @@ test("native mixed selections and finite choices survive successive saves and re
     await withBackend(backend, async () => {
         const workflow = createOriginWorkflow(environment, () => {});
         await workflow.load(characterId);
+        assert.equal(workflow.current().previewDraftRevision,
+            workflow.current().draft.revision);
+        assert.equal(mixedNativePreviewMatchesDraft(workflow.current().preview,
+            workflow.current().draft.proposal), true);
+        assert.equal(originPreviewCandidates(workflow.current().preview,
+            workflow.current().draft.proposal).length, 2);
         const selected = "contributor:parent-one:species.human:/traits/0";
         const second = "contributor:parent-two:species.elf:/traits/1";
         await workflow.toggleMixedCandidate(characterId, selected, true);
@@ -300,6 +315,10 @@ test("mixed selection conflict retains the last loaded draft and requires reload
         const workflow = createOriginWorkflow(environment, () => {});
         await workflow.load(characterId);
         const old = structuredClone(workflow.current().draft);
+        assert.equal(mixedNativePreviewMatchesDraft(workflow.current().preview,
+            workflow.current().draft.proposal), true);
+        assert.equal(originPreviewCandidates(workflow.current().preview,
+            workflow.current().draft.proposal).length, 2);
         await workflow.toggleMixedCandidate(characterId,
             "contributor:parent-one:species.human:/traits/0", true);
         assert.match(workflow.current().message, /changed in another session/);
@@ -445,5 +464,134 @@ test("an authorized-looking but stale direct preview cannot be activated", async
         await workflow.activate(characterId);
         assert.equal(activations, 0);
         assert.equal(workflow.current().draft.revision, 2);
+    });
+});
+
+test("same-fingerprint preview with mismatched native contributor snapshot cannot edit", async () => {
+    const backend = candidateDraftBackend({ mismatchedPreview: true });
+    await withBackend(backend, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        assert.equal(workflow.current().preview.fingerprint, currentFingerprint);
+        await workflow.toggleMixedCandidate(characterId,
+            "contributor:parent-one:species.human:/traits/0", true);
+        assert.equal(backend.writes.length, 0);
+        assert.deepEqual(workflow.current().draft.proposal.manifestations, []);
+    });
+});
+
+test("read-only native mixed draft cannot persist choices, change mode or activate", async () => {
+    const backend = candidateDraftBackend({ readOnly: true });
+    await withBackend(backend, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        assert.equal(workflow.current().readOnly, true);
+        await workflow.toggleMixedCandidate(characterId,
+            "contributor:parent-one:species.human:/traits/0", true);
+        await workflow.setMode(characterId, "direct");
+        await workflow.activate(characterId);
+        assert.equal(backend.writes.length, 0);
+        assert.equal(backend.requests.some(x => x.path.includes("activate")), false);
+        assert.equal(workflow.current().draft.proposal.intent, 1);
+    });
+});
+
+test("a later character load supersedes an earlier delayed owner draft response", async () => {
+    const secondId = "8945731b-c6d5-497c-8dcc-6bb1cfe51fc1";
+    let releaseFirst;
+    const holdFirst = new Promise(resolve => { releaseFirst = resolve; });
+    const fetch = async (url, init) => {
+        const path = String(url);
+        if (path.endsWith("/api/native-rules/ruleset")) return Response.json({
+            contractVersion: 1, rulesetId: "first-party-001",
+            fingerprint: currentFingerprint, schemaVersion: 1,
+            capabilities: { nativeOptionSearch: true }
+        });
+        if (path.endsWith("/origin/state")) return Response.json({
+            status: "ready", savedState: null, events: [],
+            readOnly: false, effectiveMechanicsReady: false
+        });
+        if (path.endsWith("/origin/draft") && init.method === "GET") {
+            if (path.includes(characterId)) await holdFirst;
+            return Response.json({
+                status: "ready", draft: path.includes(secondId) ?
+                    { ...makeDraft(1, currentFingerprint),
+                        characterId: secondId, proposal: {
+                            id: "initial-" + secondId, intent: 0,
+                            method: { ruleId: "rule.creature-origination", methodId: "biological" },
+                            contributors: [], candidates: [], manifestations: [],
+                            selectedSpeciesId: "species.elf", selectedAncestryId: null
+                        } } : makeDraft(),
+                preview: null, activeGrants: false
+            });
+        }
+        if (path.endsWith("/api/native-rules/origins/preview")) {
+            return Response.json({
+                contractVersion: 1, rulesetId: "first-party-001",
+                fingerprint: currentFingerprint, previewOnly: true,
+                contentChangedSinceRequest: false,
+                result: { status: 1, issues: [], profile: null,
+                    evaluatedProposal: { id: "initial-" + secondId,
+                        candidates: [], manifestations: [] } }
+            });
+        }
+        throw new Error("Unexpected request: " + path);
+    };
+    await withBackend({ fetch }, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        const earlier = workflow.load(characterId);
+        const later = workflow.load(secondId);
+        await later;
+        releaseFirst();
+        await earlier;
+        assert.equal(workflow.current().draft.characterId, secondId);
+        assert.equal(workflow.current().draft.proposal.selectedSpeciesId, "species.elf");
+        assert.equal(workflow.current().status, "ready");
+    });
+});
+
+test("same-fingerprint authorized-looking preview of another direct proposal cannot activate", async () => {
+    let activations = 0;
+    const direct = { id: "direct-current", intent: 0,
+        method: { ruleId: "rule.creature-origination", methodId: "biological" },
+        contributors: [], candidates: [], manifestations: [],
+        selectedSpeciesId: "species.human", selectedAncestryId: null };
+    const fetch = async (url, init) => {
+        const path = String(url);
+        if (path.endsWith("/api/native-rules/ruleset")) return Response.json({
+            contractVersion: 1, rulesetId: "first-party-001",
+            fingerprint: currentFingerprint, schemaVersion: 1,
+            capabilities: { nativeOptionSearch: true }
+        });
+        if (path.endsWith("/origin/state")) return Response.json({
+            status: "ready", savedState: null, events: [],
+            readOnly: false, effectiveMechanicsReady: false
+        });
+        if (path.endsWith("/origin/draft") && init.method === "GET")
+            return Response.json({ status: "ready", activeGrants: false,
+                draft: { characterId, rulesetId: "first-party-001",
+                    fingerprint: currentFingerprint, proposal: direct, revision: 3,
+                    active: false, updatedAt: "2026-11-19T00:00:00Z" },
+                preview: { contractVersion: 1, rulesetId: "first-party-001",
+                    fingerprint: currentFingerprint, previewOnly: true,
+                    contentChangedSinceRequest: false,
+                    result: { status: 4, issues: [], profile: null,
+                        evaluatedProposal: { ...direct, id: "another-character-origin" } } }
+            });
+        if (path.endsWith("/origin/activate-native")) {
+            activations++;
+            return Response.json({ status: "applied", revision: 1,
+                effectiveMechanicsReady: false });
+        }
+        throw new Error("Unexpected request: " + path);
+    };
+    await withBackend({ fetch }, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        assert.equal(workflow.current().previewDraftRevision, 3);
+        assert.equal(workflow.current().draft.fingerprint, currentFingerprint);
+        await workflow.activate(characterId);
+        assert.equal(activations, 0);
+        assert.equal(workflow.current().savedState, null);
     });
 });

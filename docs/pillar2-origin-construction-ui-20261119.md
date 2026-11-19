@@ -54,3 +54,139 @@ The separate isolated three-service browser acceptance workflow is opt-in (workf
 ## Scope compliance
 
 Only Character Sheet client model, workflow, rendering, focused tests and this workstream note were modified. Rules Core and Site were read for contract verification but not changed. Production DM authorization, mixed activation, S04 controls, runtime resource use, and Pillar 4 were not modified. No merge or deployment is part of this workstream.
+
+
+## Adversarial self-review (2026-11-19)
+
+This review was performed after the initial successful Character Sheet run
+[44468062732](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44468062732).
+The review corrections retain the same client-only ownership and do not amend
+any server authorization, migration, Rules Core source, or Site code.
+
+### Confirmed defects and corrections
+
+1. **Preview/source binding:** a preview with the same catalog fingerprint could
+   offer a candidate from a different contributor snapshot. Mixed editing now
+   requires an exact proposal ID, intent, method, contributor IDs, source references,
+   saved manifestation/choice selections, and matching draft revision. Even
+   direct activation now rejects an otherwise authorized-looking preview whose
+   evaluated proposal identity differs from the persisted draft. Candidate IDs
+   must match native source occurrences; malformed and duplicate IDs fail
+   closed. This is a proposal-snapshot consistency check, **not** a replacement
+   for Rules Core lineage/eligibility adjudication.
+2. **Preview semantics:** an evaluated manifestation request was treated as though
+   it necessarily appeared as a grant in the evaluated native profile. The UI
+   now differentiates an available offer, selected draft request, evaluated
+   manifestation, native preview profile grant, and committed state. The last
+   two are **not** interchangeable; a preview grant is never active.
+3. **Unusable mixed Skill chooser:** an unsupported mixed open-catalog Skill
+   choice previously displayed the direct-only chooser action. It now explicitly
+   identifies the missing native authorization adapter without offering an inert
+   control.
+4. **Draft revisions:** unchanged source selections previously cleared valid
+   selected manifestations and choices. They now remain untouched. Mixed
+   characteristic requests no longer lose choices when reselected. Selections
+   no longer offered by the current native preview remain visible as unresolved,
+   and the owner can remove them without injecting a replacement grant.
+5. **Long native evidence:** complete offered values and parameters now use
+   wrapping, formatted JSON under an expandable details element rather than
+   overflowing as unbroken inline payloads.
+
+Adversarial tests were added for mismatched source/intent/method/contributor
+snapshots, malformed and duplicate candidate IDs, missing/altered occurrence
+paths, re-selection preservation, selection removal after an offer disappears,
+preview grants versus unresolved manifestation requests, read-only access,
+same-fingerprint stale data, and delayed competing Character loads.
+
+### Client and server authority
+
+- The owner UI persists only untrusted proposal selections. It never sends
+  a native evaluated profile, parameter overrides, table decisions, or grant
+  receipts as committed mechanics.
+- Character Sheet's draft service independently checks Site owner/lifecycle
+  permission, reevaluates proposals through Rules Core, and compares persisted
+  revisions. An HTTP 409 leaves the last loaded proposal unchanged; retry
+  requires loading the new revision.
+- Conventional activation is still a separate server-side re-evaluation of
+  the exact saved draft under its existing first-party restrictions.
+- The production mixed Human–Elf path continues to require its exact two-source
+  *plain* draft and independently scoped DM verification. A three/four-source
+  mixed draft or a mixed draft containing selected manifestations does not
+  qualify for that existing route.
+- Owner-side native Species/Ancestry source references are **not** authenticated
+  parent Character profiles, even when a read-only source alignment succeeds.
+- Four is only this editor's source-reference limit; the universal Origin
+  contributor and input-role contracts remain unmodified.
+- The known S04 revocation-after-evaluation security gap remains **open**;
+  browser testing must not report it as repaired. This work does not implement
+  S04 or alter the restricted production approval path.
+
+### Integration relationship
+
+At final review, Workstream A was at
+`3ff1ef89b3e3900d4d2f6c42098afd0724d6b580` and Workstream C was at
+`002ccef2fa2c0f25ae299f69a822ed25bb5e3c7a`. These are newer than
+the revisions listed in the incoming review prompt. Neither branch was
+integrated here.
+
+- Workstream B currently depends on existing native preview/deconstruction,
+  candidate occurrence/source identity, and draft persistence contracts, not
+  on the unmerged A/C implementation.
+- A extends post-reconciliation prerequisite closure and dependent resource
+  consistency. Its future evaluated relationships and unresolved issues must be
+  rendered accurately, but this UI makes no reconciliation decisions.
+- C adds read-only passive native entitlement projection. It does not establish
+  authenticated Character Sheet entitlements, effective mechanical totals,
+  spell spending, combat execution or new construction permissions. No client
+  consumption of this unmerged projector was added.
+- A's exact final head passed [full hosted validation
+  44469764137](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/44469764137)
+  (140 Host, 582 Mechanics and 808 Python tests).
+- C's exact final head passed [isolated hosted validation
+  44469602610](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/44469602610)
+  (12 focused, 583 full Mechanics, 140 Host and 808 Python tests).
+  The earlier C documentation text saying its .NET tests were unexecuted was
+  superseded by this hosted run.
+- These checks validate A and C **separately**, not their combination or the
+  Character Sheet user experience against that combined Rules Core revision.
+  Integration acceptance must test their actual final HEADs together.
+
+### Browser acceptance blocker and independent procedure
+
+The review environment has Chromium/Playwright but no `dotnet` executable,
+no Docker daemon/CLI, and no network DNS resolution for GitHub cloning. The
+existing browser acceptance script launches three real .NET services and
+requires an isolated PostgreSQL service. Therefore this review cannot truthfully
+claim execution of end-to-end Site/Rules Core/Character Sheet browser acceptance,
+nor can it provide actual screenshots from that flow. The normal branch push
+workflow validates the frontend, integration tests, image and HTTP smoke tests,
+but does **not** run the browser script.
+
+For a runner with .NET 10, Node, PostgreSQL, Site/Rules Core checked out, a
+locally trusted disposable TLS certificate and a Chrome/Playwright install:
+
+1. Use GitHub Actions > **Pillar 2 / Isolated Three-Service Browser Acceptance**
+   > **Run workflow**, selecting the current Character Sheet feature branch.
+   The workflow already defines disposable PostgreSQL, builds three services,
+   and invokes `python tests/browser/pillar2_acceptance.py`.
+2. Inspect `.pillar2-browser/result.json`, browser screenshots, and three
+   service logs from `pillar2-isolated-browser-evidence`. Verify expected
+   S04 entries remain `OPEN-GAP`, not `PASS`.
+3. **Additionally** exercise the new three/four-source cards, individual
+   candidate toggles and source paths, finite multi-select, save/reload,
+   stale preview, 409 revision conflicts and read-only owner contexts. The
+   existing narrow browser script does not automatically assert these new UI
+   controls. Compare current native preview and persisted draft revision/data
+   with the visible cards; confirm no unauthorized activation requests.
+4. The workflow's pinned Rules Core and Site SHAs are historical acceptance
+   fixtures. Re-pin both to the integration-reviewer's explicitly selected
+   A/C integration heads and Site revision **in an isolated review workflow**
+   before treating it as cross-workstream acceptance; do not assume that
+   running its present pins validates unmerged A/C together.
+
+### Review disposition
+
+The scoped client corrections are committed to the Workstream B branch.
+Successful Node/.NET/hosted checks are the executed code evidence; actual
+three-service browser acceptance and A/C cross-repository integration remain
+independent acceptance tasks. No merge or deployment is authorized by this note.

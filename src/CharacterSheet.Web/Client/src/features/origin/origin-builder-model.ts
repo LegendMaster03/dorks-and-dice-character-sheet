@@ -41,12 +41,12 @@ export function isDirectOriginProposal(proposal: NativeOriginDraftProposal): boo
 }
 
 /**
- * Two biological *source references*, not verified identities or fully
+ * Biological native *source references*, not verified identities or fully
  * manifested profiles for actual parent characters. This is an evidence
  * draft only: no inherent grants, inheritance decisions or approvals.
  *
- * The general Origin contract supports arbitrary input roles and numbers;
- * this editor exposes only the common two-biological-parent example.
+ * The general Origin contract supports arbitrary input roles and numbers.
+ * Four is a basic editor limit, not an origination rule or parent maximum.
  */
 export type MixedNativeParentSlot =
     "parent-one" | "parent-two" | "source-3" | "source-4";
@@ -179,6 +179,11 @@ export function changeMixedNativeParent(
         throw new Error("Only native Species or Ancestry source identities are supported.");
     }
 
+    const existing = proposal.contributors.find(raw =>
+        isRecord(raw) && raw.id === slot);
+    if ((isRecord(existing) && isRecord(existing.source) ?
+        existing.source.id : null) === selectedSourceId) return proposal;
+
     const contributors = proposal.contributors.filter(raw =>
         isRecord(raw) && raw.id !== slot);
     if (selectedSourceId !== null) {
@@ -234,6 +239,9 @@ export interface NativeOriginCandidateView {
     eligibility: string;
     explanation: string | null;
     selectedDraft: boolean;
+    /** Present in evaluatedProposal.manifestations; not necessarily an earned grant. */
+    evaluatedManifestation: boolean;
+    /** Present in the preview profile grant list only; still not committed. */
     manifestedPreview: boolean;
     offeredValue: unknown;
     offeredParameters: Readonly<Record<string, unknown>> | null;
@@ -242,28 +250,124 @@ export interface NativeOriginCandidateView {
     requiredChoiceCount: number;
 }
 
+/**
+ * The native source deconstructor preserves the draft's contributor identities,
+ * even when an Ancestry contributes offers from an ancestor Species. Compare the
+ * contributor snapshot, not a false leaf-source equivalence rule.
+ *
+ * This only binds the preview to the current player proposal. Rules Core still
+ * authenticates the candidate origin, its inheritance eligibility, and grants.
+ */
+export function mixedNativePreviewMatchesDraft(
+    preview: NativeOriginPreview | null, proposal: NativeOriginDraftProposal
+): boolean {
+    if (!isEditableMixedNativeOrigin(proposal) ||
+        preview?.previewOnly !== true ||
+        !isRecord(preview.result?.evaluatedProposal)) return false;
+    const evaluated = preview.result.evaluatedProposal;
+    if (evaluated.id !== proposal.id ||
+        !(evaluated.intent === proposal.intent ||
+            (evaluated.intent === 1 && proposal.intent === "Mixed") ||
+            (evaluated.intent === "Mixed" && proposal.intent === 1)) ||
+        !isRecord(evaluated.method) ||
+        evaluated.method.ruleId !== proposal.method.ruleId ||
+        evaluated.method.methodId !== proposal.method.methodId ||
+        !Array.isArray(evaluated.contributors) ||
+        evaluated.contributors.length !== proposal.contributors.length ||
+        !Array.isArray(evaluated.manifestations)) return false;
+
+    const byId = new Map<string, JsonRecord>();
+    for (const raw of evaluated.contributors) {
+        if (!isRecord(raw) || typeof raw.id !== "string" ||
+            byId.has(raw.id)) return false;
+        byId.set(raw.id, raw);
+    }
+    for (const original of proposal.contributors) {
+        if (!isRecord(original) || !isRecord(original.role) ||
+            !isRecord(original.source)) return false;
+        const current = byId.get(original.id as string);
+        if (!current || !isRecord(current.role) || !isRecord(current.source) ||
+            current.role.kind !== original.role.kind ||
+            current.source.kind !== original.source.kind ||
+            current.source.id !== original.source.id ||
+            (current.source.version ?? null) !== (original.source.version ?? null))
+            return false;
+    }
+    const selections = new Map<string, JsonRecord>();
+    for (const raw of evaluated.manifestations) {
+        if (!isRecord(raw) || typeof raw.candidateId !== "string" ||
+            selections.has(raw.candidateId)) return false;
+        selections.set(raw.candidateId, raw);
+    }
+    if (selections.size !== proposal.manifestations.length) return false;
+    for (const original of proposal.manifestations) {
+        const current = selections.get(original.candidateId);
+        if (!current || current.id !== original.id ||
+            !Array.isArray(current.choices) && (original.choices?.length ?? 0) > 0)
+            return false;
+        const selectedChoices = Array.isArray(current.choices) ?
+            current.choices.filter(isRecord) : [];
+        if ((original.choices ?? []).some(choice =>
+            !selectedChoices.some(c =>
+                c.requirementId === choice.requirementId &&
+                Array.isArray(c.selectedOptionIds) &&
+                c.selectedOptionIds.length === choice.selectedOptionIds.length &&
+                c.selectedOptionIds.every((id, i) =>
+                    id === choice.selectedOptionIds[i])))) return false;
+    }
+    return true;
+}
+
 export function originPreviewCandidates(
     preview: NativeOriginPreview | null, proposal: NativeOriginDraftProposal | null
 ): readonly NativeOriginCandidateView[] {
     if (preview?.previewOnly !== true || proposal === null ||
         !isRecord(preview.result?.evaluatedProposal)) return [];
     const evaluated = preview.result.evaluatedProposal;
-    if (typeof evaluated.id === "string" && evaluated.id !== proposal.id ||
-        !Array.isArray(evaluated.candidates)) return [];
-    const manifested = new Set(Array.isArray(evaluated.manifestations)
+    if (evaluated.id !== proposal.id || !Array.isArray(evaluated.candidates) ||
+        (isEditableMixedNativeOrigin(proposal) &&
+            !mixedNativePreviewMatchesDraft(preview, proposal))) return [];
+    const evaluatedManifestations = new Set(Array.isArray(evaluated.manifestations)
         ? evaluated.manifestations.filter(isRecord)
             .map(m => m.candidateId).filter((id): id is string => typeof id === "string")
         : []);
+    const resultProfile = isRecord(preview.result.profile) ? preview.result.profile : null;
+    const underlying = resultProfile && isRecord(resultProfile.underlying)
+        ? resultProfile.underlying : null;
+    const grantSets = [underlying?.inherentGrants, resultProfile?.independentGrants];
+    const previewGrants = new Set<string>();
+    for (const grants of grantSets) {
+        if (!Array.isArray(grants)) continue;
+        for (const raw of grants) {
+            if (!isRecord(raw) || !Array.isArray(raw.sourceCandidateIds)) continue;
+            for (const id of raw.sourceCandidateIds)
+                if (typeof id === "string") previewGrants.add(id);
+        }
+    }
     const selected = new Map(proposal.manifestations.map(m => [m.candidateId, m]));
     const result: NativeOriginCandidateView[] = [];
+    const seen = new Set<string>();
     for (const raw of evaluated.candidates) {
         if (!isRecord(raw) || typeof raw.id !== "string" ||
-            !isRecord(raw.identity) || !isRecord(raw.identity.occurrence) ||
-            !isRecord(raw.identity.occurrence.source) ||
-            typeof raw.identity.occurrence.source.id !== "string") continue;
+            seen.has(raw.id) || !isRecord(raw.identity) ||
+            !isRecord(raw.identity.occurrence) ||
+            !isRecord(raw.identity.occurrence.source)) return [];
         const identity = raw.identity;
         const occurrence = identity.occurrence as JsonRecord;
         const source = occurrence.source as JsonRecord;
+        const contributorId = raw.contributorId == null ? null :
+            typeof raw.contributorId === "string" ? raw.contributorId : undefined;
+        const sourceId = source.id;
+        const path = occurrence.occurrencePath;
+        if (typeof sourceId !== "string" || typeof path !== "string" ||
+            !path.startsWith("/") ||
+            !(source.kind === 0 || source.kind === "Native") ||
+            contributorId === undefined ||
+            raw.id !== `${contributorId === null ? "direct" :
+                "contributor:" + contributorId}:${sourceId}:${path}` ||
+            (contributorId !== null && !proposal.contributors.some(entry =>
+                isRecord(entry) && entry.id === contributorId))) return [];
+        seen.add(raw.id);
         const basis = isRecord(raw.selectionBasis) ? raw.selectionBasis : {};
         const kind = identity.kind === 0 || identity.kind === "Intrinsic" ? "Intrinsic" :
             identity.kind === 1 || identity.kind === "Trait" ? "Trait" : "Other";
@@ -274,11 +378,9 @@ export function originPreviewCandidates(
         const selection = selected.get(raw.id);
         result.push({
             id: raw.id,
-            contributorId: typeof raw.contributorId === "string" ?
-                raw.contributorId : null,
-            sourceId: source.id as string,
-            occurrencePath: typeof occurrence.occurrencePath === "string" ?
-                occurrence.occurrencePath : "Unspecified source occurrence",
+            contributorId,
+            sourceId,
+            occurrencePath: path,
             characteristic: [identity.mechanicalDefinitionId, identity.traitConceptId,
                 identity.intrinsicSlotId].find(x => typeof x === "string") as string ??
                 (typeof occurrence.occurrencePath === "string" ?
@@ -294,7 +396,8 @@ export function originPreviewCandidates(
             explanation: typeof basis.explanation === "string" ?
                 basis.explanation : null,
             selectedDraft: selection !== undefined,
-            manifestedPreview: manifested.has(raw.id),
+            evaluatedManifestation: evaluatedManifestations.has(raw.id),
+            manifestedPreview: previewGrants.has(raw.id),
             offeredValue: raw.offeredValue ?? null,
             offeredParameters: isRecord(raw.offeredParameters) ?
                 raw.offeredParameters : null,
@@ -320,6 +423,15 @@ export function changeMixedNativeCandidate(
 ): NativeOriginDraftProposal {
     if (!isEditableMixedNativeOrigin(proposal))
         throw new Error("This Origin is not an editable mixed source draft.");
+    const prior = proposal.manifestations.filter(m => m.candidateId !== candidateId);
+    const alreadySelected = prior.length !== proposal.manifestations.length;
+    // An offer can disappear after native content changes or source validation.
+    // Removing an existing inert draft selection must not require a fresh offer.
+    if (!selected) {
+        if (!alreadySelected) throw new Error("This candidate is not selected in the draft.");
+        return { ...proposal, manifestations: prior };
+    }
+    if (alreadySelected) return proposal;
     const candidate = originPreviewCandidates(preview, proposal).find(c =>
         c.id === candidateId);
     const contributor = proposal.contributors.find(raw =>
@@ -328,11 +440,11 @@ export function changeMixedNativeCandidate(
     // The occurrence may name an ancestor Species, not the leaf source ID.
     if (!candidate || !isRecord(contributor) || !isRecord(contributor.source) ||
         !(contributor.source.kind === 0 || contributor.source.kind === "Native") ||
+        candidate.contributorId === null ||
         !/^(species|ancestry)\./.test(candidate.sourceId))
         throw new Error("This native candidate does not belong to a selected contributor.");
-    const prior = proposal.manifestations.filter(m => m.candidateId !== candidateId);
-    return { ...proposal, manifestations: selected ?
-        [...prior, { id: `selection:${candidateId}`, candidateId }] : prior };
+    return { ...proposal, manifestations:
+        [...prior, { id: `selection:${candidateId}`, candidateId }] };
 }
 
 /**
@@ -380,6 +492,10 @@ export function changeDirectOriginIdentity(
         proposal.candidates.length !== 0) {
         throw new Error("This proposal requires a separately authorized mixed or custom Origin editor.");
     }
+    // Repeating the same selection must not destroy its configured choices.
+    if (target === "species" && selectedId === (proposal.selectedSpeciesId ?? null) ||
+        target === "ancestry" && selectedId === (proposal.selectedAncestryId ?? null))
+        return proposal;
     // A new identity can have different traits, candidate IDs and required
     // choices. Never carry manifestations from a previous selected source.
     return target === "species"
@@ -435,7 +551,9 @@ export function requiredDraftOriginChoices(
         !isRecord(preview.result.evaluatedProposal) ||
         (typeof preview.result.evaluatedProposal.id === "string" &&
             preview.result.evaluatedProposal.id !== draft.id) ||
-        !Array.isArray(preview.result.evaluatedProposal.candidates)) return [];
+        !Array.isArray(preview.result.evaluatedProposal.candidates) ||
+        (isEditableMixedNativeOrigin(draft) &&
+            !mixedNativePreviewMatchesDraft(preview, draft))) return [];
     const direct = isDirectOriginProposal(draft);
 
     const choices: NativeOriginRequiredChoice[] = [];
