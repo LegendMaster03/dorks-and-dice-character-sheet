@@ -43,15 +43,16 @@ public static class NativeCharacterPresentationBridge
         // The caller may only use these native scalars alongside authenticated
         // committed Origin state. Exact catalog identity is checked again
         // below when the character projector independently loads its snapshot.
-        // The authenticated presentation path supplies the current saved
-        // revision. Never reuse a previously verified grant after a new commit.
-        var originRevisionChanged = hasCommittedOrigin && originProjection is not null &&
-            committedOriginRevision is not null &&
-            (committedOriginRevision <= 0 ||
+        // The authenticated caller supplies the current saved revision.
+        // A projection is not verified without two matching positive revisions;
+        // in particular, an omitted revision must not bypass this gate.
+        var originRevisionUnverified = hasCommittedOrigin && originProjection is not null &&
+            (committedOriginRevision is not > 0 ||
+             originProjection.CommittedRevision is not > 0 ||
              originProjection.CommittedRevision != committedOriginRevision);
-        var originIntrinsics = hasCommittedOrigin && !originRevisionChanged
+        var originIntrinsics = hasCommittedOrigin && !originRevisionUnverified
             ? originProjection?.Intrinsics : null;
-        var lowLightVision = hasCommittedOrigin && !originRevisionChanged
+        var lowLightVision = hasCommittedOrigin && !originRevisionUnverified
             ? originProjection?.LowLightVision : null;
 
         // Even with no Class or abilities, an authorized native Origin's
@@ -344,8 +345,8 @@ public static class NativeCharacterPresentationBridge
         return new(partial ? "partial" : "resolved", mechanics,
             partial
                 ? hasCommittedOrigin
-                    ? originRevisionChanged
-                        ? "The verified Origin revision does not match the committed Origin. Origin-dependent values are withheld pending revalidation."
+                    ? originRevisionUnverified
+                        ? "The verified Origin revision is missing, invalid, or does not match the committed Origin. Origin-dependent values are withheld pending revalidation."
                         : originCatalogChanged
                             ? "Native rules changed after Origin verification. Origin-dependent values are withheld pending revalidation; independently calculated Class values remain available."
                         : originIntrinsics is null
