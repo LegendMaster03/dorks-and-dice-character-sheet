@@ -415,15 +415,22 @@ def run_browser():
         drow_id = "contributor:parent-two:ancestry.elf.drow:/spellcastingAbilityChoice"
         drow_offer = owner.locator(f'[data-origin-native-candidate="{drow_id}"]')
         drow_offer.get_by_role("button", name="Select characteristic for draft").click()
-        charisma.select_option("charisma")
+        with owner.expect_response(
+                lambda response: response.request.method == "PUT"
+                and response.url.lower().endswith(origin_url("drow-mixed", "draft").lower())
+        ) as choice_save:
+            charisma.select_option("charisma")
+        expect_event("browser-drow-finite-choice-save", choice_save.value.ok)
+        choice_save.value.finished()
         original = saved_selection("drow-mixed", drow_id, 2)
+        expect_event("browser-drow-finite-choice-persisted", original.get("choices") == [{
+            "requirementId": "spellcastingAbility",
+            "selectedOptionIds": ["charisma"],
+        }], {"selection": original})
         choose_source("parent-one", "species", "Orc")
         retained = saved_selection("drow-mixed", drow_id, 2)
         expect_event("browser-drow-finite-choice-retained",
-                     retained == original and retained["choices"] == [{
-                         "requirementId": "spellcastingAbility",
-                         "selectedOptionIds": ["charisma"],
-                     }], {"selection": retained})
+                     retained == original, {"selection": retained})
         charisma.wait_for()
         owner.screenshot(path=str(OUT / "browser-mixed-finite-choice-retained.png"),
                          full_page=True)
