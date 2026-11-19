@@ -20,8 +20,12 @@ public sealed class CharacterSheetMigrationModelParityTests
             .UseNpgsql("Host=localhost;Database=parity_only;Username=test;Password=test")
             .Options;
         using var db = new CharacterSheetDbContext(options);
-        var snapshot = db.GetService<IMigrationsAssembly>().ModelSnapshot?.Model;
-        Assert.NotNull(snapshot);
+        var committed = db.GetService<IMigrationsAssembly>().ModelSnapshot?.Model;
+        Assert.NotNull(committed);
+        // A migration snapshot is a mutable design-time model, not an
+        // initialized runtime model. Finalize it before relational diffing.
+        var snapshot = db.GetService<IModelRuntimeInitializer>()
+            .Initialize(committed, designTime: true);
         var runtime = db.GetService<IDesignTimeModel>().Model;
         var differ = db.GetService<IMigrationsModelDiffer>();
         var changes = differ.GetDifferences(
