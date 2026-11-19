@@ -19,7 +19,7 @@ import struct
 import base64
 import secrets
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / ".pillar2-browser"
@@ -415,13 +415,22 @@ def run_browser():
         drow_id = "contributor:parent-two:ancestry.elf.drow:/spellcastingAbilityChoice"
         drow_offer = owner.locator(f'[data-origin-native-candidate="{drow_id}"]')
         drow_offer.get_by_role("button", name="Select characteristic for draft").click()
-        with owner.expect_response(
-                lambda response: response.request.method == "PUT"
-                and response.url.lower().endswith(origin_url("drow-mixed", "draft").lower())
-        ) as choice_save:
+        def is_finite_choice_save(response):
+            request = response.request
+            if (request.method != "PUT" or not
+                    request.url.lower().endswith(origin_url("drow-mixed", "draft").lower())):
+                return False
+            selections = request.post_data_json["proposal"]["manifestations"]
+            return any(selection["candidateId"] == drow_id and selection.get("choices")
+                       for selection in selections)
+
+        with owner.expect_response(is_finite_choice_save) as choice_save:
             charisma.select_option("charisma")
-        expect_event("browser-drow-finite-choice-save", choice_save.value.ok)
-        choice_save.value.finished()
+        saved = choice_save.value.json()
+        expect_event("browser-drow-finite-choice-save",
+                     choice_save.value.ok and saved["draft"]["revision"] > 0)
+        expect(owner.locator("[data-native-origin-builder]")).to_have_attribute("aria-busy", "false")
+        expect(charisma).to_have_value("charisma")
         original = saved_selection("drow-mixed", drow_id, 2)
         expect_event("browser-drow-finite-choice-persisted", original.get("choices") == [{
             "requirementId": "spellcastingAbility",
