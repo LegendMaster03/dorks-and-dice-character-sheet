@@ -293,6 +293,11 @@ public sealed class CharacterSupernaturalPersistenceTests
             downgrade.ToString(), StringComparison.Ordinal);
         Assert.Contains("20261117090000_AddInfluenceExpressionChangeAudit",
             await db.Database.GetAppliedMigrationsAsync());
+
+        // Newer additive migrations are rolled back before the historical
+        // audit guard rejects the requested downgrade. Restore the current
+        // schema before querying through the latest EF Core model.
+        await migrator.MigrateAsync();
         var persisted = await store.GetEventsAsync(id);
         Assert.Equal("expression-change", persisted[1].Kind);
         Assert.NotNull(persisted[1].ExpressionChangeJson);
