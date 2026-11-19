@@ -390,8 +390,14 @@ def run_browser():
 
         # Human's authored size alternatives exercise the finite native choice
         # path without inventing a new catalog or policy.
-        native_candidates = four_sources["preview"]["result"][
-            "evaluatedProposal"]["candidates"]
+        # GET /origin/draft is a storage read, not guaranteed to include
+        # a native evaluation. Obtain an independent stateless native preview.
+        native_review = request_on_page(
+            owner, "browser-b-four-source-native-preview",
+            API + "/native-rules/origins/preview", "POST",
+            {"rulesetId": "first-party-001", "fingerprint": fp,
+             "proposal": four_sources["draft"]["proposal"]})
+        native_candidates = native_review["result"]["evaluatedProposal"]["candidates"]
         human_choices = [
             (candidate, requirement)
             for candidate in native_candidates
