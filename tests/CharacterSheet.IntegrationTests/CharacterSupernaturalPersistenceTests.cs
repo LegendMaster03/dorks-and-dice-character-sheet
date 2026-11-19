@@ -1559,4 +1559,51 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Contains("wolf-progress-extra", (await store.GetAsync(id))!.AlternateSheetsJson);
         Assert.Equal(2, (await store.GetEventsAsync(id)).Count);
     }
+
+    [Fact]
+    public async Task ExplicitProgressionReceiptPreservesEarnedHistoryAcrossRestart()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+
+        var initial = Write(id, digest);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(initial)).Status);
+
+        var augmented = JsonNode.Parse(WolfSheet)!.AsArray();
+        augmented[0]!["progression"]!.AsArray().Add(JsonNode.Parse("""
+            {"id":"wolf-earned-next","definitionId":"fixture.progression",
+             "acquisitionEvidenceId":"fixture:verified-progression","grants":[]}
+            """));
+        var advancement = Write(id, digest, 1, 0, 0, "progress:wolf",
+            alternate: augmented.ToJsonString()) with { IsProgression = true };
+
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(advancement)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.DuplicateEvent,
+            (await store.CommitVerifiedAsync(advancement)).Status);
+
+        await using var reloadedDb = new CharacterSheetDbContext(database.CreateOptions());
+        var reloaded = new PostgresCharacterSupernaturalStateStore(reloadedDb);
+        var saved = await reloaded.GetAsync(id);
+        Assert.NotNull(saved);
+        Assert.Equal(2, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Contains("wolf-progression", saved.AlternateSheetsJson);
+        Assert.Contains("wolf-earned-next", saved.AlternateSheetsJson);
+        Assert.Equal(new[] { "acquisition", "progression" },
+            (await reloaded.GetEventsAsync(id)).Select(x => x.Kind));
+
+        // Advancement is never a first event or a disguised form transition.
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            reloaded.CommitVerifiedAsync(Write(id, digest) with
+            {
+                EventId = "progress:first",
+                IsProgression = true
+            }));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            reloaded.CommitVerifiedAsync(advancement with { IsTransition = true }));
+    }
 }

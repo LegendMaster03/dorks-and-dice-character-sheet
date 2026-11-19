@@ -42,3 +42,7 @@ Do not merge into `main`, deploy, or implement the unified Origins frontend.
 `CharacterSupernaturalOwnershipService` obtains fresh and scoped Site access, matches current PostgreSQL supernatural and manifestation revisions, reconstructs the authorized primary state, requires server-produced source material, delegates a verified plan through `INativeRulesCoreGateway`, checks identities/catalog/revisions/evidence, and commits only via the existing serializable PostgreSQL CAS store. The Core gateway deliberately throws until A implements the verified host operation. The coordinator is not registered and there is no public mutation endpoint. This is an adapter seam and synthetic-testable structure, not completed first-party entitlement.
 
 The existing immutable receipt stream distinguishes `acquisition` and `progression` in new writes; the record remains backward-compatible without a schema migration. A transition, expression event, or first acquisition cannot masquerade as advancement. The original 32-scenario production closure totals remain unchanged until live A/B tests.
+
+## Synthetic progression and response-integrity tests
+
+The new internal source/plan tests verify exact identity, event, catalog, evidence, and revision bindings. A PostgreSQL regression verifies a separate immutable `progression` receipt, preserved earlier earned progression, duplicate-event rejection, and persistence after reloading the DbContext. These tests verify the adapter and storage boundary only; production authority remains deferred.
