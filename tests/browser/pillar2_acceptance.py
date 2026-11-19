@@ -68,7 +68,7 @@ def seed_site():
     """Use only the disposable Site schema created by its actual startup."""
     run_key = os.environ.get("PILLAR2_RUN", "local")
     for name in ["owner", "dm", "unrelated", "campaign", "direct", "mixed",
-                 "race", "race-unlink", "outsider", "membership-owner", "membership-dm"]:
+                 "editor", "race", "race-unlink", "outsider", "membership-owner", "membership-dm"]:
         UUIDS[name] = str(uuid.uuid5(
             uuid.NAMESPACE_DNS, "pillar2-browser-" + run_key + "-" + name)).upper()
     now = "2026-11-17 14:10:00+00:00"
@@ -122,7 +122,7 @@ def seed_site():
             "(Id,Name,CreatedByUserId,Status,CreatedAt,UpdatedAt) "
             "VALUES (?,?,?,0,?,?)",
             (UUIDS["campaign"], "Browser Review Campaign", UUIDS["dm"], now, now))
-        for name in ["direct", "mixed", "race", "race-unlink", "outsider"]:
+        for name in ["direct", "mixed", "editor", "race", "race-unlink", "outsider"]:
             owner = "unrelated" if name == "outsider" else "owner"
             db.execute(
                 "INSERT INTO dd_character "
@@ -276,7 +276,7 @@ def run_browser():
         # Set up previously seeded Site Characters through the same browser
         # credentials. These API calls are fixture setup, not assertions that
         # every builder control has been exercised.
-        for name in ["direct", "mixed", "race", "race-unlink"]:
+        for name in ["direct", "mixed", "editor", "race", "race-unlink"]:
             request_on_page(owner, "browser-bootstrap-" + name,
                             API + "/characters/" + UUIDS[name] + "/sheet",
                             "POST", {}, 200)
@@ -313,6 +313,135 @@ def run_browser():
                                 API + "/characters/" + UUIDS["direct"] + "/origin/state")
         expect_event("browser-direct-persisted",
                      state["savedState"]["revision"] == 1)
+
+
+        # Workstream B integration: exercise actual mixed editor controls.
+        # This uses a separate disposable owner Character, not the restricted
+        # two-source DM activation fixture used later in this test.
+        editor_path = API + "/characters/" + UUIDS["editor"] + "/origin/draft"
+        owner.goto(BASE + "/tools/character-sheet/characters/" + UUIDS["editor"])
+        owner.locator('[data-character-sheet-state="rich-character"]').wait_for(timeout=30000)
+        owner.locator('[data-sheet-mode-control="guided"]').click()
+        owner.locator('[data-guided-builder-section="species"]').click()
+        owner.locator('[data-origin-construction-mode]').get_by_role(
+            "button", name="Mixed biological sources").click()
+        owner.locator('[data-origin-construction-mode="mixed"]').wait_for(timeout=30000)
+
+        def choose_editor_source(slot, display_name):
+            if slot.startswith("source-"):
+                owner.get_by_role(
+                    "button", name="Add another native source (draft only)").click()
+            else:
+                parent = owner.locator('[data-mixed-origin-parent="' + slot + '"]')
+                parent.get_by_role("button", name="Choose Species source").click()
+            chooser = owner.locator('[data-origin-chooser="species"]')
+            chooser.get_by_role("button", name=display_name, exact=True).click()
+            owner.locator('[data-mixed-origin-parent="' + slot + '"]').get_by_text(
+                "species." + display_name.lower(), exact=True).wait_for(timeout=30000)
+
+        choose_editor_source("parent-one", "Elf")
+        choose_editor_source("parent-two", "Orc")
+        elf_offers = owner.locator(
+            '[data-origin-native-candidate^="contributor:parent-one:species.elf:/traits/"]')
+        expect_event("browser-b-mixed-source-offers", elf_offers.count() > 0)
+        first_card = elf_offers.first
+        picked = first_card.get_attribute("data-origin-native-candidate")
+        first_card.get_by_role("button", name="Select characteristic for draft").click()
+        first_card.get_by_role("button", name="Remove draft selection").wait_for(
+            timeout=30000)
+        saved_editor = request_on_page(
+            owner, "browser-b-two-source-persisted", editor_path)
+        expect_event("browser-b-selected-is-draft-only",
+                     len(saved_editor["draft"]["proposal"]["manifestations"]) == 1
+                     and saved_editor["draft"]["proposal"]["manifestations"][0]
+                     ["candidateId"] == picked)
+        owner.reload()
+        owner.locator('[data-character-sheet-state="rich-character"]').wait_for(
+            timeout=30000)
+        owner.locator('[data-sheet-mode-control="guided"]').click()
+        owner.locator('[data-guided-builder-section="species"]').click()
+        owner.locator('[data-origin-native-candidate="' + picked + '"]').get_by_role(
+            "button", name="Remove draft selection").wait_for(timeout=30000)
+        expect_event("browser-b-mixed-selection-reloads", True)
+
+        # Adding a new exemplar invalidates earlier selections; it never
+        # creates a new parent-character identity or grants an active trait.
+        choose_editor_source("source-3", "Dwarf")
+        three_sources = request_on_page(
+            owner, "browser-b-three-sources-saved", editor_path)
+        expect_event("browser-b-third-source-invalidation",
+                     len(three_sources["draft"]["proposal"]["contributors"]) == 3
+                     and not three_sources["draft"]["proposal"]["manifestations"])
+        owner.get_by_text(
+            "Authenticated Character-source alignment is currently available only",
+            exact=False).wait_for(timeout=30000)
+        choose_editor_source("source-4", "Human")
+        four_sources = request_on_page(
+            owner, "browser-b-four-sources-saved", editor_path)
+        expect_event("browser-b-four-source-editor",
+                     len(four_sources["draft"]["proposal"]["contributors"]) == 4
+                     and owner.locator('[data-mixed-origin-parent]').count() == 4
+                     and owner.get_by_role(
+                         "button", name="Add another native source (draft only)").count() == 0)
+        expect_event("browser-b-no-mixed-direct-activation",
+                     owner.locator(
+                         '[data-native-origin-builder] button:has-text("Activate Native Origin")'
+                     ).count() == 0)
+
+        # Human's authored size alternatives exercise the finite native choice
+        # path without inventing a new catalog or policy.
+        native_candidates = four_sources["preview"]["result"][
+            "evaluatedProposal"]["candidates"]
+        human_choices = [
+            (candidate, requirement)
+            for candidate in native_candidates
+            if candidate.get("contributorId") == "source-4"
+            for requirement in (candidate.get("requiredChoices") or [])
+            if requirement.get("finiteOptions")
+            and requirement.get("maximum") == 1
+        ]
+        expect_event("browser-b-human-finite-choice-offered",
+                     len(human_choices) > 0)
+        candidate, requirement = human_choices[0]
+        option = requirement["finiteOptions"][0]
+        human_card = owner.locator(
+            '[data-origin-native-candidate="' + candidate["id"] + '"]')
+        human_card.get_by_role("button", name="Select characteristic for draft").click()
+        owner.locator('[data-origin-choice="' + requirement["id"] + '"] select').select_option(
+            option)
+        stored_choice = request_on_page(
+            owner, "browser-b-finite-choice-persisted", editor_path)
+        matches = [m for m in stored_choice["draft"]["proposal"]["manifestations"]
+                   if m["candidateId"] == candidate["id"]]
+        expect_event("browser-b-finite-choice-exact-persistence",
+                     len(matches) == 1 and
+                     any(c["requirementId"] == requirement["id"] and
+                         c["selectedOptionIds"] == [option]
+                         for c in matches[0].get("choices") or []))
+        editor_revision = stored_choice["draft"]["revision"]
+        request_on_page(owner, "browser-b-stale-revision-conflict",
+                        editor_path, "PUT",
+                        {"rulesetId": "first-party-001", "fingerprint": fp,
+                         "proposal": stored_choice["draft"]["proposal"],
+                         "expectedRevision": editor_revision - 1},
+                        expected=409)
+        expect_event("browser-b-revision-not-overwritten",
+                     request_on_page(owner, "browser-b-revision-after-409",
+                                     editor_path)["draft"]["revision"] ==
+                     editor_revision)
+        request_on_page(unrelated, "browser-b-other-owner-draft-denied",
+                        editor_path, expected=404)
+        owner.screenshot(path=str(OUT / "browser-b-mixed-editor.png"),
+                         full_page=True)
+        owner.reload()
+        owner.locator('[data-character-sheet-state="rich-character"]').wait_for(
+            timeout=30000)
+        owner.locator('[data-sheet-mode-control="guided"]').click()
+        owner.locator('[data-guided-builder-section="species"]').click()
+        owner.locator('[data-origin-native-candidate="' + candidate["id"] + '"]'
+                      ).get_by_role("button", name="Remove draft selection").wait_for(
+                          timeout=30000)
+        expect_event("browser-b-four-source-reloaded", True)
 
         mixed = {
             "id": "browser-mixed", "intent": 1,
