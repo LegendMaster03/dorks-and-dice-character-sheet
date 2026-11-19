@@ -54,6 +54,16 @@ public sealed class DelegatedRulesCoreGateway(
             "/api/mechanics/v1/characters/manifestations/plan",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    /// <summary>
+    /// Host-verifiable, version-2 supernatural acquisition/progression planner.
+    /// This endpoint returns candidates only and rejects absent source authority.
+    /// </summary>
+    public Task<JsonNode> PlanVerifiedSupernaturalOwnershipAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post,
+            "/api/mechanics/v1/characters/supernatural/ownership/plan",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> EvaluateVerifiedManifestationStateAsync(
         JsonElement request, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Post,
