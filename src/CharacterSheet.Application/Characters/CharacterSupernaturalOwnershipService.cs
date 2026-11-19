@@ -252,7 +252,7 @@ public sealed class CharacterSupernaturalOwnershipService(
         }
 
         if (!TryReadVerifiedPlan(response, characterId, operation,
-                eventId, rulesetId, catalogFingerprint,
+                eventId, intentId, rulesetId, catalogFingerprint,
                 expectedStateRevision, expectedLedgerRevision,
                 expectedProgressionRevision, material.AuthorizationEvidenceId,
                 out var nextSheets, out var nextInfluences,
@@ -380,7 +380,7 @@ public sealed class CharacterSupernaturalOwnershipService(
     internal static bool TryReadVerifiedPlan(
         JsonNode? response, Guid characterId,
         CharacterSupernaturalOwnershipOperation operation,
-        string eventId, string rulesetId, string fingerprint,
+        string eventId, string intentId, string rulesetId, string fingerprint,
         long expectedStateRevision, long expectedManifestationRevision,
         long expectedProgressionRevision, string evidenceId,
         out JsonArray? alternateSheets, out JsonArray? influences,
@@ -404,6 +404,7 @@ public sealed class CharacterSupernaturalOwnershipService(
                 plan["characterId"]?.GetValue<string>() != characterId.ToString("D") ||
                 plan["operation"]?.GetValue<string>() != operation.ToString() ||
                 plan["eventId"]?.GetValue<string>() != eventId ||
+                plan["intentId"]?.GetValue<string>() != intentId ||
                 plan["authorizationEvidenceId"]?.GetValue<string>() != evidenceId ||
                 plan["expectedSupernaturalRevision"]?.GetValue<long>() != expectedStateRevision ||
                 plan["expectedManifestationRevision"]?.GetValue<long>() !=
