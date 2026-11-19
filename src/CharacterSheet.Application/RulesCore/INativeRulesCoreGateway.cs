@@ -29,6 +29,17 @@ public interface INativeRulesCoreGateway
             "Verified manifestation planning is unsupported by this gateway."));
 
     /// <summary>
+    /// Provisional Workstream A, backend-only acquisition/progression planning.
+    /// A Core host must independently verify the exact source occurrence and
+    /// may not trust caller-held grants or evidence. Unsupported by default.
+    /// No production route or source adapter currently calls this operation.
+    /// </summary>
+    Task<JsonNode> PlanVerifiedSupernaturalOwnershipAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Verified supernatural acquisition/progression planning is unsupported."));
+
+    /// <summary>
     /// Authenticated read of persistent manifestations. Rules Core requires a
     /// separate independently verifying host source provider. Without it, a
     /// stored form or an echoed receipt must never become playable mechanics.

@@ -21,7 +21,8 @@ public sealed record VerifiedSupernaturalStateWrite(
     string ExpectedDependencyFingerprint, string EventId,
     string AuthorizationEvidenceId, bool IsTransition, DateTimeOffset RecordedAt,
     string? TransitionRequestJson = null,
-    bool IsExpressionChange = false, string? ExpressionChangeJson = null);
+    bool IsExpressionChange = false, string? ExpressionChangeJson = null,
+    bool IsProgression = false);
 
 public sealed record CharacterSupernaturalWriteResult(
     CharacterSupernaturalWriteStatus Status, long? Revision = null,

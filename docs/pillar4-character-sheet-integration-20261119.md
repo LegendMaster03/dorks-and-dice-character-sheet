@@ -21,7 +21,7 @@ Workstream A must define verified acquisition and advancement output (canonical 
 
 Workstream B remains responsible for evaluating applicable vs. earned characteristics, coexistence, suppression, replacements, effective resources, and unresolved mechanics. Its verified response must carry the full contributor identities and current catalog pin. Character Sheet persists approved transition plans and exposes their returned projections, never computing mechanics itself.
 
-No new source or Rules Core acquisition request/response structure was implemented here while those contracts are pending. The existing `ITrustedCharacterManifestationTransitionSource` and `ITrustedCharacterInfluenceExpressionSource` remain unregistered in production. This is an intentional fail-closed boundary, not completed production acquisition.
+A provisional internal-only acquisition/progression adapter and strict response verifier are now implemented in Character Sheet. The new default gateway method fails closed and requires Workstream A to finalize and independently verify the Core host contract; the new coordinator is not registered or reachable by HTTP. Receipt kinds now distinguish `progression` from `acquisition`, while prior earned history and resources remain guarded by PostgreSQL. The existing `ITrustedCharacterManifestationTransitionSource` and `ITrustedCharacterInfluenceExpressionSource` remain unregistered in production. This is an intentional fail-closed boundary, not completed production acquisition.
 
 ## Security and remaining work
 
@@ -36,3 +36,9 @@ No new source or Rules Core acquisition request/response structure was implement
 Prior composite head `ccf4590d1d4065defa70bad1534e5d98e4a19c11`: full validation run `44602679090` and cross-repository run `44602679137` succeeded November 19. New-branch validation is requested by push to the integration branch; its final outcome must be reported separately. This document does not claim a passing local test run.
 
 Do not merge into `main`, deploy, or implement the unified Origins frontend.
+
+## Provisional ownership coordinator (added after the initial read model)
+
+`CharacterSupernaturalOwnershipService` obtains fresh and scoped Site access, matches current PostgreSQL supernatural and manifestation revisions, reconstructs the authorized primary state, requires server-produced source material, delegates a verified plan through `INativeRulesCoreGateway`, checks identities/catalog/revisions/evidence, and commits only via the existing serializable PostgreSQL CAS store. The Core gateway deliberately throws until A implements the verified host operation. The coordinator is not registered and there is no public mutation endpoint. This is an adapter seam and synthetic-testable structure, not completed first-party entitlement.
+
+The existing immutable receipt stream distinguishes `acquisition` and `progression` in new writes; the record remains backward-compatible without a schema migration. A transition, expression event, or first acquisition cannot masquerade as advancement. The original 32-scenario production closure totals remain unchanged until live A/B tests.

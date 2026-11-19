@@ -42,7 +42,9 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             (command.IsTransition && (command.ExpectedLedgerRevision == long.MaxValue ||
                 command.NextLedgerRevision != command.ExpectedLedgerRevision + 1)) ||
             (!command.IsTransition && command.NextLedgerRevision != command.ExpectedLedgerRevision) ||
-            (command.IsExpressionChange && (command.IsTransition || command.ExpectedRevision == 0)))
+            (command.IsExpressionChange && (command.IsTransition || command.ExpectedRevision == 0)) ||
+            (command.IsProgression && (command.IsTransition || command.IsExpressionChange ||
+                command.ExpectedRevision == 0)))
             throw new ArgumentException("Invalid supernatural write revision.", nameof(command));
 
         // Shape checks never confer entitlement. The application must have
@@ -232,6 +234,7 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                     expressionHistory[audited.InfluenceId] = audited;
                     break;
                 case "acquisition":
+                case "progression":
                     if (receipt.ExpressionChangeJson is not null)
                         throw new ArgumentException("An acquisition cannot contain an expression-change audit.");
                     if (receipt.TransitionRequestJson is not null)
@@ -308,7 +311,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
     /// </summary>
     private static string ReceiptKind(VerifiedSupernaturalStateWrite command) =>
         command.IsTransition ? "transition" :
-        command.IsExpressionChange ? "expression-change" : "acquisition";
+        command.IsExpressionChange ? "expression-change" :
+        command.IsProgression ? "progression" : "acquisition";
 
     /// <summary>
     /// Validate exact event scope before entering the database transaction.
