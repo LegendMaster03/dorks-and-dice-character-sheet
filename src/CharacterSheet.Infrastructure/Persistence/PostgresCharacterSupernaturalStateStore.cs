@@ -288,12 +288,28 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             {
                 var progression = ParseProgressionJournal(receipt.ProgressionJournalSnapshotJson,
                     receipt.CharacterId);
-                if (progression.Revision <= 0 || progression.Events.LastOrDefault() != receipt.EventId ||
-                    lastProgressionJournal is not null &&
-                    progression.Revision != ParseProgressionJournal(
-                        lastProgressionJournal, receipt.CharacterId).Revision + 1)
+                // Every committed planner event has exactly one journal revision.
+                // Checking only the last receipt against the root would miss a
+                // historical receipt that silently rewrote consumed eligibility
+                // evidence or an earlier event while keeping the latest intact.
+                if (progression.Revision <= 0 ||
+                    progression.Revision != progression.Events.Length ||
+                    progression.Events.LastOrDefault() != receipt.EventId)
                     throw new ArgumentException(
                         "Immutable supernatural progression receipts are not sequential.");
+                if (lastProgressionJournal is not null)
+                {
+                    var prior = ParseProgressionJournal(lastProgressionJournal,
+                        receipt.CharacterId);
+                    if (progression.Revision != prior.Revision + 1 ||
+                        !prior.Events.SequenceEqual(
+                            progression.Events.Take(prior.Events.Length),
+                            StringComparer.Ordinal) ||
+                        !prior.ConsumedEvidence.ToHashSet(StringComparer.Ordinal)
+                            .IsSubsetOf(progression.ConsumedEvidence))
+                        throw new ArgumentException(
+                            "Immutable supernatural progression receipts lost prior event or eligibility evidence.");
+                }
                 lastProgressionJournal = receipt.ProgressionJournalSnapshotJson;
             }
             if (receipt.OverlapSelectionsSnapshotJson is not null)
