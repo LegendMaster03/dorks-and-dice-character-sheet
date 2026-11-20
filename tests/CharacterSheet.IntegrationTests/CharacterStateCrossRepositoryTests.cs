@@ -396,6 +396,314 @@ public sealed class CharacterStateCrossRepositoryTests
                 new PostgresCharacterAuthorizedOriginStore(db)));
     }
 
+
+    // Test-only source and independent host authority for the complete native
+    // ownership coordinator. This fixture does not appear in production DI.
+    private static NativeOriginSourceReference OwnershipSource() =>
+        new(NativeOriginSourceKind.Native, "fixture.supernatural.ownership", "fixture-v1");
+
+    private static NativeOriginSourceOccurrence OwnershipOccurrence(string path) =>
+        new(OwnershipSource(), path);
+
+    private static readonly NativeOriginDecisionBasis OwnershipBasis =
+        new(NativeOriginAdjudication.Supported,
+            NativeRuleReference: "fixture.rule.supernatural");
+
+    private sealed class SyntheticOwnershipSource(string fingerprint)
+        : ITrustedCharacterSupernaturalOwnershipSource
+    {
+        public Task<TrustedSupernaturalOwnershipMaterial?> PrepareAsync(
+            Guid characterId, SiteCharacterProjection authorizedCharacter,
+            CharacterSupernaturalState? committed,
+            CharacterSupernaturalOwnershipOperation operation,
+            string intentId, string eventId, CancellationToken ct)
+        {
+            var expectedEvidence = eventId switch
+            {
+                "synthetic:acquire" => "fixture:proof:acquire",
+                "synthetic:advance" => "fixture:proof:advance",
+                "synthetic:replay" => "fixture:proof:replay",
+                _ => null
+            };
+            if (expectedEvidence is null ||
+                authorizedCharacter.CharacterId != characterId ||
+                !authorizedCharacter.AllowsOrdinaryEditingByLifecycle ||
+                operation != (eventId == "synthetic:acquire"
+                    ? CharacterSupernaturalOwnershipOperation.Acquire
+                    : CharacterSupernaturalOwnershipOperation.Advance) ||
+                intentId != "intent:" + eventId)
+                return Task.FromResult<TrustedSupernaturalOwnershipMaterial?>(null);
+
+            var verified = JsonSerializer.SerializeToElement(new
+            {
+                characterId = characterId.ToString("D"),
+                operation = operation.ToString(), eventId,
+                rulesetId = "first-party-001", fingerprint,
+                authorizationEvidenceId = expectedEvidence,
+                sourceOccurrence = OwnershipOccurrence("acquisition")
+            }, Wire);
+            return Task.FromResult<TrustedSupernaturalOwnershipMaterial?>(
+                new(verified, expectedEvidence));
+        }
+    }
+
+    private sealed class PostgresSyntheticOwnershipProvider(
+        DbContextOptions<CharacterSheetDbContext> databaseOptions, Guid characterId)
+        : CoreOwnershipAuthorityProvider, INativeSupernaturalProgressionAuthority
+    {
+        private static readonly NativeSupernaturalDefinition Definition = new(
+            "fixture.definition.supernatural", OwnershipSource(),
+            new Dictionary<string, string> { ["phase"] = "dormant" },
+            [
+                new NativeSupernaturalProgressionNode("initial",
+                    OwnershipOccurrence("progression.initial"), OnAcquisition: true),
+                new NativeSupernaturalProgressionNode("moonrise",
+                    OwnershipOccurrence("progression.moonrise"),
+                    RequiredEventKeys: ["moon"],
+                    Grants: [new NativeSupernaturalGrantDefinition(
+                        "lunar-grant", "fixture.capability.lunar",
+                        OwnershipOccurrence("grants.lunar"))]),
+                new NativeSupernaturalProgressionNode("replayed",
+                    OwnershipOccurrence("progression.replayed"),
+                    RequiredEventKeys: ["moon"])
+            ]);
+
+        public async Task<CoreOwnershipAuthorization?> VerifyAsync(
+            Guid actor, CoreOwnershipPlanRequest request, CancellationToken ct)
+        {
+            if (actor != Actor || request.CharacterId != characterId.ToString("D") ||
+                request.RulesetId != "first-party-001" ||
+                request.State.CharacterId != request.CharacterId ||
+                request.State.AlternateSheets.Count != 0 ||
+                request.ExpectedLedgerRevision != 0)
+                return null;
+
+            // These exact events and source decisions are fixed by the test
+            // authority, not reconstructed from a caller's VerifiedSource JSON.
+            NativeSupernaturalTransitionRequest? transition =
+                request.EventId switch
+                {
+                    "synthetic:acquire" => new(request.CharacterId, 0,
+                        "synthetic:acquire", NativeSupernaturalTransitionKind.Acquire,
+                        "fixture.owned.wolf", "fixture:proof:acquire", OwnershipBasis),
+                    "synthetic:advance" => new(request.CharacterId, 1,
+                        "synthetic:advance", NativeSupernaturalTransitionKind.Advance,
+                        "fixture.owned.wolf", "fixture:proof:advance", OwnershipBasis,
+                        NodeId: "moonrise",
+                        RequirementEvidence: new Dictionary<string, string> {
+                            ["moon"] = "fixture:moon:1"
+                        }),
+                    "synthetic:replay" => new(request.CharacterId, 2,
+                        "synthetic:replay", NativeSupernaturalTransitionKind.Advance,
+                        "fixture.owned.wolf", "fixture:proof:replay", OwnershipBasis,
+                        NodeId: "replayed",
+                        RequirementEvidence: new Dictionary<string, string> {
+                            ["moon"] = "fixture:moon:1"
+                        }),
+                    _ => null
+                };
+            if (transition is null ||
+                transition.EvidenceId != request.AuthorizationEvidenceId ||
+                transition.ExpectedRevision != request.ProgressionJournal.Revision ||
+                request.Operation != (transition.Kind ==
+                    NativeSupernaturalTransitionKind.Acquire ? "Acquire" : "Advance"))
+                return null;
+
+            await using var db = new CharacterSheetDbContext(databaseOptions);
+            var committed = await new PostgresCharacterSupernaturalStateStore(db)
+                .GetAsync(characterId, ct);
+            if ((committed?.Revision ?? 0) != request.ExpectedSupernaturalRevision ||
+                (committed?.LedgerRevision ?? 0) != request.ExpectedLedgerRevision)
+                return null;
+            if (committed is null)
+            {
+                if (transition.Kind != NativeSupernaturalTransitionKind.Acquire ||
+                    request.State.PersistentInfluences?.Count != 0 ||
+                    request.ProgressionJournal.Revision != 0 ||
+                    request.ProgressionJournal.ProcessedEventIds.Count != 0 ||
+                    request.ProgressionJournal.ConsumedEligibilityEvidenceIds.Count != 0)
+                    return null;
+            }
+            else
+            {
+                if (!JsonEqual(committed.AlternateSheetsJson,
+                        JsonSerializer.Serialize(request.State.AlternateSheets, Wire)) ||
+                    !JsonEqual(committed.PersistentInfluencesJson,
+                        JsonSerializer.Serialize(request.State.PersistentInfluences, Wire)) ||
+                    !JsonEqual(committed.ProgressionJournalJson,
+                        JsonSerializer.Serialize(request.ProgressionJournal, Wire)) ||
+                    !JsonEqual(committed.InfluenceOverlapSelectionsJson,
+                        JsonSerializer.Serialize(
+                            request.State.InfluenceOverlapSelections, Wire)))
+                    return null;
+            }
+
+            var scores = await db.BaseAbilityScoreInputs.AsNoTracking()
+                .Where(x => x.CharacterId == characterId)
+                .ToDictionaryAsync(x => x.AbilityKey, x => x.Score, ct);
+            if (scores.Count != request.State.PrimaryMechanics.AbilityScores.Count ||
+                scores.Any(x => !request.State.PrimaryMechanics.AbilityScores
+                    .TryGetValue(x.Key, out var value) || value != x.Value))
+                return null;
+            var classes = await db.CharacterAdvancementEntries.AsNoTracking()
+                .Where(x => x.CharacterId == characterId &&
+                    x.Kind == CharacterAdvancementKind.Class).ToArrayAsync(ct);
+            if (classes.Length != request.State.PrimaryMechanics.Advancements.Count ||
+                request.State.PrimaryMechanics.Advancements.Any(x =>
+                    !classes.Any(entry => entry.Id.ToString("D") == x.OccurrenceId &&
+                        entry.RuleConceptKey == x.ClassId && entry.Level == x.Level)))
+                return null;
+
+            return new CoreOwnershipAuthorization(Definition, transition, this);
+        }
+
+        private static bool JsonEqual(string left, string right)
+        {
+            using var a = JsonDocument.Parse(left);
+            using var b = JsonDocument.Parse(right);
+            return JsonElement.DeepEquals(a.RootElement, b.RootElement);
+        }
+
+        public bool AuthorizesPrimary(string id, NativeCharacterRequest character) =>
+            id == characterId.ToString("D");
+        public bool AuthorizesSheet(string id, NativePersistentCharacterSheet sheet) => false;
+        public bool AuthorizesProgression(string id, string sheet,
+            NativeSheetEarnedProgression progression) => false;
+        public bool AuthorizesGrant(string id, string sheet,
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+        public bool AuthorizesApplicability(string id, string sheet,
+            NativeSheetGrantApplicability decision) => false;
+        public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
+            id == characterId.ToString("D") &&
+            influence.DefinitionId == Definition.Id &&
+            influence.DefinitionSource == Definition.Source &&
+            influence.AcquisitionEvidenceId == "fixture:proof:acquire";
+        public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) =>
+            AuthorizesInfluence(id, influence) &&
+            influence.Expression.TryGetValue("phase", out var phase) &&
+            phase == "dormant";
+        public bool AuthorizesEffect(string id, string influence,
+            NativeCharacterInfluenceEffect effect) => false;
+        public bool AuthorizesInfluenceProgression(string id, string influence,
+            NativeSheetEarnedProgression progression) =>
+            id == characterId.ToString("D") &&
+            influence == "fixture.owned.wolf" &&
+            progression.SourceOccurrence.Source == OwnershipSource();
+        public bool AuthorizesInfluenceGrant(string id, string influence,
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
+            AuthorizesInfluenceProgression(id, influence, progression) &&
+            grant.SourceOccurrence.Source == OwnershipSource();
+        public bool AuthorizesInfluenceApplicability(string id, string influence,
+            NativeInfluenceGrantApplicability decision) => false;
+        public bool AuthorizesJournal(string id, NativeSupernaturalTransitionJournal journal) =>
+            id == characterId.ToString("D");
+        public bool AuthorizesDefinition(string id, NativeSupernaturalDefinition definition,
+            NativeOriginDecisionBasis basis) =>
+            id == characterId.ToString("D") && definition == Definition &&
+            basis == OwnershipBasis;
+        public bool AuthorizesAcquisition(string id, NativeSupernaturalDefinition definition,
+            NativeSupernaturalTransitionRequest request) =>
+            id == characterId.ToString("D") &&
+            request.EventId == "synthetic:acquire";
+        public bool AuthorizesAdvancement(string id,
+            NativeCharacterPersistentInfluence influence,
+            NativeSupernaturalProgressionNode node,
+            NativeSupernaturalTransitionRequest request) =>
+            AuthorizesInfluence(id, influence) &&
+            node.SourceOccurrence.Source == OwnershipSource() &&
+            request.Kind == NativeSupernaturalTransitionKind.Advance;
+        public bool AuthorizesExpressionChange(string id,
+            NativeCharacterPersistentInfluence influence,
+            NativeSupernaturalTransitionRequest request) => false;
+        public bool AuthorizesEventRequirement(string id, string influence,
+            string key, string evidence,
+            NativeSupernaturalTransitionRequest request) =>
+            id == characterId.ToString("D") &&
+            influence == "fixture.owned.wolf" &&
+            key == "moon" && evidence == "fixture:moon:1";
+        public NativeSupernaturalEligibilityVerdict EvaluateRequirement(
+            string id, string influence, string key,
+            NativeSupernaturalTransitionRequest request) =>
+            NativeSupernaturalEligibilityVerdict.Unresolved;
+    }
+
+    [Fact]
+    public async Task SyntheticSupernaturalOwnershipAcquiresAndAdvancesThroughRealCoreAndPostgres()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var characterId = Guid.NewGuid();
+        var authority = new PostgresSyntheticOwnershipProvider(
+            database.CreateOptions(), characterId);
+        await using var core = await CoreHost.StartAsync(
+            verifiedOwnershipProvider: authority);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(characterId);
+        var built = new PostgresCharacterBuildStore(db);
+        foreach (var (ability, score) in new Dictionary<string, int> {
+            ["strength"] = 10, ["dexterity"] = 12, ["constitution"] = 13,
+            ["intelligence"] = 11, ["wisdom"] = 12, ["charisma"] = 10
+        })
+            await built.SetBaseAbilityScoreInputAsync(
+                characterId, ability, score, DateTimeOffset.UtcNow);
+        await built.SetStartingClassAsync(
+            characterId, "class.barbarian", DateTimeOffset.UtcNow);
+
+        var site = new OwnerAccess(characterId);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var service = new CharacterSupernaturalOwnershipService(
+            site, site, store, gateway, new SyntheticOwnershipSource(fingerprint),
+            new CharacterBuildService(site, built, TimeProvider.System),
+            new CharacterStateService(site, new PostgresCharacterStateStore(db),
+                TimeProvider.System),
+            new CharacterOriginStateService(site, built,
+                new PostgresCharacterAuthorizedOriginStore(db)));
+
+        var first = await service.ApplyAsync(characterId,
+            CharacterSupernaturalOwnershipOperation.Acquire, 0, 0,
+            "intent:synthetic:acquire", "synthetic:acquire");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, first.Status);
+        Assert.Equal(1, first.StateRevision);
+        Assert.Equal(0, first.ManifestationRevision);
+        var acquired = (await store.GetAsync(characterId))!;
+        Assert.Contains("fixture.owned.wolf", acquired.PersistentInfluencesJson);
+        Assert.Equal(1, JsonNode.Parse(acquired.ProgressionJournalJson)!
+            ["revision"]!.GetValue<long>());
+
+        var second = await service.ApplyAsync(characterId,
+            CharacterSupernaturalOwnershipOperation.Advance, 1, 0,
+            "intent:synthetic:advance", "synthetic:advance");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, second.Status);
+        Assert.Equal(2, second.StateRevision);
+        var progressed = (await store.GetAsync(characterId))!;
+        Assert.Contains("fixture.capability.lunar", progressed.PersistentInfluencesJson);
+        var journal = JsonNode.Parse(progressed.ProgressionJournalJson)!;
+        Assert.Equal(2, journal["revision"]!.GetValue<long>());
+        Assert.Equal("fixture:moon:1", journal["consumedEligibilityEvidenceIds"]![0]!
+            .GetValue<string>());
+
+        var replay = await service.ApplyAsync(characterId,
+            CharacterSupernaturalOwnershipOperation.Advance, 2, 0,
+            "intent:synthetic:replay", "synthetic:replay");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.PlanUnresolved,
+            replay.Status);
+        Assert.Equal(2, (await store.GetEventsAsync(characterId)).Count);
+
+        await using var freshDb = new CharacterSheetDbContext(database.CreateOptions());
+        var fresh = new PostgresCharacterSupernaturalStateStore(freshDb);
+        var saved = (await fresh.GetAsync(characterId))!;
+        Assert.Equal(2, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Contains("fixture.capability.lunar", saved.PersistentInfluencesJson);
+        Assert.Equal(2, (await fresh.GetEventsAsync(characterId)).Count);
+        Assert.Equal(new[] { "acquisition", "progression" },
+            (await fresh.GetEventsAsync(characterId)).Select(x => x.Kind));
+    }
+
     [Fact]
     public async Task LatestOwnedOriginUnderlyingRequiresCurrentSourceEvidenceThroughRealCore()
     {
