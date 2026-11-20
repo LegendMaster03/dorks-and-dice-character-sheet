@@ -45,7 +45,14 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             (command.IsExpressionChange && (command.IsTransition || command.ExpectedRevision == 0)) ||
             (command.IsProgression && (command.IsTransition || command.IsExpressionChange ||
                 command.ExpectedRevision == 0)) ||
-            (command.IsOwnershipPlan && (command.IsTransition || command.IsExpressionChange)))
+            (command.IsOwnershipPlan && (command.IsTransition || command.IsExpressionChange ||
+                command.IsOverlapDecision)) ||
+            (command.IsOverlapDecision && (command.IsTransition || command.IsExpressionChange ||
+                command.IsProgression || command.ExpectedRevision == 0 ||
+                string.IsNullOrWhiteSpace(command.NewOverlapDecisionId) ||
+                command.InfluenceOverlapSelectionsJson is null)) ||
+            (!command.IsOverlapDecision && (command.NewOverlapDecisionId is not null ||
+                command.ReplacedOverlapDecisionId is not null)))
             throw new ArgumentException("Invalid supernatural write revision.", nameof(command));
 
         // Shape checks never confer entitlement. The application must have
@@ -129,10 +136,20 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 existing?.InfluenceOverlapSelectionsJson ?? next.InfluenceOverlapSelectionsJson;
             if (command.InfluenceOverlapSelectionsJson is not null)
             {
-                if (!command.IsOwnershipPlan)
-                    throw new ArgumentException(
-                        "Overlap authorizations require a verified Rules Core ownership plan.");
                 ValidateOverlapDecisionShape(committedOverlapSelections, command.CharacterId);
+                if (command.IsOverlapDecision)
+                {
+                    ValidateOverlapDecisionChange(
+                        existing?.InfluenceOverlapSelectionsJson ?? "[]",
+                        committedOverlapSelections,
+                        command.NewOverlapDecisionId!,
+                        command.ReplacedOverlapDecisionId,
+                        command.AuthorizationEvidenceId);
+                }
+                else if (!SameJson(committedOverlapSelections,
+                    existing?.InfluenceOverlapSelectionsJson ?? "[]"))
+                    throw new ArgumentException(
+                        "An acquisition, form or expression plan may not create overlap decisions.");
             }
 
             if (existing is null)
@@ -268,6 +285,14 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                             "Historical influence expression or evidence chain is discontinuous.");
                     expressionHistory[audited.InfluenceId] = audited;
                     break;
+                case "overlap-decision":
+                    if (receipt.ExpressionChangeJson is not null ||
+                        receipt.TransitionRequestJson is not null ||
+                        receipt.ProgressionJournalSnapshotJson is not null ||
+                        receipt.OverlapSelectionsSnapshotJson is null)
+                        throw new ArgumentException(
+                            "An overlap decision requires a standalone immutable selection snapshot.");
+                    break;
                 case "acquisition":
                 case "progression":
                     if (receipt.ExpressionChangeJson is not null)
@@ -316,6 +341,35 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
             {
                 ValidateOverlapDecisionShape(receipt.OverlapSelectionsSnapshotJson,
                     receipt.CharacterId);
+                var priorOverlap = lastOverlapSelections ?? "[]";
+                if (receipt.Kind == "overlap-decision")
+                {
+                    using var document = JsonDocument.Parse(receipt.OverlapSelectionsSnapshotJson);
+                    var values = document.RootElement;
+                    if (values.GetArrayLength() == 0)
+                        throw new ArgumentException(
+                            "An overlap decision receipt has no new selection.");
+                    var newId = values[values.GetArrayLength() - 1]
+                        .GetProperty("id").GetString()!;
+                    using var previous = JsonDocument.Parse(priorOverlap);
+                    var previousIds = previous.RootElement.EnumerateArray()
+                        .Select(value => value.GetProperty("id").GetString()!).ToHashSet(
+                            StringComparer.Ordinal);
+                    var currentIds = values.EnumerateArray()
+                        .Select(value => value.GetProperty("id").GetString()!).ToHashSet(
+                            StringComparer.Ordinal);
+                    var replacedIds = previousIds.Except(currentIds, StringComparer.Ordinal)
+                        .ToArray();
+                    if (replacedIds.Length > 1)
+                        throw new ArgumentException(
+                            "A historical overlap decision replaced multiple owners.");
+                    ValidateOverlapDecisionChange(priorOverlap,
+                        receipt.OverlapSelectionsSnapshotJson, newId,
+                        replacedIds.SingleOrDefault(), receipt.AuthorizationEvidenceId);
+                }
+                else if (!SameJson(priorOverlap, receipt.OverlapSelectionsSnapshotJson))
+                    throw new ArgumentException(
+                        "A non-overlap event changed historical overlap decisions.");
                 lastOverlapSelections = receipt.OverlapSelectionsSnapshotJson;
             }
         }
@@ -391,6 +445,7 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
     private static string ReceiptKind(VerifiedSupernaturalStateWrite command) =>
         command.IsTransition ? "transition" :
         command.IsExpressionChange ? "expression-change" :
+        command.IsOverlapDecision ? "overlap-decision" :
         command.IsProgression ? "progression" : "acquisition";
 
     /// <summary>
@@ -713,6 +768,72 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 string.IsNullOrWhiteSpace(evidence.GetString()))
                 throw new ArgumentException("Malformed source-scoped overlap decision.");
         }
+    }
+
+    /// <summary>
+    /// Compare the new snapshot against the locked prior owner or immutable
+    /// receipt. Exactly one new decision may be appended, optionally replacing
+    /// one old decision with the same exact sheet and effect collision scope.
+    /// No other old selection, historical receipt or entitlement is rewritten.
+    /// </summary>
+    private static void ValidateOverlapDecisionChange(
+        string previousJson, string proposedJson,
+        string newDecisionId, string? replacedDecisionId, string evidenceId)
+    {
+        using var beforeDocument = JsonDocument.Parse(previousJson);
+        using var afterDocument = JsonDocument.Parse(proposedJson);
+        var previous = beforeDocument.RootElement.EnumerateArray().ToArray();
+        var proposed = afterDocument.RootElement.EnumerateArray().ToArray();
+        var selectedBefore = previous.Where(item =>
+            item.GetProperty("id").GetString() == replacedDecisionId).ToArray();
+        if (string.IsNullOrWhiteSpace(newDecisionId) ||
+            previous.Any(item => item.GetProperty("id").GetString() == newDecisionId) ||
+            replacedDecisionId is not null && selectedBefore.Length != 1)
+            throw new ArgumentException(
+                "The overlap event must name a unique new decision and an existing replaced owner.");
+
+        var retained = previous.Where(item =>
+            item.GetProperty("id").GetString() != replacedDecisionId).ToArray();
+        if (proposed.Length != retained.Length + 1 ||
+            !retained.Select((item, index) => JsonElement.DeepEquals(item, proposed[index]))
+                .All(equal => equal))
+            throw new ArgumentException(
+                "An overlap decision may not rewrite unrelated prior selections.");
+
+        var added = proposed[^1];
+        if (added.GetProperty("id").GetString() != newDecisionId ||
+            added.GetProperty("authorizationEvidenceId").GetString() != evidenceId)
+            throw new ArgumentException(
+                "The new overlap writer requires its exact verified event evidence.");
+
+        if (selectedBefore.Length == 1)
+        {
+            var old = selectedBefore[0];
+            if (old.GetProperty("targetSheetId").GetString() !=
+                    added.GetProperty("targetSheetId").GetString() ||
+                !old.GetProperty("effectIds").EnumerateArray()
+                    .Select(item => item.GetString())
+                    .OrderBy(id => id, StringComparer.Ordinal)
+                    .SequenceEqual(added.GetProperty("effectIds").EnumerateArray()
+                        .Select(item => item.GetString())
+                        .OrderBy(id => id, StringComparer.Ordinal),
+                        StringComparer.Ordinal))
+                throw new ArgumentException(
+                    "An overlap replacement must retain its exact sheet and writer set.");
+        }
+
+        var scope = added.GetProperty("targetSheetId").GetString();
+        var writers = added.GetProperty("effectIds").EnumerateArray()
+            .Select(item => item.GetString())
+            .OrderBy(id => id, StringComparer.Ordinal).ToArray();
+        if (retained.Any(item =>
+            item.GetProperty("targetSheetId").GetString() == scope &&
+            item.GetProperty("effectIds").EnumerateArray()
+                .Select(value => value.GetString())
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .SequenceEqual(writers, StringComparer.Ordinal)))
+            throw new ArgumentException(
+                "A second overlap decision cannot target the same collision.");
     }
 
     private static void ValidateLedger(VerifiedSupernaturalStateWrite command)
