@@ -1857,4 +1857,56 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Equal(2, (await durable.GetEventsAsync(id)).Count);
     }
 
+
+    [Fact]
+    public async Task ConcurrentOverlapWritersCanNotBothCommitTheSameSupernaturalRevision()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using (var bootstrap = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            var (store, digest) = await InitializeAsync(bootstrap, id);
+            Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+                (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+        }
+
+        await using var firstDb = new CharacterSheetDbContext(database.CreateOptions());
+        await using var secondDb = new CharacterSheetDbContext(database.CreateOptions());
+        var first = new PostgresCharacterSupernaturalStateStore(firstDb);
+        var second = new PostgresCharacterSupernaturalStateStore(secondDb);
+        var digestFirst = (await first.GetAuthoritativeInputsFingerprintAsync(id))!;
+        var digestSecond = (await second.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(digestFirst, digestSecond);
+
+        VerifiedSupernaturalStateWrite Decision(
+            string idSuffix, string evidence, string inputDigest) =>
+            Write(id, inputDigest, 1, 0, 0, "overlap:" + idSuffix) with
+            {
+                IsOverlapDecision = true,
+                NewOverlapDecisionId = "decision." + idSuffix,
+                AuthorizationEvidenceId = evidence,
+                InfluenceOverlapSelectionsJson = "[" +
+                    OverlapDecision("decision." + idSuffix,
+                        "fixture.effect.a", evidence) + "]"
+            };
+
+        var outcomes = await Task.WhenAll(
+            first.CommitVerifiedAsync(Decision("first", "fixture:first", digestFirst)),
+            second.CommitVerifiedAsync(Decision("second", "fixture:second", digestSecond)));
+        Assert.Single(outcomes,
+            result => result.Status == CharacterSupernaturalWriteStatus.Applied);
+        Assert.Single(outcomes,
+            result => result.Status == CharacterSupernaturalWriteStatus.RevisionConflict);
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var durable = new PostgresCharacterSupernaturalStateStore(reload);
+        var saved = (await durable.GetAsync(id))!;
+        Assert.Equal(2, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Equal(2, (await durable.GetEventsAsync(id)).Count);
+        using var selections = JsonDocument.Parse(saved.InfluenceOverlapSelectionsJson);
+        Assert.Single(selections.RootElement.EnumerateArray());
+        Assert.Equal("overlap-decision", (await durable.GetEventsAsync(id))[1].Kind);
+    }
+
 }
