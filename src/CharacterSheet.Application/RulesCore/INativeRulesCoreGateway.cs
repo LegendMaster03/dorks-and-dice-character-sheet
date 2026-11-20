@@ -40,6 +40,16 @@ public interface INativeRulesCoreGateway
             "Verified supernatural acquisition/progression planning is unsupported."));
 
     /// <summary>
+    /// Backend-only creation or replacement of one source-authorized exact
+    /// supernatural effect overlap decision. No caller-provided decision is
+    /// trusted; the native host must independently verify the current owner.
+    /// </summary>
+    Task<JsonNode> PlanVerifiedInfluenceOverlapAsync(
+        JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException(
+            "Verified supernatural overlap planning is unsupported."));
+
+    /// <summary>
     /// Authenticated read of persistent manifestations. Rules Core requires a
     /// separate independently verifying host source provider. Without it, a
     /// stored form or an echoed receipt must never become playable mechanics.
