@@ -64,6 +64,16 @@ public sealed class DelegatedRulesCoreGateway(
             "/api/mechanics/v1/characters/supernatural/ownership/plan",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    /// <summary>
+    /// Separately verified supernatural effect-writer decisions. The endpoint
+    /// is a read-only plan and never issues entitlement from delegation alone.
+    /// </summary>
+    public Task<JsonNode> PlanVerifiedInfluenceOverlapAsync(
+        JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post,
+            "/api/mechanics/v1/characters/supernatural/overlaps/plan",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> EvaluateVerifiedManifestationStateAsync(
         JsonElement request, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Post,
