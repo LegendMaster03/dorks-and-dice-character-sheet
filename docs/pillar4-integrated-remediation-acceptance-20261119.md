@@ -1,6 +1,6 @@
 # Pillar 4 — integrated remediation acceptance record
 
-**Date:** November 19, 2026  
+**Updated:** November 20, 2026  
 **Repositories:** `LegendMaster03/dorks-and-dice-rules-core` and `LegendMaster03/dorks-and-dice-character-sheet`  
 **Branches:** `integration/pillar4-infrastructure-remediation-20261119` and `integration/pillar4-character-state-remediation-20261119`  
 **Pinned Rules Core (including current main crafting/competency work):** `dbed4584febfa1b56c1ec3969ae650f12bca04ac`  
@@ -20,7 +20,7 @@ The work covers Pillar 4 acquisition/progression (A), effective-character compos
 | C1 — Canonical acquisition/progression planner | Version-2 `/characters/supernatural/ownership/plan`, independently verified host provider, exact request/intent/revision checks | Implemented; test-only independent source |
 | C2 — Durable progression journal | Serializable PostgreSQL CAS, consumed eligibility history, immutable receipts, reload and tamper tests | Implemented at storage boundary |
 | C3 — Durable overlap decisions | Separate version-1 `/characters/supernatural/overlaps/plan`, `overlap-decision` receipt kind, same-collision-only replacement, restart/forgery/concurrency checks | Implemented at storage boundary, no production source policy |
-| C4 — Full combined lifecycle | Individual real Core HTTP/PostgreSQL acquisition, advance, overlap replacement, manifestation/reversion and read scenarios; native combined advancement-after-overlap regression | **Partial**; one orchestrated acquisition-to-overlap-to-form lifecycle is not complete |
+| C4 — Full combined lifecycle | `FullSyntheticLifecycleComposesAcquisitionProgressionOverlapExpressionAndFormReversion` now exercises independent acquisitions, progression, source-scoped overlap selection, expression, Wolf activation, Class change while active, reversion, full receipt chain and restart on one character through real Core HTTP/PostgreSQL | **Partial**; Origin mutation while active, cross-service concurrent revocation, and unapproved generic mechanics policies remain separate acceptance gates |
 
 The original requested **20 integrated acceptance scenarios** must not be marked complete from the above independent slices. The older Character State Increment 4 **32-scenario** matrix is separate and retains its own outstanding production-authority cases.
 
@@ -41,13 +41,21 @@ The synthetic host verifier reads the persisted owner, current primary scores an
 - Native HTTP: `VerifiedSupernaturalOwnershipHttpPlansAcquisitionAndAdvanceButRejectsReplayedEvidence`.
 - Character Sheet contracts: `OverlapPlanRequiresExactIdentityAndImmutableDecisionEvidence`, `OverlapSourceMustBeBoundToTheExactOwnedCharacterAndIntent`, plus ownership-plan correlation tests.
 - PostgreSQL: `OverlapDecisionsCommitSeparatelyAndSupersedeOnlyExactScopeAfterReload`, `HistoricalOverlapSnapshotCorruptionRejectsSubsequentCommit`, `ConcurrentOverlapWritersCanNotBothCommitTheSameSupernaturalRevision`, `OwnershipProgressionReceiptChainRejectsLostEligibilityAfterDatabaseReload`.
-- Real Core HTTP + PostgreSQL: `SyntheticSupernaturalOwnershipAcquiresAndAdvancesThroughRealCoreAndPostgres`, `IndependentlyVerifiedOverlapDecisionSurvivesRealCoreHttpAndPostgresRestart`, and existing independently authenticated form entry/reversion, composite form, Origin and Class inheritance tests.
+- Real Core HTTP + PostgreSQL: `SyntheticSupernaturalOwnershipAcquiresAndAdvancesThroughRealCoreAndPostgres`, `IndependentlyVerifiedOverlapDecisionSurvivesRealCoreHttpAndPostgresRestart`, `FullSyntheticLifecycleComposesAcquisitionProgressionOverlapExpressionAndFormReversion`, and existing independently authenticated form entry/reversion, composite form, Origin and Class inheritance tests.
+
+### Combined lifecycle acceptance and integration fix
+
+The single-character test now records eight immutable supernatural receipts: a separately source-qualified preowned Wolf/Hybrid form acquisition, two Core-planned influence acquisitions, one source-verified advancement, the exact writer-selection decision, an expression change, Wolf activation, and reversion. It verifies that a dormant first writer does not displace the active second writer, that expression activation applies the previously authorized choice, that primary Class/ability advancement changes the active form projection without rewriting supernatural ownership, and that reversion and fresh DbContext reconstruction reproduce the latest primary plus its unchanged influence progression.
+
+The initial combined test correctly returned an unresolved mechanics read after source-verified overlap issuance. The defect was in the Character Sheet request adapters: `CharacterEffectiveStateService` and `CharacterManifestationTransitionService` forwarded persistent influences but omitted the already persisted `InfluenceOverlapSelectionsJson`. Both now forward this exact committed collection. Rules Core still separately verifies every decision and rejects missing or forged source authority. No UI, acquisition grants, or gameplay rule was added to fix the transport omission.
+
+The test-only second acquisition source uses its own definition occurrence and event receipt. Its first attempt failed the canonical Core source-occurrence comparison, and the corrected fixture preserved that fail-closed check. The preowned forms are deliberately **not** produced by the native influence acquisition planner and have a separate synthetic source receipt; this remains a synthetic combined infrastructure validation, not proof that first-party form content can be acquired in production.
 
 Each assertion is scoped to its actual synthetic fixture. An independently verified Core plan remains a proposal until the Character Sheet commit succeeds.
 
 ## Outstanding acceptance and design gates
 
-1. **Combined lifecycle:** One character acquisition of multiple independently verified effects through the Core ownership coordinator, subsequent overlap decision, expression change, form activation and reversion, Class/Origin changes, persisted reconstitution and conflicting writes must be exercised in a single authenticated acceptance sequence. Existing targeted suites do not substitute for that scenario.
+1. **Remaining combined-lifecycle variants:** The single-character Core/PostgreSQL acquisition, progression, overlap, expression, form, Class advancement, reversion and restart path now passes. Missing in that one sequence are an independently authorized Origin change while the form is active; simultaneous conflicting mutation attempts between all four coordinators; and a commit-time Site revocation fence. Existing isolated Class/Origin and PostgreSQL concurrency tests do not close those combined variants.
 2. **Source authority:** Independently authenticated production first-party acquisition/progression, DM scope and source-rule ownership are not installed. The absence is intentional while first-party content remains deferred; synthetic providers must never be registered in production.
 3. **Mechanical policy:** Creature type/targeting; non-walking movement modes; action and speech capabilities; form-specific Class feature and spell use; HP/current-max transfer; equipment shape/fit/usability; cross-influence condition/exposure histories; resource spending/recovery and permanent reconstruction still require approved shared contracts or authored gameplay rules. Do not infer policies from monster stat blocks.
 4. **Commit-time Site revocation:** Fresh Site checks are not a distributed commit fence. The separate R3 admission/revocation work remains unmerged; this integration does not claim to resolve a Site revocation occurring between the final check and PostgreSQL commit.
@@ -56,7 +64,7 @@ Each assertion is scoped to its actual synthetic fixture. An independently verif
 ## Validated revisions and CI
 
 - Rules Core `dbed4584febfa1b56c1ec3969ae650f12bca04ac`: full native mechanics/host regression, [GitHub Actions run 44651420294](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/44651420294) — **passed**.
-- Character Sheet `afff26a36ac589f3f07cccaa9484728ac35ca9c6`: full validation, PostgreSQL and container smoke, [run 44650374602](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44650374602) — **passed**.
-- Paired real Core HTTP/PostgreSQL and Mixed-Origin compatibility on that Character Sheet revision, [run 44650374706](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44650374706) — **passed**. The next CI run pins the exact Rules Core revision above.
+- Character Sheet `1bd0353601b098bab6b672c09ed5fe021bcef0b1`: full validation, PostgreSQL and container smoke, [run 44687836888](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44687836888) — **passed**.
+- Paired real Core HTTP/PostgreSQL and Mixed-Origin compatibility at the same Character Sheet revision, pinned to the Rules Core revision above, [run 44687836870](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44687836870) — **passed**.
 
 Neither integration branch is merged into `main`. The branches should remain available for the remaining acceptance work and an independent review.
