@@ -1603,6 +1603,51 @@ public sealed class CharacterStateCrossRepositoryTests
         }
     }
 
+    /// <summary>
+    /// An independently scripted source permits only the exact acquired first
+    /// influence to change phase. The second source remains active throughout.
+    /// </summary>
+    private sealed class TrustedCombinedExpressionSource : ITrustedCharacterInfluenceExpressionSource
+    {
+        public Task<TrustedInfluenceExpressionChange?> PrepareAsync(
+            Guid characterId, SiteCharacterProjection authorizedCharacter,
+            CharacterSupernaturalState committed, string influenceId,
+            string intentId, string eventId, CancellationToken ct)
+        {
+            if (authorizedCharacter.CharacterId != characterId ||
+                !authorizedCharacter.AllowsOrdinaryEditingByLifecycle ||
+                influenceId != "fixture.owned.wolf" ||
+                intentId != "expression:activate-first" ||
+                eventId != "expression:activate-first")
+                return Task.FromResult<TrustedInfluenceExpressionChange?>(null);
+            using var document = JsonDocument.Parse(committed.PersistentInfluencesJson);
+            var first = document.RootElement.EnumerateArray().Single(x =>
+                x.GetProperty("id").GetString() == influenceId);
+            if (first.GetProperty("acquisitionEvidenceId").GetString() !=
+                    "fixture:proof:acquire" ||
+                first.GetProperty("expression").GetProperty("phase").GetString() !=
+                    "dormant" ||
+                first.GetProperty("expressionEvidenceId").GetString() !=
+                    "fixture:proof:acquire")
+                return Task.FromResult<TrustedInfluenceExpressionChange?>(null);
+            return Task.FromResult<TrustedInfluenceExpressionChange?>(
+                new(new Dictionary<string, string> { ["phase"] = "active" },
+                    "fixture:expression:active:first",
+                    "fixture:verified-expression-rule:first"));
+        }
+    }
+
+    private static NativeCharacterInfluenceEffect CombinedMintedPower(
+        string owner, string effect, int value, string evidence,
+        NativeOriginSourceReference source) =>
+        new(owner + ":e:acquisition:" + effect,
+            new NativeOriginSourceOccurrence(source, "effects." + effect),
+            evidence, OwnershipBasis,
+            new Dictionary<string, string> { ["phase"] = "active" },
+            [NativeCharacterSheetResolver.PrimarySheetId],
+            NativeInfluenceCharacteristic.AbilityScore,
+            NativeInfluenceOperation.Replace, Key: "strength", NumericValue: value);
+
     private static NativeManifestationResourcePolicy[] FourOwnerPolicies() =>
     [
         new("resource.primary.1", NativeManifestationResourceMode.Inherit),
@@ -1687,6 +1732,8 @@ public sealed class CharacterStateCrossRepositoryTests
                     state.AlternateSheets, Wire)) ||
                 !SameJson(owner.PersistentInfluencesJson, JsonSerializer.Serialize(
                     state.PersistentInfluences ?? [], Wire)) ||
+                !SameJson(owner.InfluenceOverlapSelectionsJson, JsonSerializer.Serialize(
+                    state.InfluenceOverlapSelections ?? [], Wire)) ||
                 !SameJson(owner.LedgerJson, JsonSerializer.Serialize(current, Wire)))
                 return null;
 
@@ -1694,6 +1741,29 @@ public sealed class CharacterStateCrossRepositoryTests
             if (!receipts.Any(x => x.EventId == "fixture:acquire-werewolf" &&
                 x.AuthorizationEvidenceId == "fixture:verified-source"))
                 return null;
+            var firstCombined = (state.PersistentInfluences ?? [])
+                .SingleOrDefault(x => x.Id == "fixture.owned.wolf");
+            if (firstCombined is not null)
+            {
+                if (!receipts.Any(x => x.EventId == "synthetic:acquire" &&
+                        x.AuthorizationEvidenceId == "fixture:proof:acquire") ||
+                    !receipts.Any(x => x.EventId == "synthetic:acquire-second" &&
+                        x.AuthorizationEvidenceId == "fixture:proof:second") ||
+                    !receipts.Any(x => x.EventId == "synthetic:advance" &&
+                        x.AuthorizationEvidenceId == "fixture:proof:advance") ||
+                    !receipts.Any(x => x.EventId == "overlap:select-a" &&
+                        x.Kind == "overlap-decision" &&
+                        x.AuthorizationEvidenceId == "fixture:overlap:a"))
+                    return null;
+                if (firstCombined.Expression.TryGetValue("phase", out var combinedPhase) &&
+                    combinedPhase == "active" &&
+                    !receipts.Any(x => x.Kind == "expression-change" &&
+                        x.EventId == "expression:activate-first" &&
+                        x.AuthorizationEvidenceId ==
+                            "fixture:verified-expression-rule:first"))
+                    return null;
+            }
+
             // This test-only policy accepts the changed expression only when
             // PostgreSQL contains the exact independently recorded audit.
             // A persisted expression or delegated ticket alone is insufficient.
@@ -1781,7 +1851,8 @@ public sealed class CharacterStateCrossRepositoryTests
         NativeCharacterState state,
         NativeManifestationLedger committed,
         NativeManifestationTransitionRequest submitted,
-        IReadOnlySet<string> recordedEvents) : INativeCharacterManifestationAuthority
+        IReadOnlySet<string> recordedEvents) : INativeCharacterManifestationAuthority,
+        INativeCharacterInfluenceOverlapAuthority
     {
         private bool Character(string id) => id == state.CharacterId;
         private static bool Source(NativeOriginSourceReference source) =>
@@ -1868,9 +1939,43 @@ public sealed class CharacterStateCrossRepositoryTests
             JsonElement.DeepEquals(JsonSerializer.SerializeToElement(actual, Wire),
                 JsonSerializer.SerializeToElement(expected, Wire));
 
+        private static bool ValidCombinedOwner(NativeCharacterPersistentInfluence influence)
+        {
+            if (influence.Expression.Count != 1 ||
+                !influence.Expression.TryGetValue("phase", out var phase) ||
+                phase is not ("dormant" or "active") ||
+                influence.Effects.Count != 1 ||
+                influence.GrantApplicability?.Count > 0)
+                return false;
+            if (influence.Id == "fixture.owned.wolf")
+                return influence.DefinitionId == "fixture.definition.supernatural" &&
+                    influence.DefinitionSource == OwnershipSource() &&
+                    influence.AcquisitionEvidenceId == "fixture:proof:acquire" &&
+                    influence.ExpressionEvidenceId ==
+                        (phase == "dormant" ? "fixture:proof:acquire" :
+                            "fixture:expression:active:first") &&
+                    ExactFixture(influence.Effects[0], CombinedMintedPower(
+                        influence.Id, "first-power", 13, "fixture:proof:acquire",
+                        OwnershipSource())) &&
+                    (influence.Progression ?? []).Count == 2;
+            var secondSource = new NativeOriginSourceReference(
+                NativeOriginSourceKind.Native, "fixture.supernatural.second", "fixture-v1");
+            return influence.Id == "fixture.owned.second" &&
+                phase == "active" &&
+                influence.DefinitionId == "fixture.definition.second" &&
+                influence.DefinitionSource == secondSource &&
+                influence.AcquisitionEvidenceId == "fixture:proof:second" &&
+                influence.ExpressionEvidenceId == "fixture:proof:second" &&
+                ExactFixture(influence.Effects[0], CombinedMintedPower(
+                    influence.Id, "second-power", 15, "fixture:proof:second",
+                    secondSource)) &&
+                (influence.Progression ?? []).Count == 1;
+        }
+
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
             Character(id) &&
             (ExactFixture(influence, PassiveResourceInfluence()) ||
+             ValidCombinedOwner(influence) ||
              (influence.Expression.TryGetValue("phase", out var phase) &&
               phase is "dormant" or "active" &&
               ExactFixture(influence, GatedProgressiveInfluence(phase,
@@ -1880,18 +1985,58 @@ public sealed class CharacterStateCrossRepositoryTests
             AuthorizesInfluence(id, influence);
         public bool AuthorizesEffect(string id, string influenceId,
             NativeCharacterInfluenceEffect effect) =>
-            Character(id) && influenceId == "influence.synthetic.pool" &&
-            ExactFixture(effect, GatedProgressiveInfluence().Effects.Single());
+            Character(id) &&
+            (influenceId == "influence.synthetic.pool" &&
+                ExactFixture(effect, GatedProgressiveInfluence().Effects.Single()) ||
+             influenceId == "fixture.owned.wolf" &&
+                ExactFixture(effect, CombinedMintedPower(influenceId,
+                    "first-power", 13, "fixture:proof:acquire", OwnershipSource())) ||
+             influenceId == "fixture.owned.second" &&
+                ExactFixture(effect, CombinedMintedPower(influenceId,
+                    "second-power", 15, "fixture:proof:second",
+                    new NativeOriginSourceReference(NativeOriginSourceKind.Native,
+                        "fixture.supernatural.second", "fixture-v1"))));
         public bool AuthorizesInfluenceProgression(string id, string influenceId,
             NativeSheetEarnedProgression progression) =>
-            Character(id) && influenceId == "influence.synthetic.pool" &&
-            ExactFixture(progression, Earned("curse"));
+            Character(id) &&
+            (influenceId == "influence.synthetic.pool" &&
+                ExactFixture(progression, Earned("curse")) ||
+             influenceId == "fixture.owned.wolf" &&
+                (progression.Id == influenceId + ":p:initial" ||
+                 progression.Id == influenceId + ":p:moonrise") &&
+                progression.SourceOccurrence.Source == OwnershipSource() &&
+                (progression.AcquisitionEvidenceId == "fixture:proof:acquire" ||
+                 progression.AcquisitionEvidenceId == "fixture:proof:advance") ||
+             influenceId == "fixture.owned.second" &&
+                progression.Id == influenceId + ":p:initial" &&
+                progression.SourceOccurrence.Source == new NativeOriginSourceReference(
+                    NativeOriginSourceKind.Native, "fixture.supernatural.second", "fixture-v1") &&
+                progression.AcquisitionEvidenceId == "fixture:proof:second");
         public bool AuthorizesInfluenceGrant(string id, string influenceId,
             NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
             AuthorizesInfluenceProgression(id, influenceId, progression) &&
-            ExactFixture(grant, Earned("curse").Grants.Single());
+            (influenceId == "influence.synthetic.pool" &&
+                ExactFixture(grant, Earned("curse").Grants.Single()) ||
+             influenceId == "fixture.owned.wolf" &&
+                grant.Id == influenceId + ":p:moonrise:g:lunar-grant" &&
+                grant.DefinitionId == "fixture.capability.lunar" &&
+                grant.SourceOccurrence == OwnershipOccurrence("grants.lunar") &&
+                grant.AcquisitionEvidenceId == "fixture:proof:advance");
         public bool AuthorizesInfluenceApplicability(string id, string influenceId,
             NativeInfluenceGrantApplicability decision) => false;
+        public bool AuthorizesOverlapSelection(string id,
+            NativeInfluenceOverlapSelection decision) =>
+            Character(id) && recordedEvents.Contains("overlap:select-a") &&
+            ExactFixture(decision,
+                OverlapDecision("fixture.overlap.a",
+                    "fixture.owned.wolf:e:acquisition:first-power",
+                    "fixture:overlap:a") with
+                {
+                    EffectIds = [
+                        "fixture.owned.wolf:e:acquisition:first-power",
+                        "fixture.owned.second:e:acquisition:second-power"
+                    ]
+                });
     }
 
 
