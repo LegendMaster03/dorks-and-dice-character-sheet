@@ -200,4 +200,112 @@ public sealed class CharacterSupernaturalOwnershipContractTests
             }), "fixture:trusted");
         Assert.False(Matches(invalid));
     }
+
+    private static JsonNode OverlapPlanned() => JsonNode.Parse("""
+        {
+          "contractVersion":1,
+          "rulesetId":"rules",
+          "fingerprint":"catalog",
+          "status":"planned",
+          "committed":false,
+          "effectiveMechanicsReady":false,
+          "plan":{
+            "status":"planned",
+            "characterId":"11111111-2222-3333-4444-555555555555",
+            "eventId":"overlap:1",
+            "intentId":"intent:overlap:1",
+            "authorizationEvidenceId":"fixture:overlap",
+            "expectedSupernaturalRevision":1,
+            "expectedManifestationRevision":0,
+            "expectedProgressionRevision":0,
+            "decisionId":"fixture.decision",
+            "replacedDecisionId":null,
+            "proposedState":{
+              "characterId":"11111111-2222-3333-4444-555555555555",
+              "primaryMechanics":{},
+              "alternateSheets":[],
+              "persistentInfluences":[],
+              "influenceOverlapSelections":[{
+                "id":"fixture.decision",
+                "authorizationEvidenceId":"fixture:overlap"
+              }]
+            }
+          }
+        }
+        """)!;
+
+    private static bool AcceptOverlap(JsonNode response) =>
+        CharacterInfluenceOverlapDecisionService.TryReadVerifiedPlan(
+            response, Character, "intent:overlap:1", "overlap:1",
+            "rules", "catalog", 1, 0, 0, "fixture:overlap",
+            out _, out _, out _);
+
+    [Fact]
+    public void OverlapPlanRequiresExactIdentityAndImmutableDecisionEvidence()
+    {
+        var accepted = OverlapPlanned();
+        Assert.True(CharacterInfluenceOverlapDecisionService.TryReadVerifiedPlan(
+            accepted, Character, "intent:overlap:1", "overlap:1",
+            "rules", "catalog", 1, 0, 0, "fixture:overlap",
+            out var selections, out var decision, out var replaced));
+        Assert.Single(selections!);
+        Assert.Equal("fixture.decision", decision);
+        Assert.Null(replaced);
+
+        foreach (var (scope, key, value) in new[]
+        {
+            ("root", "committed", "true"),
+            ("root", "effectiveMechanicsReady", "true"),
+            ("root", "fingerprint", "\"stale\""),
+            ("plan", "eventId", "\"forged\""),
+            ("plan", "intentId", "\"forged\""),
+            ("plan", "authorizationEvidenceId", "\"forged\""),
+            ("plan", "decisionId", "\"forged\""),
+            ("plan", "expectedSupernaturalRevision", "2"),
+            ("plan", "expectedProgressionRevision", "1")
+        })
+        {
+            var forged = OverlapPlanned();
+            var target = scope == "root" ? forged : forged["plan"]!;
+            target.AsObject()[key] = JsonNode.Parse(value);
+            Assert.False(AcceptOverlap(forged), scope + "." + key);
+        }
+
+        var missing = OverlapPlanned();
+        missing["plan"]!["proposedState"]!["influenceOverlapSelections"] = new JsonArray();
+        Assert.False(AcceptOverlap(missing));
+
+        var forgedEvidence = OverlapPlanned();
+        forgedEvidence["plan"]!["proposedState"]!
+            ["influenceOverlapSelections"]![0]!["authorizationEvidenceId"] = "forged";
+        Assert.False(AcceptOverlap(forgedEvidence));
+    }
+
+    [Fact]
+    public void OverlapSourceMustBeBoundToTheExactOwnedCharacterAndIntent()
+    {
+        TrustedInfluenceOverlapDecisionMaterial Material(
+            string intent = "intent:overlap:1", string characterId = "") => new(
+            JsonSerializer.SerializeToElement(new
+            {
+                characterId = characterId == "" ? Character.ToString("D") : characterId,
+                eventId = "overlap:1", intentId = intent,
+                rulesetId = "rules", fingerprint = "catalog",
+                decisionId = "fixture.decision", replacedDecisionId = (string?)null,
+                authorizationEvidenceId = "fixture:overlap",
+                sourceOccurrence = new
+                {
+                    source = new { kind = 0, id = "fixture.supernatural", version = "v1" },
+                    occurrencePath = "overlaps.fixture"
+                }
+            }), "fixture:overlap");
+        bool Matches(TrustedInfluenceOverlapDecisionMaterial material) =>
+            CharacterInfluenceOverlapDecisionService.MatchesTrustedSource(material,
+                Character, "intent:overlap:1", "overlap:1", "rules", "catalog");
+
+        Assert.True(Matches(Material()));
+        Assert.False(Matches(Material(intent: "forged")));
+        Assert.False(Matches(Material(characterId: Guid.NewGuid().ToString("D"))));
+    }
+
 }
