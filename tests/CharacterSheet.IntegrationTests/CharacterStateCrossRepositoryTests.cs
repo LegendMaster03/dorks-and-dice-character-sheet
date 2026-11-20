@@ -1151,21 +1151,12 @@ public sealed class CharacterStateCrossRepositoryTests
             CharacterSupernaturalOwnershipOperation.Acquire,
             "synthetic:acquire-second", 2);
         Assert.Contains("fixture.owned.second", second.PersistentInfluencesJson);
-        // The collision decision can be source-authorized before either
-        // effect is active. The initially dormant first influence must not
-        // displace the independently acquired second source.
-        var overlapService = new CharacterInfluenceOverlapDecisionService(
-            site, site, store, gateway, new SyntheticOverlapTrustedSource(fingerprint),
-            buildService, stateService, originService);
-        var choice = await overlapService.ApplyAsync(id, 3, 0,
-            "intent:overlap:select-a", "overlap:select-a");
-        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, choice.Status);
-        Assert.Equal(4, choice.StateRevision);
+        // Only the second source is active initially, so there is no
+        // competing writer set to decide yet. A persisted selection at this
+        // stage would claim a collision that has not occurred.
         var dormant = await Reader(db, id, gateway).GetAsync(id);
         Assert.NotNull(dormant.View);
-        Assert.True(dormant.View!.Status == "partial",
-            "Dormant combined projection: " + dormant.View.Status +
-            "; unresolved: " + string.Join(", ", dormant.View.Unresolved));
+        Assert.Equal("partial", dormant.View!.Status);
         Assert.Equal(15, dormant.View.NativeProjection!["effectiveCharacter"]!
             ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
 
@@ -1192,10 +1183,10 @@ public sealed class CharacterStateCrossRepositoryTests
             new TrustedCombinedExpressionSource(), gateway,
             Reader(expressionDb, id, gateway));
         var advanceTask = advanceService.ApplyAsync(id,
-            CharacterSupernaturalOwnershipOperation.Advance, 4, 0,
+            CharacterSupernaturalOwnershipOperation.Advance, 3, 0,
             "intent:synthetic:advance", "synthetic:advance");
         var expressionTask = expressionService.ApplyAsync(
-            id, 4, 0, "fixture.owned.wolf",
+            id, 3, 0, "fixture.owned.wolf",
             "expression:activate-first", "expression:activate-first");
         await Task.WhenAll(advanceTask, expressionTask);
         var advanceWon = advanceTask.Result.Status ==
@@ -1204,12 +1195,12 @@ public sealed class CharacterStateCrossRepositoryTests
             CharacterInfluenceExpressionChangeStatus.Applied;
         Assert.True(advanceWon ^ expressionWon,
             "Exactly one acquisition-progression or expression writer must " +
-            "commit revision five. Advancement: " + advanceTask.Result.Status +
+            "commit revision four. Advancement: " + advanceTask.Result.Status +
             "; expression: " + expressionTask.Result.Status);
         var oneWinner = (await store.GetAsync(id))!;
-        Assert.Equal(5, oneWinner.Revision);
+        Assert.Equal(4, oneWinner.Revision);
         Assert.Equal(0, oneWinner.LedgerRevision);
-        Assert.Equal(5, (await store.GetEventsAsync(id)).Count);
+        Assert.Equal(4, (await store.GetEventsAsync(id)).Count);
         Assert.Equal(advanceWon ? 3 : 2,
             JsonNode.Parse(oneWinner.ProgressionJournalJson)!
                 ["revision"]!.GetValue<long>());
@@ -1217,7 +1208,7 @@ public sealed class CharacterStateCrossRepositoryTests
         if (!advanceWon)
         {
             var retry = await owners.ApplyAsync(id,
-                CharacterSupernaturalOwnershipOperation.Advance, 5, 0,
+                CharacterSupernaturalOwnershipOperation.Advance, 4, 0,
                 "intent:synthetic:advance", "synthetic:advance");
             Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied,
                 retry.Status);
@@ -1228,21 +1219,36 @@ public sealed class CharacterStateCrossRepositoryTests
                 site, site, store, new TrustedCombinedExpressionSource(), gateway,
                 Reader(db, id, gateway));
             var retry = await retryExpression.ApplyAsync(
-                id, 5, 0, "fixture.owned.wolf",
+                id, 4, 0, "fixture.owned.wolf",
                 "expression:activate-first", "expression:activate-first");
             Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied,
                 retry.Status);
         }
 
         var combined = (await store.GetAsync(id))!;
-        Assert.Equal(6, combined.Revision);
+        Assert.Equal(5, combined.Revision);
         Assert.Equal(0, combined.LedgerRevision);
         Assert.Contains("fixture.capability.lunar", combined.PersistentInfluencesJson);
         Assert.Equal(3, JsonNode.Parse(combined.ProgressionJournalJson)!
             ["revision"]!.GetValue<long>());
-        var afterBoth = await Reader(db, id, gateway).GetAsync(id);
-        Assert.Equal("partial", afterBoth.View!.Status);
-        Assert.Equal(13, afterBoth.View.NativeProjection!["effectiveCharacter"]!
+
+        // Both source-authenticated effects now compete on strength. No
+        // writer decision is inferred from acquisition order or last update.
+        var withoutDecision = await Reader(db, id, gateway).GetAsync(id);
+        Assert.NotNull(withoutDecision.View);
+        Assert.Equal("unresolved", withoutDecision.View!.Status);
+        Assert.Null(withoutDecision.View.NativeProjection);
+
+        var overlapService = new CharacterInfluenceOverlapDecisionService(
+            site, site, store, gateway, new SyntheticOverlapTrustedSource(fingerprint),
+            buildService, stateService, originService);
+        var choice = await overlapService.ApplyAsync(id, 5, 0,
+            "intent:overlap:select-a", "overlap:select-a");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, choice.Status);
+        Assert.Equal(6, choice.StateRevision);
+        var selected = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", selected.View!.Status);
+        Assert.Equal(13, selected.View.NativeProjection!["effectiveCharacter"]!
             ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
 
         var acquiredBeforeForm = (await store.GetAsync(id))!;
@@ -1308,12 +1314,11 @@ public sealed class CharacterStateCrossRepositoryTests
             persisted.PersistentInfluencesJson, Wire)!.Length);
         var sequence = (await durable.GetEventsAsync(id))
             .Select(x => x.Kind).ToArray();
-        Assert.Equal(new[]
-        {
-            "acquisition", "acquisition", "acquisition", "overlap-decision"
-        }, sequence.Take(4));
+        Assert.Equal(new[] { "acquisition", "acquisition", "acquisition" },
+            sequence.Take(3));
         Assert.Equal(new[] { "expression-change", "progression" },
-            sequence.Skip(4).Take(2).OrderBy(x => x, StringComparer.Ordinal));
+            sequence.Skip(3).Take(2).OrderBy(x => x, StringComparer.Ordinal));
+        Assert.Equal("overlap-decision", sequence[5]);
         Assert.Equal(new[] { "transition", "transition" }, sequence.Skip(6));
         var restarted = await Reader(restartedDb, id, gateway).GetAsync(id);
         Assert.Equal("partial", restarted.View!.Status);
