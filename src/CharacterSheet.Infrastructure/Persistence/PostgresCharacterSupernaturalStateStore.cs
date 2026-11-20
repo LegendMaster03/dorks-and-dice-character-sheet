@@ -379,6 +379,10 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 existing.CharacterId))
             throw new ArgumentException(
                 "The persisted progression journal differs from its latest immutable receipt.");
+        if (lastOverlapSelections is null &&
+            !SameJson("[]", existing.InfluenceOverlapSelectionsJson))
+            throw new ArgumentException(
+                "Persisted overlap decisions lack an independently audited source receipt.");
         if (lastOverlapSelections is not null &&
             !SameJson(lastOverlapSelections, existing.InfluenceOverlapSelectionsJson))
             throw new ArgumentException(
