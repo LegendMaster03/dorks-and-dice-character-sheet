@@ -1611,4 +1611,116 @@ public sealed class CharacterSupernaturalPersistenceTests
         await Assert.ThrowsAsync<ArgumentException>(() =>
             reloaded.CommitVerifiedAsync(advancement with { IsTransition = true }));
     }
+
+    private static string OwnershipJournal(Guid id, long revision,
+        IReadOnlyList<string> events, IReadOnlyList<string> consumedEvidence) =>
+        JsonSerializer.Serialize(new
+        {
+            characterId = id.ToString("D"), revision,
+            processedEventIds = events,
+            consumedEligibilityEvidenceIds = consumedEvidence
+        });
+
+    [Fact]
+    public async Task OwnershipProgressionReceiptChainRejectsLostEligibilityAfterDatabaseReload()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var initialContext = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(initialContext, id);
+
+        var firstInfluence = SyntheticInfluence("1", "fixture:stage1");
+        var acquire = Write(id, digest, eventId: "ownership:acquire",
+            alternate: "[]") with
+        {
+            IsOwnershipPlan = true,
+            PersistentInfluencesJson = firstInfluence,
+            ProgressionJournalJson = OwnershipJournal(id, 1,
+                ["ownership:acquire"], []),
+            InfluenceOverlapSelectionsJson = "[]"
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(acquire)).Status);
+
+        var advancedInfluences = JsonNode.Parse(firstInfluence)!.AsArray();
+        advancedInfluences[0]!["progression"]!.AsArray().Add(JsonNode.Parse("""
+            {"id":"curse.moonrise","grants":[]}
+            """));
+        var advance = Write(id, digest, 1, 0, 0, "ownership:advance",
+            alternate: "[]") with
+        {
+            IsOwnershipPlan = true,
+            IsProgression = true,
+            PersistentInfluencesJson = advancedInfluences.ToJsonString(),
+            ProgressionJournalJson = OwnershipJournal(id, 2,
+                ["ownership:acquire", "ownership:advance"],
+                ["fixture:verified-moonrise"]),
+            InfluenceOverlapSelectionsJson = "[]"
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(advance)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.DuplicateEvent,
+            (await store.CommitVerifiedAsync(advance)).Status);
+
+        await using var resumedContext = new CharacterSheetDbContext(database.CreateOptions());
+        var resumed = new PostgresCharacterSupernaturalStateStore(resumedContext);
+        var saved = (await resumed.GetAsync(id))!;
+        Assert.Equal(2, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Contains("curse.moonrise", saved.PersistentInfluencesJson);
+        Assert.Equal(2, (await resumed.GetEventsAsync(id)).Count);
+
+        // Introduce a second source acquisition without affecting the
+        // independent progression journal or the prior earned capabilities.
+        var nextInfluences = JsonNode.Parse(saved.PersistentInfluencesJson)!.AsArray();
+        var second = nextInfluences[0]!.DeepClone().AsObject();
+        second["id"] = "curse.second";
+        second["acquisitionEvidenceId"] = "fixture:acquired-second";
+        second["expressionEvidenceId"] = "fixture:other-stage1";
+        second["progression"]![0]!["id"] = "curse.second.earned";
+        second["progression"]!.AsArray().RemoveAt(1);
+        nextInfluences.Add(second);
+        var next = Write(id, digest, 2, 0, 0, "acquire:other",
+            alternate: "[]") with
+        {
+            PersistentInfluencesJson = nextInfluences.ToJsonString()
+        };
+
+        // This mutation is not possible through the application planner.
+        // It simulates a corrupted historical PostgreSQL receipt and verifies
+        // that the next independently verified commit fails closed.
+        var previous = Assert.Single((await resumed.GetEventsAsync(id)),
+            receipt => receipt.EventId == "ownership:acquire");
+        var forged = OwnershipJournal(id, 1, ["ownership:acquire"],
+            ["fixture:phantom-eligibility"]);
+        Assert.Equal(1, await resumedContext.SupernaturalEventReceipts
+            .Where(x => x.CharacterId == id && x.EventId == "ownership:acquire")
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.ProgressionJournalSnapshotJson, forged)));
+
+        await using var corruptContext = new CharacterSheetDbContext(database.CreateOptions());
+        var corrupted = new PostgresCharacterSupernaturalStateStore(corruptContext);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            corrupted.CommitVerifiedAsync(next));
+        Assert.Equal(2, (await corrupted.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await corrupted.GetEventsAsync(id)).Count);
+
+        Assert.Equal(1, await resumedContext.SupernaturalEventReceipts
+            .Where(x => x.CharacterId == id && x.EventId == "ownership:acquire")
+            .ExecuteUpdateAsync(set => set.SetProperty(
+                x => x.ProgressionJournalSnapshotJson,
+                previous.ProgressionJournalSnapshotJson)));
+        await using var restoredContext = new CharacterSheetDbContext(database.CreateOptions());
+        var restored = new PostgresCharacterSupernaturalStateStore(restoredContext);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await restored.CommitVerifiedAsync(next)).Status);
+        var after = (await restored.GetAsync(id))!;
+        Assert.Equal(3, after.Revision);
+        Assert.Contains("curse.moonrise", after.PersistentInfluencesJson);
+        Assert.Contains("curse.second", after.PersistentInfluencesJson);
+        using var committedJournal = JsonDocument.Parse(after.ProgressionJournalJson);
+        Assert.Equal(2, committedJournal.RootElement
+            .GetProperty("revision").GetInt64());
+    }
+
 }
