@@ -1237,14 +1237,16 @@ public sealed class CharacterStateCrossRepositoryTests
             id, 3, 0, "fixture.owned.wolf",
             "expression:activate-first", "expression:activate-first");
         await Task.WhenAll(advanceTask, expressionTask);
-        var advanceWon = advanceTask.Result.Status ==
+        var racedAdvance = await advanceTask;
+        var racedExpression = await expressionTask;
+        var advanceWon = racedAdvance.Status ==
             CharacterSupernaturalOwnershipApplyStatus.Applied;
-        var expressionWon = expressionTask.Result.Status ==
+        var expressionWon = racedExpression.Status ==
             CharacterInfluenceExpressionChangeStatus.Applied;
         Assert.True(advanceWon ^ expressionWon,
             "Exactly one acquisition-progression or expression writer must " +
-            "commit revision four. Advancement: " + advanceTask.Result.Status +
-            "; expression: " + expressionTask.Result.Status);
+            "commit revision four. Advancement: " + racedAdvance.Status +
+            "; expression: " + racedExpression.Status);
         var oneWinner = (await store.GetAsync(id))!;
         Assert.Equal(4, oneWinner.Revision);
         Assert.Equal(0, oneWinner.LedgerRevision);
@@ -1407,13 +1409,15 @@ public sealed class CharacterStateCrossRepositoryTests
         var enterTask = competingForm.ApplyAsync(id, 8, 2,
             "reenter:wolf", "reenter:wolf");
         await Task.WhenAll(chooseTask, enterTask);
-        var choiceApplied = chooseTask.Result.Status ==
+        var racedChoice = await chooseTask;
+        var racedForm = await enterTask;
+        var choiceApplied = racedChoice.Status ==
             CharacterSupernaturalOwnershipApplyStatus.Applied;
-        var formApplied = enterTask.Result.Status ==
+        var formApplied = racedForm.Status ==
             CharacterManifestationApplyStatus.Applied;
         Assert.True(choiceApplied ^ formApplied,
             "Exactly one independently authorized coordinator may own revision nine. " +
-            "Overlap: " + chooseTask.Result.Status + "; form: " + enterTask.Result.Status);
+            "Overlap: " + racedChoice.Status + "; form: " + racedForm.Status);
 
         await using var afterRaceDb = new CharacterSheetDbContext(dbOptions);
         var afterRace = new PostgresCharacterSupernaturalStateStore(afterRaceDb);
