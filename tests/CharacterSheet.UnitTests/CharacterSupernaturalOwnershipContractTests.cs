@@ -47,6 +47,7 @@ public sealed class CharacterSupernaturalOwnershipContractTests
             "characterId":"11111111-2222-3333-4444-555555555555",
             "operation":"Acquire",
             "eventId":"acq-1",
+            "intentId":"intent-1",
             "authorizationEvidenceId":"fixture:trusted",
             "expectedSupernaturalRevision":0,
             "expectedManifestationRevision":0,
@@ -71,7 +72,7 @@ public sealed class CharacterSupernaturalOwnershipContractTests
     private static bool Accept(JsonNode response) =>
         CharacterSupernaturalOwnershipService.TryReadVerifiedPlan(
             response, Character, CharacterSupernaturalOwnershipOperation.Acquire,
-            "acq-1", "rules", "catalog", 0, 0, 0, "fixture:trusted",
+            "acq-1", "intent-1", "rules", "catalog", 0, 0, 0, "fixture:trusted",
             out _, out _, out _, out _);
 
     [Fact]
@@ -110,7 +111,7 @@ public sealed class CharacterSupernaturalOwnershipContractTests
         var source = Planned();
         Assert.True(CharacterSupernaturalOwnershipService.TryReadVerifiedPlan(
             source, Character, CharacterSupernaturalOwnershipOperation.Acquire,
-            "acq-1", "rules", "catalog", 0, 0, 0, "fixture:trusted",
+            "acq-1", "intent-1", "rules", "catalog", 0, 0, 0, "fixture:trusted",
             out var sheets, out var influences, out var journal,
             out var overlap));
         Assert.Single(sheets!);
@@ -137,6 +138,7 @@ public sealed class CharacterSupernaturalOwnershipContractTests
     [Theory]
     [InlineData("characterId", "other")]
     [InlineData("eventId", "spoof")]
+    [InlineData("intentId", "forged-intent")]
     [InlineData("operation", "Advance")]
     [InlineData("authorizationEvidenceId", "forged")]
     public void ForgedCorePlanIdentityFailsClosed(string field, string value)
