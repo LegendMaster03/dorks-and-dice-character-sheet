@@ -166,6 +166,49 @@ public sealed class CharacterStateCrossRepositoryTests
         }
     }
 
+    /// <summary>
+    /// Test-only independent source identity for two sequential Origin
+    /// revisions. It checks exact recorded evidence at each revision and the
+    /// final authorized profile rather than trusting the Core caller.
+    /// </summary>
+    private sealed class PostgresRevisedOriginAuthority(
+        DbContextOptions<CharacterSheetDbContext> options, Guid characterId,
+        string fingerprint, string finalSourceJson) : CoreOriginAuthorityProvider
+    {
+        public async Task<bool> VerifyAsync(Guid actorId, Guid id, long revision,
+            NativeOriginProfile profile, CancellationToken cancellationToken)
+        {
+            if (actorId != Actor || id != characterId || revision != 2)
+                return false;
+            await using var db = new CharacterSheetDbContext(options);
+            var saved = await db.AuthorizedOrigins.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.CharacterId == id, cancellationToken);
+            if (saved is null || saved.Revision != revision ||
+                saved.RulesetId != "first-party-001" ||
+                saved.Fingerprint != fingerprint)
+                return false;
+            using var persisted = JsonDocument.Parse(saved.ProfileJson);
+            using var authored = JsonDocument.Parse(finalSourceJson);
+            if (!JsonElement.DeepEquals(persisted.RootElement, authored.RootElement) ||
+                !JsonElement.DeepEquals(persisted.RootElement,
+                    JsonSerializer.SerializeToElement(profile, Wire)))
+                return false;
+            var events = await db.OriginEventReceipts.AsNoTracking()
+                .Where(x => x.CharacterId == id)
+                .OrderBy(x => x.CommittedRevision).ToArrayAsync(cancellationToken);
+            return events.Length == 2 &&
+                events[0].CommittedRevision == 1 &&
+                events[0].EventId == "fixture:origin-human" &&
+                events[0].AuthorizationEvidenceId == "fixture:source:human" &&
+                events[1].CommittedRevision == 2 &&
+                events[1].EventId == "fixture:origin-revised" &&
+                events[1].AuthorizationEvidenceId == "fixture:source:revised" &&
+                events.All(x => x.AuthorizationKind == "test-only" &&
+                    x.MethodId == "fixture-reconstitution" &&
+                    x.MethodRuleId == "fixture.source.origin");
+        }
+    }
+
     private sealed class OwnerAccess(Guid ownedId, bool authorize = true,
         SiteCharacterLifecycleState lifecycle = SiteCharacterLifecycleState.Active)
         : ISiteCharacterAccessGateway, ISiteFreshCharacterAccessGateway
@@ -1636,6 +1679,137 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Empty(await finalDb.SupernaturalStates.ToArrayAsync());
         Assert.Empty(await finalDb.SupernaturalEventReceipts.ToArrayAsync());
         Assert.Equal(1, await finalDb.OriginEventReceipts.CountAsync(x => x.CharacterId == id));
+    }
+
+    /// <summary>
+    /// Origin Underlying may change independently after a form has become
+    /// active. Its separately verified species identity is not equivalent to
+    /// revalidating every inherited trait, so current form mechanics must fail
+    /// closed until a shared reconstruction policy exists. This uses an
+    /// internal test-only Origin commit, not a production Origin mutation API.
+    /// </summary>
+    [Fact]
+    public async Task RevisedOriginWhileWolfIsActiveRetainsOwnedFormButBlocksStaleEffectiveMechanics()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var options = database.CreateOptions();
+        var originalUnderlying = new NativeOriginCurrentConfiguration(
+            "species.human", null, []);
+        var revisedUnderlying = new NativeOriginCurrentConfiguration(
+            "species.elf", null, []);
+        var originalProfile = new NativeOriginProfile("fixture.origin.profile",
+            originalUnderlying, originalUnderlying, [], [],
+            new NativeOriginDecisionBasis(NativeOriginAdjudication.Supported));
+        var revisedProfile = originalProfile with
+        {
+            Underlying = revisedUnderlying, Current = revisedUnderlying
+        };
+        var revisedJson = JsonSerializer.Serialize(revisedProfile, Wire);
+        // The content fingerprint is learned from the real native catalog.
+        await using var catalogHost = await CoreHost.StartAsync();
+        var catalogGateway = new RealGateway(catalogHost.Client);
+        var fingerprint = (await catalogGateway.GetNativeRulesetAsync(
+            CancellationToken.None))["fingerprint"]!.GetValue<string>();
+        var originAuthority = new PostgresRevisedOriginAuthority(
+            options, id, fingerprint, revisedJson);
+
+        var formAuthority = new PostgresSyntheticAuthorityProvider(options, id);
+        await using var core = await CoreHost.StartAsync(
+            verifiedSourceProvider: formAuthority,
+            verifiedReadProvider: formAuthority,
+            verifiedOriginProvider: originAuthority);
+        var gateway = new RealGateway(core.Client);
+        await using var db = new CharacterSheetDbContext(options);
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var baseState = TestCharacter(id, fingerprint, TestOwnedForms());
+        var build = new PostgresCharacterBuildStore(db);
+        foreach (var (key, value) in baseState.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, key, value, DateTimeOffset.UtcNow);
+        var site = new OwnerAccess(id);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(TestOwnedForms(), Wire), "[]",
+                JsonSerializer.Serialize(new NativeManifestationLedger(
+                    id.ToString("D"), 0, [], [], []), Wire),
+                0, 0, 0, digest, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        var formSource = new SyntheticTrustedSource(baseState);
+        var formService = TransitionRunner(db, site, store, gateway, formSource);
+        var active = await formService.ApplyAsync(
+            id, 1, 0, "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, active.Status);
+        var priorRead = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", priorRead.View!.Status);
+        Assert.Equal("wolf", priorRead.View.EffectiveSheetId);
+        Assert.Equal(17, priorRead.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        var originalSupernatural = (await store.GetAsync(id))!;
+
+        // These are preapproved synthetic fixture commands, not an attempt to
+        // build an Origin authorizer by accepting client-supplied profile JSON.
+        var originStore = new PostgresCharacterAuthorizedOriginStore(db);
+        async Task CommitOrigin(int oldRevision, string eventId,
+            string evidence, NativeOriginProfile profile)
+        {
+            var command = new VerifiedOriginPersistenceCommand(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(profile, Wire), oldRevision, null,
+                eventId, "fixture.source.origin", "fixture-reconstitution",
+                "test-only", evidence, DateTimeOffset.UtcNow);
+            var commit = await originStore.CommitVerifiedAsync(command);
+            Assert.Equal(AuthorizedOriginStoreStatus.Applied, commit.Status);
+            Assert.Equal(oldRevision + 1, commit.Revision);
+        }
+        await CommitOrigin(0, "fixture:origin-human",
+            "fixture:source:human", originalProfile);
+        await CommitOrigin(1, "fixture:origin-revised",
+            "fixture:source:revised", revisedProfile);
+
+        var verified = new CharacterVerifiedOriginUnderlyingService(
+            new CharacterOriginStateService(site, build, originStore),
+            store, gateway, site);
+        var nativeOrigin = await verified.GetAsync(id);
+        Assert.Equal(CharacterVerifiedOriginUnderlyingStatus.VerifiedPartial,
+            nativeOrigin.Status);
+        Assert.Equal(2, nativeOrigin.OriginRevision);
+        Assert.Equal("species.elf", nativeOrigin.Underlying!["speciesId"]!
+            .GetValue<string>());
+
+        // The independent Underlying read authenticates which Origin is owned,
+        // but has not approved how Elf traits compose with an active Wolf form.
+        var blocked = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, blocked.Status);
+        Assert.Equal("unresolved", blocked.View!.Status);
+        Assert.Null(blocked.View.NativeProjection);
+        Assert.Contains("origin-underlying-grants-not-yet-revalidated",
+            blocked.View.Unresolved);
+        Assert.Null(blocked.View.ActiveManifestationId);
+
+        var refusedReversion = await formService.ApplyAsync(
+            id, 2, 1, "revert:wolf", "revert:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.SourceUnauthorized,
+            refusedReversion.Status);
+
+        await using var fresh = new CharacterSheetDbContext(options);
+        var finalStore = new PostgresCharacterSupernaturalStateStore(fresh);
+        var after = (await finalStore.GetAsync(id))!;
+        Assert.Equal(originalSupernatural.Revision, after.Revision);
+        Assert.Equal(originalSupernatural.LedgerRevision, after.LedgerRevision);
+        Assert.Equal(originalSupernatural.LedgerJson, after.LedgerJson);
+        Assert.Equal(originalSupernatural.AlternateSheetsJson, after.AlternateSheetsJson);
+        Assert.Equal(originalSupernatural.PersistentInfluencesJson,
+            after.PersistentInfluencesJson);
+        Assert.Equal(2, (await finalStore.GetEventsAsync(id)).Count);
+        var originAudit = await new PostgresCharacterAuthorizedOriginStore(fresh)
+            .GetEventsAsync(id);
+        Assert.Equal(2, originAudit.Count);
     }
 
     [Fact]
