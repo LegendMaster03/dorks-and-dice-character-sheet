@@ -776,10 +776,26 @@ public sealed class CharacterStateCrossRepositoryTests
     }
 
     private sealed class PostgresSyntheticOverlapProvider(
-        DbContextOptions<CharacterSheetDbContext> options, Guid characterId)
+        DbContextOptions<CharacterSheetDbContext> options, Guid characterId,
+        bool combinedLifecycle = false)
         : CoreOverlapAuthorityProvider, INativeCharacterInfluenceAuthority,
         INativeCharacterInfluenceOverlapAuthority
     {
+        private readonly PostgresSyntheticOwnershipProvider ownership =
+            new(options, characterId, combinedLifecycle: true);
+
+        private static readonly string[] CombinedEffectIds =
+        [
+            "fixture.owned.wolf:e:acquisition:first-power",
+            "fixture.owned.second:e:acquisition:second-power"
+        ];
+        private static NativeInfluenceOverlapSelection CombinedDecisionA =>
+            OverlapDecision("fixture.overlap.a", CombinedEffectIds[0],
+                "fixture:overlap:a") with { EffectIds = CombinedEffectIds };
+        private static NativeInfluenceOverlapSelection CombinedDecisionB =>
+            OverlapDecision("fixture.overlap.b", CombinedEffectIds[1],
+                "fixture:overlap:b") with { EffectIds = CombinedEffectIds };
+
         private static NativeInfluenceOverlapSelection DecisionA =>
             OverlapDecision("fixture.overlap.a", "fixture.effect.a",
                 "fixture:overlap:a");
@@ -793,15 +809,19 @@ public sealed class CharacterStateCrossRepositoryTests
             if (actor != Actor || request.CharacterId != characterId.ToString("D") ||
                 request.RulesetId != "first-party-001" ||
                 request.State.CharacterId != request.CharacterId ||
-                request.State.AlternateSheets.Count != 0 ||
+                (combinedLifecycle
+                    ? !Equal(request.State.AlternateSheets, TestOwnedForms())
+                    : request.State.AlternateSheets.Count != 0) ||
                 request.State.PersistentInfluences?.Count != 2)
                 return null;
 
             var expected = request.EventId switch
             {
-                "overlap:select-a" => (Decision: DecisionA,
+                "overlap:select-a" => (Decision: combinedLifecycle
+                    ? CombinedDecisionA : DecisionA,
                     Replaced: (string?)null),
-                "overlap:select-b" => (Decision: DecisionB,
+                "overlap:select-b" => (Decision: combinedLifecycle
+                    ? CombinedDecisionB : DecisionB,
                     Replaced: (string?)"fixture.overlap.a"),
                 _ => default
             };
@@ -866,33 +886,52 @@ public sealed class CharacterStateCrossRepositoryTests
 
         public bool AuthorizesPrimary(string id, NativeCharacterRequest character) =>
             Character(id);
-        public bool AuthorizesSheet(string id, NativePersistentCharacterSheet sheet) => false;
+        public bool AuthorizesSheet(string id, NativePersistentCharacterSheet sheet) =>
+            combinedLifecycle && Character(id) && TestOwnedForms()
+                .Any(x => Equal(x, sheet));
         public bool AuthorizesProgression(string id, string sheet,
-            NativeSheetEarnedProgression progression) => false;
+            NativeSheetEarnedProgression progression) =>
+            combinedLifecycle && Character(id) && TestOwnedForms()
+                .Any(x => x.Id == sheet && (x.Progression ?? [])
+                    .Any(p => Equal(p, progression)));
         public bool AuthorizesGrant(string id, string sheet,
-            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
+            AuthorizesProgression(id, sheet, progression) &&
+            progression.Grants.Any(x => Equal(x, grant));
         public bool AuthorizesApplicability(string id, string sheet,
-            NativeSheetGrantApplicability decision) => false;
+            NativeSheetGrantApplicability decision) =>
+            combinedLifecycle && Character(id) && TestOwnedForms()
+                .Any(x => x.Id == sheet && (x.GrantApplicability ?? [])
+                    .Any(d => Equal(d, decision)));
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
+            combinedLifecycle ? ownership.AuthorizesInfluence(id, influence) :
             Character(id) && (Equal(influence, OverlapInfluence("a", 13)) ||
                 Equal(influence, OverlapInfluence("b", 15)));
         public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) =>
+            combinedLifecycle ? ownership.AuthorizesExpression(id, influence) :
             AuthorizesInfluence(id, influence);
         public bool AuthorizesEffect(string id, string owner,
             NativeCharacterInfluenceEffect effect) =>
+            combinedLifecycle ? ownership.AuthorizesEffect(id, owner, effect) :
             Character(id) && (owner == "fixture.influence.a" &&
                 Equal(effect, OverlapInfluence("a", 13).Effects[0]) ||
                 owner == "fixture.influence.b" &&
                 Equal(effect, OverlapInfluence("b", 15).Effects[0]));
         public bool AuthorizesInfluenceProgression(string id, string owner,
-            NativeSheetEarnedProgression progression) => false;
+            NativeSheetEarnedProgression progression) =>
+            combinedLifecycle && ownership.AuthorizesInfluenceProgression(
+                id, owner, progression);
         public bool AuthorizesInfluenceGrant(string id, string owner,
-            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
+            combinedLifecycle && ownership.AuthorizesInfluenceGrant(
+                id, owner, progression, grant);
         public bool AuthorizesInfluenceApplicability(string id, string owner,
             NativeInfluenceGrantApplicability decision) => false;
         public bool AuthorizesOverlapSelection(string id,
             NativeInfluenceOverlapSelection decision) =>
-            Character(id) && (Equal(decision, DecisionA) || Equal(decision, DecisionB));
+            Character(id) && (combinedLifecycle
+                ? Equal(decision, CombinedDecisionA) || Equal(decision, CombinedDecisionB)
+                : Equal(decision, DecisionA) || Equal(decision, DecisionB));
     }
 
     [Fact]
