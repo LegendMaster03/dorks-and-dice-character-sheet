@@ -1052,6 +1052,211 @@ public sealed class CharacterStateCrossRepositoryTests
             (await persisted.GetEventsAsync(id)).Select(x => x.Kind));
     }
 
+    /// <summary>
+    /// One persisted character exercises A (independent acquisitions and earned
+    /// progression), B (dormant then active competing effects and verified
+    /// writer selection), and C (expression, form and reversion commits). The
+    /// preowned synthetic forms have their own source receipt; no production
+    /// supernatural form acquisition or table authority is inferred.
+    /// </summary>
+    [Fact]
+    public async Task FullSyntheticLifecycleComposesAcquisitionProgressionOverlapExpressionAndFormReversion()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var dbOptions = database.CreateOptions();
+        var native = new PostgresSyntheticOwnershipProvider(
+            dbOptions, id, combinedLifecycle: true);
+        var overlap = new PostgresSyntheticOverlapProvider(
+            dbOptions, id, combinedLifecycle: true);
+        var manifestation = new PostgresSyntheticAuthorityProvider(dbOptions, id);
+        await using var core = await CoreHost.StartAsync(
+            verifiedSourceProvider: manifestation,
+            verifiedReadProvider: manifestation,
+            verifiedOwnershipProvider: native,
+            verifiedOverlapProvider: overlap);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+
+        await using var db = new CharacterSheetDbContext(dbOptions);
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        var primary = TestCharacter(id, fingerprint, TestOwnedForms());
+        foreach (var (ability, value) in primary.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, ability, value, DateTimeOffset.UtcNow);
+        var initial = await build.SetStartingClassAsync(
+            id, "class.barbarian", DateTimeOffset.UtcNow);
+        var classEntry = Assert.Single(initial!.AdvancementEntries,
+            entry => entry.Kind == CharacterAdvancementKind.Class);
+        primary = primary with
+        {
+            PrimaryMechanics = primary.PrimaryMechanics with
+            {
+                Advancements = [new NativeAdvancement(
+                    "class.barbarian", 1, classEntry.Id.ToString("D"))]
+            }
+        };
+
+        var site = new OwnerAccess(id);
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        // Preexisting form ownership is source-verified separately from the
+        // Core influence-acquisition planner and has no activated instances.
+        var seed = new VerifiedSupernaturalStateWrite(
+            id, "first-party-001", fingerprint,
+            JsonSerializer.Serialize(primary.AlternateSheets, Wire), "[]",
+            JsonSerializer.Serialize(new NativeManifestationLedger(
+                id.ToString("D"), 0, [], [], []), Wire),
+            0, 0, 0, digest, "fixture:acquire-werewolf",
+            "fixture:verified-source", false, DateTimeOffset.UtcNow);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(seed)).Status);
+
+        var buildService = new CharacterBuildService(site, build, TimeProvider.System);
+        var stateService = new CharacterStateService(site,
+            new PostgresCharacterStateStore(db), TimeProvider.System);
+        var originService = new CharacterOriginStateService(site, build,
+            new PostgresCharacterAuthorizedOriginStore(db));
+        var owners = new CharacterSupernaturalOwnershipService(
+            site, site, store, gateway,
+            new SyntheticOwnershipSource(fingerprint),
+            buildService, stateService, originService);
+
+        async Task<CharacterSupernaturalState> AcquireOrAdvance(
+            CharacterSupernaturalOwnershipOperation operation,
+            string eventId, long expectedRevision)
+        {
+            var outcome = await owners.ApplyAsync(id, operation, expectedRevision, 0,
+                "intent:" + eventId, eventId);
+            Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied,
+                outcome.Status);
+            Assert.Equal(expectedRevision + 1, outcome.StateRevision);
+            return (await store.GetAsync(id))!;
+        }
+
+        var first = await AcquireOrAdvance(
+            CharacterSupernaturalOwnershipOperation.Acquire,
+            "synthetic:acquire", 1);
+        Assert.Contains("fixture.owned.wolf", first.PersistentInfluencesJson);
+        var second = await AcquireOrAdvance(
+            CharacterSupernaturalOwnershipOperation.Acquire,
+            "synthetic:acquire-second", 2);
+        Assert.Contains("fixture.owned.second", second.PersistentInfluencesJson);
+        var earned = await AcquireOrAdvance(
+            CharacterSupernaturalOwnershipOperation.Advance,
+            "synthetic:advance", 3);
+        Assert.Contains("fixture.capability.lunar", earned.PersistentInfluencesJson);
+        Assert.Equal(3, JsonNode.Parse(earned.ProgressionJournalJson)!
+            ["revision"]!.GetValue<long>());
+
+        var overlapService = new CharacterInfluenceOverlapDecisionService(
+            site, site, store, gateway, new SyntheticOverlapTrustedSource(fingerprint),
+            buildService, stateService, originService);
+        var choice = await overlapService.ApplyAsync(id, 4, 0,
+            "intent:overlap:select-a", "overlap:select-a");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, choice.Status);
+        Assert.Equal(5, choice.StateRevision);
+        var dormant = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", dormant.View!.Status);
+        Assert.Equal(15, dormant.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+
+        var expression = new CharacterInfluenceExpressionChangeService(
+            site, site, store, new TrustedCombinedExpressionSource(), gateway,
+            Reader(db, id, gateway));
+        var expressed = await expression.ApplyAsync(
+            id, 5, 0, "fixture.owned.wolf",
+            "expression:activate-first", "expression:activate-first");
+        Assert.Equal(CharacterInfluenceExpressionChangeStatus.Applied, expressed.Status);
+        Assert.Equal(CharacterInfluenceProjectionOutcome.Available,
+            expressed.ProjectionOutcome);
+        Assert.Equal(13, expressed.EffectiveProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        var acquiredBeforeForm = (await store.GetAsync(id))!;
+        Assert.Equal(3, JsonNode.Parse(acquiredBeforeForm.ProgressionJournalJson)!
+            ["revision"]!.GetValue<long>());
+
+        var formSource = new SyntheticTrustedSource(primary);
+        var forms = TransitionRunner(db, site, store, gateway, formSource);
+        var entered = await forms.ApplyAsync(id, 6, 0, "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, entered.Status);
+        var wolf = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("partial", wolf.View!.Status);
+        Assert.Equal("wolf", wolf.View.EffectiveSheetId);
+        Assert.Equal("manifest.wolf.1", wolf.View.ActiveManifestationId);
+        Assert.Equal(17, wolf.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+
+        await build.SetBaseAbilityScoreInputAsync(
+            id, "constitution", 15, DateTimeOffset.UtcNow.AddMinutes(1));
+        await build.SetAdvancementLevelAsync(
+            id, classEntry.Id, 2, DateTimeOffset.UtcNow.AddMinutes(1));
+        var latestScores = primary.PrimaryMechanics.AbilityScores.ToDictionary(
+            pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        latestScores["constitution"] = 15;
+        primary = primary with
+        {
+            PrimaryMechanics = primary.PrimaryMechanics with
+            {
+                AbilityScores = latestScores,
+                Advancements = [new NativeAdvancement(
+                    "class.barbarian", 2, classEntry.Id.ToString("D"))]
+            }
+        };
+        formSource.Current = primary;
+
+        var currentWolf = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("wolf", currentWolf.View!.EffectiveSheetId);
+        Assert.Equal(15, currentWolf.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["constitution"]!.GetValue<int>());
+        Assert.Equal(2, currentWolf.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["advancements"]![0]!["level"]!.GetValue<int>());
+
+        var ended = await forms.ApplyAsync(id, 7, 1, "revert:wolf", "revert:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.Applied, ended.Status);
+        var reverted = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("@primary", reverted.View!.EffectiveSheetId);
+        Assert.Null(reverted.View.ActiveManifestationId);
+        Assert.Equal(13, reverted.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        Assert.Equal(15, reverted.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["constitution"]!.GetValue<int>());
+
+        await using var restartedDb = new CharacterSheetDbContext(dbOptions);
+        var durable = new PostgresCharacterSupernaturalStateStore(restartedDb);
+        var persisted = (await durable.GetAsync(id))!;
+        Assert.Equal(8, persisted.Revision);
+        Assert.Equal(2, persisted.LedgerRevision);
+        Assert.Equal(3, JsonNode.Parse(persisted.ProgressionJournalJson)!
+            ["revision"]!.GetValue<long>());
+        Assert.Single(JsonSerializer.Deserialize<NativeInfluenceOverlapSelection[]>(
+            persisted.InfluenceOverlapSelectionsJson, Wire)!);
+        Assert.Equal(2, JsonSerializer.Deserialize<NativeCharacterPersistentInfluence[]>(
+            persisted.PersistentInfluencesJson, Wire)!.Length);
+        Assert.Equal(new[]
+        {
+            "acquisition", "acquisition", "acquisition", "progression",
+            "overlap-decision", "expression-change", "transition", "transition"
+        }, (await durable.GetEventsAsync(id)).Select(x => x.Kind));
+        var restarted = await Reader(restartedDb, id, gateway).GetAsync(id);
+        Assert.Equal("partial", restarted.View!.Status);
+        Assert.Equal("@primary", restarted.View.EffectiveSheetId);
+        Assert.Equal(13, restarted.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        Assert.Equal(8, (await durable.GetEventsAsync(id)).Count);
+
+        // Stale form admission must never consume another supernatural event.
+        var duplicate = await TransitionRunner(restartedDb, new OwnerAccess(id),
+            durable, gateway, formSource).ApplyAsync(
+                id, 7, 1, "enter:wolf", "enter:wolf");
+        Assert.Equal(CharacterManifestationApplyStatus.StateRevisionConflict,
+            duplicate.Status);
+        Assert.Equal(8, (await durable.GetEventsAsync(id)).Count);
+    }
+
     [Fact]
     public async Task SyntheticSupernaturalOwnershipAcquiresAndAdvancesThroughRealCoreAndPostgres()
     {
