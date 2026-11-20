@@ -635,13 +635,23 @@ public sealed class CharacterStateCrossRepositoryTests
 
         public bool AuthorizesPrimary(string id, NativeCharacterRequest character) =>
             id == characterId.ToString("D");
-        public bool AuthorizesSheet(string id, NativePersistentCharacterSheet sheet) => false;
+        public bool AuthorizesSheet(string id, NativePersistentCharacterSheet sheet) =>
+            combinedLifecycle && id == characterId.ToString("D") &&
+            TestOwnedForms().Any(x => SameObject(x, sheet));
         public bool AuthorizesProgression(string id, string sheet,
-            NativeSheetEarnedProgression progression) => false;
+            NativeSheetEarnedProgression progression) =>
+            combinedLifecycle && id == characterId.ToString("D") &&
+            TestOwnedForms().Any(x => x.Id == sheet &&
+                (x.Progression ?? []).Any(xp => SameObject(xp, progression)));
         public bool AuthorizesGrant(string id, string sheet,
-            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
+            AuthorizesProgression(id, sheet, progression) &&
+            progression.Grants.Any(x => SameObject(x, grant));
         public bool AuthorizesApplicability(string id, string sheet,
-            NativeSheetGrantApplicability decision) => false;
+            NativeSheetGrantApplicability decision) =>
+            combinedLifecycle && id == characterId.ToString("D") &&
+            TestOwnedForms().Any(x => x.Id == sheet &&
+                (x.GrantApplicability ?? []).Any(d => SameObject(d, decision)));
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
             id == characterId.ToString("D") &&
             ((influence.DefinitionId == Definition.Id &&
@@ -670,8 +680,10 @@ public sealed class CharacterStateCrossRepositoryTests
         public bool AuthorizesInfluenceProgression(string id, string influence,
             NativeSheetEarnedProgression progression) =>
             id == characterId.ToString("D") &&
-            influence == "fixture.owned.wolf" &&
-            progression.SourceOccurrence.Source == OwnershipSource();
+            (influence == "fixture.owned.wolf" &&
+                progression.SourceOccurrence.Source == OwnershipSource() ||
+             combinedLifecycle && influence == "fixture.owned.second" &&
+                progression.SourceOccurrence.Source == SecondSource());
         public bool AuthorizesInfluenceGrant(string id, string influence,
             NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) =>
             AuthorizesInfluenceProgression(id, influence, progression) &&
