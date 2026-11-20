@@ -1108,8 +1108,9 @@ public sealed class CharacterStateCrossRepositoryTests
         var site = new OwnerAccess(id);
         var store = new PostgresCharacterSupernaturalStateStore(db);
         var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
-        // Preexisting form ownership is source-verified separately from the
-        // Core influence-acquisition planner and has no activated instances.
+        // A trusted test setup pre-seeds the exact authored forms. The
+        // separate manifestation host later verifies their source-qualified
+        // receipt and persisted state. This is not independent acquisition.
         var seed = new VerifiedSupernaturalStateWrite(
             id, "first-party-001", fingerprint,
             JsonSerializer.Serialize(primary.AlternateSheets, Wire), "[]",
