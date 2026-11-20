@@ -915,8 +915,11 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(0, saved.LedgerRevision);
         Assert.Equal(0, JsonNode.Parse(saved.ProgressionJournalJson)!
             ["revision"]!.GetValue<long>());
-        Assert.Equal(JsonSerializer.Serialize(known.PersistentInfluences, Wire),
-            saved.PersistentInfluencesJson);
+        using (var originalOwners = JsonDocument.Parse(
+            JsonSerializer.Serialize(known.PersistentInfluences, Wire)))
+        using (var persistedOwners = JsonDocument.Parse(saved.PersistentInfluencesJson))
+            Assert.True(JsonElement.DeepEquals(
+                originalOwners.RootElement, persistedOwners.RootElement));
         var decisionB = JsonSerializer.Deserialize<NativeInfluenceOverlapSelection[]>(
             saved.InfluenceOverlapSelectionsJson, Wire)!;
         Assert.Single(decisionB);
