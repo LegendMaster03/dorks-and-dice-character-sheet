@@ -1194,14 +1194,19 @@ public sealed class CharacterStateCrossRepositoryTests
             CharacterSupernaturalOwnershipOperation.Acquire,
             "synthetic:acquire-second", 2);
         Assert.Contains("fixture.owned.second", second.PersistentInfluencesJson);
-        // Only the second source is active initially, so there is no
-        // competing writer set to decide yet. A persisted selection at this
-        // stage would claim a collision that has not occurred.
-        var dormant = await Reader(db, id, gateway).GetAsync(id);
-        Assert.NotNull(dormant.View);
-        Assert.Equal("partial", dormant.View!.Status);
-        Assert.Equal(15, dormant.View.NativeProjection!["effectiveCharacter"]!
-            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        // An unadjudicated pair remains stored, but no effective projection
+        // is published until native mechanics can resolve the exact writer set.
+        // This does not prevent either independently authorized progression
+        // or expression change from recording its own evidence.
+        var unadjudicated = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal("unresolved", unadjudicated.View!.Status);
+        Assert.Null(unadjudicated.View.NativeProjection);
+        var acquiredOwners = JsonSerializer.Deserialize<NativeCharacterPersistentInfluence[]>(
+            second.PersistentInfluencesJson, Wire)!;
+        Assert.Equal("dormant", Assert.Single(acquiredOwners,
+            x => x.Id == "fixture.owned.wolf").Expression["phase"]);
+        Assert.Equal("active", Assert.Single(acquiredOwners,
+            x => x.Id == "fixture.owned.second").Expression["phase"]);
 
         // Two separately source-authorized application coordinators race one
         // committed supernatural revision using independent EF Core contexts.
