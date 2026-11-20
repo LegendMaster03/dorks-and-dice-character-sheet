@@ -114,9 +114,9 @@ The detailed baseline is `docs/rewrite/character-origins/pillar4-workstream-b-ef
 
 - Rules Core `dbed4584febfa1b56c1ec3969ae650f12bca04ac`: full native mechanics/host regression, [GitHub Actions run 44651420294](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/44651420294) — **passed**.
 - Rules Core full regression: 146 Host and 729 Mechanics tests passed, plus native structural/Python checks, on the pinned revision above.
-- Character Sheet implementation `0522d7985edf36f1a39c4489851b076e4fc1567f`: full validation, PostgreSQL and container smoke, [run 44691711793](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44691711793) — **passed** (196 unit; 312 integration).
-- Paired real Core HTTP/PostgreSQL integration at the same implementation revision, pinned to the exact Core revision above, [run 44691711777](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44691711777) — **passed** (23 integrated tests; 20 Mixed-Origin pass, one excluded R3 characterization skip).
-- Follow-up test-only analyzer clean-up `780e27d2f4886d95a402c8deb53ab94d3be1e948` awaits exact paired CI result in this document's revision history. No gameplay code or source policy was changed by that clean-up.
+- Character Sheet implementation `780e27d2f4886d95a402c8deb53ab94d3be1e948`: full validation, PostgreSQL and container smoke, [run 44692552581](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44692552581) — **passed** (196 unit; 312 integration).
+- Paired real Core HTTP/PostgreSQL integration at the same implementation revision, pinned to the exact Core revision above, [run 44692552628](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44692552628) — **passed** (23 integrated tests; 20 Mixed-Origin pass, one excluded R3 characterization skip).
+- The `780e27d2` revision also eliminates newly introduced xUnit blocking-task analyzer warnings by awaiting both concurrent coordinator results after `Task.WhenAll`. No gameplay code or source policy was changed by that clean-up.
 
 ## Final review recommendation
 
