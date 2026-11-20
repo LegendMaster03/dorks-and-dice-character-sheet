@@ -70,7 +70,7 @@ jobs:
           --filter FullyQualifiedName~MixedOriginCrossRepositoryPersistenceTests
           -p:BuildClient=false
           -p:RulesCoreCheckout="$GITHUB_WORKSPACE/rules-core"
-          -p:DefineConstants=PILLAR2_PHASE5_ORIGIN
+          -p:DefineConstants=PILLAR2_PHASE5_ORIGIN%3BPILLAR2_CURRENT_ORIGIN
       - name: Cleanup disposable PostgreSQL
         if: always()
         run: docker rm -f character-state-increment4-postgres 2>/dev/null || true

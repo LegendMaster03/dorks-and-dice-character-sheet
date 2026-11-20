@@ -160,6 +160,7 @@ public sealed class CharacterSupernaturalPersistenceTests
         var migrator = db.Database.GetService<IMigrator>();
         var beforeAudit = "20261115010000_AddCharacterSupernaturalState";
         var auditMigration = "20261115020000_AddSupernaturalTransitionRequestAudit";
+        const string ownershipMigration = "20261119190000_AddSupernaturalProgressionOwnership";
         await migrator.MigrateAsync(beforeAudit);
         var id = Guid.NewGuid();
 
@@ -214,8 +215,9 @@ public sealed class CharacterSupernaturalPersistenceTests
         // Rollback removes only the additive column; no prior character
         // identity, ledger or receipt may be removed or rewritten.
         await migrator.MigrateAsync(beforeAudit);
-        Assert.DoesNotContain(auditMigration,
-            await db.Database.GetAppliedMigrationsAsync());
+        var rolledBack = await db.Database.GetAppliedMigrationsAsync();
+        Assert.DoesNotContain(auditMigration, rolledBack);
+        Assert.DoesNotContain(ownershipMigration, rolledBack);
         await migrator.MigrateAsync();
         await using var reload = new CharacterSheetDbContext(database.CreateOptions());
         var after = new PostgresCharacterSupernaturalStateStore(reload);
@@ -1669,6 +1671,7 @@ public sealed class CharacterSupernaturalPersistenceTests
         Assert.Equal(0, saved.LedgerRevision);
         Assert.Contains("curse.moonrise", saved.PersistentInfluencesJson);
         Assert.Equal(2, (await resumed.GetEventsAsync(id)).Count);
+        await AssertOwnershipDowngradeRefusedAsync(database, resumedContext, id);
 
         // Introduce a second source acquisition without affecting the
         // independent progression journal or the prior earned capabilities.
@@ -1807,6 +1810,7 @@ public sealed class CharacterSupernaturalPersistenceTests
             ["revision"]!.GetValue<long>());
         Assert.Equal(new[] { "acquisition", "overlap-decision", "overlap-decision" },
             (await durable.GetEventsAsync(id)).Select(x => x.Kind));
+        await AssertOwnershipDowngradeRefusedAsync(database, reload, id);
 
         // This ordinary acquisition has no independent overlap authorization,
         // and therefore may not change the prior decision collection.
@@ -1816,6 +1820,35 @@ public sealed class CharacterSupernaturalPersistenceTests
                 PersistentInfluencesJson = owned,
                 InfluenceOverlapSelectionsJson = "[" + first + "]"
             }));
+    }
+
+    private static async Task AssertOwnershipDowngradeRefusedAsync(
+        PostgresTestDatabase database, CharacterSheetDbContext db, Guid id)
+    {
+        const string ownershipMigration = "20261119190000_AddSupernaturalProgressionOwnership";
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var before = (await store.GetAsync(id))!;
+        var receipts = await store.GetEventsAsync(id);
+
+        var migrator = db.Database.GetService<IMigrator>();
+        var error = await Record.ExceptionAsync(() =>
+            migrator.MigrateAsync("20261117090000_AddInfluenceExpressionChangeAudit"));
+        Assert.NotNull(error);
+        Assert.Contains("Cannot downgrade supernatural ownership with committed progression or overlap history.",
+            error.ToString(), StringComparison.Ordinal);
+
+        await using var reopened = new CharacterSheetDbContext(database.CreateOptions());
+        Assert.Contains(ownershipMigration, await reopened.Database.GetAppliedMigrationsAsync());
+        var persisted = new PostgresCharacterSupernaturalStateStore(reopened);
+        var after = (await persisted.GetAsync(id))!;
+        Assert.Equal(before.Revision, after.Revision);
+        Assert.Equal(before.ProgressionJournalJson, after.ProgressionJournalJson);
+        Assert.Equal(before.InfluenceOverlapSelectionsJson, after.InfluenceOverlapSelectionsJson);
+        Assert.Equal(
+            receipts.Select(receipt => (receipt.EventId, receipt.ProgressionJournalSnapshotJson,
+                receipt.OverlapSelectionsSnapshotJson)),
+            (await persisted.GetEventsAsync(id)).Select(receipt => (receipt.EventId,
+                receipt.ProgressionJournalSnapshotJson, receipt.OverlapSelectionsSnapshotJson)));
     }
 
     [Fact]

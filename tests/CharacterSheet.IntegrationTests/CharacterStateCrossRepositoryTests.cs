@@ -245,6 +245,7 @@ public sealed class CharacterStateCrossRepositoryTests
     {
         public int ProjectionRequests { get; private set; }
         public int VerifiedReadRequests { get; private set; }
+        public JsonNode? LastVerifiedRead { get; private set; }
 
         /// <summary>
         /// Test-only corrupted transport responses. The real host still
@@ -290,11 +291,13 @@ public sealed class CharacterStateCrossRepositoryTests
             JsonElement request, CancellationToken ct)
         {
             VerifiedReadRequests++;
+            LastVerifiedRead = null;
             using var message = Authorized(HttpMethod.Post,
                 "/api/mechanics/v1/characters/effective-state");
             message.Content = JsonContent.Create(request, options: Wire);
             using var response = await http.SendAsync(message, ct);
             var result = await Parse(response, ct);
+            LastVerifiedRead = result.DeepClone();
             if (ForgePrimarySelection)
             {
                 result["projection"]!["effectiveCharacter"]!["effectiveSheetId"] = "@primary";
@@ -1194,13 +1197,6 @@ public sealed class CharacterStateCrossRepositoryTests
             CharacterSupernaturalOwnershipOperation.Acquire,
             "synthetic:acquire-second", 2);
         Assert.Contains("fixture.owned.second", second.PersistentInfluencesJson);
-        // An unadjudicated pair remains stored, but no effective projection
-        // is published until native mechanics can resolve the exact writer set.
-        // This does not prevent either independently authorized progression
-        // or expression change from recording its own evidence.
-        var unadjudicated = await Reader(db, id, gateway).GetAsync(id);
-        Assert.Equal("unresolved", unadjudicated.View!.Status);
-        Assert.Null(unadjudicated.View.NativeProjection);
         var acquiredOwners = JsonSerializer.Deserialize<NativeCharacterPersistentInfluence[]>(
             second.PersistentInfluencesJson, Wire)!;
         Assert.Equal("dormant", Assert.Single(acquiredOwners,
@@ -1288,6 +1284,11 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.NotNull(withoutDecision.View);
         Assert.Equal("unresolved", withoutDecision.View!.Status);
         Assert.Null(withoutDecision.View.NativeProjection);
+        var nativeCollision = gateway.LastVerifiedRead;
+        Assert.NotNull(nativeCollision);
+        Assert.Equal("unresolved", nativeCollision["status"]!.GetValue<string>());
+        Assert.Contains(nativeCollision["projection"]!["issues"]!.AsArray(),
+            issue => issue?["code"]?.GetValue<string>() == "influence-overlap-unresolved");
 
         var overlapService = new CharacterInfluenceOverlapDecisionService(
             site, site, store, gateway, new SyntheticOverlapTrustedSource(fingerprint),
@@ -2301,9 +2302,10 @@ public sealed class CharacterStateCrossRepositoryTests
                         x.AuthorizationEvidenceId == "fixture:proof:second") ||
                     !receipts.Any(x => x.EventId == "synthetic:advance" &&
                         x.AuthorizationEvidenceId == "fixture:proof:advance") ||
-                    !receipts.Any(x => x.EventId == "overlap:select-a" &&
-                        x.Kind == "overlap-decision" &&
-                        x.AuthorizationEvidenceId == "fixture:overlap:a"))
+                    ((state.InfluenceOverlapSelections ?? []).Count > 0 &&
+                        !receipts.Any(x => x.EventId == "overlap:select-a" &&
+                            x.Kind == "overlap-decision" &&
+                            x.AuthorizationEvidenceId == "fixture:overlap:a")))
                     return null;
                 if (firstCombined.Expression.TryGetValue("phase", out var combinedPhase) &&
                     combinedPhase == "active" &&

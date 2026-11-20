@@ -1184,7 +1184,7 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
             var builds = new PostgresCharacterBuildStore(db);
             var origins = new PostgresCharacterAuthorizedOriginStore(db);
             var activation = new CharacterOriginInitialActivationService(
-                site, builds, drafts, origins, native, TimeProvider.System);
+                site, site, builds, drafts, origins, native, TimeProvider.System);
             var activated = await activation.ApplyAsync(characterId, 1);
             Assert.Equal(CharacterOriginActivationStatus.Applied, activated.Status);
             Assert.Equal(1, activated.Revision);
@@ -1315,8 +1315,13 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     /// explicitly owns both. A DM role never supplies private parent access.
     /// </summary>
     private sealed class OwnerScopedParentAccess(
-        Guid childId, Guid parentId, bool allowParent) : ISiteCharacterAccessGateway
+        Guid childId, Guid parentId, bool allowParent)
+        : ISiteCharacterAccessGateway, ISiteFreshCharacterAccessGateway
     {
+        public Task<SiteCharacterAccessResult> GetFreshAuthorizedCharacterAsync(
+            Guid characterId, CancellationToken cancellationToken = default) =>
+            GetAuthorizedCharacterAsync(characterId, cancellationToken);
+
         public Task<SiteCharacterAccessResult> GetAuthorizedCharacterAsync(
             Guid characterId, CancellationToken cancellationToken = default)
         {
