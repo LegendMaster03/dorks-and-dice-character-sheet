@@ -29,7 +29,14 @@ public sealed record VerifiedSupernaturalStateWrite(
     /// </summary>
     bool IsOwnershipPlan = false,
     string? ProgressionJournalJson = null,
-    string? InfluenceOverlapSelectionsJson = null);
+    string? InfluenceOverlapSelectionsJson = null,
+    /// <summary>
+    /// A separate Core-verified overlap decision. The old decision, if any,
+    /// may be superseded only for the same exact writer set and target sheet.
+    /// </summary>
+    bool IsOverlapDecision = false,
+    string? NewOverlapDecisionId = null,
+    string? ReplacedOverlapDecisionId = null);
 
 public sealed record CharacterSupernaturalWriteResult(
     CharacterSupernaturalWriteStatus Status, long? Revision = null,
