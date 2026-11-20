@@ -459,7 +459,12 @@ public sealed class CharacterStateCrossRepositoryTests
                 operation = operation.ToString(), eventId,
                 rulesetId = "first-party-001", fingerprint,
                 authorizationEvidenceId = expectedEvidence,
-                sourceOccurrence = OwnershipOccurrence("acquisition")
+                sourceOccurrence = eventId == "synthetic:acquire-second"
+                    ? new NativeOriginSourceOccurrence(
+                        new NativeOriginSourceReference(
+                            NativeOriginSourceKind.Native, "fixture.supernatural.second",
+                            "fixture-v1"), "acquisition")
+                    : OwnershipOccurrence("acquisition")
             }, Wire);
             return Task.FromResult<TrustedSupernaturalOwnershipMaterial?>(
                 new(verified, expectedEvidence));
