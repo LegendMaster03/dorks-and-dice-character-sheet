@@ -157,6 +157,7 @@ public sealed class CharacterManifestationTransitionService(
         {
             using var sheets = JsonDocument.Parse(saved.AlternateSheetsJson);
             using var influences = JsonDocument.Parse(saved.PersistentInfluencesJson);
+                         using var overlap = JsonDocument.Parse(saved.InfluenceOverlapSelectionsJson);
             using var ledger = JsonDocument.Parse(saved.LedgerJson);
             request = JsonSerializer.SerializeToElement(new
             {
@@ -169,7 +170,8 @@ public sealed class CharacterManifestationTransitionService(
                     // not make committed plans differ from fresh effective reads.
                     primaryMechanics = primary.Mechanics.Value,
                     alternateSheets = sheets.RootElement,
-                    persistentInfluences = influences.RootElement
+                    persistentInfluences = influences.RootElement,
+                                 influenceOverlapSelections = overlap.RootElement
                 },
                 ledger = ledger.RootElement,
                 transition = verified.Transition
