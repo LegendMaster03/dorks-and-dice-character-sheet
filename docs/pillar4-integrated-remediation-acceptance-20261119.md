@@ -3,7 +3,7 @@
 **Date:** November 19, 2026  
 **Repositories:** `LegendMaster03/dorks-and-dice-rules-core` and `LegendMaster03/dorks-and-dice-character-sheet`  
 **Branches:** `integration/pillar4-infrastructure-remediation-20261119` and `integration/pillar4-character-state-remediation-20261119`  
-**Pinned Rules Core:** `e277b79a49a44ad27da5c352ffdad263985a3bbf`  
+**Pinned Rules Core (including current main crafting/competency work):** `dbed4584febfa1b56c1ec3969ae650f12bca04ac`  
 **Disposition:** **Partially complete. Not approved for merge or deployment.**
 
 ## Scope and accounting
@@ -55,7 +55,7 @@ Each assertion is scoped to its actual synthetic fixture. An independently verif
 
 ## Validated revisions and CI
 
-- Rules Core `e277b79a49a44ad27da5c352ffdad263985a3bbf`: full native mechanics/host regression, [GitHub Actions run 44650583200](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/44650583200) — **passed**.
+- Rules Core `dbed4584febfa1b56c1ec3969ae650f12bca04ac`: full native mechanics/host regression, [GitHub Actions run 44651420294](https://github.com/LegendMaster03/dorks-and-dice-rules-core/actions/runs/44651420294) — **passed**.
 - Character Sheet `afff26a36ac589f3f07cccaa9484728ac35ca9c6`: full validation, PostgreSQL and container smoke, [run 44650374602](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44650374602) — **passed**.
 - Paired real Core HTTP/PostgreSQL and Mixed-Origin compatibility on that Character Sheet revision, [run 44650374706](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/44650374706) — **passed**. The next CI run pins the exact Rules Core revision above.
 

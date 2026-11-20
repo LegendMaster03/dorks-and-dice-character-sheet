@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LegendMaster03/dorks-and-dice-rules-core
-          ref: e277b79a49a44ad27da5c352ffdad263985a3bbf
+          ref: dbed4584febfa1b56c1ec3969ae650f12bca04ac
           path: rules-core
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
