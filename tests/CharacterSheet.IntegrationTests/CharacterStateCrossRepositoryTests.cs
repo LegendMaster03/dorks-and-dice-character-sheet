@@ -440,13 +440,14 @@ public sealed class CharacterStateCrossRepositoryTests
             {
                 "synthetic:acquire" => "fixture:proof:acquire",
                 "synthetic:advance" => "fixture:proof:advance",
+                "synthetic:acquire-second" => "fixture:proof:second",
                 "synthetic:replay" => "fixture:proof:replay",
                 _ => null
             };
             if (expectedEvidence is null ||
                 authorizedCharacter.CharacterId != characterId ||
                 !authorizedCharacter.AllowsOrdinaryEditingByLifecycle ||
-                operation != (eventId == "synthetic:acquire"
+                operation != (eventId is "synthetic:acquire" or "synthetic:acquire-second"
                     ? CharacterSupernaturalOwnershipOperation.Acquire
                     : CharacterSupernaturalOwnershipOperation.Advance) ||
                 intentId != "intent:" + eventId)
@@ -466,7 +467,8 @@ public sealed class CharacterStateCrossRepositoryTests
     }
 
     private sealed class PostgresSyntheticOwnershipProvider(
-        DbContextOptions<CharacterSheetDbContext> databaseOptions, Guid characterId)
+        DbContextOptions<CharacterSheetDbContext> databaseOptions, Guid characterId,
+        bool combinedLifecycle = false)
         : CoreOwnershipAuthorityProvider, INativeSupernaturalProgressionAuthority
     {
         private static readonly NativeSupernaturalDefinition Definition = new(
@@ -486,13 +488,51 @@ public sealed class CharacterStateCrossRepositoryTests
                     RequiredEventKeys: ["moon"])
             ]);
 
+        private static NativeOriginSourceReference SecondSource() =>
+            new(NativeOriginSourceKind.Native, "fixture.supernatural.second", "fixture-v1");
+
+        private static NativeCharacterInfluenceEffect AuthoredPower(
+            string effectId, int value, NativeOriginSourceReference source) =>
+            new(effectId, new NativeOriginSourceOccurrence(source, "effects." + effectId),
+                "fixture:authored-effect", OwnershipBasis,
+                new Dictionary<string, string> { ["phase"] = "active" },
+                [NativeCharacterSheetResolver.PrimarySheetId],
+                NativeInfluenceCharacteristic.AbilityScore,
+                NativeInfluenceOperation.Replace, Key: "strength", NumericValue: value);
+
+        private static readonly NativeSupernaturalDefinition SecondDefinition = new(
+            "fixture.definition.second", SecondSource(),
+            new Dictionary<string, string> { ["phase"] = "active" },
+            [new NativeSupernaturalProgressionNode("initial",
+                new NativeOriginSourceOccurrence(SecondSource(), "progression.initial"),
+                OnAcquisition: true)],
+            [AuthoredPower("second-power", 15, SecondSource())]);
+
+        private static readonly NativeSupernaturalDefinition CombinedFirstDefinition =
+            Definition with { AcquisitionEffects = [AuthoredPower("first-power", 13, OwnershipSource())] };
+
+        private static NativeCharacterInfluenceEffect MintedPower(
+            string owner, string key, int strength, string evidence,
+            NativeOriginSourceReference source) =>
+            AuthoredPower(key, strength, source) with
+            {
+                Id = owner + ":e:acquisition:" + key,
+                AuthorizationEvidenceId = evidence
+            };
+
+        private static bool SameObject(object left, object right) =>
+            JsonElement.DeepEquals(JsonSerializer.SerializeToElement(left, Wire),
+                JsonSerializer.SerializeToElement(right, Wire));
+
         public async Task<CoreOwnershipAuthorization?> VerifyAsync(
             Guid actor, CoreOwnershipPlanRequest request, CancellationToken ct)
         {
             if (actor != Actor || request.CharacterId != characterId.ToString("D") ||
                 request.RulesetId != "first-party-001" ||
                 request.State.CharacterId != request.CharacterId ||
-                request.State.AlternateSheets.Count != 0 ||
+                (combinedLifecycle
+                    ? !SameObject(request.State.AlternateSheets, TestOwnedForms())
+                    : request.State.AlternateSheets.Count != 0) ||
                 request.ExpectedLedgerRevision != 0)
                 return null;
 
@@ -504,14 +544,21 @@ public sealed class CharacterStateCrossRepositoryTests
                     "synthetic:acquire" => new(request.CharacterId, 0,
                         "synthetic:acquire", NativeSupernaturalTransitionKind.Acquire,
                         "fixture.owned.wolf", "fixture:proof:acquire", OwnershipBasis),
-                    "synthetic:advance" => new(request.CharacterId, 1,
+                    "synthetic:acquire-second" when combinedLifecycle =>
+                        new(request.CharacterId, 1,
+                            "synthetic:acquire-second",
+                            NativeSupernaturalTransitionKind.Acquire,
+                            "fixture.owned.second", "fixture:proof:second", OwnershipBasis),
+                    "synthetic:advance" => new(request.CharacterId,
+                        combinedLifecycle ? 2 : 1,
                         "synthetic:advance", NativeSupernaturalTransitionKind.Advance,
                         "fixture.owned.wolf", "fixture:proof:advance", OwnershipBasis,
                         NodeId: "moonrise",
                         RequirementEvidence: new Dictionary<string, string> {
                             ["moon"] = "fixture:moon:1"
                         }),
-                    "synthetic:replay" => new(request.CharacterId, 2,
+                    "synthetic:replay" => new(request.CharacterId,
+                        combinedLifecycle ? 3 : 2,
                         "synthetic:replay", NativeSupernaturalTransitionKind.Advance,
                         "fixture.owned.wolf", "fixture:proof:replay", OwnershipBasis,
                         NodeId: "replayed",
@@ -572,7 +619,11 @@ public sealed class CharacterStateCrossRepositoryTests
                         entry.RuleConceptKey == x.ClassId && entry.Level == x.Level)))
                 return null;
 
-            return new CoreOwnershipAuthorization(Definition, transition, this);
+            return new CoreOwnershipAuthorization(
+                request.EventId == "synthetic:acquire-second"
+                    ? SecondDefinition
+                    : combinedLifecycle ? CombinedFirstDefinition : Definition,
+                transition, this);
         }
 
         private static bool JsonEqual(string left, string right)
@@ -593,15 +644,29 @@ public sealed class CharacterStateCrossRepositoryTests
             NativeSheetGrantApplicability decision) => false;
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
             id == characterId.ToString("D") &&
-            influence.DefinitionId == Definition.Id &&
-            influence.DefinitionSource == Definition.Source &&
-            influence.AcquisitionEvidenceId == "fixture:proof:acquire";
+            ((influence.DefinitionId == Definition.Id &&
+              influence.DefinitionSource == Definition.Source &&
+              influence.AcquisitionEvidenceId == "fixture:proof:acquire") ||
+             (combinedLifecycle &&
+              influence.DefinitionId == SecondDefinition.Id &&
+              influence.DefinitionSource == SecondDefinition.Source &&
+              influence.AcquisitionEvidenceId == "fixture:proof:second"));
         public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) =>
             AuthorizesInfluence(id, influence) &&
             influence.Expression.TryGetValue("phase", out var phase) &&
-            phase == "dormant";
+            (phase == "dormant" ||
+             combinedLifecycle && phase == "active" &&
+             (influence.Id == "fixture.owned.second" ||
+              influence.ExpressionEvidenceId == "fixture:expression:active:first"));
         public bool AuthorizesEffect(string id, string influence,
-            NativeCharacterInfluenceEffect effect) => false;
+            NativeCharacterInfluenceEffect effect) =>
+            combinedLifecycle && id == characterId.ToString("D") &&
+            (influence == "fixture.owned.wolf" &&
+             SameObject(effect, MintedPower(influence, "first-power", 13,
+                 "fixture:proof:acquire", OwnershipSource())) ||
+             influence == "fixture.owned.second" &&
+             SameObject(effect, MintedPower(influence, "second-power", 15,
+                 "fixture:proof:second", SecondSource())));
         public bool AuthorizesInfluenceProgression(string id, string influence,
             NativeSheetEarnedProgression progression) =>
             id == characterId.ToString("D") &&
@@ -617,12 +682,17 @@ public sealed class CharacterStateCrossRepositoryTests
             id == characterId.ToString("D");
         public bool AuthorizesDefinition(string id, NativeSupernaturalDefinition definition,
             NativeOriginDecisionBasis basis) =>
-            id == characterId.ToString("D") && definition == Definition &&
+            id == characterId.ToString("D") &&
+            (definition == Definition ||
+             combinedLifecycle &&
+             (SameObject(definition, CombinedFirstDefinition) ||
+              SameObject(definition, SecondDefinition))) &&
             basis == OwnershipBasis;
         public bool AuthorizesAcquisition(string id, NativeSupernaturalDefinition definition,
             NativeSupernaturalTransitionRequest request) =>
             id == characterId.ToString("D") &&
-            request.EventId == "synthetic:acquire";
+            (request.EventId == "synthetic:acquire" ||
+             combinedLifecycle && request.EventId == "synthetic:acquire-second");
         public bool AuthorizesAdvancement(string id,
             NativeCharacterPersistentInfluence influence,
             NativeSupernaturalProgressionNode node,
