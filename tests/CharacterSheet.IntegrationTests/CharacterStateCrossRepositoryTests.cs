@@ -2129,6 +2129,27 @@ public sealed class CharacterStateCrossRepositoryTests
     }
 
     /// <summary>
+    /// Independent source-qualified writers of different primary ability
+    /// slots. This exact test-only fixture does not establish acquisition by
+    /// the native supernatural ownership planner.
+    /// </summary>
+    private static NativeCharacterPersistentInfluence CompatibleInfluence(
+        string ability, int adjustment) =>
+        new("influence.compat." + ability, "definition.compat." + ability,
+            SyntheticSource(), "fixture:acquire.compat." + ability,
+            "fixture:expression.compat." + ability,
+            new Dictionary<string, string>(),
+            [
+                new NativeCharacterInfluenceEffect(
+                    "effect.compat." + ability,
+                    Occurrence("effects.compat." + ability),
+                    "fixture:effect.compat." + ability, SyntheticRule(),
+                    new Dictionary<string, string>(), ["@primary"],
+                    NativeInfluenceCharacteristic.AbilityScore,
+                    NativeInfluenceOperation.Adjust, ability, adjustment)
+            ], [], []);
+
+    /// <summary>
     /// An independently scripted source permits only the exact acquired first
     /// influence to change phase. The second source remains active throughout.
     /// </summary>
@@ -2500,6 +2521,8 @@ public sealed class CharacterStateCrossRepositoryTests
         public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
             Character(id) &&
             (ExactFixture(influence, PassiveResourceInfluence()) ||
+             ExactFixture(influence, CompatibleInfluence("strength", 1)) ||
+             ExactFixture(influence, CompatibleInfluence("dexterity", 2)) ||
              ValidCombinedOwner(influence) ||
              (influence.Expression.TryGetValue("phase", out var phase) &&
               phase is "dormant" or "active" &&
@@ -2513,6 +2536,10 @@ public sealed class CharacterStateCrossRepositoryTests
             Character(id) &&
             (influenceId == "influence.synthetic.pool" &&
                 ExactFixture(effect, GatedProgressiveInfluence().Effects.Single()) ||
+             influenceId == "influence.compat.strength" &&
+                ExactFixture(effect, CompatibleInfluence("strength", 1).Effects.Single()) ||
+             influenceId == "influence.compat.dexterity" &&
+                ExactFixture(effect, CompatibleInfluence("dexterity", 2).Effects.Single()) ||
              influenceId == "fixture.owned.wolf" &&
                 ExactFixture(effect, CombinedMintedPower(influenceId,
                     "first-power", 13, "fixture:proof:acquire", OwnershipSource())) ||
@@ -3074,6 +3101,73 @@ public sealed class CharacterStateCrossRepositoryTests
             "enter:wolf", "enter:wolf");
         Assert.NotEqual(CharacterManifestationApplyStatus.Applied, replay.Status);
         Assert.Equal(5, (await durable.GetEventsAsync(id)).Count);
+    }
+
+    /// <summary>
+    /// Required integrated scenario #8: two independently source-checked
+    /// influences modify different abilities and do not need a writer-choice
+    /// policy or an implicit arithmetic stacking order.
+    /// </summary>
+    [Fact]
+    public async Task CompatiblePersistentSupernaturalInfluencesComposeThroughRealCoreAndPostgres()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var authority = new PostgresSyntheticAuthorityProvider(
+            database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(authority, authority);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(
+            CancellationToken.None))["fingerprint"]!.GetValue<string>();
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var build = new PostgresCharacterBuildStore(db);
+        var authored = TestCharacter(id, fingerprint, TestOwnedForms()) with
+        {
+            PersistentInfluences = [
+                CompatibleInfluence("strength", 1),
+                CompatibleInfluence("dexterity", 2)
+            ]
+        };
+        foreach (var (key, value) in authored.PrimaryMechanics.AbilityScores)
+            await build.SetBaseAbilityScoreInputAsync(
+                id, key, value, DateTimeOffset.UtcNow);
+
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint,
+                JsonSerializer.Serialize(authored.AlternateSheets, Wire),
+                JsonSerializer.Serialize(authored.PersistentInfluences, Wire),
+                JsonSerializer.Serialize(new NativeManifestationLedger(
+                    id.ToString("D"), 0, [], [], []), Wire),
+                0, 0, 0, digest, "fixture:acquire-werewolf",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        var resolved = await Reader(db, id, gateway).GetAsync(id);
+        Assert.Equal(CharacterEffectiveStateStatus.Ready, resolved.Status);
+        Assert.Equal("partial", resolved.View!.Status);
+        Assert.Equal("@primary", resolved.View.EffectiveSheetId);
+        Assert.NotNull(resolved.View.NativeProjection);
+        Assert.Equal(11, resolved.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
+        Assert.Equal(14, resolved.View.NativeProjection!["effectiveCharacter"]!
+            ["effectiveMechanics"]!["abilityScores"]!["dexterity"]!.GetValue<int>());
+        Assert.Equal(2, ((JsonArray)resolved.View.NativeProjection!["effectiveCharacter"]!
+            ["appliedEffects"]!).Count);
+        Assert.Equal(1, gateway.VerifiedReadRequests);
+        Assert.False(resolved.View.EffectiveMechanicsReady);
+
+        await using var reloadDb = new CharacterSheetDbContext(database.CreateOptions());
+        var latest = await Reader(reloadDb, id, gateway).GetAsync(id);
+        Assert.Equal("partial", latest.View!.Status);
+        Assert.True(JsonNode.DeepEquals(resolved.View.NativeProjection,
+            latest.View.NativeProjection));
+        Assert.Equal(1, (await new PostgresCharacterSupernaturalStateStore(reloadDb)
+            .GetEventsAsync(id)).Count);
     }
 
     [Theory]
