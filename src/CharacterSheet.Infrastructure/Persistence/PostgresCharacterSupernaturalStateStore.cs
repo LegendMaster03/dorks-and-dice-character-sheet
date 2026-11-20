@@ -344,8 +344,8 @@ public sealed class PostgresCharacterSupernaturalStateStore(CharacterSheetDbCont
                 var priorOverlap = lastOverlapSelections ?? "[]";
                 if (receipt.Kind == "overlap-decision")
                 {
-                    using var document = JsonDocument.Parse(receipt.OverlapSelectionsSnapshotJson);
-                    var values = document.RootElement;
+                    using var overlapDocument = JsonDocument.Parse(receipt.OverlapSelectionsSnapshotJson);
+                    var values = overlapDocument.RootElement;
                     if (values.GetArrayLength() == 0)
                         throw new ArgumentException(
                             "An overlap decision receipt has no new selection.");
