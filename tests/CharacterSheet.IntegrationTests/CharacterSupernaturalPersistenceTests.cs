@@ -1723,4 +1723,138 @@ public sealed class CharacterSupernaturalPersistenceTests
             .GetProperty("revision").GetInt64());
     }
 
+
+    private static string OverlapDecision(string id, string winner,
+        string evidence, string target = "@primary") => JsonSerializer.Serialize(new
+        {
+            id, targetSheetId = target,
+            effectIds = new[] { "fixture.effect.a", "fixture.effect.b" },
+            selectedEffectId = winner,
+            ruleOccurrence = new
+            {
+                source = new { kind = 0, id = "fixture.supernatural", version = "v1" },
+                occurrencePath = "overlaps.fixture"
+            },
+            basis = new { adjudication = 0,
+                nativeRuleReference = "fixture.rule.overlap" },
+            authorizationEvidenceId = evidence
+        });
+
+    [Fact]
+    public async Task OverlapDecisionsCommitSeparatelyAndSupersedeOnlyExactScopeAfterReload()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        var owned = SyntheticInfluence("1", "fixture:stage1");
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest) with
+            {
+                PersistentInfluencesJson = owned
+            })).Status);
+
+        var first = OverlapDecision("decision.first", "fixture.effect.a",
+            "fixture:overlap:first");
+        var firstChoices = "[" + first + "]";
+        var planned = Write(id, digest, 1, 0, 0, "overlap:first") with
+        {
+            PersistentInfluencesJson = owned,
+            IsOverlapDecision = true,
+            NewOverlapDecisionId = "decision.first",
+            AuthorizationEvidenceId = "fixture:overlap:first",
+            InfluenceOverlapSelectionsJson = firstChoices
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(planned)).Status);
+        Assert.Equal(CharacterSupernaturalWriteStatus.DuplicateEvent,
+            (await store.CommitVerifiedAsync(planned)).Status);
+
+        var second = OverlapDecision("decision.second", "fixture.effect.b",
+            "fixture:overlap:second");
+        var supersede = Write(id, digest, 2, 0, 0, "overlap:second") with
+        {
+            PersistentInfluencesJson = owned,
+            IsOverlapDecision = true,
+            NewOverlapDecisionId = "decision.second",
+            ReplacedOverlapDecisionId = "decision.first",
+            AuthorizationEvidenceId = "fixture:overlap:second",
+            InfluenceOverlapSelectionsJson = "[" + second + "]"
+        };
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            supersede with { ReplacedOverlapDecisionId = null }));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            supersede with { ReplacedOverlapDecisionId = "different.decision" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            supersede with { PersistentInfluencesJson = "[]" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            supersede with { InfluenceOverlapSelectionsJson = "[" +
+                OverlapDecision("decision.second", "fixture.effect.b",
+                    "fixture:overlap:second", "wolf") + "]" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CommitVerifiedAsync(
+            supersede with { AuthorizationEvidenceId = "fixture:forged" }));
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(supersede)).Status);
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var durable = new PostgresCharacterSupernaturalStateStore(reload);
+        var saved = (await durable.GetAsync(id))!;
+        Assert.Equal(3, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Contains("decision.second", saved.InfluenceOverlapSelectionsJson);
+        Assert.DoesNotContain("decision.first", saved.InfluenceOverlapSelectionsJson);
+        Assert.Equal(0, JsonNode.Parse(saved.ProgressionJournalJson)!
+            ["revision"]!.GetValue<long>());
+        Assert.Equal(new[] { "acquisition", "overlap-decision", "overlap-decision" },
+            (await durable.GetEventsAsync(id)).Select(x => x.Kind));
+
+        // This ordinary acquisition has no independent overlap authorization,
+        // and therefore may not change the prior decision collection.
+        await Assert.ThrowsAsync<ArgumentException>(() => durable.CommitVerifiedAsync(
+            Write(id, digest, 3, 0, 0, "acquire:unapproved-overlap") with
+            {
+                PersistentInfluencesJson = owned,
+                InfluenceOverlapSelectionsJson = "[" + first + "]"
+            }));
+    }
+
+    [Fact]
+    public async Task HistoricalOverlapSnapshotCorruptionRejectsSubsequentCommit()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        var (store, digest) = await InitializeAsync(db, id);
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(Write(id, digest))).Status);
+
+        var first = OverlapDecision("decision.first", "fixture.effect.a",
+            "fixture:overlap:first");
+        var operation = Write(id, digest, 1, 0, 0, "overlap:first") with
+        {
+            IsOverlapDecision = true,
+            NewOverlapDecisionId = "decision.first",
+            AuthorizationEvidenceId = "fixture:overlap:first",
+            InfluenceOverlapSelectionsJson = "[" + first + "]"
+        };
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(operation)).Status);
+
+        // The latest state still contains the correct winner. An independently
+        // corrupted historical receipt must block a new write after restart.
+        var altered = JsonNode.Parse("[" + first + "]")!.AsArray();
+        altered[0]!["selectedEffectId"] = "fixture.effect.b";
+        Assert.Equal(1, await db.SupernaturalEventReceipts
+            .Where(x => x.CharacterId == id && x.EventId == "overlap:first")
+            .ExecuteUpdateAsync(set => set.SetProperty(
+                x => x.OverlapSelectionsSnapshotJson, altered.ToJsonString())));
+
+        await using var reload = new CharacterSheetDbContext(database.CreateOptions());
+        var durable = new PostgresCharacterSupernaturalStateStore(reload);
+        await Assert.ThrowsAsync<ArgumentException>(() => durable.CommitVerifiedAsync(
+            Write(id, digest, 2, 0, 0, "acquire:extra")));
+        Assert.Equal(2, (await durable.GetAsync(id))!.Revision);
+        Assert.Equal(2, (await durable.GetEventsAsync(id)).Count);
+    }
+
 }
