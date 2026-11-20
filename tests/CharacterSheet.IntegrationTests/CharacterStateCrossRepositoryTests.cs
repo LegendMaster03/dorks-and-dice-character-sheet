@@ -645,6 +645,289 @@ public sealed class CharacterStateCrossRepositoryTests
             NativeSupernaturalEligibilityVerdict.Unresolved;
     }
 
+
+    private static NativeCharacterPersistentInfluence OverlapInfluence(
+        string owner, int strength) => new(
+            "fixture.influence." + owner, "fixture.definition." + owner,
+            OwnershipSource(), "fixture:acquire:" + owner,
+            "fixture:expression:" + owner,
+            new Dictionary<string, string> { ["phase"] = "active" },
+            [
+                new NativeCharacterInfluenceEffect(
+                    "fixture.effect." + owner,
+                    OwnershipOccurrence("effects." + owner),
+                    "fixture:effect:" + owner, OwnershipBasis,
+                    new Dictionary<string, string>(),
+                    [NativeCharacterSheetResolver.PrimarySheetId],
+                    NativeInfluenceCharacteristic.AbilityScore,
+                    NativeInfluenceOperation.Replace,
+                    Key: "strength", NumericValue: strength)
+            ], [], []);
+
+    private static NativeInfluenceOverlapSelection OverlapDecision(
+        string id, string selected, string evidence) => new(
+            id, ["fixture.effect.a", "fixture.effect.b"], selected,
+            OwnershipOccurrence("decisions.strength"), OwnershipBasis, evidence,
+            NativeCharacterSheetResolver.PrimarySheetId);
+
+    private sealed class SyntheticOverlapTrustedSource(string fingerprint)
+        : ITrustedCharacterInfluenceOverlapDecisionSource
+    {
+        public Task<TrustedInfluenceOverlapDecisionMaterial?> PrepareAsync(
+            Guid characterId, SiteCharacterProjection authorizedCharacter,
+            CharacterSupernaturalState committed, string intentId, string eventId,
+            CancellationToken cancellationToken)
+        {
+            var data = eventId switch
+            {
+                "overlap:select-a" => ("fixture.overlap.a", (string?)null,
+                    "fixture:overlap:a"),
+                "overlap:select-b" => ("fixture.overlap.b", (string?)"fixture.overlap.a",
+                    "fixture:overlap:b"),
+                _ => default
+            };
+            if (string.IsNullOrWhiteSpace(data.Item1) ||
+                authorizedCharacter.CharacterId != characterId ||
+                !authorizedCharacter.AllowsOrdinaryEditingByLifecycle ||
+                intentId != "intent:" + eventId)
+                return Task.FromResult<TrustedInfluenceOverlapDecisionMaterial?>(null);
+            var verified = JsonSerializer.SerializeToElement(new
+            {
+                characterId = characterId.ToString("D"),
+                intentId, eventId, rulesetId = "first-party-001",
+                fingerprint, decisionId = data.Item1,
+                replacedDecisionId = data.Item2,
+                authorizationEvidenceId = data.Item3,
+                sourceOccurrence = OwnershipOccurrence("decisions.strength")
+            }, Wire);
+            return Task.FromResult<TrustedInfluenceOverlapDecisionMaterial?>(
+                new(verified, data.Item3));
+        }
+    }
+
+    private sealed class PostgresSyntheticOverlapProvider(
+        DbContextOptions<CharacterSheetDbContext> options, Guid characterId)
+        : CoreOverlapAuthorityProvider, INativeCharacterInfluenceAuthority,
+        INativeCharacterInfluenceOverlapAuthority
+    {
+        private static NativeInfluenceOverlapSelection DecisionA =>
+            OverlapDecision("fixture.overlap.a", "fixture.effect.a",
+                "fixture:overlap:a");
+        private static NativeInfluenceOverlapSelection DecisionB =>
+            OverlapDecision("fixture.overlap.b", "fixture.effect.b",
+                "fixture:overlap:b");
+
+        public async Task<CoreOverlapAuthorization?> VerifyAsync(
+            Guid actor, CoreOverlapPlanRequest request, CancellationToken ct)
+        {
+            if (actor != Actor || request.CharacterId != characterId.ToString("D") ||
+                request.RulesetId != "first-party-001" ||
+                request.State.CharacterId != request.CharacterId ||
+                request.State.AlternateSheets.Count != 0 ||
+                request.State.PersistentInfluences?.Count != 2)
+                return null;
+
+            var expected = request.EventId switch
+            {
+                "overlap:select-a" => (Decision: DecisionA,
+                    Replaced: (string?)null),
+                "overlap:select-b" => (Decision: DecisionB,
+                    Replaced: (string?)"fixture.overlap.a"),
+                _ => default
+            };
+            if (expected.Decision is null ||
+                expected.Decision.AuthorizationEvidenceId !=
+                    request.AuthorizationEvidenceId)
+                return null;
+
+            await using var db = new CharacterSheetDbContext(options);
+            var stateStore = new PostgresCharacterSupernaturalStateStore(db);
+            var saved = await stateStore.GetAsync(characterId, ct);
+            if (saved is null || saved.Revision != request.ExpectedSupernaturalRevision ||
+                saved.LedgerRevision != request.ExpectedLedgerRevision ||
+                saved.Fingerprint != request.Fingerprint ||
+                saved.RulesetId != request.RulesetId ||
+                !SameJson(saved.AlternateSheetsJson,
+                    JsonSerializer.Serialize(request.State.AlternateSheets, Wire)) ||
+                !SameJson(saved.PersistentInfluencesJson,
+                    JsonSerializer.Serialize(request.State.PersistentInfluences, Wire)) ||
+                !SameJson(saved.InfluenceOverlapSelectionsJson,
+                    JsonSerializer.Serialize(request.State.InfluenceOverlapSelections, Wire)) ||
+                !SameJson(saved.LedgerJson,
+                    JsonSerializer.Serialize(request.Ledger, Wire)) ||
+                !SameJson(saved.ProgressionJournalJson,
+                    JsonSerializer.Serialize(request.ProgressionJournal, Wire)) ||
+                await stateStore.GetAuthoritativeInputsFingerprintAsync(
+                    characterId, ct) != request.AuthoritativeInputsFingerprint)
+                return null;
+
+            var baseScores = await db.BaseAbilityScoreInputs.AsNoTracking()
+                .Where(x => x.CharacterId == characterId)
+                .ToDictionaryAsync(x => x.AbilityKey, x => x.Score, ct);
+            if (baseScores.Count != request.State.PrimaryMechanics.AbilityScores.Count ||
+                baseScores.Any(x => !request.State.PrimaryMechanics.AbilityScores
+                    .TryGetValue(x.Key, out var value) || value != x.Value))
+                return null;
+
+            var classes = await db.CharacterAdvancementEntries.AsNoTracking()
+                .Where(x => x.CharacterId == characterId &&
+                    x.Kind == CharacterAdvancementKind.Class).ToArrayAsync(ct);
+            if (classes.Length != request.State.PrimaryMechanics.Advancements.Count ||
+                request.State.PrimaryMechanics.Advancements.Any(x =>
+                    !classes.Any(entry => entry.Id.ToString("D") == x.OccurrenceId &&
+                        entry.RuleConceptKey == x.ClassId && entry.Level == x.Level)))
+                return null;
+
+            return new CoreOverlapAuthorization(
+                expected.Decision, expected.Replaced, this);
+        }
+
+        private static bool SameJson(string left, string right)
+        {
+            using var a = JsonDocument.Parse(left);
+            using var b = JsonDocument.Parse(right);
+            return JsonElement.DeepEquals(a.RootElement, b.RootElement);
+        }
+
+        private bool Character(string id) => id == characterId.ToString("D");
+        private static bool Equal(object a, object b) =>
+            JsonElement.DeepEquals(JsonSerializer.SerializeToElement(a, Wire),
+                JsonSerializer.SerializeToElement(b, Wire));
+
+        public bool AuthorizesPrimary(string id, NativeCharacterRequest character) =>
+            Character(id);
+        public bool AuthorizesSheet(string id, NativePersistentCharacterSheet sheet) => false;
+        public bool AuthorizesProgression(string id, string sheet,
+            NativeSheetEarnedProgression progression) => false;
+        public bool AuthorizesGrant(string id, string sheet,
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+        public bool AuthorizesApplicability(string id, string sheet,
+            NativeSheetGrantApplicability decision) => false;
+        public bool AuthorizesInfluence(string id, NativeCharacterPersistentInfluence influence) =>
+            Character(id) && (Equal(influence, OverlapInfluence("a", 13)) ||
+                Equal(influence, OverlapInfluence("b", 15)));
+        public bool AuthorizesExpression(string id, NativeCharacterPersistentInfluence influence) =>
+            AuthorizesInfluence(id, influence);
+        public bool AuthorizesEffect(string id, string owner,
+            NativeCharacterInfluenceEffect effect) =>
+            Character(id) && (owner == "fixture.influence.a" &&
+                Equal(effect, OverlapInfluence("a", 13).Effects[0]) ||
+                owner == "fixture.influence.b" &&
+                Equal(effect, OverlapInfluence("b", 15).Effects[0]));
+        public bool AuthorizesInfluenceProgression(string id, string owner,
+            NativeSheetEarnedProgression progression) => false;
+        public bool AuthorizesInfluenceGrant(string id, string owner,
+            NativeSheetEarnedProgression progression, NativeSheetEarnedGrant grant) => false;
+        public bool AuthorizesInfluenceApplicability(string id, string owner,
+            NativeInfluenceGrantApplicability decision) => false;
+        public bool AuthorizesOverlapSelection(string id,
+            NativeInfluenceOverlapSelection decision) =>
+            Character(id) && (Equal(decision, DecisionA) || Equal(decision, DecisionB));
+    }
+
+    [Fact]
+    public async Task IndependentlyVerifiedOverlapDecisionSurvivesRealCoreHttpAndPostgresRestart()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var provider = new PostgresSyntheticOverlapProvider(database.CreateOptions(), id);
+        await using var core = await CoreHost.StartAsync(
+            verifiedOverlapProvider: provider);
+        var gateway = new RealGateway(core.Client);
+        var fingerprint = (await gateway.GetNativeRulesetAsync(CancellationToken.None))
+            ["fingerprint"]!.GetValue<string>();
+
+        await using var db = new CharacterSheetDbContext(database.CreateOptions());
+        await db.Database.MigrateAsync();
+        await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+        var builder = new PostgresCharacterBuildStore(db);
+        var known = TestCharacter(id, fingerprint, []);
+        foreach (var pair in known.PrimaryMechanics.AbilityScores)
+            await builder.SetBaseAbilityScoreInputAsync(
+                id, pair.Key, pair.Value, DateTimeOffset.UtcNow);
+        var built = await builder.SetStartingClassAsync(
+            id, "class.barbarian", DateTimeOffset.UtcNow);
+        var classEntry = Assert.Single(built!.AdvancementEntries,
+            entry => entry.Kind == CharacterAdvancementKind.Class);
+        known = known with
+        {
+            PrimaryMechanics = known.PrimaryMechanics with
+            {
+                Advancements = [new NativeAdvancement(
+                    "class.barbarian", 1, classEntry.Id.ToString("D"))]
+            },
+            PersistentInfluences = [
+                OverlapInfluence("a", 13),
+                OverlapInfluence("b", 15)
+            ]
+        };
+        var store = new PostgresCharacterSupernaturalStateStore(db);
+        var digest = (await store.GetAuthoritativeInputsFingerprintAsync(id))!;
+        Assert.Equal(CharacterSupernaturalWriteStatus.Applied,
+            (await store.CommitVerifiedAsync(new VerifiedSupernaturalStateWrite(
+                id, "first-party-001", fingerprint, "[]",
+                JsonSerializer.Serialize(known.PersistentInfluences, Wire),
+                JsonSerializer.Serialize(new NativeManifestationLedger(
+                    id.ToString("D"), 0, [], [], []), Wire),
+                0, 0, 0, digest, "fixture:acquire-both",
+                "fixture:verified-source", false, DateTimeOffset.UtcNow))).Status);
+
+        var owner = new OwnerAccess(id);
+        var service = new CharacterInfluenceOverlapDecisionService(
+            owner, owner, store, gateway,
+            new SyntheticOverlapTrustedSource(fingerprint),
+            new CharacterBuildService(owner, builder, TimeProvider.System),
+            new CharacterStateService(owner, new PostgresCharacterStateStore(db),
+                TimeProvider.System),
+            new CharacterOriginStateService(owner, builder,
+                new PostgresCharacterAuthorizedOriginStore(db)));
+
+        Assert.Equal("unresolved",
+            NativeCharacterInfluenceResolver.Resolve(known, "@primary", provider).Status);
+
+        var first = await service.ApplyAsync(id, 1, 0,
+            "intent:overlap:select-a", "overlap:select-a");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, first.Status);
+        Assert.Equal(2, first.StateRevision);
+        var selected = (await store.GetAsync(id))!;
+        var decisionA = JsonSerializer.Deserialize<NativeInfluenceOverlapSelection[]>(
+            selected.InfluenceOverlapSelectionsJson, Wire)!;
+        Assert.Single(decisionA);
+        Assert.Equal("fixture.effect.a", decisionA[0].SelectedEffectId);
+        var firstProjection = NativeCharacterInfluenceResolver.Resolve(
+            known with { InfluenceOverlapSelections = decisionA }, "@primary", provider);
+        Assert.Equal("resolved", firstProjection.Status);
+        Assert.Equal(13, firstProjection.EffectiveMechanics!.AbilityScores["strength"]);
+
+        var replaced = await service.ApplyAsync(id, 2, 0,
+            "intent:overlap:select-b", "overlap:select-b");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, replaced.Status);
+        Assert.Equal(3, replaced.StateRevision);
+        var stale = await service.ApplyAsync(id, 2, 0,
+            "intent:overlap:select-b", "overlap:select-b");
+        Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.StateRevisionConflict,
+            stale.Status);
+
+        await using var reloaded = new CharacterSheetDbContext(database.CreateOptions());
+        var persisted = new PostgresCharacterSupernaturalStateStore(reloaded);
+        var saved = (await persisted.GetAsync(id))!;
+        Assert.Equal(3, saved.Revision);
+        Assert.Equal(0, saved.LedgerRevision);
+        Assert.Equal(0, JsonNode.Parse(saved.ProgressionJournalJson)!
+            ["revision"]!.GetValue<long>());
+        Assert.Equal(JsonSerializer.Serialize(known.PersistentInfluences, Wire),
+            saved.PersistentInfluencesJson);
+        var decisionB = JsonSerializer.Deserialize<NativeInfluenceOverlapSelection[]>(
+            saved.InfluenceOverlapSelectionsJson, Wire)!;
+        Assert.Single(decisionB);
+        Assert.Equal("fixture.overlap.b", decisionB[0].Id);
+        Assert.Equal(15, NativeCharacterInfluenceResolver.Resolve(
+            known with { InfluenceOverlapSelections = decisionB },
+            "@primary", provider).EffectiveMechanics!.AbilityScores["strength"]);
+        Assert.Equal(new[] { "acquisition", "overlap-decision", "overlap-decision" },
+            (await persisted.GetEventsAsync(id)).Select(x => x.Kind));
+    }
+
     [Fact]
     public async Task SyntheticSupernaturalOwnershipAcquiresAndAdvancesThroughRealCoreAndPostgres()
     {
