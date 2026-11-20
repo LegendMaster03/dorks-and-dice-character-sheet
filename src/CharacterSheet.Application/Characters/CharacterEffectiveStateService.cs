@@ -148,7 +148,9 @@ public sealed class CharacterEffectiveStateService(
                     {
                         using var sheets = JsonDocument.Parse(persisted.AlternateSheetsJson);
                         using var influences = JsonDocument.Parse(persisted.PersistentInfluencesJson);
-                         using var overlap = JsonDocument.Parse(persisted.InfluenceOverlapSelectionsJson);
+                        // Include persisted choices so native read authority
+                        // verifies their source and exact active writer set.
+                        using var overlap = JsonDocument.Parse(persisted.InfluenceOverlapSelectionsJson);
                         using var ledger = JsonDocument.Parse(persisted.LedgerJson);
                         var request = JsonSerializer.SerializeToElement(new
                         {
@@ -158,7 +160,7 @@ public sealed class CharacterEffectiveStateService(
                                 primaryMechanics = primary.Mechanics.Value,
                                 alternateSheets = sheets.RootElement,
                                 persistentInfluences = influences.RootElement,
-                                 influenceOverlapSelections = overlap.RootElement
+                                influenceOverlapSelections = overlap.RootElement
                             },
                             ledger = ledger.RootElement
                         }, Wire);

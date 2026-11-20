@@ -157,7 +157,9 @@ public sealed class CharacterManifestationTransitionService(
         {
             using var sheets = JsonDocument.Parse(saved.AlternateSheetsJson);
             using var influences = JsonDocument.Parse(saved.PersistentInfluencesJson);
-                         using var overlap = JsonDocument.Parse(saved.InfluenceOverlapSelectionsJson);
+            // A form transition must preserve and independently revalidate
+            // the currently authorized effect writer decisions.
+            using var overlap = JsonDocument.Parse(saved.InfluenceOverlapSelectionsJson);
             using var ledger = JsonDocument.Parse(saved.LedgerJson);
             request = JsonSerializer.SerializeToElement(new
             {
@@ -171,7 +173,7 @@ public sealed class CharacterManifestationTransitionService(
                     primaryMechanics = primary.Mechanics.Value,
                     alternateSheets = sheets.RootElement,
                     persistentInfluences = influences.RootElement,
-                                 influenceOverlapSelections = overlap.RootElement
+                    influenceOverlapSelections = overlap.RootElement
                 },
                 ledger = ledger.RootElement,
                 transition = verified.Transition
