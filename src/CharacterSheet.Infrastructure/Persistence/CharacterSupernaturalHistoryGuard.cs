@@ -78,6 +78,17 @@ internal static class CharacterSupernaturalHistoryGuard
             PreserveExpressionChange(existing.PersistentInfluencesJson,
                 command.PersistentInfluencesJson, command.ExpressionChangeJson!);
         }
+        else if (command.IsOverlapDecision)
+        {
+            // A winner selection is not a new influence, form, grant or
+            // progression. The only mutation permitted on this path is the
+            // separately verified, historical overlap-decision collection.
+            if (!JsonEqual(existing.AlternateSheetsJson, command.AlternateSheetsJson) ||
+                !JsonEqual(existing.PersistentInfluencesJson, command.PersistentInfluencesJson) ||
+                !JsonElement.DeepEquals(old, next))
+                throw new ArgumentException(
+                    "An overlap decision cannot mutate owners or the manifestation ledger.");
+        }
         else
         {
             if (!JsonElement.DeepEquals(old, next))
