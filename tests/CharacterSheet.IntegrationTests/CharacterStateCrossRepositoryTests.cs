@@ -1264,6 +1264,56 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(CharacterManifestationApplyStatus.StateRevisionConflict,
             duplicate.Status);
         Assert.Equal(8, (await durable.GetEventsAsync(id)).Count);
+
+        // Competing, separately source-authorized coordinators must not
+        // consume the same character revision. Each has its own DbContext;
+        // the Core HTTP host and PostgreSQL character root are shared.
+        await using var overlapDb = new CharacterSheetDbContext(dbOptions);
+        await using var formDb = new CharacterSheetDbContext(dbOptions);
+        var concurrentSite = new OwnerAccess(id);
+        var overlapBuild = new PostgresCharacterBuildStore(overlapDb);
+        var competingChoice = new CharacterInfluenceOverlapDecisionService(
+            concurrentSite, concurrentSite,
+            new PostgresCharacterSupernaturalStateStore(overlapDb), gateway,
+            new SyntheticOverlapTrustedSource(fingerprint),
+            new CharacterBuildService(concurrentSite, overlapBuild, TimeProvider.System),
+            new CharacterStateService(concurrentSite,
+                new PostgresCharacterStateStore(overlapDb), TimeProvider.System),
+            new CharacterOriginStateService(concurrentSite, overlapBuild,
+                new PostgresCharacterAuthorizedOriginStore(overlapDb)));
+        var competingForm = TransitionRunner(formDb, concurrentSite,
+            new PostgresCharacterSupernaturalStateStore(formDb),
+            gateway, formSource);
+        var chooseTask = competingChoice.ApplyAsync(id, 8, 2,
+            "intent:overlap:select-b", "overlap:select-b");
+        var enterTask = competingForm.ApplyAsync(id, 8, 2,
+            "reenter:wolf", "reenter:wolf");
+        await Task.WhenAll(chooseTask, enterTask);
+        var choiceApplied = chooseTask.Result.Status ==
+            CharacterSupernaturalOwnershipApplyStatus.Applied;
+        var formApplied = enterTask.Result.Status ==
+            CharacterManifestationApplyStatus.Applied;
+        Assert.True(choiceApplied ^ formApplied,
+            "Exactly one independently authorized coordinator may own revision nine. " +
+            "Overlap: " + chooseTask.Result.Status + "; form: " + enterTask.Result.Status);
+
+        await using var afterRaceDb = new CharacterSheetDbContext(dbOptions);
+        var afterRace = new PostgresCharacterSupernaturalStateStore(afterRaceDb);
+        var final = (await afterRace.GetAsync(id))!;
+        Assert.Equal(9, final.Revision);
+        Assert.Equal(choiceApplied ? 2 : 3, final.LedgerRevision);
+        var finalReceipts = await afterRace.GetEventsAsync(id);
+        Assert.Equal(9, finalReceipts.Count);
+        Assert.Equal(choiceApplied ? "overlap:select-b" : "reenter:wolf",
+            finalReceipts[^1].EventId);
+        Assert.Equal(choiceApplied ? "overlap-decision" : "transition",
+            finalReceipts[^1].Kind);
+        Assert.Single(finalReceipts,
+            receipt => receipt.EventId == finalReceipts[^1].EventId);
+        Assert.Equal(3, JsonNode.Parse(final.ProgressionJournalJson)!
+            ["revision"]!.GetValue<long>());
+        Assert.Equal(2, JsonSerializer.Deserialize<NativeCharacterPersistentInfluence[]>(
+            final.PersistentInfluencesJson, Wire)!.Length);
     }
 
     [Fact]
