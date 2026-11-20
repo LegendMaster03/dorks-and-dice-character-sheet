@@ -1165,7 +1165,10 @@ public sealed class CharacterStateCrossRepositoryTests
         Assert.Equal(CharacterSupernaturalOwnershipApplyStatus.Applied, choice.Status);
         Assert.Equal(5, choice.StateRevision);
         var dormant = await Reader(db, id, gateway).GetAsync(id);
-        Assert.Equal("partial", dormant.View!.Status);
+        Assert.NotNull(dormant.View);
+        Assert.True(dormant.View!.Status == "partial",
+            "Dormant combined projection: " + dormant.View.Status +
+            "; unresolved: " + string.Join(", ", dormant.View.Unresolved));
         Assert.Equal(15, dormant.View.NativeProjection!["effectiveCharacter"]!
             ["effectiveMechanics"]!["abilityScores"]!["strength"]!.GetValue<int>());
 
