@@ -27,6 +27,9 @@ using CoreOriginAuthorityProvider = CoreHost::RulesCore.Host.INativeOriginHostUn
 using CoreOwnershipAuthorityProvider = CoreHost::RulesCore.Host.INativeSupernaturalHostAuthorityProvider;
 using CoreOwnershipPlanRequest = CoreHost::RulesCore.Host.VerifiedSupernaturalOwnershipPlanRequest;
 using CoreOwnershipAuthorization = CoreHost::RulesCore.Host.VerifiedSupernaturalHostAuthorization;
+using CoreOverlapAuthorityProvider = CoreHost::RulesCore.Host.INativeInfluenceOverlapHostAuthorityProvider;
+using CoreOverlapPlanRequest = CoreHost::RulesCore.Host.VerifiedInfluenceOverlapPlanRequest;
+using CoreOverlapAuthorization = CoreHost::RulesCore.Host.VerifiedInfluenceOverlapHostAuthorization;
 using CoreApplication = CoreHost::RulesCore.Host.RulesCoreApplication;
 using CoreTicketValidator = CoreHost::RulesCore.Host.CharacterSheetMechanicsTicketValidator;
 
@@ -76,7 +79,8 @@ public sealed class CharacterStateCrossRepositoryTests
             CoreAuthorityProvider? verifiedSourceProvider = null,
             CoreReadAuthorityProvider? verifiedReadProvider = null,
             CoreOriginAuthorityProvider? verifiedOriginProvider = null,
-            CoreOwnershipAuthorityProvider? verifiedOwnershipProvider = null)
+            CoreOwnershipAuthorityProvider? verifiedOwnershipProvider = null,
+            CoreOverlapAuthorityProvider? verifiedOverlapProvider = null)
         {
             var root = Environment.GetEnvironmentVariable("RULES_CORE_CONTENT_ROOT");
             if (root is null || !Directory.Exists(Path.Combine(root, "first-party-001", "native")))
@@ -104,6 +108,8 @@ public sealed class CharacterStateCrossRepositoryTests
                     services.AddSingleton(verifiedOriginProvider);
                 if (verifiedOwnershipProvider is not null)
                     services.AddSingleton(verifiedOwnershipProvider);
+                if (verifiedOverlapProvider is not null)
+                    services.AddSingleton(verifiedOverlapProvider);
             });
             await app.StartAsync();
             var server = app.Services.GetRequiredService<IServer>();
@@ -269,6 +275,18 @@ public sealed class CharacterStateCrossRepositoryTests
             using var response = await http.SendAsync(message, ct);
             var result = await Parse(response, ct);
             AfterVerifiedOriginRead?.Invoke();
+            return result;
+        }
+
+        public async Task<JsonNode> PlanVerifiedInfluenceOverlapAsync(
+            JsonElement request, CancellationToken ct)
+        {
+            using var message = Authorized(HttpMethod.Post,
+                "/api/mechanics/v1/characters/supernatural/overlaps/plan");
+            message.Content = JsonContent.Create(request, options: Wire);
+            using var response = await http.SendAsync(message, ct);
+            var result = await Parse(response, ct);
+            AfterVerifiedPlan?.Invoke();
             return result;
         }
 
