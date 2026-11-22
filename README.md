@@ -4,9 +4,9 @@ Character Sheet is the separately deployable, player-facing Dorks & Dice tool fo
 
 The Dorks & Dice Site owns canonical Character identity, account ownership, Character lifecycle, and campaign-character associations. Character Sheet owns rich sheet state attached to the Site-generated `CharacterId`. Rules Core owns normalized rule definitions.
 
-The current implementation provides the first real Character workflow: owner-only Tool Host Character authorization, EF Core/PostgreSQL persistence, canonical Site Character creation from `/new`, existing-basic-Character upgrades, archived read-only behavior, a Rules Core-backed initial builder, an explicit Embedded Module v2 frontend lifecycle, external database deployment, CI validation, and tests. Broader D&D character-building mechanics remain intentionally deferred.
+The current implementation includes Site-owned Character creation and upgrades, owner-only Tool Host authorization, PostgreSQL persistence, an embedded builder and advancement workflow, Character-owned ability inputs, notes, art, conditions, inventory and starting equipment, and a harvesting/crafting workspace. The native Rules Core integration supplies supported rule options and character projections. Unsupported rule mechanics, incomplete native content, and unavailable calculations remain explicit rather than being guessed in the UI.
 
-See `docs/architecture.md` for the ownership, authorization, persistence, API, lifecycle, and routing contracts.
+See `docs/architecture.md` for ownership, persistence, lifecycle, and historical design decisions. For the **current** Rules Core integration, use `docs/character-sheet-native-consumer-status.md`; `docs/character-mechanics-presentation-contract.md` defines the frontend projection boundary. The retired `/api/rules` path is not an active integration.
 
 ## Development
 
