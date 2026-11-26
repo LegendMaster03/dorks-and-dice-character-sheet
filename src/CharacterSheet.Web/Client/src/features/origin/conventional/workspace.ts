@@ -26,6 +26,8 @@ export interface ConventionalHost<TContext> {
     methodContext(method: NativeMethod, presets: readonly NativePreset[]): TContext;
     resetToConventional?(): Promise<void>;
     canResetToConventional?(): boolean;
+    hasPendingCustomEdit?(): boolean;
+    renderCustomStatus?(): HTMLElement;
     /** Optional bounded presentation metadata from a native presentation provider. */
     describePreset?(id: string): string | undefined;
     labelRule?(id: string): string | undefined;
@@ -82,7 +84,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     const revision = () => host.current().draft?.revision ?? 0;
     function writable(): boolean {
         const s = host.current();
-        return host.canEditDraft() && s.status === "ready" && !s.readOnly && !s.savedState && !s.busy &&
+        return host.canEditDraft() && !host.hasPendingCustomEdit?.() && s.status === "ready" && !s.readOnly && !s.savedState && !s.busy &&
             !!s.catalog && (!s.draft || s.draft.fingerprint === s.catalog.fingerprint &&
                 s.draft.rulesetId === s.catalog.rulesetId) && editableConventional(currentProposal());
     }
@@ -330,6 +332,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                     state.draft ? "saved" : "unavailable";
         if (status !== "unavailable") area.append(renderDraftStatus(status));
         if (error) area.append(createInlineState(error, "error"));
+        if (host.renderCustomStatus) area.append(host.renderCustomStatus());
         if (busy && !saving) area.append(createInlineState("Loading native information…", "loading"));
         if (pending) {
             const retry = pending;
@@ -376,7 +379,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                 row.append(createElement("h3", undefined, method.name));
                 if (method.description) row.append(createElement("p", undefined, method.description));
                 if (editor) row.append(createButton("Configure", button, () => { chosenMethod = method; notify(); },
-                    busy || !!pending || !host.canEditDraft() || state.readOnly || !!state.savedState));
+                    busy || !!pending || !!host.hasPendingCustomEdit?.() || !host.canEditDraft() || state.readOnly || !!state.savedState));
                 else row.append(createElement("p", undefined, "Unavailable in Guided Setup."));
                 area.append(row);
             }

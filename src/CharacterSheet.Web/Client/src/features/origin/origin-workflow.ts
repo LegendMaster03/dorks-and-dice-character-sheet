@@ -251,10 +251,10 @@ export function createOriginWorkflow(
     }
 
     async function saveProposal(characterId: string,
-        proposal: NonNullable<OriginUiState["draft"]>["proposal"]): Promise<void> {
+        proposal: NonNullable<OriginUiState["draft"]>["proposal"]): Promise<boolean> {
         if (currentCharacterId !== characterId || state.status !== "ready" ||
             state.busy || state.readOnly || state.savedState !== null ||
-            state.catalog === null) return;
+            state.catalog === null) return false;
         const token = ++sequence;
         const expectedRevision = state.draft?.revision ?? 0;
         // Editing a draft invalidates every previous proposed parent binding,
@@ -265,7 +265,13 @@ export function createOriginWorkflow(
             const response = await saveOriginDraft(environment, characterId,
                 state.catalog.rulesetId, state.catalog.fingerprint,
                 proposal, expectedRevision);
-            if (token !== sequence) return;
+            if (token !== sequence) return false;
+            if (!response.draft || response.draft.characterId !== characterId ||
+                response.draft.revision !== expectedRevision + 1 ||
+                response.draft.proposal.id !== proposal.id ||
+                response.draft.proposal.method.ruleId !== proposal.method.ruleId ||
+                response.draft.proposal.method.methodId !== proposal.method.methodId)
+                throw new Error("The server did not confirm the requested Origin draft revision.");
             const previewDrifted = response.preview?.contentChangedSinceRequest === true ||
                 (response.preview !== null && response.preview !== undefined &&
                  response.preview.fingerprint !== state.catalog?.fingerprint);
@@ -298,14 +304,16 @@ export function createOriginWorkflow(
                             contributorId: source.slot, sourceId: source.sourceId!
                         })));
             }
+            return true;
         } catch (error) {
-            if (token !== sequence) return;
+            if (token !== sequence) return false;
             // A 409 is an optimistic-concurrency conflict, not an instruction
             // to automatically overwrite a newer independently edited draft.
             update({ busy: false, message: error instanceof CharacterSheetApiError
                 && error.status === 409
                     ? "Origin changed in another session. Reload before editing."
                     : requestErrorMessage(error) });
+            return false;
         }
     }
 
@@ -482,8 +490,8 @@ export function createOriginWorkflow(
                 (state.draft && (!editableConventional(state.draft.proposal) ||
                     state.draft.rulesetId !== state.catalog.rulesetId || state.draft.fingerprint !== state.catalog.fingerprint)))
                 throw new Error("The Origin draft changed. Reload before saving.");
-            await saveProposal(characterId, proposal);
-            if (state.message && (state.draft?.revision ?? 0) <= expectedRevision) throw new Error(state.message);
+            if (!await saveProposal(characterId, proposal))
+                throw new Error(state.message ?? "The Origin draft save was not confirmed.");
         },
         async saveCustomDraft(characterId, proposal, expectedRevision) {
             const isSupported = (p: NonNullable<OriginUiState["draft"]>["proposal"]) =>
@@ -494,11 +502,9 @@ export function createOriginWorkflow(
                 (state.draft && (!isSupported(state.draft.proposal) ||
                     state.draft.rulesetId !== state.catalog.rulesetId || state.draft.fingerprint !== state.catalog.fingerprint)))
                 throw new Error("The Origin draft changed or is not editable. Reload before saving.");
-            await saveProposal(characterId, proposal);
-            // saveProposal also serves legacy event handlers and reports failures
-            // through state. The guided host must additionally reject a failed
-            // save so it can retain the exact proposed change for retry.
-            if (currentCharacterId !== characterId || state.draft?.revision !== expectedRevision + 1)
+            // Never treat a concurrent load or failed save as a successful
+            // write merely because the new revision is visible.
+            if (!await saveProposal(characterId, proposal))
                 throw new Error(state.message ?? "The Origin draft save was not confirmed.");
         },
         openChooser, searchChooser, closeChooser,

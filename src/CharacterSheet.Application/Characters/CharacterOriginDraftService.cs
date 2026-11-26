@@ -157,8 +157,10 @@ public sealed class CharacterOriginDraftService(
             preview["result"] is null)
             return new(CharacterOriginDraftStatus.RulesCoreUnavailable);
 
-        if (isConstruct && (preview["rulesetId"]?.ToJsonString() != JsonSerializer.Serialize(validRuleset) ||
-            preview["fingerprint"]?.ToJsonString() != JsonSerializer.Serialize(validFingerprint)))
+        if ((isConstruct || proposal.TryGetProperty("biologicalTransmission", out _)) &&
+            (validFingerprint is null || preview["rulesetId"]?.ToJsonString() != JsonSerializer.Serialize(validRuleset) ||
+            preview["fingerprint"]?.ToJsonString() != JsonSerializer.Serialize(validFingerprint) ||
+            preview["contentChangedSinceRequest"]?.ToJsonString() == "true"))
             return new(CharacterOriginDraftStatus.InvalidRequest);
 
         var saved = await draftStore.SaveAsync(characterId, validRuleset,

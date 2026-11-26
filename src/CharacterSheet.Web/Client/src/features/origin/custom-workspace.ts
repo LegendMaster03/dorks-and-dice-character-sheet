@@ -134,7 +134,7 @@ export function createCustomOriginHost(environment: HostEnvironment, characterId
             rulesetId: d.rulesetId, fingerprint: d.fingerprint, saveStatus: draftStatus(),
             readOnly: !editable() || !!pending } : null;
     }
-    function wrap(content: HTMLElement): HTMLElement {
+    function renderCustomStatus(): HTMLElement {
         const area = createElement("div");
         if (error) area.append(createInlineState(error, "error"));
         if (pending) {
@@ -150,14 +150,13 @@ export function createCustomOriginHost(environment: HostEnvironment, characterId
                     }
                 }, saving));
         }
-        area.append(content);
         return area;
     }
     const methodEditors: readonly MethodEditor<CustomOriginContext>[] = [
         { reference: biologicalEditor.reference, decisions: biologicalEditor.decisions,
             render: context => {
                 if (context.kind !== "biological") throw new Error("Invalid Biological editor context.");
-                return wrap(biologicalEditor.render(context.editor));
+                return biologicalEditor.render(context.editor);
             } },
         { reference: constructMethodEditor.reference, decisions: constructMethodEditor.decisions,
             render: context => {
@@ -176,7 +175,7 @@ export function createCustomOriginHost(environment: HostEnvironment, characterId
                         });
                     }, c.readOnly || !c.catalog));
                 } else content.append(constructMethodEditor.render(c));
-                return wrap(content);
+                return content;
             } }
     ];
     function methodContext(method: NativeMethod, presets: readonly NativePreset[]): CustomOriginContext {
@@ -218,7 +217,8 @@ export function createCustomOriginHost(environment: HostEnvironment, characterId
             requestConfiguration: id => void requestConfiguration(id),
             reportError: message => { error = message; notify(); } } };
     }
-    return { methodEditors, methodContext,
+    return { methodEditors, methodContext, renderCustomStatus,
+        hasPendingCustomEdit: () => pending !== null || saving,
         canResetToConventional: () => {
             const p = state().draft?.proposal;
             return editable() && !pending && !!p &&
