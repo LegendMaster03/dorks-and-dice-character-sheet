@@ -19,6 +19,9 @@
     .dd-guided-workspace[data-guided-layout="browser"] { grid-template-columns: minmax(12rem, 1fr) minmax(0, 3fr); }
 }
 
-.dd-guided-builder__nav { flex-wrap: wrap; overflow-x: visible; }
-.dd-guided-builder__nav-button { min-height: 44px; flex: 1 1 auto; white-space: normal; }
+.dd-guided-builder__nav { min-width: 0; }
+.dd-guided-builder__nav-button { min-height: 44px; white-space: nowrap; }
+.dd-guided-character-summary > summary, .dd-guided-activation > summary,
+.dd-guided-tree summary { cursor: pointer; padding-block: .5rem; }
+.dd-guided-character-summary__content { max-width: 36rem; }
 .dd-guided-builder__review-item button { justify-self: start; }

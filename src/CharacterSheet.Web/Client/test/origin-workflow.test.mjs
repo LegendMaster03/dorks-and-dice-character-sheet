@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createOriginWorkflow } from "../.test-dist/features/origin/origin-workflow.js";
 import {
-    mixedNativePreviewMatchesDraft, originPreviewCandidates
+    createInitialOriginProposal, mixedNativePreviewMatchesDraft, originPreviewCandidates
 } from "../.test-dist/features/origin/origin-builder-model.js";
 
 const characterId = "54bb0d47-38d1-4ce4-9cbf-fcb8753e3140";
@@ -42,8 +42,9 @@ function preview(fingerprint, contentChangedSinceRequest) {
     };
 }
 
-function mockBackend({ denySave = false, readOnly = false, onDraftRead } = {}) {
-    let draft = makeDraft();
+function mockBackend({ denySave = false, readOnly = false, onDraftRead,
+    initialDraft = makeDraft(), expectedProposal = mixedProposal } = {}) {
+    let draft = initialDraft;
     const writes = [];
     const calls = [];
     const fetch = async (url, init) => {
@@ -84,8 +85,8 @@ function mockBackend({ denySave = false, readOnly = false, onDraftRead } = {}) {
             }
             assert.equal(body.expectedRevision, draft.revision);
             assert.equal(body.fingerprint, currentFingerprint);
-            assert.deepEqual(body.proposal, mixedProposal);
-            draft = makeDraft(draft.revision + 1, currentFingerprint);
+            assert.deepEqual(body.proposal, expectedProposal);
+            draft = { ...makeDraft(draft.revision + 1, currentFingerprint), proposal: body.proposal };
             return Response.json({
                 status: "ready", draft: structuredClone(draft),
                 preview: preview(currentFingerprint, false),
@@ -109,6 +110,29 @@ async function withBackend(backend, action) {
         globalThis.fetch = originalFetch;
     }
 }
+
+test("conventional setup saves through the revisioned Origin draft without activation", async () => {
+    const initial = { ...createInitialOriginProposal(characterId), selectedSpeciesId: "species.elf" };
+    const selection = { ...initial, selectedAncestryId: "ancestry.elf.wood" };
+    const backend = mockBackend({
+        initialDraft: { ...makeDraft(2, currentFingerprint), proposal: initial },
+        expectedProposal: selection
+    });
+    await withBackend(backend, async () => {
+        const workflow = createOriginWorkflow(environment, () => {});
+        await workflow.load(characterId);
+        await assert.rejects(workflow.saveConventionalDraft(characterId, selection, 1), /draft changed/);
+        await assert.rejects(workflow.saveConventionalDraft(characterId, mixedProposal, 2), /draft changed/);
+        assert.equal(backend.writes.length, 0);
+
+        await workflow.saveConventionalDraft(characterId, selection, 2);
+        assert.equal(backend.writes.length, 1);
+        assert.equal(workflow.current().draft.revision, 3);
+        assert.deepEqual(workflow.current().draft.proposal, selection);
+        assert.equal(workflow.current().savedState, null);
+        assert.equal(backend.calls.some(({ path }) => path.includes("activate")), false);
+    });
+});
 
 test("owner refreshes an outdated mixed draft via a new native snapshot and revision", async () => {
     const backend = mockBackend();

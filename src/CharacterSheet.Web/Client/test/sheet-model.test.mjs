@@ -605,7 +605,7 @@ test("Guided Builder remains optional and supports direct section navigation", (
     assert.match(sheetSource, /data-guided-builder-section/);
     assert.match(sheetSource, /aria-current", "page"/);
     assert.match(sheetSource, /selectGuidedBuilderSection/);
-    assert.match(sheetSource, /The Character Sheet remains available even when setup is incomplete/);
+    assert.match(sheetSource, /"Back to Character Sheet"[\s\S]*?handlers\.closeGuidedBuilder/);
 });
 
 test("structural mutation handlers are namespaced separately from ordinary sheet interaction", () => {

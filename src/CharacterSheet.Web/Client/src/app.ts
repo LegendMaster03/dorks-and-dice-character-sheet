@@ -37,6 +37,7 @@ import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
 import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
 import { createHarvestingCraftingWorkflow } from "./features/harvesting/harvesting-workflow.js";
+import { createConventionalWorkspace } from "./features/origin/conventional/workspace.js";
 import { createOriginWorkflow } from "./features/origin/origin-workflow.js";
 
 const root = document.getElementById("tool-root");
@@ -386,7 +387,9 @@ function renderWorkspace(
                     contributorId, parentCharacterId),
             reviewParentSources: () =>
                 void originWorkflow.reviewParentSources(character.characterId)
-        });
+        },
+        state.guidedBuilder.open && state.guidedBuilder.activeSection === "species"
+            ? () => guidedOrigins(character.characterId).render() : undefined);
     return workspace;
 }
 
@@ -471,6 +474,21 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
 
 const application = createApplication(initialState, render);
 const originWorkflow = createOriginWorkflow(environment, () => application.render());
+let originWorkspace: { characterId: string; workspace: ReturnType<typeof createConventionalWorkspace<never>> } | undefined;
+function guidedOrigins(characterId: string) {
+    if (originWorkspace?.characterId === characterId) return originWorkspace.workspace;
+    const workspace = createConventionalWorkspace<never>(environment, characterId, {
+        current: originWorkflow.current,
+        canEditDraft: () => !originWorkflow.current().readOnly,
+        save: (proposal, revision) => originWorkflow.saveConventionalDraft(characterId, proposal, revision),
+        retry: () => originWorkflow.load(characterId),
+        notify: () => application.render(),
+        methodEditors: [],
+        methodContext: () => { throw new Error("No custom editor is available for this character."); }
+    });
+    originWorkspace = { characterId, workspace };
+    return workspace;
+}
 const presentationWorkflow = createPresentationWorkflow(application, environment);
 const routineStateWorkflow = createRoutineStateWorkflow(application, environment);
 const harvestingCraftingWorkflow = createHarvestingCraftingWorkflow(
