@@ -96,6 +96,7 @@ def run_browser():
         event("native-biological-allocation", result["preview"].get("allocation") is not None)
         snapshot("guided-biological-contributors")
         decision("Inheritance & Expression")
+        page.get_by_label("Search characteristics").fill("Creature Type")
         def offer(color):
             return page.get_by_role("heading", name=re.compile("Contributor.*" + color, re.I), level=4).locator("..").filter(
                 has=page.get_by_role("button", name="Inherit instance", exact=True)).first
@@ -132,9 +133,11 @@ def run_browser():
         options = request(page, "native-construct-components", API + "/native-rules/options?" + urlencode({
             "fingerprint": fingerprint, "category":"construct-component","q":"","limit":100,"offset":0}))["options"]
         # Select actual published component names, not client-authored definitions.
-        def category(*terms):
-            return next(x for x in options if any(t in (x.get("componentCategory") or "").lower() for t in terms))
-        parts = [category("structur", "frame"), category("power"), category("locomot", "movement")]
+        def component(key):
+            return next(x for x in options if x["id"] == "construct-component." + key)
+        # Specific native definitions from the documented reference, not an
+        # arbitrary first match (which might be storage rather than generation).
+        parts = [component("structural-frame"), component("power-source-housing"), component("locomotion-unit")]
         for part in parts:
             page.get_by_label("Search components").fill(part["name"])
             card = page.get_by_role("heading", name=part["name"], exact=True, level=3).locator("..").filter(
@@ -144,17 +147,35 @@ def run_browser():
         event("three-native-components", len(components) == 3)
         event("native-construct-evaluation", assembled.get("constructPreview", {}).get("previewOnly") is True)
         snapshot("guided-construct-assembly")
-        for part in parts[:2]:
-            card = page.locator("article").filter(has=page.get_by_role("heading", name=part["name"], exact=True)).filter(
-                has=page.get_by_role("button", name="Configure", exact=True))
+        def configure(part, field, value, result):
+            instance = next(x for x in result["draft"]["proposal"]["constructAssembly"]["components"]
+                            if x["definitionId"] == part["id"])
+            instance_id = instance["instanceId"]
+            card = page.locator('[data-construct-instance="' + instance_id + '"]')
             card.get_by_role("button", name="Configure", exact=True).click()
-            # Scope to the actual configuration control labels rather than hidden IDs.
-            selector = page.get_by_label(re.compile("Construction variant|Material —|Power source")).first
+            panel = page.locator('[data-construct-configuration="' + instance_id + '"]')
+            selector = panel.get_by_label(field, exact=True)
             expect(selector).to_be_visible()
-            values = selector.locator("option").evaluate_all("(options) => options.filter(x => x.value && !x.disabled).map(x => x.value)")
-            assert values
-            configured = save("mixed", lambda: selector.select_option(values[0]))
-            snapshot("guided-construct-config-" + str(parts.index(part)))
+            previous = result["draft"]["proposal"]["constructAssembly"]["components"]
+            updated = save("mixed", lambda: selector.select_option(value))
+            after = updated["draft"]["proposal"]["constructAssembly"]["components"]
+            event("unrelated-config-retention-" + field, [x for x in previous if x["instanceId"] != instance_id] ==
+                  [x for x in after if x["instanceId"] != instance_id])
+            return updated
+
+        configured = configure(parts[0], "Construction variant", "medium", assembled)
+        configured = configure(parts[0], "Material — Frame", "construct-material.steel", configured)
+        snapshot("guided-construct-config-frame")
+        configured = configure(parts[1], "Power source", "construct-power-source.mechanical-engine", configured)
+        configured = configure(parts[1], "Material — Housing", "construct-material.wood", configured)
+        snapshot("guided-construct-config-power")
+        configured = configure(parts[2], "Material — Contact", "construct-material.steel", configured)
+        event("construct-native-cost", configured["constructPreview"]["result"]["assembly"]["knownConstructionCost"] > 0)
+        page.locator('[data-guided-builder-section="background"]').click()
+        page.locator('[data-guided-builder-section="species"]').click()
+        expect(page.get_by_role("navigation", name="Configuration decisions")).to_be_visible()
+        event("construct-navigation-exact", request(page, "construct-navigation", url("mixed"))["draft"]["proposal"] ==
+              configured["draft"]["proposal"])
         decision("Review")
         snapshot("guided-construct-review-desktop")
         open_origin("mixed")

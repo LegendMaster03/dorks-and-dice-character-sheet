@@ -41,6 +41,7 @@ export function canMountGuidedOriginWorkspace(state: OriginUiState | undefined):
 export function createCustomOriginHost(environment: HostEnvironment, characterId: string,
     workflow: OriginWorkflow, notify: () => void) {
     let biologicalDecision = "contributors", constructDecision = "assembly";
+    const characteristicBrowser = { query: "", expanded: new Map<string, boolean>() };
     let query = "", selectedInstanceId: string | null = null;
     let catalog: ConstructCatalog | null = null, catalogKey: string | null = null;
     let attemptedCatalogKey: string | null = null, catalogError: string | null = null;
@@ -219,7 +220,7 @@ export function createCustomOriginHost(environment: HostEnvironment, characterId
                     previewOnly: true, result: p, issues: [] } : null;
             return { kind: "biological", editor: { characterId, draft, preview, decisionId: biologicalDecision,
                 readOnly, navigate: id => { biologicalDecision = id; notify(); },
-                save: proposal => save(proposal, revision, fingerprint), retry, presets } };
+                save: proposal => save(proposal, revision, fingerprint), retry, presets, characteristicBrowser } };
         }
         syncDiscovery();
         const draft = commonDraft(stored ? unpackConstructDraft(stored) : null);

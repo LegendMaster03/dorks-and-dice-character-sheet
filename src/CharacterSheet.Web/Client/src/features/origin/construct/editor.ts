@@ -32,6 +32,7 @@ function selectField(title: string, options: readonly NamedOption[], selected: s
     change: (value: string | null) => void, disabled: boolean): HTMLElement {
     const label = createElement("label", undefined, title + " ");
     const select = createElement("select"); select.disabled = disabled;
+    select.setAttribute("aria-label", title);
     const empty = createElement("option", undefined, "Not selected"); empty.value = ""; select.append(empty);
     // A stale choice stays visible; the native evaluator, not this dropdown,
     // decides whether it may be retained after a catalog/configuration change.
@@ -66,7 +67,7 @@ function textField(title: string, value: string | null | undefined, disabled: bo
     label.append(input); return label;
 }
 function renderEditor(context: ConstructEditorContext): HTMLElement {
-    const root = createElement("section");
+    const root = createElement("section", "dd-custom-origin");
     root.append(renderDecisionNavigation(decisions, context.decisionId, context.navigate));
     if (!context.draft) {
         root.append(createElement("p", undefined, "An authorized initial Construct draft is not available."));
@@ -122,17 +123,23 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
     }
     if (!draft.assembly.components.length) work.append(createElement("p", undefined, "No components installed in this proposal."));
     for (const part of draft.assembly.components) {
-        const card = createElement("article", "dd-guided-detail");
+        const card = createElement("article", "dd-guided-detail dd-construct-part");
+        card.dataset.constructInstance = part.instanceId;
         const assessed = preview?.assembly.components.find(x => x.instanceId === part.instanceId &&
             x.definitionId === part.definitionId);
         card.append(createElement("h3", undefined, partName(part.instanceId)),
             createElement("p", undefined, assessed ? (assessed.operational ? "Operating in native preview" :
                 !assessed.requestedEnabled ? "Disabled in proposal" : "Not operating in native preview") :
                 "Operating state not evaluated"));
-        if (assessed) card.append(renderFacts([{ label: "Installed in preview", value: assessed.installed ? "Yes" : "No" },
+        if (assessed) {
+            const evidence = createElement("details");
+            evidence.append(createElement("summary", undefined, "Installed and operating capabilities"),
+                renderFacts([{ label: "Installed in preview", value: assessed.installed ? "Yes" : "No" },
             { label: "Active capabilities in preview", value: assessed.activeCapabilities.map(readable).join(", ") || "None reported" },
             ...(assessed.sourceSupplyingPower == null ? [] : [{ label: "Source supplies in preview",
                 value: assessed.sourceSupplyingPower ? "Yes (not live fuel)" : "No" }])]));
+            card.append(evidence);
+        }
         const inspect = createButton("Configure", buttonClass, () => {
             context.inspectInstance(part.instanceId); context.requestConfiguration(part.definitionId); context.navigate("configuration");
         });
@@ -210,7 +217,7 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
         work.append(createElement("p", undefined, "Review is a proposal only. Character finalization requires the authorized creation lifecycle."));
     }
 
-    const browser = createSectionCard("Add components");
+    const browser = createSectionCard("Add components", "dd-guided-browser");
     const search = createElement("input"); search.type = "search"; search.value = context.query;
     search.setAttribute("aria-label", "Search components");
     const searchLabel = createElement("label", undefined, "Search components "); searchLabel.append(search);
@@ -228,7 +235,7 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
         group.push(option); categories.set(category, group);
     }
     for (const [category, options] of categories) {
-        const group = createElement("details"); group.open = true;
+        const group = createElement("details"); group.open = !!term;
         group.append(createElement("summary", undefined, category ? readable(category) : "Components — category not supplied"));
         for (const option of options) {
             const config = configFor(option.id);
@@ -283,7 +290,9 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
                 { label: "Combustibility", value: surface.combustibility ?? "Unresolved" },
                 { label: "Operational (preview)", value: surface.operational ? "Yes" : "No" }]));
         physical.append(createElement("p", undefined, "Physical evidence does not grant unrestricted movement, armor, resistance, or damage reduction."));
-        side.append(physical);
+        const physicalDisclosure = createElement("details");
+        physicalDisclosure.append(createElement("summary", undefined, "Physical and material evidence"), physical);
+        side.append(physicalDisclosure);
         const quotation = createSectionCard("Native ingredient quotation");
         const quote = assembly.manufacturingQuote;
         if (quote && quote.status !== "unavailable") {
@@ -323,7 +332,10 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
                 "Detailed native quotation exceeds the supported presentation bound." :
                 "The current Core build has not provided stage-level quotation."));
         }
-        side.append(quotation);
+        const quoteDisclosure = createElement("details");
+        quoteDisclosure.open = context.decisionId === "review";
+        quoteDisclosure.append(createElement("summary", undefined, "Ingredient quotation and manufacturing"), quotation);
+        side.append(quoteDisclosure);
         const power = createSectionCard("Power networks");
         if (!assembly.powerNetworks?.length) power.append(createElement("p", undefined, "No evaluated power network."));
         for (const [index, network] of (assembly.powerNetworks ?? []).entries()) {
@@ -344,19 +356,34 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
         }
         for (const consequence of assembly.shutdownConsequences)
             power.append(createElement("p", undefined, partName(consequence.instanceId) + ": " + readable(consequence.consequenceId)));
-        side.append(power);
+        const powerDisclosure = createElement("details");
+        powerDisclosure.append(createElement("summary", undefined, "Power network details"), power);
+        powerDisclosure.open = context.decisionId === "review";
+        side.append(renderFacts([
+            { label: "Power networks", value: String(assembly.powerNetworks?.length ?? 0) },
+            { label: "Power assessment", value: assembly.powerNetworks?.some(n => n.isOverallocated) ? "Insufficient capacity" :
+                assembly.powerNetworks?.length && assembly.powerNetworks.every(n => !n.hasUnresolvedDemand && !n.hasUnresolvedOutput && n.isOverallocated === false) ?
+                    "Capacity evaluated (not live supply)" : "Unresolved" }
+        ]), powerDisclosure);
         if (preview.movement) side.append(renderFacts([{ label: "Movement preview", value: preview.movement.status },
             ...preview.movement.modes.map(m => ({ label: readable(m.mode), value: m.speedFeet + " ft" }))]));
-        side.append(renderValidation(toValidation([...assembly.issues, ...preview.origin.issues]), context.navigate));
+        const issues = toValidation([...assembly.issues, ...preview.origin.issues]);
+        const validation = createElement("details");
+        validation.open = context.decisionId === "review";
+        validation.append(createElement("summary", undefined, issues.length + " validation issues"),
+            renderValidation(issues, context.navigate));
+        side.append(validation);
     } else side.append(createElement("p", undefined, "Awaiting a current native evaluation. Previous results are not current mechanics."));
-    root.append(renderWorkspace(work, context.decisionId === "review" ? undefined : browser, side));
+    // Component configuration is a focused decision, not a second browser.
+    root.append(renderWorkspace(work, context.decisionId === "assembly" ? browser : undefined, side));
     return root;
 }
 function renderConfiguration(part: ComponentInstance, config: Configuration, draft: ConstructDraft,
     materials: readonly NamedOption[], partName: (id: string) => string, configFor: (id: string) => Configuration | null,
     disabled: boolean, update: (patch: import("./model.js").ComponentPatch) => void,
     save: (draft: ConstructDraft) => void, navigate: (id: string) => void): HTMLElement {
-    const panel = createSectionCard("Component configuration");
+    const panel = createSectionCard("Component configuration", "dd-construct-configuration");
+    panel.dataset.constructConfiguration = part.instanceId;
     const simple = (ids: readonly string[]): NamedOption[] => ids.map(id => ({ id, name: readable(id) }));
     panel.append(renderFacts([{ label: "Native capabilities", value: config.baseCapabilities.map(readable).join(", ") || "None reported" },
         { label: "Operating requirements", value: config.requiresAnyOf.map(group => group.map(readable).join(" or ")).join("; ") || "None reported" },

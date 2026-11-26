@@ -25,3 +25,20 @@
 .dd-guided-tree summary { cursor: pointer; padding-block: .5rem; }
 .dd-guided-character-summary__content { max-width: 36rem; }
 .dd-guided-builder__review-item button { justify-self: start; }
+
+/* Custom procedures: concise decision summaries and optional evidence. */
+.dd-custom-origin .dd-guided-detail h3,
+.dd-custom-origin .dd-build-choice h4,
+.dd-custom-origin .dd-biological-groups h3 { font-size: 1.05rem; margin-block: .5rem; }
+.dd-custom-origin .dd-guided-detail,
+.dd-custom-origin .dd-biological-gene { border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent); padding-block: .65rem; }
+.dd-custom-origin .dd-biological-gene > summary { font-weight: 600; cursor: pointer; padding-block: .4rem; }
+.dd-custom-origin input[type="search"],
+.dd-custom-origin select { max-width: 100%; box-sizing: border-box; min-height: 40px; }
+.dd-custom-origin .dd-biological-groups { margin-top: .5rem; }
+.dd-origin-allocation { padding: .65rem; margin-block: .5rem; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: .4rem; }
+.dd-origin-allocation .dd-guided-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.dd-origin-allocation p { margin: .35rem 0 0; }
+@container character-sheet (min-width: 65rem) {
+    .dd-origin-allocation .dd-guided-facts { grid-template-columns: repeat(6, minmax(0, auto)); justify-content: start; gap: .35rem 1rem; }
+}
