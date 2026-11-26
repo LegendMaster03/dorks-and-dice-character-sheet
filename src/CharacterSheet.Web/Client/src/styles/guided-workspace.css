@@ -1,0 +1,18 @@
+.dd-guided-workspace { display: grid; gap: 1rem; align-items: start; }
+.dd-guided-workspace > * { min-width: 0; overflow-wrap: anywhere; }
+.dd-guided-workspace__side > summary, .dd-guided-detail summary { cursor: pointer; padding: .5rem 0; }
+.dd-guided-workspace button, .dd-guided-secondary button { min-height: 44px; white-space: normal; }
+.dd-guided-workspace :focus-visible, .dd-guided-secondary :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.dd-guided-secondary { display: flex; flex-wrap: wrap; gap: .5rem; }
+.dd-guided-secondary [aria-current], .dd-guided-tree [aria-current] { font-weight: bold; text-decoration: underline; }
+.dd-guided-browser input { display: block; width: 100%; box-sizing: border-box; min-height: 44px; }
+.dd-guided-tree, .dd-guided-tree ul { padding-inline-start: 1rem; }
+.dd-guided-tree li { margin-block: .4rem; }
+.dd-guided-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .35rem .75rem; }
+.dd-guided-facts dd { margin: 0; }
+.dd-guided-choice { min-width: 0; margin-block: .75rem; }
+.dd-guided-choice label { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.dd-guided-choice input { flex: none; }
+@container character-sheet (min-width: 65rem) {
+    .dd-guided-workspace { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+}
