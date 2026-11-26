@@ -58,7 +58,7 @@ def run_browser():
         def select_method(method_id):
             page.get_by_role("button", name="Construct a Custom Origin", exact=True).click()
             method = next(m for m in methods if m["reference"]["methodId"] == method_id)
-            card = page.locator("article").filter(has=page.get_by_role("heading", name=method["name"], exact=True))
+            card = page.get_by_role("heading", name=method["name"], exact=True).locator("..")
             card.get_by_role("button", name="Configure", exact=True).click()
 
         def decision(label):
@@ -86,14 +86,14 @@ def run_browser():
         snapshot("guided-biological-contributors")
         decision("Inheritance & Expression")
         def offer(color):
-            return page.locator("article").filter(has=page.get_by_role("heading", name=re.compile("Contributor.*" + color, re.I))).filter(
+            return page.get_by_role("heading", name=re.compile("Contributor.*" + color, re.I), level=4).locator("..").filter(
                 has=page.get_by_role("button", name="Inherit instance", exact=True)).first
-        inherited_red = save("red", lambda: offer("Red Dragonborn").get_by_role("button", name="Inherit instance", exact=True).click())
-        inherited = save("red", lambda: offer("Bronze Dragonborn").get_by_role("button", name="Inherit instance", exact=True).click())
+        inherited_red = save("red", lambda: offer("Red").get_by_role("button", name="Inherit instance", exact=True).click())
+        inherited = save("red", lambda: offer("Bronze").get_by_role("button", name="Inherit instance", exact=True).click())
         old_ids = inherited_red["draft"]["proposal"]["biologicalTransmission"]["candidateIds"]
         bronze = [x for x in inherited["draft"]["proposal"]["biologicalTransmission"]["candidateIds"] if x not in old_ids]
         event("distinct-inherited-instances", len(bronze) == 1)
-        bronze_card = page.locator("article").filter(has=page.get_by_role("heading", name=re.compile("Contributor.*Bronze Dragonborn", re.I))).filter(
+        bronze_card = page.get_by_role("heading", name=re.compile("Contributor.*Bronze", re.I), level=4).locator("..").filter(
             has=page.get_by_role("button", name="Remove inherited instance", exact=True))
         expressed = save("red", lambda: bronze_card.get_by_role("button", name="Request expression", exact=True).click())
         event("requested-expression", any(x["candidateId"] == bronze[0] for x in expressed["draft"]["proposal"]["manifestations"]))
@@ -101,8 +101,8 @@ def run_browser():
         decision("Configuration")
         snapshot("guided-biological-configuration")
         decision("Contributors")
-        page.get_by_label("Native biological contributor source").select_option("ancestry.dragonborn.red")
-        page.locator("article").filter(has=page.get_by_role("heading", name="Contributor 1", exact=True)).get_by_role(
+        page.get_by_label("Native biological contributor source").select_option("ancestry.dragonborn.blue")
+        page.get_by_role("heading", name="Contributor 1", exact=True).locator("..").get_by_role(
             "button", name="Replace with selected source below").click()
         changed = save("red", lambda: page.get_by_role("button", name="Apply changes", exact=True).click())
         event("unaffected-contributor-retention", bronze[0] in changed["draft"]["proposal"]["biologicalTransmission"]["candidateIds"])
@@ -126,7 +126,7 @@ def run_browser():
         parts = [category("structur", "frame"), category("power"), category("locomot", "movement")]
         for part in parts:
             page.get_by_label("Search components").fill(part["name"])
-            card = page.locator("article").filter(has=page.get_by_role("heading", name=part["name"], exact=True)).filter(
+            card = page.get_by_role("heading", name=part["name"], exact=True, level=3).locator("..").filter(
                 has=page.get_by_role("button", name="Add component", exact=True))
             assembled = save("mixed", lambda: card.get_by_role("button", name="Add component").click())
         components = assembled["draft"]["proposal"]["constructAssembly"]["components"]
@@ -137,7 +137,6 @@ def run_browser():
             card = page.locator("article").filter(has=page.get_by_role("heading", name=part["name"], exact=True)).filter(
                 has=page.get_by_role("button", name="Configure", exact=True))
             card.get_by_role("button", name="Configure", exact=True).click()
-            panel = page.locator("section").filter(has=page.get_by_role("heading", name="Component configuration", exact=True))
             # Scope to the actual configuration control labels rather than hidden IDs.
             selector = page.get_by_label(re.compile("Construction variant|Material —|Power source")).first
             expect(selector).to_be_visible()
