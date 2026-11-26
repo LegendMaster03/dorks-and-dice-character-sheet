@@ -100,10 +100,49 @@ const presets = [
     "ancestrySelectionRequired": false
   }
 ];
+// Additional pinned definitions: base/tiefling.json, ancestry/tiefling/{abyssal,infernal}.json.
+presets.push(...[
+  {
+    "id": "species.tiefling",
+    "name": "Tiefling",
+    "kind": "species",
+    "parentId": null,
+    "selectable": false,
+    "defaultUpbringingId": null,
+    "acquisitionMethodIds": [],
+    "ancestrySelectionRequired": true
+  },
+  {
+    "id": "ancestry.tiefling.abyssal",
+    "name": "Abyssal Tiefling",
+    "kind": "ancestry",
+    "parentId": "species.tiefling",
+    "selectable": true,
+    "defaultUpbringingId": null,
+    "acquisitionMethodIds": [],
+    "ancestrySelectionRequired": false
+  },
+  {
+    "id": "ancestry.tiefling.infernal",
+    "name": "Infernal Tiefling",
+    "kind": "ancestry",
+    "parentId": "species.tiefling",
+    "selectable": true,
+    "defaultUpbringingId": null,
+    "acquisitionMethodIds": [],
+    "ancestrySelectionRequired": false
+  }
+]);
 const entries = presetEntries(presets, "biological");
 const entry = id => entries.find(e => e.preset.id === id);
 test("Orc is selectable directly without ancestry", () => {
     assert.deepEqual(entry("species.orc").selection, { speciesId: "species.orc", ancestryId: null });
+});
+test("Tiefling requires an Ancestry; its native leaves remain selectable", () => {
+    assert.equal(entry("species.tiefling").preset.ancestrySelectionRequired, true);
+    assert.equal(entry("species.tiefling").selection, null);
+    assert.deepEqual(entry("ancestry.tiefling.abyssal").selection,
+        { speciesId: "species.tiefling", ancestryId: "ancestry.tiefling.abyssal" });
 });
 test("Elf ancestry resolves the native parent Species", () => {
     assert.deepEqual(entry("ancestry.elf.wood").selection,
