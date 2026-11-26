@@ -1,0 +1,30 @@
+name: Construct workspace isolated validation
+
+# D owns this temporary branch-only test entry. A can move the tests into
+# the shared suite when method composition is integrated.
+on:
+  push:
+    branches: ["feature/guided-creator-construct-assembly-20261126"]
+
+concurrency:
+  group: construct-workspace-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  construct-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+      - name: Install client dependencies
+        working-directory: src/CharacterSheet.Web/Client
+        run: npm install --no-audit --no-fund
+      - name: Check TypeScript and run isolated model tests
+        working-directory: src/CharacterSheet.Web/Client
+        run: |
+          npm run typecheck
+          npx tsc --ignoreConfig src/features/origin/construct/model.ts --outDir .construct-test-dist --module ESNext --target ES2022 --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck
+          node --test src/features/origin/construct/model.test.mjs
+          rm -rf .construct-test-dist

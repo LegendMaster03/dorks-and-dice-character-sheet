@@ -3,7 +3,8 @@ import { isCurrentEvaluation, type EditorContext, type MethodEditor, type Native
 import { renderAllocation, renderDecisionNavigation, renderDraftStatus, renderFacts, renderValidation,
     renderWorkspace } from "../../guided/components.js";
 import { addComponent, constructionAllocation, constructReference, editComponent, removeComponent,
-    setManifestation, toValidation, type Candidate, type ComponentInstance, type Configuration,
+    setManifestation, toValidation, hasPhysicalDeclaration, hasProposedContact, hasPowerConnection,
+    setPhysicalConnection, setExplicitWiring, setPowerConnection, type ComponentInstance, type Configuration,
     type ConstructDraft, type ConstructPreview, type NamedOption } from "./model.js";
 import type { ConstructCatalog } from "./native.js";
 
@@ -53,8 +54,16 @@ function checkField(title: string, checked: boolean, disabled: boolean, change: 
 function textField(title: string, value: string | null | undefined, disabled: boolean,
     change: (value: string | null) => void): HTMLElement {
     const label = createElement("label", undefined, title + " "); const input = createElement("input");
-    input.value = value ?? ""; input.disabled = disabled;
-    input.addEventListener("change", () => change(input.value.trim() || null)); label.append(input); return label;
+    input.value = value ?? ""; input.disabled = disabled; input.maxLength = 96; input.pattern = "[A-Za-z0-9_.-]{1,96}";
+    input.addEventListener("change", () => {
+        if (input.value.trim() && !/^[A-Za-z0-9_.-]{1,96}$/.test(input.value.trim())) {
+            input.setCustomValidity("Use up to 96 letters, digits, dots, hyphens or underscores.");
+            input.reportValidity(); return;
+        }
+        input.setCustomValidity(""); change(input.value.trim() || null);
+    });
+    input.addEventListener("input", () => input.setCustomValidity(""));
+    label.append(input); return label;
 }
 function renderEditor(context: ConstructEditorContext): HTMLElement {
     const root = createElement("section");
@@ -93,6 +102,17 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
         void context.retry().catch(error => context.reportError(error instanceof Error ? error.message : "Retry failed."));
     }, context.readOnly || draftView.readOnly));
     if (!catalog) work.append(createElement("p", undefined, "Current native component catalog is unavailable."));
+    if (context.decisionId !== "review") {
+        const wiring = createElement("details");
+        wiring.append(createElement("summary", undefined, draft.assembly.powerConnections == null ?
+            "Power wiring: physical contacts conduct" : "Power wiring: explicit connections"),
+            createElement("p", undefined, draft.assembly.powerConnections == null ?
+                "Switching to explicit wiring starts with no power links. The physical assembly is retained." :
+                "Switching to physical-contact wiring removes explicit power links. Physical contacts will conduct according to the native rule."),
+            createButton(draft.assembly.powerConnections == null ? "Use explicit wiring" : "Use physical-contact wiring",
+                buttonClass, () => save(setExplicitWiring(draft, draft.assembly.powerConnections == null)), blocked));
+        work.append(wiring);
+    }
     if (!draft.assembly.components.length) work.append(createElement("p", undefined, "No components installed in this proposal."));
     for (const part of draft.assembly.components) {
         const card = createElement("article", "dd-guided-detail");
@@ -103,7 +123,9 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
                 !assessed.requestedEnabled ? "Disabled in proposal" : "Not operating in native preview") :
                 "Operating state not evaluated"));
         if (assessed) card.append(renderFacts([{ label: "Installed in preview", value: assessed.installed ? "Yes" : "No" },
-            { label: "Active capabilities in preview", value: assessed.activeCapabilities.map(readable).join(", ") || "None reported" }]));
+            { label: "Active capabilities in preview", value: assessed.activeCapabilities.map(readable).join(", ") || "None reported" },
+            ...(assessed.sourceSupplyingPower == null ? [] : [{ label: "Source supplies in preview",
+                value: assessed.sourceSupplyingPower ? "Yes (not live fuel)" : "No" }])]));
         const inspect = createButton("Configure", buttonClass, () => {
             context.inspectInstance(part.instanceId); context.requestConfiguration(part.definitionId); context.navigate("configuration");
         });
@@ -125,8 +147,8 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
             const config = configFor(part.definitionId);
             if (!config) card.append(createElement("p", undefined, "Native configuration not loaded."),
                 createButton("Load configuration", buttonClass, () => context.requestConfiguration(part.definitionId)));
-            else card.append(renderConfiguration(part, config, draft, materials, partName,
-                blocked, patch => save(editComponent(draft, part.instanceId, patch)), context.navigate));
+            else card.append(renderConfiguration(part, config, draft, materials, partName, configFor,
+                blocked, patch => save(editComponent(draft, part.instanceId, patch)), save, context.navigate));
         }
         work.append(card);
     }
@@ -138,13 +160,20 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
             const selected = draft.proposal.manifestations.find(x => x.candidateId === offer.id);
             const card = createElement("article", "dd-guided-detail");
             card.append(createElement("h4", undefined, labelFor(offer.labelId, traits)));
+            const sourceInstance = offer.occurrencePath.split("/instance/").at(-1);
+            const installedSource = draft.assembly.components.some(x => x.instanceId === sourceInstance);
+            card.append(createElement("p", undefined, "Source: " + name(offer.sourceDefinitionId) +
+                (installedSource && sourceInstance ? " — " + partName(sourceInstance) : "")));
+            if (offer.eligibility !== "Eligible") card.append(createElement("p", undefined,
+                "Native eligibility: " + offer.eligibility + (offer.eligibilityExplanation ? " — " + offer.eligibilityExplanation : "")));
             if (offer.offeredValue !== undefined && offer.offeredValue !== null &&
                 ["string", "number", "boolean"].includes(typeof offer.offeredValue))
                 card.append(createElement("p", undefined, "Native offer: " + String(offer.offeredValue)));
             const choose = () => setManifestation(draft, offer.id, { id: selected?.id ?? "manifest-" + crypto.randomUUID(),
                 candidateId: offer.id, ...(offer.kind === "Intrinsic" && offer.offeredValue != null ? { selectedValue: offer.offeredValue } : {}),
                 choices: selected?.choices, selectedParameters: selected?.selectedParameters });
-            card.append(checkField("Select proposed characteristic", !!selected, blocked || !!offer.unresolvedEvidence.length && !selected,
+            card.append(checkField("Select proposed characteristic", !!selected, blocked ||
+                (offer.eligibility !== "Eligible" || !!offer.unresolvedEvidence.length) && !selected,
                 checked => save(checked ? choose() : setManifestation(draft, offer.id, null))));
             if (selected && offer.kind === "Intrinsic" && offer.offeredValue != null &&
                 JSON.stringify(selected.selectedValue) !== JSON.stringify(offer.offeredValue))
@@ -244,8 +273,9 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
     return root;
 }
 function renderConfiguration(part: ComponentInstance, config: Configuration, draft: ConstructDraft,
-    materials: readonly NamedOption[], partName: (id: string) => string, disabled: boolean,
-    update: (patch: import("./model.js").ComponentPatch) => void, navigate: (id: string) => void): HTMLElement {
+    materials: readonly NamedOption[], partName: (id: string) => string, configFor: (id: string) => Configuration | null,
+    disabled: boolean, update: (patch: import("./model.js").ComponentPatch) => void,
+    save: (draft: ConstructDraft) => void, navigate: (id: string) => void): HTMLElement {
     const panel = createSectionCard("Component configuration");
     const simple = (ids: readonly string[]): NamedOption[] => ids.map(id => ({ id, name: readable(id) }));
     panel.append(renderFacts([{ label: "Native capabilities", value: config.baseCapabilities.map(readable).join(", ") || "None reported" },
@@ -278,25 +308,47 @@ function renderConfiguration(part: ComponentInstance, config: Configuration, dra
         panel.append(selectField("Operating mode (proposal)", simple(config.modeIds), part.modeId, id => update({ modeId: id }), disabled));
     panel.append(checkField("Enabled in proposal", part.enabled, disabled, enabled => update({ enabled })));
     const others = draft.assembly.components.filter(x => x.instanceId !== part.instanceId);
-    if (config.acceptsMountInterfaces.length || part.parentInstanceId) {
-        panel.append(selectField("Mount parent", others.map(x => ({ id: x.instanceId, name: partName(x.instanceId) })),
-            part.parentInstanceId, id => update({ parentInstanceId: id, mountInterfaceId: null }), disabled));
-        panel.append(selectField("Mount interface", simple(config.acceptsMountInterfaces), part.mountInterfaceId,
+    if (config.mountInterfaces.length || part.parentInstanceId) {
+        const compatibleParents = others.filter(other => {
+            const parent = configFor(other.definitionId);
+            return !parent || config.mountInterfaces.some(id => parent.acceptsMountInterfaces.includes(id));
+        });
+        panel.append(selectField("Mount parent", compatibleParents.map(x => ({ id: x.instanceId, name: partName(x.instanceId) })),
+            part.parentInstanceId, id => update({ parentInstanceId: id, ...(id ? {} : { mountInterfaceId: null }) }), disabled));
+        const parent = others.find(x => x.instanceId === part.parentInstanceId);
+        const parentConfig = parent ? configFor(parent.definitionId) : null;
+        const interfaces = config.mountInterfaces.filter(id => !parentConfig || parentConfig.acceptsMountInterfaces.includes(id));
+        panel.append(selectField("Mount interface", simple(interfaces), part.mountInterfaceId,
             id => update({ mountInterfaceId: id }), disabled || !part.parentInstanceId));
+        if (parent && !parentConfig) panel.append(createElement("p", undefined, "Parent compatibility requires native validation."));
     }
-    const connections = createSectionCard("Power connections");
-    connections.append(createElement("p", undefined, "Explicit connections are evaluated by Rules Core. No connection is automatically added."));
-    for (const other of others) connections.append(checkField("Connect to " + partName(other.instanceId),
-        part.connectedTo?.includes(other.instanceId) ?? false, disabled, checked => update({
-            connectedTo: checked ? [...(part.connectedTo ?? []), other.instanceId] :
-                (part.connectedTo ?? []).filter(x => x !== other.instanceId) })));
-    if (draft.assembly.powerConnections?.length) {
-        const incident = draft.assembly.powerConnections.filter(x => x.fromInstanceId === part.instanceId || x.toInstanceId === part.instanceId);
-        for (const link of incident) connections.append(createElement("p", undefined, "Explicit assembly link: " +
-            partName(link.fromInstanceId) + " → " + partName(link.toInstanceId)));
+    const connections = createSectionCard("Physical connections");
+    connections.append(createElement("p", undefined, "Physical contacts and mounting are separate from explicit power wiring."));
+    for (const other of others) {
+        const mounted = part.parentInstanceId === other.instanceId || other.parentInstanceId === part.instanceId;
+        connections.append(checkField("Physical connection to " + partName(other.instanceId),
+            hasPhysicalDeclaration(draft, part.instanceId, other.instanceId), disabled,
+            checked => save(setPhysicalConnection(draft, part.instanceId, other.instanceId, checked))));
+        if (mounted) connections.append(createElement("p", undefined, "Proposed mounting contact: " + partName(other.instanceId)));
     }
     panel.append(connections);
-    if (part.protectedRegionId) panel.append(textField("Retained protected-region selection", part.protectedRegionId, true, () => {}));
+    if (draft.assembly.powerConnections != null) {
+        const power = createSectionCard("Explicit power connections");
+        power.append(createElement("p", undefined, "Wiring must follow native-validated direct physical contacts. Removing contact can invalidate a retained wire."));
+        for (const other of others) {
+            const selected = hasPowerConnection(draft, part.instanceId, other.instanceId);
+            const contact = hasProposedContact(draft, part.instanceId, other.instanceId);
+            if (selected || contact) power.append(checkField("Wire to " + partName(other.instanceId) +
+                (!contact ? " (contact missing — review)" : ""), selected, disabled,
+                checked => save(setPowerConnection(draft, part.instanceId, other.instanceId, checked))));
+        }
+        panel.append(power);
+    }
+    if (config.baseCapabilities.includes("protective-surface") || part.protectedRegionId) {
+        panel.append(textField("Protected region (proposal)", part.protectedRegionId, disabled,
+            id => update({ protectedRegionId: id })),
+            createElement("p", undefined, "A region label is physical evidence only; it does not grant armor or damage reduction."));
+    }
     if (config.issues.length) panel.append(renderValidation(toValidation(config.issues), navigate));
     return panel;
 }

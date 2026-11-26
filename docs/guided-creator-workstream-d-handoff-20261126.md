@@ -45,9 +45,10 @@ previous selections remain visible until reviewed; no client issues grants.
   principle/restrictions, protected-region choices or all recipe-stage detail.
   Add bounded projections in Core and reviewed delegated routes as needed.
   The current adapter shows names and discovered capabilities, material candidates
-  and native validation; existing region values and top-level explicit links
-  remain read-only rather than fabricating choices. Source-specific runtime
-  authority is unresolved. The native assembly quote contains aggregate resource
+  and native validation. The native evaluator supports user-assigned path-safe
+  protected-region labels and separately specified undirected power links;
+  the editor now exposes those without adding protection or dispatch mechanics.
+  Source-specific runtime authority is unresolved. The native assembly quote contains aggregate resource
   quantities and known cost, not a per-stage manufacturing quote. Reuse the
   manufacturing/crafting evaluator and expose bounded results; no independent
   economy or client mechanical inference.

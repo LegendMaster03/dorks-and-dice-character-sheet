@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyConstructDraft, addComponent, editComponent, removeComponent, constructionAllocation,
-    decodeAssembly, decodeConfiguration, setManifestation } from "../../../../../../.construct-test-dist/features/origin/construct/model.js";
+    decodeAssembly, decodeConfiguration, setManifestation, hasPhysicalDeclaration, hasProposedContact,
+    setPhysicalConnection, setExplicitWiring, setPowerConnection, hasPowerConnection } from "../../../../.construct-test-dist/features/origin/construct/model.js";
 
 test("exact instances support duplicate definitions and retain unaffected settings", () => {
     let draft = emptyConstructDraft("origin", null);
@@ -65,4 +66,30 @@ test("configuration discovery retains native variant, mode, and compatibility id
     assert.equal(config.constructionVariants[0].recipeId, "recipe.b");
     assert.deepEqual(config.requiresAnyOf, [["power", "alternate"]]);
     assert.throws(() => decodeConfiguration({ ...config, powerSourceRequired: 0 }));
+});
+
+test("physical links and explicit wiring remain distinct undirected choices", () => {
+    let draft = emptyConstructDraft("origin", null);
+    for (const id of ["one", "two", "three"]) draft = addComponent(draft, id, "component.a");
+    draft = setPhysicalConnection(draft, "one", "two", true);
+    assert.equal(hasPhysicalDeclaration(draft, "two", "one"), true);
+    assert.equal(draft.assembly.powerConnections, undefined);
+    draft = setExplicitWiring(draft, true);
+    assert.deepEqual(draft.assembly.powerConnections, []);
+    assert.throws(() => setPowerConnection(draft, "one", "three", true));
+    draft = setPowerConnection(draft, "one", "two", true);
+    assert.equal(setPowerConnection(draft, "two", "one", true), draft);
+    assert.equal(hasPowerConnection(draft, "two", "one"), true);
+    draft = setPhysicalConnection(draft, "two", "one", false);
+    assert.equal(hasPhysicalDeclaration(draft, "one", "two"), false);
+    assert.equal(hasPowerConnection(draft, "one", "two"), true);
+    draft = setPowerConnection(draft, "two", "one", false);
+    assert.deepEqual(draft.assembly.powerConnections, []);
+    draft = editComponent(draft, "two", { parentInstanceId: "three", mountInterfaceId: "socket" });
+    assert.equal(hasProposedContact(draft, "three", "two"), true);
+    draft = setPowerConnection(draft, "two", "three", true);
+    assert.equal(draft.assembly.powerConnections.length, 1);
+    draft = setExplicitWiring(draft, false);
+    assert.equal(draft.assembly.powerConnections, undefined);
+    assert.equal(draft.assembly.components[1].parentInstanceId, "three");
 });

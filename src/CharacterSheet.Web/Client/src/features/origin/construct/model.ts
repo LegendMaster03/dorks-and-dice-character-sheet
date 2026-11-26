@@ -65,6 +65,57 @@ export function removeComponent(draft: ConstructDraft, instanceId: string): Cons
         x.fromInstanceId !== instanceId && x.toInstanceId !== instanceId);
     return { ...draft, assembly: { ...draft.assembly, components, powerConnections } };
 }
+/** ConnectedTo is a physical, undirected declaration, independent of explicit
+ * power wiring. Mounts are proposed physical contacts, not client-verified links. */
+export function hasPhysicalDeclaration(draft: ConstructDraft, a: string, b: string): boolean {
+    return draft.assembly.components.some(x => (x.instanceId === a && x.connectedTo?.includes(b)) ||
+        (x.instanceId === b && x.connectedTo?.includes(a)));
+}
+export function hasProposedContact(draft: ConstructDraft, a: string, b: string): boolean {
+    return hasPhysicalDeclaration(draft, a, b) || draft.assembly.components.some(x =>
+        x.instanceId === a && x.parentInstanceId === b || x.instanceId === b && x.parentInstanceId === a);
+}
+function requireDistinctPair(draft: ConstructDraft, a: string, b: string): void {
+    if (a === b || ![a, b].every(id => draft.assembly.components.some(x => x.instanceId === id)))
+        throw new Error("A connection needs distinct installed component instances.");
+}
+export function setPhysicalConnection(draft: ConstructDraft, a: string, b: string, connected: boolean): ConstructDraft {
+    requireDistinctPair(draft, a, b);
+    if (connected) {
+        if (hasPhysicalDeclaration(draft, a, b)) return draft;
+        const part = draft.assembly.components.find(x => x.instanceId === a)!;
+        return editComponent(draft, a, { connectedTo: [...(part.connectedTo ?? []), b] });
+    }
+    // Remove the exact pair in either direction. Preserve explicit wiring
+    // evidence for native review if it no longer has a physical contact.
+    const components = draft.assembly.components.map(x => {
+        const target = x.instanceId === a ? b : x.instanceId === b ? a : null;
+        return target && x.connectedTo?.includes(target) ?
+            { ...x, connectedTo: x.connectedTo.filter(id => id !== target) } : x;
+    });
+    return { ...draft, assembly: { ...draft.assembly, components } };
+}
+export function setExplicitWiring(draft: ConstructDraft, explicit: boolean): ConstructDraft {
+    const current = draft.assembly.powerConnections;
+    if (explicit === (current != null)) return draft;
+    return { ...draft, assembly: { ...draft.assembly, powerConnections: explicit ? [] : undefined } };
+}
+function samePair(link: PowerConnection, a: string, b: string): boolean {
+    return link.fromInstanceId === a && link.toInstanceId === b ||
+        link.fromInstanceId === b && link.toInstanceId === a;
+}
+export function hasPowerConnection(draft: ConstructDraft, a: string, b: string): boolean {
+    return draft.assembly.powerConnections?.some(link => samePair(link, a, b)) ?? false;
+}
+export function setPowerConnection(draft: ConstructDraft, a: string, b: string, connected: boolean): ConstructDraft {
+    requireDistinctPair(draft, a, b);
+    const links = draft.assembly.powerConnections;
+    if (links == null) throw new Error("Explicit power wiring is not selected.");
+    if (connected && !hasProposedContact(draft, a, b)) throw new Error("Power wiring needs a proposed direct physical contact.");
+    if (connected === hasPowerConnection(draft, a, b)) return draft;
+    return { ...draft, assembly: { ...draft.assembly, powerConnections: connected ?
+        [...links, { fromInstanceId: a, toInstanceId: b }] : links.filter(link => !samePair(link, a, b)) } };
+}
 export function setManifestation(draft: ConstructDraft, candidateId: string,
     selection: NativeOriginDraftManifestation | null): ConstructDraft {
     if (selection && selection.candidateId !== candidateId) throw new Error("Mismatched characteristic identity.");
@@ -108,6 +159,9 @@ export interface AssemblyResult {
 export interface Candidate {
     id: string; kind: "Intrinsic" | "Trait" | "Other"; labelId: string;
     offeredValue: unknown; unresolvedEvidence: string[];
+    sourceDefinitionId: string; occurrencePath: string;
+    eligibility: "Unreviewed" | "Eligible" | "Restricted" | "Unresolved" | "DmAuthorized";
+    eligibilityExplanation: string | null;
     requiredChoices: { id: string; minimum: number; maximum: number;
         finiteOptions: string[] | null; optionCatalogId: string | null; parameterKey: string | null }[];
 }
@@ -201,8 +255,12 @@ export function decodeAssembly(v: unknown): AssemblyResult {
         productsWithUncertifiedMass: optional(r.productsWithUncertifiedMass, strings) };
 }
 function candidate(v: unknown): Candidate {
-    const r = record(v), identity = record(r.identity);
+    const r = record(v), identity = record(r.identity), basis = record(r.selectionBasis);
+    const occurrence = record(identity.occurrence), source = record(occurrence.source);
     return { id: str(r.id), kind: enumValue(identity.kind, ["Intrinsic", "Trait", "Other"] as const),
+        sourceDefinitionId: str(source.id), occurrencePath: str(occurrence.occurrencePath),
+        eligibility: enumValue(basis.eligibility, ["Unreviewed", "Eligible", "Restricted", "Unresolved", "DmAuthorized"] as const),
+        eligibilityExplanation: optional(basis.explanation, str),
         labelId: str(identity.intrinsicSlotId ?? identity.mechanicalDefinitionId ?? identity.traitConceptId),
         offeredValue: r.offeredValue, unresolvedEvidence: optional(r.unresolvedEvidence, strings) ?? [],
         requiredChoices: optional(r.requiredChoices, x => list(x, raw => {
@@ -216,7 +274,9 @@ export function decodeConstructPreview(raw: unknown, movement: unknown): Constru
     return { assembly: decodeAssembly(r.assembly),
         origin: { status: status(origin.status), issues: list(origin.issues, issue),
             candidates: list(proposal.candidates, candidate) },
-        movement: optional(movement, x => { const t = record(x); return {
+        movement: optional(movement, x => { const t = record(x);
+            if (t.previewOnly !== true) throw new Error("Movement is not a native preview.");
+            return {
             status: str(t.status), modes: list(t.modes, y => {
                 const m = record(y); return { mode: str(m.mode), speedFeet: nonnegative(m.speedFeet) };
             }) }; }) };
