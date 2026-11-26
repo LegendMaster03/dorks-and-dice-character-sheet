@@ -35,7 +35,7 @@ interface Inspection {
     review?: DependencyChange;
 }
 const button = "dd-button dd-button--secondary";
-const humanize = (id: string): string => id.split(".").at(-1)!.replaceAll(/[-_]/g, " ")
+const humanize = (id: string): string => id.split(".").at(-1)!.replaceAll(/[-_]/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\b\w/g, c => c.toUpperCase());
 function valueLabel(value: unknown): string | undefined {
     if (typeof value === "string") return humanize(value);
@@ -64,7 +64,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     let query = "", inspectedId: string | null = null;
     let inspection: Inspection | null = null;
     let custom = false, chosenMethod: NativeMethod | null = null;
-    let busy = false, error: string | null = null, methodError: string | null = null;
+    let busy = false, saving = false, error: string | null = null, methodError: string | null = null;
     let sequence = 0;
     let pending: { proposal: NativeOriginDraftProposal; revision: number; fingerprint: string } | null = null;
     const catalogs = new Map<string, { options: readonly { id: string; name: string }[]; restricted: boolean }>();
@@ -96,7 +96,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
         if (host.current().catalog?.fingerprint !== metadata.fingerprint)
             throw new Error("The native rules changed; reload discovery.");
         const value = { options: response.choices.options,
-            restricted: response.choices.requiresCharacterAuthority || response.choices.status !== "supported" };
+            restricted: response.choices.requiresCharacterAuthority || response.choices.status !== "available" };
         catalogs.set(id, value);
         return value;
     }
@@ -174,19 +174,27 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
         if (!metadata || !writable() || busy || revision() !== expectedRevision ||
             discoveryFingerprint !== metadata.fingerprint) return;
         pending = { proposal, revision: expectedRevision, fingerprint: metadata.fingerprint };
-        busy = true; error = null; notify();
+        busy = true; saving = true; error = null; notify();
         try {
             await host.save(proposal, expectedRevision);
             const saved = host.current().draft;
             if (!saved || saved.revision <= expectedRevision || saved.fingerprint !== metadata.fingerprint ||
+                saved.proposal.id !== proposal.id ||
                 saved.proposal.selectedSpeciesId !== proposal.selectedSpeciesId ||
-                (saved.proposal.selectedAncestryId ?? null) !== (proposal.selectedAncestryId ?? null))
+                (saved.proposal.selectedAncestryId ?? null) !== (proposal.selectedAncestryId ?? null) ||
+                saved.proposal.manifestations.length !== proposal.manifestations.length ||
+                proposal.manifestations.some(m => !saved.proposal.manifestations.some(n =>
+                    n.id === m.id && n.candidateId === m.candidateId &&
+                    (n.choices ?? []).length === (m.choices ?? []).length &&
+                    (m.choices ?? []).some(c => !(n.choices ?? []).some(d =>
+                        c.requirementId === d.requirementId && c.selectedOptionIds.length === d.selectedOptionIds.length &&
+                        c.selectedOptionIds.every((id, i) => id === d.selectedOptionIds[i]))) === false)))
                 throw new Error("The host has not confirmed the requested draft save.");
             pending = null; inspection = null;
             inspectedId = saved.proposal.selectedAncestryId ?? saved.proposal.selectedSpeciesId ?? null;
         } catch (e) {
             error = errorText(e);
-        } finally { busy = false; notify(); }
+        } finally { busy = false; saving = false; notify(); }
     }
     function detail(entry: PresetEntry, proposal?: NativeOriginDraftProposal, preview?: NativeOriginPreview): RuleDetail {
         const facts: DisplayFact[] = [{ label: "Species / Ancestry", value: entry.path.map(p => p.name).join(" / ") }];
@@ -198,8 +206,14 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             for (const candidate of originPreviewCandidates(preview, proposal)) {
                 if (!candidate.manifestedPreview && candidate.eligibility !== "Eligible") continue;
                 if (candidate.kind === "Intrinsic" && candidate.manifestedPreview) {
-                    const v = valueLabel(candidate.offeredValue);
-                    if (v !== undefined) facts.push({ label: label(candidate.characteristic), value: v,
+                    const profile = isRecord(preview.result.profile) ? preview.result.profile : null;
+                    const underlying = profile && isRecord(profile.underlying) ? profile.underlying : null;
+                    const grants = Array.isArray(underlying?.inherentGrants) ? underlying.inherentGrants : [];
+                    const grant = grants.find(g => isRecord(g) && Array.isArray(g.sourceCandidateIds) &&
+                        g.sourceCandidateIds.includes(candidate.id));
+                    const v = isRecord(grant) ? valueLabel(grant.effectiveValue) : undefined;
+                    if (v !== undefined) facts.push({ label: label(candidate.characteristic),
+                        value: candidate.characteristic === "walkingSpeedFeet" || candidate.characteristic === "darkvisionFeet" ? v + " ft." : v,
                         source: { label: label(candidate.sourceId) } });
                     continue;
                 }
@@ -217,7 +231,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                         if (v !== undefined) values.push({ label: humanize(key), value: v });
                     }
                 }
-                features.push({ title: candidate.displayName.startsWith("trait.") ? label(candidate.displayName) : candidate.displayName,
+                features.push({ title: candidate.displayName.startsWith("trait.") || candidate.displayName.startsWith("direct:") ? label(candidate.characteristic) : candidate.displayName,
                     description: candidate.description ?? undefined, facts: values,
                     source: { label: label(candidate.sourceId) } });
             }
@@ -237,6 +251,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
         const section = createSectionCard("Required creation choices");
         const requirements = requiredDirectOriginChoices(preview, proposal);
         const candidates = originPreviewCandidates(preview, proposal);
+        const expectedRevision = revision();
         if (!requirements.length) section.append(createElement("p", undefined, "No required choices reported."));
         requirements.forEach((requirement, index) => {
             const candidate = candidates.find(c => c.id === requirement.candidateId);
@@ -256,17 +271,17 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             const locked = !writable() || busy || !!pending || candidate?.eligibility !== "Eligible" || !!catalog?.restricted;
             section.append(renderChoice(view, locked, {
                 select: (_id, optionId, selected) => {
-                    if (locked || !options.some(o => o.id === optionId)) return;
+                    if (locked || revision() !== expectedRevision || currentPreview() !== preview || !options.some(o => o.id === optionId)) return;
                     const existing = requirement.selectedOptionIds;
                     const next = selected ? requirement.maximum === 1 ? [optionId] :
                         [...new Set([...existing, optionId])] : existing.filter(o => o !== optionId);
                     if (next.length > requirement.maximum) { notify(); return; }
                     void persist(changeDirectOriginChoice(proposal, requirement.candidateId,
-                        requirement.requirementId, next), revision());
+                        requirement.requirementId, next), expectedRevision);
                 },
                 browseCatalog: async (_id, requested) => {
                     const metadata = host.current().catalog;
-                    if (!metadata || locked || requested !== catalogId) return;
+                    if (!metadata || locked || revision() !== expectedRevision || currentPreview() !== preview || requested !== catalogId) return;
                     busy = true; error = null; notify();
                     try { await loadCatalog(metadata, requested); expandedCatalogs.add(id); }
                     catch (e) { error = errorText(e); }
@@ -285,11 +300,12 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
         const state = host.current();
         const area = createSectionCard("Character Origins");
         const status: DraftSaveStatus = state.readOnly || state.savedState ? "read-only" :
-            busy ? "saving" : pending ? "failed" : state.status !== "ready" ? "unavailable" :
+            saving ? "saving" : pending ? "failed" : state.status !== "ready" ? "unavailable" :
                 state.draft && state.draft.fingerprint !== state.catalog?.fingerprint ? "stale" :
                     state.draft ? "saved" : "dirty";
         area.append(renderDraftStatus(status));
         if (error) area.append(createInlineState(error, "error"));
+        if (busy && !saving) area.append(createInlineState("Loading native information…", "loading"));
         if (pending) {
             const retry = pending;
             area.append(createButton("Retry draft save", button, () => {
