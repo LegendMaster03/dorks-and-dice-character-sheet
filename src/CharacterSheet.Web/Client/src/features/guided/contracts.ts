@@ -29,7 +29,7 @@ export interface NativeMethodReference {
 export interface NativeMethod {
     readonly reference: NativeMethodReference;
     readonly name: string;
-    readonly stage: string;
+    readonly stage: string | null;
     readonly support: string;
     readonly defaultAvailability: string | null;
 }
@@ -142,7 +142,8 @@ export interface MethodEditor<TContext> {
  * A preview editor is never an activation capability.
  */
 export function resolveMethodEditor<T>(method: NativeMethod, editors: readonly MethodEditor<T>[]): MethodEditor<T> | null {
-    if (method.support !== "initial-preview" && method.support !== "assembly-preview") return null;
+    if (method.stage === "post-origination" ||
+        (method.support !== "initial-preview" && method.support !== "assembly-preview")) return null;
     const matches = editors.filter(editor => editor.reference.ruleId === method.reference.ruleId
         && editor.reference.methodId === method.reference.methodId);
     return matches.length === 1 ? matches[0]! : null;
