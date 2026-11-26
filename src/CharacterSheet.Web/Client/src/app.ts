@@ -389,7 +389,7 @@ function renderWorkspace(
                 void originWorkflow.reviewParentSources(character.characterId)
         },
         state.guidedBuilder.open && state.guidedBuilder.activeSection === "species"
-            ? () => guidedOrigins(character.characterId).render() : undefined);
+            ? renderSavedDraft => guidedOrigins(character.characterId).render(renderSavedDraft) : undefined);
     return workspace;
 }
 

@@ -95,7 +95,7 @@ export function renderCharacterWorkspace(
     equipmentPreviewStatus?: "loading" | "ready" | "error",
     origin?: OriginUiState,
     originHandlers?: OriginBuilderHandlers,
-    renderGuidedOrigins?: () => HTMLElement
+    renderGuidedOrigins?: (renderSavedDraft?: () => HTMLElement) => HTMLElement
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -387,8 +387,7 @@ function renderCharacterEditorOverlay(
     mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers,
     origin?: OriginUiState,
-    originHandlers?: OriginBuilderHandlers,
-    renderGuidedOrigins?: () => HTMLElement
+    originHandlers?: OriginBuilderHandlers
 ): HTMLElement {
     const overlay = createElement("div", "dd-character-editor-overlay");
     overlay.setAttribute("data-character-editor-overlay", "true");
@@ -444,7 +443,7 @@ function renderGuidedBuilder(
     equipmentStatus?: "loading" | "ready" | "error",
     origin?: OriginUiState,
     originHandlers?: OriginBuilderHandlers,
-    renderGuidedOrigins?: () => HTMLElement
+    renderGuidedOrigins?: (renderSavedDraft?: () => HTMLElement) => HTMLElement
 ): HTMLElement {
     const container = createElement("section", "dd-guided-builder");
     container.setAttribute("aria-labelledby", "dd-guided-builder-heading");
@@ -550,11 +549,14 @@ function renderGuidedBuilder(
             // editor is the canonical Origin draft. Never duplicate legacy
             // Species/Subspecies mutations in this guided section.
             const draft = origin?.draft;
-            if (renderGuidedOrigins && origin?.status === "ready" && origin.catalog && !origin.savedState &&
-                (!draft || (editableConventional(draft.proposal) && draft.rulesetId === origin.catalog.rulesetId &&
-                    draft.fingerprint === origin.catalog.fingerprint && !origin.preview?.contentChangedSinceRequest))) {
-                panel.append(renderGuidedOrigins());
-                if (draft && originHandlers && origin.preview && origin.previewDraftRevision === draft.revision &&
+            if (renderGuidedOrigins && origin?.status === "ready" && origin.catalog && !origin.savedState) {
+                const needsSavedEditor = draft && (!editableConventional(draft.proposal) ||
+                    draft.rulesetId !== origin.catalog.rulesetId || draft.fingerprint !== origin.catalog.fingerprint ||
+                    origin.preview?.contentChangedSinceRequest);
+                panel.append(renderGuidedOrigins(needsSavedEditor && originHandlers
+                    ? () => renderOriginBuilder(characterId, origin, builder.build, origin.readOnly, originHandlers)
+                    : undefined));
+                if (!needsSavedEditor && draft && originHandlers && origin.preview && origin.previewDraftRevision === draft.revision &&
                     !hasLegacySpeciesSelections(builder.build?.foundationalSelections ?? []) &&
                     canActivateDirectNativeOrigin(draft.proposal, origin.preview)) {
                     const activation = createElement("details", "dd-guided-activation");

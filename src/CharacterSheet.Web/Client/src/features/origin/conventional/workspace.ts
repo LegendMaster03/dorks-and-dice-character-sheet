@@ -66,7 +66,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     let attemptedFingerprint: string | null = null;
     let query = "", inspectedId: string | null = null;
     let inspection: Inspection | null = null;
-    let custom = false, chosenMethod: NativeMethod | null = null;
+    let custom = false, savedDraftOpen = false, chosenMethod: NativeMethod | null = null;
     let busy = false, saving = false, error: string | null = null, methodError: string | null = null;
     let sequence = 0;
     let pending: { proposal: NativeOriginDraftProposal; revision: number; fingerprint: string } | null = null;
@@ -81,6 +81,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     function writable(): boolean {
         const s = host.current();
         return host.canEditDraft() && s.status === "ready" && !s.readOnly && !s.savedState && !s.busy &&
+            !s.preview?.contentChangedSinceRequest &&
             !!s.catalog && (!s.draft || s.draft.fingerprint === s.catalog.fingerprint &&
                 s.draft.rulesetId === s.catalog.rulesetId) && editableConventional(currentProposal());
     }
@@ -313,13 +314,21 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
         });
         return section;
     }
-    function render(): HTMLElement {
+    function render(renderSavedDraft?: () => HTMLElement): HTMLElement {
         const state = host.current();
         const area = createSectionCard("Character Origins");
         const status: DraftSaveStatus = state.readOnly || state.savedState || !host.canEditDraft() ? "read-only" :
             saving ? "saving" : pending ? "failed" : state.status !== "ready" ? "unavailable" :
                 state.draft && state.draft.fingerprint !== state.catalog?.fingerprint ? "stale" :
                     state.draft ? "saved" : "unavailable";
+        if (!renderSavedDraft) savedDraftOpen = false;
+        if (savedDraftOpen && renderSavedDraft) {
+            area.append(createButton("Back to Character Origins", button, () => {
+                savedDraftOpen = false;
+                notify();
+            }), renderSavedDraft());
+            return area;
+        }
         if (status !== "unavailable") area.append(renderDraftStatus(status));
         if (error) area.append(createInlineState(error, "error"));
         if (busy && !saving) area.append(createInlineState("Loading native information…", "loading"));
@@ -333,6 +342,12 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
         }
         if (state.message) area.append(createInlineState(state.message, "warning"));
         if (!state.catalog || state.status !== "ready") return area;
+        if (renderSavedDraft) {
+            area.append(createButton("Review saved Origin draft", button, () => {
+                savedDraftOpen = true;
+                notify();
+            }));
+        }
         if (discoveryFingerprint !== state.catalog.fingerprint) {
             const fingerprint = state.catalog.fingerprint;
             if (attemptedFingerprint !== fingerprint && !busy) {
@@ -371,8 +386,8 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             return area;
         }
         area.append(createButton("Construct a Custom Origin", "dd-button", () => { custom = true; notify(); }));
-        if (!editableConventional(currentProposal()) && !state.savedState)
-            area.append(createInlineState("This saved Origin uses a custom configuration. Its evidence is preserved.", "readonly"));
+        if (renderSavedDraft)
+            area.append(createInlineState("Review your saved draft before selecting a Species or Ancestry.", "readonly"));
         const savedIdentity = currentProposal().selectedAncestryId ?? currentProposal().selectedSpeciesId ?? null;
         const selected = entries.find(e => e.preset.id === (inspectedId ?? savedIdentity));
         const inspected = activeInspection();

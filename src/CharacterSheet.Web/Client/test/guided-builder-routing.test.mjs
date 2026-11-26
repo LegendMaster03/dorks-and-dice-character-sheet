@@ -317,6 +317,16 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });
 
+test("saved mixed or stale Origins keep the Guided Setup workspace and offer draft review", async () => {
+    const sheet = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    const workspace = await readFile(new URL("../src/features/origin/conventional/workspace.ts", import.meta.url), "utf8");
+    const route = sheet.slice(sheet.indexOf('case "species": {'), sheet.indexOf('case "abilities": {'));
+    assert.match(route, /if \(renderGuidedOrigins && origin\?\.status === "ready" && origin\.catalog && !origin\.savedState\)/);
+    assert.match(route, /renderGuidedOrigins\(needsSavedEditor && originHandlers/);
+    assert.match(route, /!needsSavedEditor && draft && originHandlers/);
+    assert.match(workspace, /"Review saved Origin draft"[\s\S]*?savedDraftOpen = true/);
+});
+
 test("guided builder uses numbered steps, sequential navigation, a Rules Core-backed Equipment step, and a non-blocking sheet exit", async () => {
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     const builderSource = await readFile(new URL("../src/ui/builder.ts", import.meta.url), "utf8");
