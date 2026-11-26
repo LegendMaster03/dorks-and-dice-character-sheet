@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCustomOriginHost } from "../.test-dist/features/origin/custom-workspace.js";
+import { canMountGuidedOriginWorkspace, createCustomOriginHost } from "../.test-dist/features/origin/custom-workspace.js";
 import { resolveMethodEditor } from "../.test-dist/features/guided/contracts.js";
 import { newBiologicalProposal } from "../.test-dist/features/origin/biological/model.js";
 import { emptyConstructDraft, packConstructDraft, unpackConstructDraft, addComponent }
@@ -57,4 +57,18 @@ test("failed biological save retains the exact edit; stale revisions cannot be s
     state.draft = { ...state.draft, revision: 2 };
     await assert.rejects(context.editor.retry(), /saved Origin changed/);
     assert.equal(host.methodContext(biological, []).editor.draft.saveStatus, "conflict");
+});
+
+test("actual guided mount policy retains both custom editors after first save and during native content review", () => {
+    const base = { status: "ready", catalog: metadata, savedState: null, draft: null };
+    assert.equal(canMountGuidedOriginWorkspace(base), true);
+    for (const proposal of [newBiologicalProposal("bio"), packConstructDraft(emptyConstructDraft("construct", 123))]) {
+        const saved = { ...base, draft: view(proposal) };
+        assert.equal(canMountGuidedOriginWorkspace(saved), true);
+        assert.equal(canMountGuidedOriginWorkspace({ ...saved, catalog: { ...metadata, fingerprint: "new" } }), true);
+        assert.equal(canMountGuidedOriginWorkspace({ ...saved, savedState: { revision: 1 } }), false);
+    }
+    const legacy = newBiologicalProposal("legacy");
+    delete legacy.biologicalTransmission;
+    assert.equal(canMountGuidedOriginWorkspace({ ...base, draft: view(legacy) }), false);
 });

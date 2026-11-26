@@ -23,6 +23,7 @@ def run_browser():
         _, outsider = fixture.login(browser, "unrelated")
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on("pageerror", lambda error: print("Browser page error:", str(error), flush=True))
         page.set_default_timeout(45000)
         ids = fixture.UUIDS
 
@@ -53,6 +54,9 @@ def run_browser():
             result = response.json()
             assert result["activeGrants"] is False
             assert result["draft"]["revision"] > 0
+            event(name + "-draft-save-" + str(result["draft"]["revision"]), True,
+                  {"method": result["draft"]["proposal"]["method"], "revision": result["draft"]["revision"],
+                   "preview": bool(result.get("preview")), "constructPreview": bool(result.get("constructPreview"))})
             return result
 
         def select_method(method_id):
@@ -78,6 +82,13 @@ def run_browser():
         open_origin("red")
         select_method("biological")
         save("red", lambda: page.get_by_role("button", name="Start biological draft").click())
+        try:
+            expect(page.get_by_label("Native biological contributor source")).to_be_visible(timeout=15000)
+        except Exception:
+            snapshot("guided-biological-post-save-failure")
+            print("Post-save guided UI:", page.locator('[data-guided-builder]').inner_text()[:6000], flush=True)
+            raise
+        snapshot("guided-biological-initial-draft")
         for ancestry in ("ancestry.dragonborn.red", "ancestry.dragonborn.bronze"):
             page.get_by_label("Native biological contributor source").select_option(ancestry)
             result = save("red", lambda: page.get_by_role("button", name="Add contributor").click())

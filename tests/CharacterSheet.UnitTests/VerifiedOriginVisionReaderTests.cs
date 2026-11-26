@@ -65,19 +65,21 @@ public sealed class VerifiedOriginVisionReaderTests
         Assert.Equal("bright", value.PerceivedLightLevel);
     }
 
-    [Fact]
-    public void CanonicalSharedTraitIdMatchesExactNativeGrantAndDoesNotAllowOtherDefinitions()
+    [Theory]
+    [InlineData("trait.low-light-vision")]
+    [InlineData("trait.shared.low-light-vision")]
+    public void CanonicalSharedTraitIdMatchesExactNativeGrantAndDoesNotAllowOtherDefinitions(string canonicalId)
     {
         var canonical = Profile.Replace(
             "species.orc#trait:low-light-vision",
-            "trait.shared.low-light-vision", StringComparison.Ordinal);
+            canonicalId, StringComparison.Ordinal);
         var view = Assert.IsType<VerifiedOriginLowLightVision>(
             Read(stored: canonical));
         Assert.Equal("species.orc", view.SourceId);
         Assert.Equal("grant:vision", view.GrantId);
 
         var mismatched = canonical.Replace(
-            "trait.shared.low-light-vision",
+            canonicalId,
             "trait.other.low-light-vision", StringComparison.Ordinal);
         Assert.Null(Read(stored: mismatched));
 

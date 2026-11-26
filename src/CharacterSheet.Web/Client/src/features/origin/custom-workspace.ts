@@ -6,7 +6,7 @@ import { createButton, createElement, createInlineState } from "../../ui/compone
 import type { DraftSaveStatus, DraftView, EvaluationView, MethodEditor, NativeMethod, NativePreset,
     NativePreviewEnvelope } from "../guided/contracts.js";
 import type { NativeOriginDraftProposal } from "./origin-api.js";
-import type { OriginWorkflow } from "./origin-workflow.js";
+import type { OriginUiState, OriginWorkflow } from "./origin-workflow.js";
 import { createInitialOriginProposal } from "./origin-builder-model.js";
 import { editableConventional } from "./conventional/model.js";
 import { biologicalEditor, type BiologicalEditorContext } from "./biological/editor.js";
@@ -25,6 +25,18 @@ const button = "dd-button dd-button--secondary";
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Native Origin request failed.";
 const sameMethod = (a: NativeOriginDraftProposal, b: NativeOriginDraftProposal) =>
     a.intent === b.intent && a.method.ruleId === b.method.ruleId && a.method.methodId === b.method.methodId;
+
+/** Keep the guided workspace mounted after initial saves and during stale-rule
+ * review. Unsupported legacy drafts and established Origins retain their
+ * existing read-only/reconciliation route. This is not an authorization gate. */
+export function canMountGuidedOriginWorkspace(state: OriginUiState | undefined): state is OriginUiState {
+    if (!state || state.status !== "ready" || !state.catalog || state.savedState) return false;
+    const draft = state.draft;
+    if (!draft) return true;
+    if (supportsBiologicalDraft(draft.proposal) || unpackConstructDraft(draft.proposal)) return true;
+    return editableConventional(draft.proposal) && draft.rulesetId === state.catalog.rulesetId &&
+        draft.fingerprint === state.catalog.fingerprint && !state.preview?.contentChangedSinceRequest;
+}
 
 export function createCustomOriginHost(environment: HostEnvironment, characterId: string,
     workflow: OriginWorkflow, notify: () => void) {
