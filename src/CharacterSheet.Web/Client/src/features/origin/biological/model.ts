@@ -42,6 +42,7 @@ export interface BiologicalEvaluation {
     components: readonly RecordValue[];
     issues: readonly ValidationIssue[];
     current: boolean;
+    policyRevision?: string;
 }
 export function newBiologicalProposal(id: string): BiologicalProposal {
     return { id, intent: 1, method: biologicalReference, contributors: [], candidates: [],
@@ -57,7 +58,16 @@ export function supportsBiologicalDraft(proposal: NativeOriginDraftProposal): pr
         proposal.selectedAncestryId == null && record(plan) &&
         Array.isArray(plan.candidateIds) && plan.candidateIds.every(id => typeof id === "string") &&
         (plan.latentConfigurations == null || Array.isArray(plan.latentConfigurations)) &&
-        (plan.combinations == null || Array.isArray(plan.combinations));
+        (plan.combinations == null || Array.isArray(plan.combinations)) &&
+        !["existingConfiguration", "existingEffectiveConfiguration", "existingEffectiveConfigurationBasis",
+            "activeTemporaryTransformation", "otherActiveTemporaryTransformations", "temporaryTransformationPrecedence",
+            "tableDecisions", "history", "resolutions", "relationships", "constraints", "inputRequirements", "processCreatureTypeId"]
+            .some(key => proposal[key] != null && !(Array.isArray(proposal[key]) && (proposal[key] as unknown[]).length === 0)) &&
+        proposal.contributors.every(c => record(c) && record(c.source) && record(c.role) &&
+            typeof c.id === "string" && typeof c.source.id === "string" &&
+            (c.source.kind === 0 || c.source.kind === "Native") &&
+            (c.role.kind === 0 || c.role.kind === "BiologicalParent") &&
+            c.manifestedProfile == null && c.historicalSourceIds == null && c.source.version == null);
 }
 export function nativeContributorAllowed(preset: NativePreset): boolean {
     return preset.selectable && (preset.kind.toLowerCase() === "species" ||
@@ -135,6 +145,7 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
     const rawAllocation = record(envelope.allocation) ? envelope.allocation : result.creationAllocation;
     const allocation = allocationView(rawAllocation);
     return { current: true, groups, allocation, issues,
+        policyRevision: record(rawAllocation) && typeof rawAllocation.policyRevision === "string" ? rawAllocation.policyRevision : undefined,
         components: record(rawAllocation) ? records(rawAllocation.components) : [],
         charges: record(rawAllocation) ? records(rawAllocation.charges) : [] };
 }
@@ -203,7 +214,8 @@ export function setFiniteChoice(proposal: BiologicalProposal, evaluation: Biolog
  * remains inert in the draft and is flagged for review. */
 export function removeContributor(proposal: BiologicalProposal, evaluation: BiologicalEvaluation,
     contributorId: string): { proposal: BiologicalProposal; change: DependencyChange } {
-    if (!evaluation.current) throw new Error("Refresh native evidence before removing a contributor.");
+    if (!evaluation.current && (proposal.biologicalTransmission.candidateIds.length || proposal.manifestations.length))
+        throw new Error("Refresh native evidence before removing a contributor with saved selections.");
     const affected = new Set(evaluation.groups.flatMap(g => g.offers).filter(o => o.contributorId === contributorId).map(o => o.id));
     const plan = proposal.biologicalTransmission;
     const removed = plan.candidateIds.filter(id => affected.has(id));
