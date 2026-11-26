@@ -1,6 +1,6 @@
 /** Biological draft operations and read-only native evaluation adapters.
  * No candidate, grant, price, or authority is synthesized here. */
-import type { NativeOriginDraftProposal, NativeOriginDraftChoice, NativeOriginDraftManifestation } from "../origin-api.js";
+import type { NativeOriginDraftProposal, NativeOriginDraftChoice } from "../origin-api.js";
 import type { AllocationView, DependencyChange, NativePreset, ValidationIssue } from "../../guided/contracts.js";
 
 type RecordValue = Record<string, unknown>;
@@ -99,7 +99,7 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
         !record(result.biologicalCombination) || result.biologicalCombination.proposalId !== proposal.id ||
         result.biologicalCombination.explicitTransmissionPlan !== true) return empty;
     const combination = result.biologicalCombination;
-    if (!Array.isArray(combination.characteristics) || !Array.isArray(combination.inheritedInstances)) return empty;
+    if (!Array.isArray(combination.characteristics)) return empty;
     const genes = records(combination.inheritedInstances);
     const groups = records(combination.characteristics).map(group => ({
         id: text(group.characteristicId), kind: String(group.kind),
@@ -116,7 +116,7 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
             const expressionIds = [...new Set(instances.flatMap(g => strings(g.expressionGrantIds)))];
             const validGene = instances.length > 0 && instances.every(g => Array.isArray(g.expressionGrantIds));
             const state: Offer["state"] = !inherited ? "available" : !validGene ? "unresolved" :
-                expressionIds.length ? "expressed" : requestedExpression ? "pending" : "latent";
+                expressionIds.length ? "expressed" : "latent";
             return [{ id, contributorId: c.contributorId, sourceId: text(c.identity.occurrence.source.id),
                 occurrence: text(c.identity.occurrence.occurrencePath), kind: String(group.kind),
                 characteristicId: text(group.characteristicId), eligibility: typeof c.selectionBasis.eligibility === "number" ? c.selectionBasis.eligibility : text(c.selectionBasis.eligibility),
@@ -126,7 +126,7 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
     }));
     const represented = new Set(groups.flatMap(g => g.offers.map(o => o.id)));
     const issues: ValidationIssue[] = records(result.issues).map((issue, i) => ({
-        id: text(issue.code) + ":" + i, severity: "warning", message: text(issue.detail) || "Native evaluation requires review.",
+        id: text(issue.code) + ":" + i, severity: issue.severity === "Invalid" || issue.severity === 3 ? "invalid" : issue.severity === "Conflict" || issue.severity === 2 ? "conflict" : issue.severity === "Incomplete" || issue.severity === 0 ? "incomplete" : "warning", message: text(issue.detail) || "Native evaluation requires review.",
         decision: { id: "inheritance", label: "Review inheritance" }
     }));
     for (const id of proposal.biologicalTransmission.candidateIds) if (!represented.has(id))
@@ -181,7 +181,7 @@ export function setFiniteChoice(proposal: BiologicalProposal, evaluation: Biolog
     const offer = requireOffer(evaluation, candidateId);
     const req = offer.requirements.find(r => r.id === requirementId);
     if (!offer.inherited || !req || !Array.isArray(req.finiteOptions) || req.optionCatalogId != null ||
-        (req.timing !== 0 && req.timing !== "Persistent") || typeof req.maximum !== "number" ||
+        (req.timing !== 0 && req.timing !== "Creation") || typeof req.maximum !== "number" ||
         new Set(selected).size !== selected.length || selected.length > req.maximum ||
         selected.some(id => !req.finiteOptions || !strings(req.finiteOptions).includes(id)))
         throw new Error("This choice is not an available persistent finite selection.");
@@ -214,5 +214,5 @@ export function removeContributor(proposal: BiologicalProposal, evaluation: Biol
         biologicalTransmission: { ...plan, candidateIds: retained,
             latentConfigurations: plan.latentConfigurations?.filter(c => !affected.has(c.candidateId)),
             combinations: plan.combinations?.filter(c => !c.candidateIds.some(id => affected.has(id))) } },
-        change: { retained: retained.map(name), reconsider: removed.map(name), available: [] } };
+        change: { retained: retained.filter(id => evaluation.groups.some(g => g.offers.some(o => o.id === id))).map(name), reconsider: [...removed, ...retained.filter(id => !evaluation.groups.some(g => g.offers.some(o => o.id === id)))].map(name), available: [] } };
 }
