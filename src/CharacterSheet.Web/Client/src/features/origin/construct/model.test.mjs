@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyConstructDraft, addComponent, editComponent, removeComponent, constructionAllocation,
     decodeAssembly, decodeConfiguration, setManifestation, hasPhysicalDeclaration, hasProposedContact,
-    setPhysicalConnection, setExplicitWiring, setPowerConnection, hasPowerConnection } from "../../../../.construct-test-dist/features/origin/construct/model.js";
+    setPhysicalConnection, setExplicitWiring, setPowerConnection, hasPowerConnection } from "../../../../.test-dist/features/origin/construct/model.js";
 
 test("exact instances support duplicate definitions and retain unaffected settings", () => {
     let draft = emptyConstructDraft("origin", null);
