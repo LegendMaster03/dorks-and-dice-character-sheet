@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadConstructAllowance, loadConstructOptions } from "../../../../.construct-test-dist/features/origin/construct/native.js";
+import { loadConstructAllowance, loadConstructOptions } from "../../../../.test-dist/features/origin/construct/native.js";
 
 const fingerprint = "a".repeat(64);
 const metadata = { contractVersion: 1, rulesetId: "first-party-001", fingerprint,
