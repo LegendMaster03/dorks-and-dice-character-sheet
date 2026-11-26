@@ -150,6 +150,21 @@ export function createCustomOriginHost(environment: HostEnvironment, characterId
                     }
                 }, saving));
         }
+        const s = state();
+        const d = s.draft;
+        if (d && s.catalog && d.rulesetId === s.catalog.rulesetId &&
+            d.fingerprint !== s.catalog.fingerprint && s.status === "ready" &&
+            !s.readOnly && !s.savedState && !pending &&
+            (supportsBiologicalDraft(d.proposal) || unpackConstructDraft(d.proposal))) {
+            area.append(createInlineState("Native rules changed. Review the saved choices against the current catalog before editing.", "warning"),
+                createButton("Review with current rules", button, () => {
+                    if (!window.confirm("Re-evaluate this saved Origin under current rules? Existing choices will be preserved; native costs, requirements and allowance may change.")) return;
+                    saving = true; error = null; notify();
+                    void workflow.renewCustomDraft(characterId, d.revision, d.fingerprint).catch(e => {
+                        error = errorText(e);
+                    }).finally(() => { saving = false; notify(); });
+                }, saving || s.busy));
+        }
         return area;
     }
     const methodEditors: readonly MethodEditor<CustomOriginContext>[] = [

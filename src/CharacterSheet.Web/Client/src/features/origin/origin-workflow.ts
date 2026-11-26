@@ -9,8 +9,8 @@ import { CharacterSheetApiError } from "../../character-api.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
 import { editableConventional } from "./conventional/model.js";
 import { supportsBiologicalDraft } from "./biological/model.js";
-import { unpackConstructDraft, type ConstructPreview } from "./construct/model.js";
-import { decodeSavedConstructPreview, evaluateConstructDraft } from "./construct/native.js";
+import { packConstructDraft, unpackConstructDraft, type ConstructPreview } from "./construct/model.js";
+import { decodeSavedConstructPreview, evaluateConstructDraft, loadConstructAllowance } from "./construct/native.js";
 import type { NativePreviewEnvelope } from "../guided/contracts.js";
 import {
     activateNativeOrigin,
@@ -75,6 +75,7 @@ export interface OriginWorkflow {
         expectedRevision: number): Promise<void>;
     saveCustomDraft(characterId: string, proposal: NonNullable<OriginUiState["draft"]>["proposal"],
         expectedRevision: number): Promise<void>;
+    renewCustomDraft(characterId: string, expectedRevision: number, expectedFingerprint: string | null): Promise<void>;
     openChooser(category: "species" | "ancestry" | "skill",
         candidateId?: string, requirementId?: string,
         parentSlot?: MixedNativeParentSlot): Promise<void>;
@@ -506,6 +507,30 @@ export function createOriginWorkflow(
             // write merely because the new revision is visible.
             if (!await saveProposal(characterId, proposal))
                 throw new Error(state.message ?? "The Origin draft save was not confirmed.");
+        },
+        async renewCustomDraft(characterId, expectedRevision, expectedFingerprint) {
+            // Explicit review only. Re-read authorization, the draft and current
+            // rules. Never overwrite a concurrent edit or migrate ruleset identity.
+            await load(characterId);
+            const draft = state.draft, metadata = state.catalog;
+            if (currentCharacterId !== characterId || state.status !== "ready" || state.busy ||
+                state.readOnly || state.savedState || !draft || !metadata ||
+                draft.revision !== expectedRevision || draft.fingerprint !== expectedFingerprint ||
+                draft.rulesetId !== metadata.rulesetId)
+                throw new Error("The saved Origin changed or requires ruleset migration. Reload before editing.");
+            const construct = unpackConstructDraft(draft.proposal);
+            if (!construct && !supportsBiologicalDraft(draft.proposal))
+                throw new Error("This saved Origin requires a separate review.");
+            let proposal = draft.proposal;
+            if (construct) {
+                const allowance = await loadConstructAllowance(environment, metadata);
+                proposal = packConstructDraft({ ...construct, assembly: { ...construct.assembly, initialAllowance: allowance } });
+            }
+            if (currentCharacterId !== characterId || state.draft !== draft || state.catalog !== metadata ||
+                state.busy || state.readOnly || state.savedState)
+                throw new Error("The saved Origin changed during review.");
+            if (!await saveProposal(characterId, proposal))
+                throw new Error(state.message ?? "The Origin review could not be saved.");
         },
         openChooser, searchChooser, closeChooser,
         chooseOption, clearAncestry, setMode, clearMixedParent,
