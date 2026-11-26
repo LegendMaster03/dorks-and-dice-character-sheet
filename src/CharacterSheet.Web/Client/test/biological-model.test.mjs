@@ -1,9 +1,8 @@
-// Standalone until Workstream A adds this to the shared test command.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { newBiologicalProposal, addNativeContributor, evaluateBiological,
     setInherited, setExpression, setFiniteChoice, removeContributor, allocationView }
-    from "../src/features/origin/biological/model.ts";
+    from "../.test-dist/features/origin/biological/model.js";
 
 const preset = (id, name) => ({ id, name, kind: "ancestry", parentId: "species.dragonborn",
     selectable: true, defaultUpbringingId: null, acquisitionMethodIds: [], ancestrySelectionRequired: false });
