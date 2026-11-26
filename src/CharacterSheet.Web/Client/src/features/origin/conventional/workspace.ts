@@ -247,7 +247,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                     source: { label: label(candidate.sourceId) } });
             }
         }
-        return { title: entry.preset.name, description: host.describePreset?.(entry.preset.id),
+        return { title: entry.preset.name, description: entry.preset.description ?? host.describePreset?.(entry.preset.id),
             facts, features };
     }
     function validation(preview: NativeOriginPreview): readonly ValidationIssue[] {
@@ -352,6 +352,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                 const editor = initialMethod(method) ? resolveMethodEditor(method, host.methodEditors) : null;
                 const row = createElement("article");
                 row.append(createElement("h3", undefined, method.name));
+                if (method.description) row.append(createElement("p", undefined, method.description));
                 if (editor) row.append(createButton("Configure", button, () => { chosenMethod = method; notify(); },
                     busy || !!pending || !host.canEditDraft() || state.readOnly || !!state.savedState));
                 else row.append(createElement("p", undefined, initialMethod(method) ?
@@ -374,7 +375,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             const preview = shown?.preview ?? (same ? savedPreview : null);
             const proposal = shown?.proposal ?? (same ? currentProposal() : undefined);
             work.append(renderRuleDetail(detail(selected, proposal, preview ?? undefined)));
-            if (!host.describePreset?.(selected.preset.id))
+            if (!selected.preset.description && !host.describePreset?.(selected.preset.id))
                 work.append(createElement("p", undefined, "Native preset description is not available."));
             if (preview) work.append(renderValidation(validation(preview), () => undefined));
             if (shown && !same) {
