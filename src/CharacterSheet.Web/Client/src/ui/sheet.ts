@@ -13,8 +13,10 @@ import {
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import { renderCharacterBuilder } from "./builder.js";
 import { renderOriginBuilder, type OriginBuilderHandlers } from "../features/origin/origin-builder.js";
+import { editableConventional } from "../features/origin/conventional/model.js";
 import type { OriginUiState } from "../features/origin/origin-workflow.js";
 import {
+    canActivateDirectNativeOrigin,
     hasLegacySpeciesSelections,
     savedUnderlyingOriginIdentity
 } from "../features/origin/origin-builder-model.js";
@@ -35,7 +37,7 @@ import {
 } from "./guided-equipment.js";
 import type { NativeStartingEquipmentPreview } from "../features/inventory/starting-equipment-api.js";
 import { renderGuidedSourceFeatures } from "./guided-source-features.js";
-import { renderDraftStatus, renderFacts, renderWorkspace } from "../features/guided/components.js";
+import { renderDraftStatus, renderFacts } from "../features/guided/components.js";
 import type { DisplayFact } from "../features/guided/contracts.js";
 import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
@@ -92,7 +94,8 @@ export function renderCharacterWorkspace(
     equipmentPreviewMessage?: string,
     equipmentPreviewStatus?: "loading" | "ready" | "error",
     origin?: OriginUiState,
-    originHandlers?: OriginBuilderHandlers
+    originHandlers?: OriginBuilderHandlers,
+    renderGuidedOrigins?: () => HTMLElement
 ): HTMLElement {
     const shell = createElement("article", "dd-sheet");
     shell.setAttribute("data-character-sheet-shell", "true");
@@ -117,7 +120,8 @@ export function renderCharacterWorkspace(
         advancement,
         portraitAsset === undefined ? null : handlers.routine.artContentUrl(portraitAsset.id),
         origin));
-    if (advancement !== null && advancement.occurrences.length > 0) {
+    if (advancement !== null && advancement.occurrences.length > 0 &&
+        (!guidedBuilder.open || guidedBuilder.activeSection === "class")) {
         const advancementEditing = guidedBuilder.open
             && editable
             && guidedBuilder.activeSection === "class";
@@ -146,7 +150,7 @@ export function renderCharacterWorkspace(
     if (readOnly) {
         shell.append(renderReadOnlyBanner(character.lifecycle === "Archived"));
     }
-    if (mechanicsAvailability && mechanicsAvailability.status !== "resolved" &&
+    if (!guidedBuilder.open && mechanicsAvailability && mechanicsAvailability.status !== "resolved" &&
         mechanicsAvailability.status !== "loading") {
         const descriptions = {
             partial: "Some character mechanics are unresolved. Displayed calculations cover only supported native rules.",
@@ -173,7 +177,8 @@ export function renderCharacterWorkspace(
             equipmentPreviewMessage,
             equipmentPreviewStatus,
             origin,
-            originHandlers));
+            originHandlers,
+            renderGuidedOrigins));
         if (harvestingCrafting.open && handlers.harvestingCrafting !== undefined) {
             shell.append(renderHarvestingCraftingOverlay(
                 character,
@@ -382,7 +387,8 @@ function renderCharacterEditorOverlay(
     mechanics: CharacterMechanicsView | null,
     handlers: CharacterSheetHandlers,
     origin?: OriginUiState,
-    originHandlers?: OriginBuilderHandlers
+    originHandlers?: OriginBuilderHandlers,
+    renderGuidedOrigins?: () => HTMLElement
 ): HTMLElement {
     const overlay = createElement("div", "dd-character-editor-overlay");
     overlay.setAttribute("data-character-editor-overlay", "true");
@@ -437,7 +443,8 @@ function renderGuidedBuilder(
     equipmentError?: string,
     equipmentStatus?: "loading" | "ready" | "error",
     origin?: OriginUiState,
-    originHandlers?: OriginBuilderHandlers
+    originHandlers?: OriginBuilderHandlers,
+    renderGuidedOrigins?: () => HTMLElement
 ): HTMLElement {
     const container = createElement("section", "dd-guided-builder");
     container.setAttribute("aria-labelledby", "dd-guided-builder-heading");
@@ -445,12 +452,7 @@ function renderGuidedBuilder(
 
     const heading = createElement("h2", "dd-guided-builder__title", "Guided Character Setup");
     heading.id = "dd-guided-builder-heading";
-    container.append(
-        heading,
-        createElement(
-            "p",
-            "dd-guided-builder__intro",
-            "Work through the sections in any order. The Character Sheet remains available even when setup is incomplete."));
+    container.append(heading);
 
     const equipmentReceived = routine.state?.rulesInputs?.some(input =>
         input.kind === "booleanFact" &&
@@ -467,12 +469,13 @@ function renderGuidedBuilder(
         const active = section.id === guidedBuilder.activeSection;
         const unavailable = section.status === "unavailable";
         const button = createButton(
-            `${index + 1}. ${section.label} · ${guidedStatusLabel(section.status)}`,
+            `${index + 1}. ${section.label}`,
             active
                 ? "dd-guided-builder__nav-button dd-guided-builder__nav-button--active"
                 : "dd-guided-builder__nav-button",
             () => handlers.selectGuidedBuilderSection(section.id),
             unavailable);
+        button.setAttribute("aria-label", `${index + 1}. ${section.label} · ${guidedStatusLabel(section.status)}`);
         button.setAttribute("data-guided-builder-section", section.id);
         button.setAttribute("data-guided-builder-step", String(index + 1));
         button.setAttribute("data-guided-builder-status", section.status);
@@ -546,7 +549,22 @@ function renderGuidedBuilder(
             // The route ID is retained for saved navigation state, but the
             // editor is the canonical Origin draft. Never duplicate legacy
             // Species/Subspecies mutations in this guided section.
-            if (origin !== undefined && originHandlers !== undefined) {
+            const draft = origin?.draft;
+            if (renderGuidedOrigins && origin?.status === "ready" && origin.catalog && !origin.savedState &&
+                (!draft || (editableConventional(draft.proposal) && draft.rulesetId === origin.catalog.rulesetId &&
+                    draft.fingerprint === origin.catalog.fingerprint && !origin.preview?.contentChangedSinceRequest))) {
+                panel.append(renderGuidedOrigins());
+                if (draft && originHandlers && origin.preview && origin.previewDraftRevision === draft.revision &&
+                    !hasLegacySpeciesSelections(builder.build?.foundationalSelections ?? []) &&
+                    canActivateDirectNativeOrigin(draft.proposal, origin.preview)) {
+                    const activation = createElement("details", "dd-guided-activation");
+                    activation.append(createElement("summary", undefined, "Activate saved Origin"),
+                        createElement("p", undefined, "Activation commits this Origin to the character."),
+                        createButton("Activate Native Origin", "dd-button dd-button--primary",
+                            originHandlers.activate, origin.readOnly || origin.busy));
+                    panel.append(activation);
+                }
+            } else if (origin !== undefined && originHandlers !== undefined) {
                 panel.append(renderOriginBuilder(characterId, origin, builder.build,
                     builder.build?.readOnly === true, originHandlers));
             } else {
@@ -721,7 +739,10 @@ function renderGuidedBuilder(
         panel.append(navigation);
     }
 
-    container.append(renderWorkspace(panel, undefined, renderGuidedCharacterPreview(builder, routine, mechanics, origin)));
+    const preview = createElement("details", "dd-guided-character-summary");
+    preview.append(createElement("summary", undefined, "Character summary"),
+        renderGuidedCharacterPreview(builder, routine, mechanics, origin));
+    container.append(panel, preview);
     return container;
 }
 
@@ -729,7 +750,7 @@ function renderGuidedBuilder(
  * into the active character or used to infer eligibility. */
 function renderGuidedCharacterPreview(builder: CharacterBuilderUiState, routine: CharacterRoutineUiState,
     mechanics: CharacterMechanicsView | null, origin?: OriginUiState): HTMLElement {
-    const section = createSectionCard("Character summary");
+    const section = createElement("div", "dd-guided-character-summary__content");
     const facts: DisplayFact[] = [
         { label: "Class", value: builderReferenceDisplay(builder, "startingClass").value },
         { label: "Origin", value: origin?.savedState ? "Committed native Origin"

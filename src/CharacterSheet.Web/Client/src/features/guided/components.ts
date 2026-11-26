@@ -7,9 +7,10 @@ const buttonClass = "dd-button dd-button--secondary";
 
 /** The caller owns search/selection state so a render never creates a second draft. */
 export function renderRuleBrowser(nodes: readonly RuleNode[], query: string, selectedId: string | null,
-    readOnly: boolean, onSearch: (query: string) => void, onInspect: (id: string) => void): HTMLElement {
-    const card = createSectionCard("Browse rules", "dd-guided-browser");
-    const label = createElement("label", undefined, "Search rules");
+    readOnly: boolean, onSearch: (query: string) => void, onInspect: (id: string) => void,
+    title = "Browse rules", expandedBranches?: Map<string, boolean>): HTMLElement {
+    const card = createSectionCard(title, "dd-guided-browser");
+    const label = createElement("label", undefined, title === "Browse rules" ? "Search rules" : `Search ${title}`);
     const input = createElement("input");
     input.type = "search";
     input.value = query;
@@ -25,15 +26,33 @@ export function renderRuleBrowser(nodes: readonly RuleNode[], query: string, sel
         const item = createElement("li");
         const button = createButton(node.label, buttonClass, () => onInspect(node.id));
         if (node.id === selectedId) button.setAttribute("aria-current", "true");
-        item.append(button);
-        if (!node.selectable || readOnly || node.reason) item.append(createElement("p", undefined,
-            node.reason ?? (!node.selectable ? "Browse only" : "Read only")));
         const children = visible.filter(child => child.parentId === node.id);
-        if (children.length) {
-            const list = createElement("ul");
-            children.forEach(child => appendNode(list, child));
-            item.append(list);
+        const list = createElement("ul");
+        if (children.length && expandedBranches) {
+            const branch = createElement("details");
+            const searchActive = query.trim().length > 0;
+            branch.open = searchActive || (expandedBranches.get(node.id) ?? false);
+            const summary = createElement("summary", undefined, node.label);
+            branch.append(summary);
+            if (node.id === selectedId && !node.selectable) summary.setAttribute("aria-current", "true");
+            if (node.selectable) {
+                button.textContent = `View ${node.label}`;
+                branch.append(button);
+            } else if (node.reason && node.reason !== "Browse only") {
+                branch.append(createElement("p", undefined, node.reason));
+            }
+            branch.append(list);
+            branch.addEventListener("toggle", () => {
+                if (!searchActive && branch.isConnected) expandedBranches.set(node.id, branch.open);
+            });
+            item.append(branch);
+        } else {
+            item.append(button);
+            if (node.reason || (!expandedBranches && (!node.selectable || readOnly))) item.append(createElement("p", undefined,
+                node.reason ?? (node.selectable ? "Read only" : "Browse only")));
+            if (children.length) item.append(list);
         }
+        children.forEach(child => appendNode(list, child));
         parent.append(item);
     }
     const list = createElement("ul", "dd-guided-tree");

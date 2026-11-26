@@ -63,6 +63,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     let entries: readonly PresetEntry[] = [];
     let methods: readonly NativeMethod[] = [];
     let discoveryFingerprint: string | null = null;
+    let attemptedFingerprint: string | null = null;
     let query = "", inspectedId: string | null = null;
     let inspection: Inspection | null = null;
     let custom = false, chosenMethod: NativeMethod | null = null;
@@ -71,6 +72,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     let pending: { proposal: NativeOriginDraftProposal; revision: number; fingerprint: string } | null = null;
     const catalogs = new Map<string, { options: readonly { id: string; name: string }[]; restricted: boolean }>();
     const expandedCatalogs = new Set<string>();
+    const expandedBranches = new Map<string, boolean>();
 
     const notify = () => host.notify();
     const label = (id: string) => host.labelRule?.(id) ?? entries.find(e => e.preset.id === id)?.preset.name ?? humanize(id);
@@ -105,9 +107,10 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     async function load(): Promise<void> {
         const metadata = host.current().catalog;
         if (!metadata || busy) return;
+        attemptedFingerprint = metadata.fingerprint;
         const token = ++sequence;
         busy = true; error = null; methodError = null; inspection = null; chosenMethod = null;
-        catalogs.clear(); expandedCatalogs.clear(); notify();
+        catalogs.clear(); expandedCatalogs.clear(); expandedBranches.clear(); notify();
         try {
             const results = await Promise.allSettled([
                 discoverNativeOriginPresets(environment, metadata),
@@ -123,6 +126,8 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             methodError = methodResult.status === "rejected" ? errorText(methodResult.reason) : null;
             discoveryFingerprint = metadata.fingerprint;
             inspectedId = currentProposal().selectedAncestryId ?? currentProposal().selectedSpeciesId ?? null;
+            const selected = entries.find(entry => entry.preset.id === inspectedId);
+            for (const node of selected?.path ?? []) expandedBranches.set(node.id, true);
         } catch (e) {
             if (token === sequence) error = errorText(e);
         } finally {
@@ -315,23 +320,28 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             saving ? "saving" : pending ? "failed" : state.status !== "ready" ? "unavailable" :
                 state.draft && state.draft.fingerprint !== state.catalog?.fingerprint ? "stale" :
                     state.draft ? "saved" : "unavailable";
-        if (state.status === "ready" && !state.draft && host.canEditDraft() && !pending && !saving && !state.savedState)
-            area.append(createElement("p", undefined, "No Origin draft selected."));
-        else area.append(renderDraftStatus(status));
+        if (status !== "unavailable") area.append(renderDraftStatus(status));
         if (error) area.append(createInlineState(error, "error"));
         if (busy && !saving) area.append(createInlineState("Loading native information…", "loading"));
         if (pending) {
             const retry = pending;
             area.append(createButton("Retry draft save", button, () => {
-                if (revision() === retry.revision && state.catalog?.fingerprint === retry.fingerprint)
-                    void persist(retry.proposal, retry.revision);
+                if (revision() === retry.revision && state.catalog?.fingerprint === retry.fingerprint &&
+                    !state.message?.includes("changed in another session")) void persist(retry.proposal, retry.revision);
                 else void host.retry();
             }, busy), createButton("Discard pending change", button, () => { pending = null; error = null; notify(); }, busy));
         }
         if (state.message) area.append(createInlineState(state.message, "warning"));
         if (!state.catalog || state.status !== "ready") return area;
         if (discoveryFingerprint !== state.catalog.fingerprint) {
-            area.append(createButton("Load native Species and Ancestries", button, () => void load(), busy));
+            const fingerprint = state.catalog.fingerprint;
+            if (attemptedFingerprint !== fingerprint && !busy) {
+                queueMicrotask(() => {
+                    if (host.current().catalog?.fingerprint === fingerprint && attemptedFingerprint !== fingerprint)
+                        void load();
+                });
+                area.append(createInlineState("Loading Species and Ancestries…", "loading"));
+            } else if (!busy) area.append(createButton("Retry Species and Ancestries", button, () => void load()));
             return area;
         }
         if (custom) {
@@ -348,15 +358,14 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                 return area;
             }
             for (const method of methods) {
-                if (method.stage === "post-origination") continue;
-                const editor = initialMethod(method) ? resolveMethodEditor(method, host.methodEditors) : null;
+                if (!initialMethod(method)) continue;
+                const editor = resolveMethodEditor(method, host.methodEditors);
                 const row = createElement("article");
                 row.append(createElement("h3", undefined, method.name));
                 if (method.description) row.append(createElement("p", undefined, method.description));
                 if (editor) row.append(createButton("Configure", button, () => { chosenMethod = method; notify(); },
                     busy || !!pending || !host.canEditDraft() || state.readOnly || !!state.savedState));
-                else row.append(createElement("p", undefined, initialMethod(method) ?
-                    "Native preview supported; editor not registered." : "Reference only — not available for initial creation."));
+                else row.append(createElement("p", undefined, "Unavailable in Guided Setup."));
                 area.append(row);
             }
             return area;
@@ -375,9 +384,8 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             const preview = shown?.preview ?? (same ? savedPreview : null);
             const proposal = shown?.proposal ?? (same ? currentProposal() : undefined);
             work.append(renderRuleDetail(detail(selected, proposal, preview ?? undefined)));
-            if (!selected.preset.description && !host.describePreset?.(selected.preset.id))
-                work.append(createElement("p", undefined, "Native preset description is not available."));
-            if (preview) work.append(renderValidation(validation(preview), () => undefined));
+            if (same && preview && preview.result.issues.length)
+                work.append(renderValidation(validation(preview), () => undefined));
             if (shown && !same) {
                 const required = requiredDirectOriginChoices(shown.preview, shown.proposal).filter(requirement =>
                     originPreviewCandidates(shown.preview, shown.proposal).some(c => c.id === requirement.candidateId && c.eligibility === "Eligible"));
@@ -402,21 +410,21 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                     "Draft requires further native review."));
             }
         } else work.append(createElement("p", undefined, "Browse Species and Ancestries to inspect a configuration."));
-        const browser = renderRuleBrowser(presetRuleNodes(entries), query, selected?.preset.id ?? null,
-            !writable(), q => {
-                query = q;
-                // Keep focus on search during the local list update.
-                const old = area.querySelector(".dd-guided-browser");
-                const next = renderRuleBrowser(presetRuleNodes(entries), query, selected?.preset.id ?? null,
-                    !writable(), updateQuery, id => void inspect(id));
-                old?.replaceWith(next); next.querySelector("input")?.focus();
-            }, id => void inspect(id));
+        const browser = renderBrowser();
+        function renderBrowser(): HTMLElement {
+            return renderRuleBrowser(presetRuleNodes(entries), query, selected?.preset.id ?? null,
+                !writable(), updateQuery, id => void inspect(id), "Species and Ancestries", expandedBranches);
+        }
         function updateQuery(q: string): void {
             query = q;
             const old = area.querySelector(".dd-guided-browser");
-            const next = renderRuleBrowser(presetRuleNodes(entries), query, selected?.preset.id ?? null,
-                !writable(), updateQuery, id => void inspect(id));
-            old?.replaceWith(next); next.querySelector("input")?.focus();
+            const previousInput = old?.querySelector("input");
+            const next = renderBrowser();
+            old?.replaceWith(next);
+            const nextInput = next.querySelector("input");
+            nextInput?.focus();
+            if (previousInput?.selectionStart != null && previousInput.selectionEnd != null)
+                nextInput?.setSelectionRange(previousInput.selectionStart, previousInput.selectionEnd);
         }
         area.append(renderWorkspace(work, browser));
         return area;

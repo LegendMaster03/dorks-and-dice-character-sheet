@@ -7,6 +7,7 @@ import { loadNativeRuleset, searchNativeOptions,
     type NativeOptionSummary, type NativeRulesetMetadata } from "../../rules-core-native-api.js";
 import { CharacterSheetApiError } from "../../character-api.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
+import { editableConventional } from "./conventional/model.js";
 import {
     activateNativeOrigin,
     loadOriginDraft,
@@ -65,6 +66,8 @@ export interface OriginUiState {
 export interface OriginWorkflow {
     current(): Readonly<OriginUiState>;
     load(characterId: string): Promise<void>;
+    saveConventionalDraft(characterId: string, proposal: NonNullable<OriginUiState["draft"]>["proposal"],
+        expectedRevision: number): Promise<void>;
     openChooser(category: "species" | "ancestry" | "skill",
         candidateId?: string, requirementId?: string,
         parentSlot?: MixedNativeParentSlot): Promise<void>;
@@ -447,7 +450,18 @@ export function createOriginWorkflow(
     }
 
     return {
-        current: () => state, load, openChooser, searchChooser, closeChooser,
+        current: () => state, load,
+        async saveConventionalDraft(characterId, proposal, expectedRevision) {
+            if (currentCharacterId !== characterId || state.status !== "ready" || state.busy ||
+                state.readOnly || state.savedState || !state.catalog ||
+                (state.draft?.revision ?? 0) !== expectedRevision || !editableConventional(proposal) ||
+                (state.draft && (!editableConventional(state.draft.proposal) ||
+                    state.draft.rulesetId !== state.catalog.rulesetId || state.draft.fingerprint !== state.catalog.fingerprint)))
+                throw new Error("The Origin draft changed. Reload before saving.");
+            await saveProposal(characterId, proposal);
+            if (state.message && (state.draft?.revision ?? 0) <= expectedRevision) throw new Error(state.message);
+        },
+        openChooser, searchChooser, closeChooser,
         chooseOption, clearAncestry, setMode, clearMixedParent,
         setFiniteChoice, toggleMixedCandidate, activate, refreshDraft,
         loadParentOptions, selectParentSource,
