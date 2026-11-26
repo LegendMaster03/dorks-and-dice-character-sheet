@@ -13,9 +13,10 @@ test("hierarchical search retains exact ancestors and nonselectability", () => {
 test("method registry refuses reference-only and ambiguous editors", () => {
     const reference = { ruleId: "rule", methodId: "method" };
     const editor = { reference, decisions: [], render() {} };
-    const method = { reference, support: "initial-preview" };
+    const method = { reference, stage: null, support: "initial-preview" };
     assert.equal(resolveMethodEditor(method, [editor]), editor);
     assert.equal(resolveMethodEditor(method, [editor, editor]), null);
+    assert.equal(resolveMethodEditor({ ...method, stage: "post-origination" }, [editor]), null);
     assert.equal(resolveMethodEditor({ ...method, support: "reference-only" }, [editor]), null);
     assert.equal(resolveMethodEditor({ ...method, support: "verified-reconstruction-plan" }, [editor]), null);
 });
