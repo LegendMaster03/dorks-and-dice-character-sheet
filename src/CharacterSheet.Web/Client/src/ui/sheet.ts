@@ -753,7 +753,7 @@ function renderGuidedCharacterPreview(builder: CharacterBuilderUiState, routine:
     const hp = mechanics?.healthTracks?.find(track => track.role === "hit-points");
     facts.push({ label: "Hit points", value: hp?.formattedValue ?? (hp?.maximum === undefined ? "Unavailable" : String(hp.maximum)) });
     facts.push({ label: "Inventory", value: routine.status === "ready" && routine.state
-        ? routine.state.inventoryItemOccurrences.length + " item entries" : "Unavailable" });
+        ? (routine.state.inventoryItemOccurrences ?? []).length + " item entries" : "Unavailable" });
     if (mechanics === null) section.append(createInlineState("Current mechanical presentation unavailable.", "warning"));
     section.append(renderFacts(facts));
     return section;
