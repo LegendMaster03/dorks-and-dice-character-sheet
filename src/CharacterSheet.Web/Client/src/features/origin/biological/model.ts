@@ -235,6 +235,31 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
         components: record(rawAllocation) ? records(rawAllocation.components) : [],
         charges: record(rawAllocation) ? records(rawAllocation.charges) : [] };
 }
+/** Present each actual native charge once within a characteristic group.
+ * A single effective grant can represent several transmitted source instances;
+ * a bundle or inherited interaction can also be shared across groups.
+ * The allocation total is never recomputed by the client. */
+export function groupAllocationCharges(evaluation: BiologicalEvaluation, group: CharacteristicGroup):
+    readonly { load: number; shared: boolean }[] {
+    if (!evaluation.current) return [];
+    const grantIds = new Set(group.expressions.flatMap(g => typeof g.id === "string" ? [g.id] : []));
+    const seen = new Set<string>(), result: { load: number; shared: boolean }[] = [];
+    for (const charge of evaluation.charges) {
+        if (typeof charge.load !== "number" || !Number.isSafeInteger(charge.load) || charge.load < 0 ||
+            !Array.isArray(charge.grantIds) || !charge.grantIds.every(id => typeof id === "string") ||
+            !charge.grantIds.some(id => grantIds.has(id))) continue;
+        const ids = strings(charge.grantIds);
+        const key = JSON.stringify([charge.priceId, charge.configurationId, [...ids].sort(), charge.load]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const inputs = evaluation.groups.flatMap(g => g.offers).filter(o => o.expressionIds.some(id => ids.includes(id)));
+        const shared = ids.length > 1 || inputs.length > 1 ||
+            evaluation.groups.filter(g => g.expressions.some(grant => typeof grant.id === "string" && ids.includes(grant.id))).length > 1;
+        result.push({ load: charge.load, shared });
+    }
+    return result;
+}
+
 function decodeInteractions(raw: unknown, configured: ReadonlySet<string>): InteractionOption[] | undefined {
     if (!Array.isArray(raw) || raw.length > 100) return undefined;
     const result: InteractionOption[] = [], seen = new Set<string>();

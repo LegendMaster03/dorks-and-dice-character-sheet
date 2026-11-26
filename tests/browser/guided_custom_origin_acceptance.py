@@ -157,6 +157,10 @@ def run_browser():
               effective[0]["parameterSources"]["area"] == bronze_breath["id"])
         event("recombined-native-allocation", result["preview"]["allocation"]["status"] == "within-allowance" and
               result["preview"]["allocation"]["committedLoad"] > base_allocation["committedLoad"])
+        charge = page.locator('[data-biological-group="' + key + '"] .dd-biological-charge')
+        expect(charge).to_have_count(1)
+        expect(charge).to_contain_text("shared; counted once in total")
+        event("recombined-charge-presented-once", True)
         snapshot("guided-biological-configuration")
         open_origin("red")
         decision("Configuration")

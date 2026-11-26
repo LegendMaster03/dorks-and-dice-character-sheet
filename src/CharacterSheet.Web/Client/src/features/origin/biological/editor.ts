@@ -7,7 +7,7 @@ import { isCurrentEvaluation, type EditorContext, type MethodEditor, type Native
 import type { NativeOriginDraftProposal } from "../origin-api.js";
 import { addNativeContributor, biologicalReference, evaluateBiological, nativeContributorAllowed,
     newBiologicalProposal, record, removeContributor, setExpression, setFiniteChoice, setInherited,
-    composableOffers, setComposition, clearComposition, setInheritedInteraction, removeInheritedInteraction,
+    composableOffers, setComposition, clearComposition, setInheritedInteraction, removeInheritedInteraction, groupAllocationCharges,
     supportsBiologicalDraft, type BiologicalEvaluation, type BiologicalProposal, type Offer, type CharacteristicGroup } from "./model.js";
 
 export interface BiologicalEditorContext extends EditorContext<NativeOriginDraftProposal, unknown> {
@@ -155,12 +155,6 @@ function renderOffer(context: BiologicalEditorContext, proposal: BiologicalPropo
         ]));
     if (offer.explanation) evidence.append(createElement("p", undefined, offer.explanation));
     card.append(evidence);
-    const charges = evaluation.charges.filter(charge => Array.isArray(charge.grantIds) &&
-        charge.grantIds.some(id => typeof id === "string" && offer.expressionIds.includes(id)));
-    for (const charge of charges) {
-        if (typeof charge.load === "number")
-            card.append(createElement("p", undefined, "Evaluated charge: " + charge.load + (Array.isArray(charge.grantIds) && charge.grantIds.length > 1 ? " (shared charge)" : "") + " points"));
-    }
     if (!configure) {
         const composition = proposal.relationships?.some(r => r.candidateIds.includes(offer.id));
         card.append(createButton(offer.inherited ? "Remove inherited instance" : "Inherit instance", buttonClass,
@@ -355,7 +349,10 @@ function renderCharacteristics(context: BiologicalEditorContext, proposal: Biolo
             const key = (configure ? "configure:" : "inherit:") + group.id;
             const inheritedCount = offers.filter(o => o.inherited).length;
             const expressedCount = offers.filter(o => o.state === "expressed").length;
-            detail.open = !!term || (browser?.expanded.get(key) ?? (configure || inheritedCount > 0));
+            const hasConfiguration = offers.some(o => o.inherited && o.requirements.some(r =>
+                r.timing === 0 || r.timing === "Creation")) || composableOffers(group).length > 1 ||
+                !!proposal.resolutions?.some(r => r.relationshipId === "guided-compose:" + group.id);
+            detail.open = !!term || (browser?.expanded.get(key) ?? (configure ? hasConfiguration : inheritedCount > 0));
             detail.append(createElement("summary", undefined, title + " — " + inheritedCount +
                 (evaluation.maxInherited == null ? "" : "/" + evaluation.maxInherited) + " inherited" +
                 (expressedCount ? " · " + group.expressions.length +
@@ -367,6 +364,9 @@ function renderCharacteristics(context: BiologicalEditorContext, proposal: Biolo
             const description = group.presentation?.description ?? context.characteristicDescription?.(group.id) ??
                 (record(authored) && typeof authored.description === "string" ? authored.description : undefined);
             if (description) detail.append(createElement("p", undefined, description));
+            for (const charge of groupAllocationCharges(evaluation, group))
+                detail.append(createElement("p", "dd-biological-charge", "Evaluated charge: " + charge.load +
+                    (charge.load === 1 ? " point" : " points") + (charge.shared ? " (shared; counted once in total)" : "")));
             for (const offer of offers) detail.append(renderOffer(context, proposal, evaluation, offer, locked, save, configure));
             const composition = renderComposition(context, proposal, evaluation, group, locked, save);
             if (composition) detail.append(composition);
@@ -433,7 +433,8 @@ export function renderBiologicalEditor(context: BiologicalEditorContext): HTMLEl
         (evaluation.allocation.status === "within" ? "Within allocation" : "Native allocation unavailable")));
     if (evaluation.maxInherited != null && evaluation.maxExpressed != null)
         allocation.append(createElement("p", undefined, "Per characteristic: " + evaluation.maxInherited +
-            " inherited instances; " + evaluation.maxExpressed + " effective expressions."));
+            " inherited instances; " + evaluation.maxExpressed +
+            (evaluation.maxExpressed === 1 ? " effective expression." : " effective expressions.")));
     section.append(allocation);
     let work: HTMLElement;
     switch (context.decisionId) {

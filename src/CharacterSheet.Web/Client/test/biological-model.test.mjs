@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { newBiologicalProposal, addNativeContributor, evaluateBiological,
     setInherited, setExpression, setFiniteChoice, removeContributor, allocationView,
     composableOffers, setComposition, clearComposition, supportsBiologicalDraft,
-    setInheritedInteraction, removeInheritedInteraction }
+    setInheritedInteraction, removeInheritedInteraction, groupAllocationCharges }
     from "../.test-dist/features/origin/biological/model.js";
 
 const preset = (id, name) => ({ id, name, kind: "ancestry", parentId: "species.dragonborn",
@@ -160,4 +160,17 @@ test("inherited interactions require the native exact configured inputs and do n
     assert.deepEqual(selected.biologicalTransmission.candidateIds, p.biologicalTransmission.candidateIds);
     assert.equal(supportsBiologicalDraft(JSON.parse(JSON.stringify(selected))), true);
     assert.deepEqual(removeInheritedInteraction(selected, "rule.test", "test-interaction").biologicalTransmission, p.biologicalTransmission);
+});
+
+test("recombined source instances display one native shared charge rather than one charge per donor", () => {
+    let p = proposal();
+    p = setInherited(p, evaluation(p), "red-breath", true);
+    p = setInherited(p, evaluation(p), "bronze-breath", true);
+    const base = evaluation(p, [["red-breath", ["grant"]], ["bronze-breath", ["grant"]]]);
+    const group = {...base.groups[0], expressions: [{id:"grant"}]};
+    const charge = {priceId:"breath", load:3, grantIds:["grant"]};
+    const e = {...base, groups:[group], charges:[charge, charge]};
+    assert.deepEqual(groupAllocationCharges(e, group), [{load:3, shared:true}]);
+    assert.equal(e.allocation.used, "3");
+    assert.deepEqual(groupAllocationCharges({...e,current:false},group), []);
 });
