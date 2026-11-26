@@ -113,6 +113,8 @@ export interface FeatCharacterHandlers {
 }
 
 export interface CharacterSheetHandlers {
+    renderUpbringing?(): HTMLElement;
+    upbringingLabel?(id: string): string;
     structural: StructuralCharacterHandlers;
     feats: FeatCharacterHandlers;
     spells: KnownSpellCharacterHandlers;

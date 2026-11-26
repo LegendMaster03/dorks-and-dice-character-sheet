@@ -10,12 +10,14 @@ type Fetcher = typeof globalThis.fetch;
 /** Older Core builds return titles alone. Selection requires both complete
  * native source catalogs and an intact hierarchy at the requested fingerprint. */
 export async function loadExperienceTitleCatalog(environment: HostEnvironment, metadata: NativeRulesetMetadata,
-    fetcher: Fetcher = globalThis.fetch.bind(globalThis)): Promise<ExperienceCatalog> {
+    fetcher: Fetcher = globalThis.fetch.bind(globalThis),
+    categories: readonly ("upbringing" | "background" | "skill" | "competency")[] =
+        ["upbringing", "background", "skill", "competency"]): Promise<ExperienceCatalog> {
     if (!metadata.capabilities.nativeOptionSearch) throw new Error("Native catalog discovery is unavailable.");
     const nodes: ExperienceNode[] = [];
     const labels: Record<string, string> = Object.create(null);
     let hierarchyComplete = true;
-    for (const category of ["upbringing", "background", "skill", "competency"] as const) {
+    for (const category of categories) {
         const experienceCategory = category === "upbringing" || category === "background";
         const seen = new Set<string>();
         let total: number | null = null;

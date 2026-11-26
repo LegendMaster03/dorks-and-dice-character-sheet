@@ -292,6 +292,19 @@ app.MapDelete("/api/characters/{characterId:guid}/build/background", async (
     CancellationToken cancellationToken) =>
     ToBuildApiResult(await service.ClearBackgroundAsync(characterId, cancellationToken), mutating: true));
 
+app.MapPut("/api/characters/{characterId:guid}/build/upbringing", async (
+    Guid characterId,
+    RuleConceptSelectionRequest request,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(await service.SetUpbringingAsync(characterId, request.ConceptKey, cancellationToken), mutating: true));
+
+app.MapDelete("/api/characters/{characterId:guid}/build/upbringing", async (
+    Guid characterId,
+    CharacterBuildService service,
+    CancellationToken cancellationToken) =>
+    ToBuildApiResult(await service.ClearUpbringingAsync(characterId, cancellationToken), mutating: true));
+
 app.MapPut("/api/characters/{characterId:guid}/build/deity", async (
     Guid characterId,
     RuleConceptSelectionRequest request,
@@ -535,6 +548,9 @@ static IResult ToBuildApiResult(CharacterBuildResult result, bool mutating) => r
     CharacterBuildAccessStatus.ProjectionUnavailable => Results.Json(new { error = "Site Character authorization is unavailable for this request." }, statusCode: StatusCodes.Status503ServiceUnavailable),
     CharacterBuildAccessStatus.Unauthenticated => Results.Unauthorized(),
     CharacterBuildAccessStatus.SheetNotInitialized => Results.NotFound(new { error = "Digital Character Sheet is not initialized." }),
+    CharacterBuildAccessStatus.InvalidUpbringing => Results.BadRequest(new { error = "Choose a selectable Upbringing." }),
+    CharacterBuildAccessStatus.UpbringingCatalogUnavailable => Results.Json(
+        new { error = "The Upbringing catalog is unavailable." }, statusCode: StatusCodes.Status503ServiceUnavailable),
     CharacterBuildAccessStatus.OriginManaged =>
         Results.Json(new { error = "origin_is_managed_by_authorized_profile",
             detail = "Use the Origin builder and validated transition to change Species or Ancestry." },

@@ -37,6 +37,7 @@ import { createNotesWorkflow } from "./features/notes/notes-workflow.js";
 import { createConditionsWorkflow } from "./features/conditions/conditions-workflow.js";
 import { createKnownSpellWorkflow } from "./features/spells/known-spell-workflow.js";
 import { createHarvestingCraftingWorkflow } from "./features/harvesting/harvesting-workflow.js";
+import { createUpbringingPicker } from "./features/life-experiences/upbringing-picker.js";
 import { createConventionalWorkspace } from "./features/origin/conventional/workspace.js";
 import { createOriginWorkflow } from "./features/origin/origin-workflow.js";
 
@@ -193,6 +194,11 @@ function renderWorkspace(
         state.presentation.status === "ready" ? state.presentation.advancement : null,
         state.presentation.status === "ready" ? state.presentation.mechanics : null,
         {
+            renderUpbringing: () => upbringingPicker.render(character.characterId, state.builder, {
+                save: id => void advancementWorkflow.save(character.characterId, "upbringing", id),
+                clear: () => void advancementWorkflow.clear(character.characterId, "upbringing")
+            }),
+            upbringingLabel: upbringingPicker.label,
             structural: {
                 openChooser: target => advancementWorkflow.openChooser(target),
                 clearChoice: target => void advancementWorkflow.clear(character.characterId, target),
@@ -474,6 +480,7 @@ async function initializeExistingCharacter(character: CharacterSheetBootstrapRes
 
 const application = createApplication(initialState, render);
 const originWorkflow = createOriginWorkflow(environment, () => application.render());
+const upbringingPicker = createUpbringingPicker(environment, () => application.render());
 let originWorkspace: { characterId: string; workspace: ReturnType<typeof createConventionalWorkspace<never>> } | undefined;
 function guidedOrigins(characterId: string) {
     if (originWorkspace?.characterId === characterId) return originWorkspace.workspace;

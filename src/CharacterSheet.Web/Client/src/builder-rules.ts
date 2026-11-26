@@ -51,6 +51,7 @@ export function getStoredChoiceConceptKey(
     if (choice === "background" || choice === "deity") {
         return build.foundationalSelections.find(value => value.category === choice)?.ruleConceptKey ?? null;
     }
+    if (choice === "upbringing") return build.upbringingId ?? null;
     if (choice === "startingClass") {
         return getStartingClassEntry(build)?.ruleConceptKey ?? null;
     }

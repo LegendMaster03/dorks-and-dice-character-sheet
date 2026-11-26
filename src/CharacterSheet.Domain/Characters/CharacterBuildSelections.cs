@@ -9,7 +9,8 @@ public enum CharacterFoundationalSelectionCategory
     Background = 2,
     Deity = 3,
     Species = 4,
-    Subspecies = 5
+    Subspecies = 5,
+    Upbringing = 6
 }
 
 public enum CharacterAdvancementKind

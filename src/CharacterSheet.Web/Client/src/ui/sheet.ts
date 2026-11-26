@@ -520,7 +520,8 @@ function renderGuidedBuilder(
             break;
         }
         case "background": {
-            panel.append(createInlineState("Background remains editable. Native Upbringing and combined Life Experiences are not yet available.", "warning"));
+            const upbringing = handlers.renderUpbringing?.();
+            if (upbringing) panel.append(upbringing);
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
@@ -741,7 +742,7 @@ function renderGuidedBuilder(
 
     const preview = createElement("details", "dd-guided-character-summary");
     preview.append(createElement("summary", undefined, "Character summary"),
-        renderGuidedCharacterPreview(builder, routine, mechanics, origin));
+        renderGuidedCharacterPreview(builder, routine, mechanics, origin, handlers.upbringingLabel));
     container.append(panel, preview);
     return container;
 }
@@ -749,13 +750,15 @@ function renderGuidedBuilder(
 /** Read from the existing application stores; no preview value is promoted
  * into the active character or used to infer eligibility. */
 function renderGuidedCharacterPreview(builder: CharacterBuilderUiState, routine: CharacterRoutineUiState,
-    mechanics: CharacterMechanicsView | null, origin?: OriginUiState): HTMLElement {
+    mechanics: CharacterMechanicsView | null, origin?: OriginUiState,
+    upbringingLabel?: (id: string) => string): HTMLElement {
     const section = createElement("div", "dd-guided-character-summary__content");
     const facts: DisplayFact[] = [
         { label: "Class", value: builderReferenceDisplay(builder, "startingClass").value },
         { label: "Origin", value: origin?.savedState ? "Committed native Origin"
             : origin?.draft ? "Uncommitted draft" : "Not configured" },
-        { label: "Upbringing", value: "Native integration pending" },
+        { label: "Upbringing", value: builder.build?.upbringingId
+            ? upbringingLabel?.(builder.build.upbringingId) ?? "Selected" : "Not selected" },
         { label: "Background", value: builderReferenceDisplay(builder, "background").value }
     ];
     if (origin?.readOnly) section.append(renderDraftStatus("read-only"));
