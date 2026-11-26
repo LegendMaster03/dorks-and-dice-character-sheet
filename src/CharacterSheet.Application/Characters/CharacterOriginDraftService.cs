@@ -22,7 +22,7 @@ public sealed record CharacterOriginDraftView(
 public sealed record CharacterOriginDraftResult(
     CharacterOriginDraftStatus Status,
     CharacterOriginDraftView? Draft = null,
-    JsonNode? Preview = null);
+    JsonNode? Preview = null, JsonNode? ConstructPreview = null);
 
 /// <summary>
 /// Persists untrusted Origin proposals only after authenticated user access and
@@ -92,15 +92,59 @@ public sealed class CharacterOriginDraftService(
         // imply authorization; invalid and unresolved results remain drafts.
         // The bridge rejects forged prior profiles, history and table decisions.
         JsonNode preview;
+        var isConstruct = false;
         try
         {
-            preview = await rulesCore.PreviewNativeOriginAsync(
+            // The assembly is part of the same revisioned draft, but is not a
+            // member of Rules Core's ordinary Origin proposal contract.
+            if (proposal.TryGetProperty("constructAssembly", out var assembly))
+            {
+                if (validFingerprint is null || !IsInitialConstruct(proposal, assembly))
+                    return new(CharacterOriginDraftStatus.InvalidRequest);
+                isConstruct = true;
+                var methods = await rulesCore.DiscoverNativeOriginMethodsAsync(
+                    validFingerprint, null, cancellationToken);
+                if (methods is not JsonObject || methods["fingerprint"]?.ToJsonString() != JsonSerializer.Serialize(validFingerprint) ||
+                    methods["rulesetId"]?.ToJsonString() != JsonSerializer.Serialize(validRuleset) ||
+                    methods["previewOnly"]?.ToJsonString() != "true" || methods["methods"] is not JsonArray discovered)
+                    return new(CharacterOriginDraftStatus.RulesCoreUnavailable);
+                var constructMethods = discovered.OfType<JsonObject>().Where(item =>
+                    item["reference"] is JsonObject reference &&
+                    reference["ruleId"]?.ToJsonString() == "\"rule.creature-origination\"" &&
+                    reference["methodId"]?.ToJsonString() == "\"construct-assembly\"" &&
+                    item["support"]?.ToJsonString() == "\"assembly-preview\"").ToArray();
+                if (constructMethods.Length != 1)
+                    return new(CharacterOriginDraftStatus.RulesCoreUnavailable);
+                var allowance = constructMethods[0]["initialConstructionAllowance"];
+                if (allowance is not null && (allowance is not JsonValue value ||
+                    !value.TryGetValue<int>(out var amount) || amount < 0))
+                    return new(CharacterOriginDraftStatus.RulesCoreUnavailable);
+                if (!assembly.TryGetProperty("initialAllowance", out var submitted) ||
+                    !JsonElement.DeepEquals(submitted, JsonSerializer.SerializeToElement(allowance)))
+                    return new(CharacterOriginDraftStatus.InvalidRequest);
+                var nativeProposal = JsonNode.Parse(validProposal)!.AsObject();
+                nativeProposal.Remove("constructAssembly");
+                preview = await rulesCore.PreviewNativeConstructAsync(
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        rulesetId = validRuleset, fingerprint = validFingerprint,
+                        proposal = nativeProposal, assembly
+                    }), cancellationToken);
+            }
+            else
+            {
+                // A Construct without an assembly must not be validated via
+                // the ordinary Origin route and mistaken for a complete draft.
+                if (IsConstructMethod(proposal))
+                    return new(CharacterOriginDraftStatus.InvalidRequest);
+                preview = await rulesCore.PreviewNativeOriginAsync(
                 JsonSerializer.SerializeToElement(new
                 {
                     rulesetId = validRuleset,
                     fingerprint = validFingerprint,
                     proposal
                 }), cancellationToken);
+            }
         }
         catch (RulesCoreGatewayException error)
         {
@@ -112,6 +156,10 @@ public sealed class CharacterOriginDraftService(
             preview["previewOnly"]?.GetValue<bool>() != true ||
             preview["result"] is null)
             return new(CharacterOriginDraftStatus.RulesCoreUnavailable);
+
+        if (isConstruct && (preview["rulesetId"]?.ToJsonString() != JsonSerializer.Serialize(validRuleset) ||
+            preview["fingerprint"]?.ToJsonString() != JsonSerializer.Serialize(validFingerprint)))
+            return new(CharacterOriginDraftStatus.InvalidRequest);
 
         var saved = await draftStore.SaveAsync(characterId, validRuleset,
             validFingerprint, validProposal, expectedRevision,
@@ -126,8 +174,35 @@ public sealed class CharacterOriginDraftService(
                 ? CharacterOriginDraftStatus.OriginAlreadyCommitted
                 : CharacterOriginDraftStatus.RevisionConflict);
         }
-        return new(CharacterOriginDraftStatus.Ready, ToView(saved), preview);
+        return new(CharacterOriginDraftStatus.Ready, ToView(saved),
+            isConstruct ? null : preview, isConstruct ? preview : null);
     }
+
+    private static bool IsConstructMethod(JsonElement proposal) =>
+        proposal.TryGetProperty("method", out var method) && method.ValueKind == JsonValueKind.Object &&
+        method.TryGetProperty("ruleId", out var rule) && rule.ValueKind == JsonValueKind.String &&
+        rule.GetString() == "rule.creature-origination" &&
+        method.TryGetProperty("methodId", out var id) && id.ValueKind == JsonValueKind.String &&
+        id.GetString() == "construct-assembly";
+
+    // Only player-editable initial assembly input is accepted here. Operating
+    // context, verified resources, and existing state require separate authority.
+    private static bool IsInitialConstruct(JsonElement proposal, JsonElement assembly) =>
+        IsConstructMethod(proposal) &&
+        proposal.TryGetProperty("intent", out var intent) && intent.ValueKind == JsonValueKind.String &&
+        intent.GetString() == "Custom" &&
+        proposal.TryGetProperty("contributors", out var contributors) && contributors.ValueKind == JsonValueKind.Array &&
+        contributors.GetArrayLength() == 0 &&
+        proposal.TryGetProperty("candidates", out var candidates) && candidates.ValueKind == JsonValueKind.Array &&
+        candidates.GetArrayLength() == 0 &&
+        assembly.ValueKind == JsonValueKind.Object &&
+        assembly.TryGetProperty("initialConstruction", out var initial) && initial.ValueKind == JsonValueKind.True &&
+        assembly.TryGetProperty("components", out var components) && components.ValueKind == JsonValueKind.Array &&
+        assembly.EnumerateObject().All(field => field.Name is "components" or "initialAllowance" or "initialConstruction" or "powerConnections") &&
+        components.EnumerateArray().All(component => component.ValueKind == JsonValueKind.Object &&
+            component.EnumerateObject().All(field => field.Name is "instanceId" or "definitionId" or "materials" or
+                "connectedTo" or "enabled" or "modeId" or "designId" or "enhancementIds" or "powerSourceId" or
+                "parentInstanceId" or "mountInterfaceId" or "constructionVariantId" or "protectedRegionId"));
 
     private static CharacterOriginDraftView ToView(CharacterOriginDraftState state) =>
         new(state.CharacterId, state.RulesetId, state.Fingerprint,
