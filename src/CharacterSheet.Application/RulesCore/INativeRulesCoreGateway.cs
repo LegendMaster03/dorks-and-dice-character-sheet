@@ -46,6 +46,25 @@ public interface INativeRulesCoreGateway
         Task.FromException<JsonNode>(new RulesCoreGatewayException(
             "Native direct-Origin innate spell ledger bootstrap is unsupported."));
 
+    // Bounded discovery and stateless previews only. No authority or commit routes.
+    Task<JsonNode> DiscoverNativeOriginMethodsAsync(string fingerprint, string? creatureTypeId, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException("Native guided discovery or preview is unsupported by this gateway."));
+
+    Task<JsonNode> DiscoverNativeOriginPresetsAsync(string fingerprint, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException("Native guided discovery or preview is unsupported by this gateway."));
+
+    Task<JsonNode> DiscoverNativeOriginChoiceCatalogAsync(string fingerprint, string catalogId, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException("Native guided discovery or preview is unsupported by this gateway."));
+
+    Task<JsonNode> DiscoverNativeConstructConfigurationAsync(string definitionId, string fingerprint, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException("Native guided discovery or preview is unsupported by this gateway."));
+
+    Task<JsonNode> PreviewNativeConstructAsync(JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException("Native guided discovery or preview is unsupported by this gateway."));
+
+    Task<JsonNode> PreviewNativeLifeExperiencesAsync(JsonElement request, CancellationToken cancellationToken) =>
+        Task.FromException<JsonNode>(new RulesCoreGatewayException("Native guided discovery or preview is unsupported by this gateway."));
+
     Task<JsonNode> GetNativeHarvestingCatalogAsync(
         string fingerprint, CancellationToken cancellationToken) =>
         Task.FromException<JsonNode>(new RulesCoreGatewayException(

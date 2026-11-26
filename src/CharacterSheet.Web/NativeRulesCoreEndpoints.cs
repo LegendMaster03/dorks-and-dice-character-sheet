@@ -35,6 +35,30 @@ public static class NativeRulesCoreEndpoints
             Forward(() => gateway.SearchNativeOptionsAsync(
                 fingerprint, category, q, limit ?? 50, offset ?? 0, cancellationToken)));
 
+        group.MapGet("/origins/methods", (string fingerprint, string? creatureTypeId,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.DiscoverNativeOriginMethodsAsync(fingerprint, creatureTypeId, cancellationToken)));
+
+        group.MapGet("/origins/presets", (string fingerprint,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.DiscoverNativeOriginPresetsAsync(fingerprint, cancellationToken)));
+
+        group.MapGet("/origins/choice-catalog", (string fingerprint, string catalogId,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.DiscoverNativeOriginChoiceCatalogAsync(fingerprint, catalogId, cancellationToken)));
+
+        group.MapGet("/origins/construct/components/{definitionId}/configuration", (string definitionId, string fingerprint,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.DiscoverNativeConstructConfigurationAsync(definitionId, fingerprint, cancellationToken)));
+
+        group.MapPost("/origins/construct/preview", (JsonElement request,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.PreviewNativeConstructAsync(request, cancellationToken)));
+
+        group.MapPost("/origins/life-experiences/preview", (JsonElement request,
+            [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
+            Forward(() => gateway.PreviewNativeLifeExperiencesAsync(request, cancellationToken)));
+
         group.MapGet("/harvesting", (string fingerprint,
             [FromServices] INativeRulesCoreGateway gateway, CancellationToken cancellationToken) =>
             Forward(() => gateway.GetNativeHarvestingCatalogAsync(
