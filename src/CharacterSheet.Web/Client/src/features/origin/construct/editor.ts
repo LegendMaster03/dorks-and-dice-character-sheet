@@ -259,6 +259,30 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
         if (assembly.unresolvedRetainedMassMaterials?.length || assembly.productsWithUncertifiedMass?.length)
             side.append(createElement("p", undefined, "Unresolved mass evidence: " +
                 [...(assembly.unresolvedRetainedMassMaterials ?? []), ...(assembly.productsWithUncertifiedMass ?? [])].map(readable).join(", ")));
+        const physical = createSectionCard("Physical evidence");
+        const pounds = (n: number | null) => n === null ? "Unresolved" : n + " lb";
+        if (assembly.physicalLoad) {
+            const load = assembly.physicalLoad;
+            physical.append(renderFacts([{ label: "Load assessment", value: readable(load.status) },
+                { label: "Known minimum gross load", value: pounds(load.knownMinimumGrossLoadPounds) },
+                { label: "Verified support capacity", value: pounds(load.verifiedSupportCapacityPounds) },
+                { label: "Minimum deficit", value: pounds(load.minimumDeficitPounds) },
+                { label: "Maximum possible headroom", value: pounds(load.maximumPossibleHeadroomPounds) }]),
+                createElement("p", undefined, load.explanation));
+        } else physical.append(createElement("p", undefined, "No native load assessment available."));
+        for (const support of assembly.physicalLoadSupports)
+            physical.append(renderFacts([{ label: readable(support.sourceId), value: support.operating ? "Operating (preview)" : "Not operating (preview)" },
+                { label: "Maximum gross load", value: pounds(support.maximumGrossLoadPounds) },
+                { label: "Shares load", value: support.sharesLoad ? "Yes" : "No" }]));
+        for (const surface of assembly.physicalSurfaces)
+            physical.append(renderFacts([{ label: partName(surface.instanceId), value: readable(surface.role) },
+                { label: "Material", value: labelFor(surface.materialDefinitionId, materials) },
+                { label: "Region", value: surface.protectedRegionId ?? "Unspecified" },
+                { label: "Rigidity", value: surface.rigidity ?? "Unresolved" },
+                { label: "Combustibility", value: surface.combustibility ?? "Unresolved" },
+                { label: "Operational (preview)", value: surface.operational ? "Yes" : "No" }]));
+        physical.append(createElement("p", undefined, "Physical evidence does not grant unrestricted movement, armor, resistance, or damage reduction."));
+        side.append(physical);
         const quotation = createSectionCard("Native ingredient quotation");
         const quote = assembly.manufacturingQuote;
         if (quote && quote.status !== "unavailable") {

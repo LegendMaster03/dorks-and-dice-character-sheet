@@ -114,3 +114,19 @@ test("manufacturing stage and external price evidence is native, including unkno
     assert.equal(constructionAllocation(90, resolved).remaining, "-10");
     assert.equal(constructionAllocation(90, resolved).status, "over");
 });
+
+test("physical evidence remains a native lower bound and unresolved support capacity", () => {
+    const result = decodeAssembly({ ...assembly, physicalLoad: { status: "unresolved", knownMinimumGrossLoadPounds: 21,
+        verifiedSupportCapacityPounds: null, minimumDeficitPounds: null, maximumPossibleHeadroomPounds: null,
+        bodyMassComplete: false, explanation: "gross-load-mass-incomplete" },
+        physicalLoadSupports: [{ sourceId: "drive", maximumGrossLoadPounds: null, operating: true, sharesLoad: false }],
+        physicalSurfaces: [{ instanceId: "shell", componentDefinitionId: "component.shell", materialSlotId: "plate",
+            materialDefinitionId: "material.steel", role: "protective-surface", rigidity: "rigid",
+            combustibility: null, operational: true, protectedRegionId: "front-hull" }] });
+    assert.equal(result.physicalLoad.verifiedSupportCapacityPounds, null);
+    assert.equal(result.physicalLoadSupports[0].maximumGrossLoadPounds, null);
+    assert.equal(result.physicalSurfaces[0].protectedRegionId, "front-hull");
+    assert.equal(result.physicalSurfaces[0].combustibility, null);
+    assert.throws(() => decodeAssembly({ ...assembly, physicalLoadSupports: [
+        { sourceId: "drive", maximumGrossLoadPounds: -1, operating: true, sharesLoad: false }] }));
+});

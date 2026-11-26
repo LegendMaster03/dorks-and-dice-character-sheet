@@ -171,6 +171,13 @@ export interface AssemblyResult {
     derivedCreatureSize: string | null; knownRetainedMaterialMassPounds: number | null;
     unresolvedRetainedMassMaterials: string[] | null; isBodyMassComplete: boolean;
     productsWithUncertifiedMass: string[] | null;
+    physicalLoad: { status: string; knownMinimumGrossLoadPounds: number;
+        verifiedSupportCapacityPounds: number | null; minimumDeficitPounds: number | null;
+        maximumPossibleHeadroomPounds: number | null; bodyMassComplete: boolean; explanation: string } | null;
+    physicalLoadSupports: { sourceId: string; maximumGrossLoadPounds: number | null; operating: boolean; sharesLoad: boolean }[];
+    physicalSurfaces: { instanceId: string; componentDefinitionId: string; materialSlotId: string;
+        materialDefinitionId: string; role: string; rigidity: string | null; combustibility: string | null;
+        operational: boolean; protectedRegionId: string | null }[];
 }
 export interface Candidate {
     id: string; kind: "Intrinsic" | "Trait" | "Other"; labelId: string;
@@ -304,7 +311,25 @@ export function decodeAssembly(v: unknown): AssemblyResult {
         knownRetainedMaterialMassPounds: optional(r.knownRetainedMaterialMassPounds, nonnegative),
         unresolvedRetainedMassMaterials: optional(r.unresolvedRetainedMassMaterials, strings),
         isBodyMassComplete: bool(r.isBodyMassComplete),
-        productsWithUncertifiedMass: optional(r.productsWithUncertifiedMass, strings) };
+        productsWithUncertifiedMass: optional(r.productsWithUncertifiedMass, strings),
+        physicalLoad: optional(r.physicalLoad, raw => {
+            const t = record(raw); return { status: str(t.status), knownMinimumGrossLoadPounds: nonnegative(t.knownMinimumGrossLoadPounds),
+                verifiedSupportCapacityPounds: optional(t.verifiedSupportCapacityPounds, nonnegative),
+                minimumDeficitPounds: optional(t.minimumDeficitPounds, nonnegative),
+                maximumPossibleHeadroomPounds: optional(t.maximumPossibleHeadroomPounds, nonnegative),
+                bodyMassComplete: bool(t.bodyMassComplete), explanation: str(t.explanation) };
+        }),
+        physicalLoadSupports: optional(r.physicalLoadSupports, raw => list(raw, x => {
+            const t = record(x); return { sourceId: str(t.sourceId),
+                maximumGrossLoadPounds: optional(t.maximumGrossLoadPounds, nonnegative),
+                operating: bool(t.operating), sharesLoad: bool(t.sharesLoad) };
+        })) ?? [],
+        physicalSurfaces: optional(r.physicalSurfaces, raw => list(raw, x => {
+            const t = record(x); return { instanceId: str(t.instanceId), componentDefinitionId: str(t.componentDefinitionId),
+                materialSlotId: str(t.materialSlotId), materialDefinitionId: str(t.materialDefinitionId), role: str(t.role),
+                rigidity: optional(t.rigidity, str), combustibility: optional(t.combustibility, str),
+                operational: bool(t.operational), protectedRegionId: optional(t.protectedRegionId, str) };
+        })) ?? [] };
 }
 function candidate(v: unknown): Candidate {
     const r = record(v), identity = record(r.identity), basis = record(r.selectionBasis);
