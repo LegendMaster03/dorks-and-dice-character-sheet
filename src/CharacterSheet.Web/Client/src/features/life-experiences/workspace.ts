@@ -16,8 +16,8 @@ export interface ExperienceWorkspaceContext extends EditorContext<ExperienceDraf
     readonly inspectedId: string | null;
     readonly onSearch: (query: string) => void;
     readonly inspect: (id: string) => void;
-    readonly pendingSourceChange: SourceChange | null;
-    readonly reviewSourceChange: (change: SourceChange | null) => void;
+    readonly pendingSourceChange: (SourceChange & { draftRevision: number }) | null;
+    readonly reviewSourceChange: (change: (SourceChange & { draftRevision: number }) | null) => void;
     readonly openEquipment: () => void;
     /** The application supplies the real Skill/Competency hierarchy, including
      * nonselectable families and independently trainable composite nodes. */
@@ -219,7 +219,8 @@ export function renderExperienceWorkspace(context: ExperienceWorkspaceContext): 
         context.catalog.fingerprint === context.draft.fingerprint;
     const disabled = context.readOnly || context.draft.readOnly || !catalogCurrent ||
         ["saving", "conflict", "stale", "failed", "unavailable", "read-only"].includes(context.draft.saveStatus);
-    const preview = context.preview && isCurrentEvaluation(context.draft, context.preview) && catalogCurrent ?
+    const preview = context.preview && isCurrentEvaluation(context.draft, context.preview) && catalogCurrent &&
+        ["saved", "read-only"].includes(context.draft.saveStatus) ?
         context.preview.result : null;
     work.append(renderDraftStatus(context.draft.saveStatus));
     if (context.draft.saveStatus === "failed") work.append(createButton("Retry draft save", secondary, () => { void context.retry(); }, context.readOnly));
@@ -242,11 +243,11 @@ export function renderExperienceWorkspace(context: ExperienceWorkspaceContext): 
         if (inspected) {
             work.append(renderRuleDetail(inspected.detail), createButton("Select " + inspected.label, secondary, () => {
                 const change = changeExperienceSource(draft, kind, inspected.id, context.catalog);
-                if (change.reconsider.length) context.reviewSourceChange(change);
+                if (change.reconsider.length) context.reviewSourceChange({ ...change, draftRevision: context.draft!.revision });
                 else save(change.draft);
             }, disabled || !inspected.selectable || !context.catalog.hierarchyComplete));
         }
-        if (context.pendingSourceChange) {
+        if (context.pendingSourceChange && context.pendingSourceChange.draftRevision === context.draft.revision) {
             const change = context.pendingSourceChange;
             const summarize = (key: string) => key.split("/").map(id => labelFor(context.catalog, id)).join(" — ");
             work.append(renderDependencyReview({ retained: change.retained.map(summarize),

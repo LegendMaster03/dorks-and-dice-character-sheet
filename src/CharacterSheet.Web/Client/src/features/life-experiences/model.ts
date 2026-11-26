@@ -40,6 +40,8 @@ export interface ExperiencePreview extends Omit<NativeLifeExperiencePreviewResul
     issues: ExperienceIssue[];
     candidateEquipment: EquipmentPreview | null;
     equipmentReplacements: EquipmentReplacement[];
+    /** UI-only review evidence; never returned as a native grant. */
+    draftReviewKeys?: readonly string[];
 }
 function record(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -179,8 +181,8 @@ export function reconsiderChoices(draft: ExperienceDraft, preview: ExperiencePre
     if (preview.issues.some(i => i.code === "invalid-life-experience-source" ||
         i.code === "invalid-life-experience-parent")) return [];
     const choices = new Map(preview.choices.map(c => [c.key, c]));
-    const invalidKeys = new Set(preview.issues.filter(i => ["unexpected-life-experience-choice",
-        "invalid-life-experience-selection", "unexpected-starting-item-choice"].includes(i.code)).map(i => i.path));
+    const invalidKeys = new Set([...(preview.draftReviewKeys ?? []), ...preview.issues.filter(i => ["unexpected-life-experience-choice",
+        "invalid-life-experience-selection", "unexpected-starting-item-choice"].includes(i.code)).map(i => i.path)]);
     for (const [key, ids] of Object.entries(draft.selections)) {
         const choice = choices.get(key);
         if (!choice || ids.length > choice.count || new Set(ids).size !== ids.length ||

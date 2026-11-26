@@ -81,7 +81,7 @@ export async function evaluateExperienceDraft(environment: HostEnvironment, meta
         if (invalidSource || signature(filtered) === signature(proposal)) {
             const review = invalidSource ? [] : [...new Set([...reconsiderChoices(draft.proposal, result), ...rejected])];
             return { rulesetId: envelope.rulesetId, fingerprint: envelope.fingerprint, draftRevision: draft.revision,
-                previewOnly: true, result, issues: [...validationIssues(result), ...review.map((_, index) => ({
+                previewOnly: true, result: { ...result, draftReviewKeys: review }, issues: [...validationIssues(result), ...review.map((_, index) => ({
                     id: "draft-review-" + index, severity: "conflict" as const,
                     message: "A saved choice needs review against the current active native options.",
                     decision: { id: "benefits", label: "Benefits" }
