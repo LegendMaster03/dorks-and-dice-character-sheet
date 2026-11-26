@@ -140,3 +140,37 @@ test("title-only discovery does not fabricate hierarchy or selection authorizati
     assert.ok(discovered.nodes.every(node => !node.selectable));
     assert.ok(discovered.nodes.every(node => !("definition" in node)));
 });
+
+
+test("native source discovery keeps Upbringing and Background distinct and requires complete parentage", async () => {
+    const records = {
+        upbringing: [
+            { id: "upbringing.elf.general", name: "General Elf", kind: "upbringing",
+                lifeExperience: { parentId: null, selectable: false, description: null } },
+            { id: "upbringing.elf.wood", name: "Wood Elf", kind: "upbringing",
+                lifeExperience: { parentId: "upbringing.elf.general", selectable: true, description: "Woodland traditions." } }
+        ],
+        background: [
+            { id: "background.entertainer", name: "Entertainer", kind: "background",
+                lifeExperience: { parentId: null, selectable: true, description: null } }
+        ]
+    };
+    const discover = (orphan = false) => loadExperienceTitleCatalog(env, metadata, async url => {
+        const query = new URL(url, "https://example.test").searchParams;
+        const category = query.get("category");
+        const options = orphan && category === "upbringing" ? records.upbringing.slice(1) : records[category] ?? [];
+        return reply({ ...metadata, category, total: options.length, offset: 0, options,
+            includesLifeExperienceHierarchy: category in records });
+    });
+    const discovered = await discover();
+    assert.equal(discovered.hierarchyComplete, true);
+    const upbringing = changeExperienceSource(emptyExperienceDraft(), "upbringing", "upbringing.elf.wood", discovered);
+    assert.equal(upbringing.draft.upbringingId, "upbringing.elf.wood");
+    assert.equal(upbringing.draft.backgroundId, null);
+    const background = changeExperienceSource(upbringing.draft, "background", "background.entertainer", discovered);
+    assert.equal(background.draft.upbringingId, upbringing.draft.upbringingId);
+    assert.equal(background.draft.backgroundId, "background.entertainer");
+    const orphan = await discover(true);
+    assert.equal(orphan.hierarchyComplete, false);
+    assert.ok(orphan.nodes.every(node => !node.selectable));
+});

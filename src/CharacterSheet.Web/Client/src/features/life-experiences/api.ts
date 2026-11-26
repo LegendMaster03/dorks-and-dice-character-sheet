@@ -7,14 +7,16 @@ import { decodeExperiencePreview, toNativeProposal, replayExperienceProposal, re
 
 type Fetcher = typeof globalThis.fetch;
 
-/** The public native options route currently returns only identities and titles.
- * Do not infer selectability, parentage, or descriptions from these records. */
+/** Older Core builds return titles alone. Selection requires both complete
+ * native source catalogs and an intact hierarchy at the requested fingerprint. */
 export async function loadExperienceTitleCatalog(environment: HostEnvironment, metadata: NativeRulesetMetadata,
     fetcher: Fetcher = globalThis.fetch.bind(globalThis)): Promise<ExperienceCatalog> {
     if (!metadata.capabilities.nativeOptionSearch) throw new Error("Native catalog discovery is unavailable.");
     const nodes: ExperienceNode[] = [];
     const labels: Record<string, string> = Object.create(null);
+    let hierarchyComplete = true;
     for (const category of ["upbringing", "background", "skill", "competency"] as const) {
+        const experienceCategory = category === "upbringing" || category === "background";
         const seen = new Set<string>();
         let total: number | null = null;
         for (let offset = 0; ; ) {
@@ -32,16 +34,27 @@ export async function loadExperienceTitleCatalog(environment: HostEnvironment, m
                 offset + page.options.length > page.total)
                 throw new Error("Invalid native catalog page.");
             total = page.total as number;
+            const hasHierarchy = page.includesLifeExperienceHierarchy === true;
+            if (experienceCategory && !hasHierarchy) hierarchyComplete = false;
             for (const option of page.options) {
                 if (typeof option?.id !== "string" || !option.id || typeof option.name !== "string" ||
                     !option.name.trim() || option.kind !== category || seen.has(option.id))
                     throw new Error("Invalid or repeated native catalog identity.");
                 seen.add(option.id);
                 labels[option.id] = option.name;
-                if (category === "upbringing" || category === "background") nodes.push({
-                    id: option.id, label: option.name, kind: category, selectable: false,
-                    reason: "Native selection and hierarchy metadata unavailable.",
-                    detail: { title: option.name, description: "Native definition details are not exposed by title discovery." }
+                if (!experienceCategory) continue;
+                const source = option.lifeExperience;
+                if (hasHierarchy && (!source || typeof source.selectable !== "boolean" ||
+                    (source.parentId !== null && (typeof source.parentId !== "string" ||
+                        !source.parentId.trim() || source.parentId.length > 160)) ||
+                    (source.description !== null && (typeof source.description !== "string" ||
+                        !source.description.trim() || source.description.length > 4000))))
+                    throw new Error("Invalid native Life Experiences metadata.");
+                nodes.push({
+                    id: option.id, label: option.name, kind: category,
+                    parentId: hasHierarchy ? source.parentId : null,
+                    selectable: hasHierarchy && source.selectable,
+                    detail: { title: option.name, description: hasHierarchy ? source.description ?? undefined : undefined }
                 });
             }
             offset += page.options.length;
@@ -49,7 +62,25 @@ export async function loadExperienceTitleCatalog(environment: HostEnvironment, m
             if (!page.options.length) throw new Error("Incomplete native catalog page.");
         }
     }
-    return { rulesetId: metadata.rulesetId, fingerprint: metadata.fingerprint, nodes, labels, hierarchyComplete: false };
+    if (hierarchyComplete) {
+        const byId = new Map(nodes.map(node => [node.id, node]));
+        hierarchyComplete = byId.size === nodes.length && nodes.every(node => {
+            const seen = new Set([node.id]);
+            let parentId = node.parentId;
+            while (parentId) {
+                const parent = byId.get(parentId);
+                if (node.kind !== "upbringing" || parent?.kind !== node.kind ||
+                    seen.has(parentId) || seen.size >= 16) return false;
+                seen.add(parentId);
+                parentId = parent.parentId;
+            }
+            return true;
+        });
+    }
+    return { rulesetId: metadata.rulesetId, fingerprint: metadata.fingerprint, labels, hierarchyComplete,
+        nodes: hierarchyComplete ? nodes : nodes.map(node => ({
+            ...node, parentId: null, selectable: false, reason: "Native selection and hierarchy metadata unavailable."
+        })) };
 }
 
 /** A draft can exist with only one selected source. The native resolver needs
