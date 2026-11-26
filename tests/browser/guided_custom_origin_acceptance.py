@@ -190,19 +190,19 @@ def run_browser():
         open_origin("drow-mixed")
         select_method("biological")
         save("drow-mixed", lambda: page.get_by_role("button", name="Start biological draft").click())
-        page.get_by_label("Native biological contributor source").select_option("ancestry.elf.drow")
-        drow = save("drow-mixed", lambda: page.get_by_role("button", name="Add contributor").click())
-        donor = drow["draft"]["proposal"]["contributors"][0]["id"]
+        page.get_by_label("Native biological contributor source").select_option("ancestry.goliath.stone")
+        goliath = save("drow-mixed", lambda: page.get_by_role("button", name="Add contributor").click())
+        donor = goliath["draft"]["proposal"]["contributors"][0]["id"]
         decision("Inheritance & Expression")
         for key in ("creatureType", "size", "walkingSpeedFeet"):
-            drow = gene_action(drow, key, donor, "Inherit instance", "drow-mixed")
-            drow = gene_action(drow, key, donor, "Request expression", "drow-mixed")
-        ability = candidate(drow, "spellcastingAbility", donor)
-        drow = gene_action(drow, "spellcastingAbility", donor, "Inherit instance", "drow-mixed")
+            goliath = gene_action(goliath, key, donor, "Inherit instance", "drow-mixed")
+            goliath = gene_action(goliath, key, donor, "Request expression", "drow-mixed")
+        ability = candidate(goliath, "trait.ancestral-aptitude", donor)
+        goliath = gene_action(goliath, "trait.ancestral-aptitude", donor, "Inherit instance", "drow-mixed")
         decision("Configuration")
-        ability_group = open_gene("spellcastingAbility")
-        wisdom = ability_group.get_by_label("Wisdom", exact=True)
-        expect(wisdom).to_be_visible()
+        ability_group = open_gene("trait.ancestral-aptitude")
+        constitution = ability_group.get_by_label("Constitution", exact=True)
+        expect(constitution).to_be_visible()
         failed_requests = []
         def abort_save(route):
             if route.request.method == "PUT":
@@ -211,31 +211,31 @@ def run_browser():
             else:
                 route.continue_()
         page.route("**/origin/draft", abort_save)
-        wisdom.check()
+        constitution.check()
         expect(page.get_by_role("button", name="Retry draft save", exact=True)).to_be_enabled()
         event("finite-choice-save-failure-retained", len(failed_requests) == 1)
         event("failed-save-did-not-change-server-draft", request(page, "failed-save-read", url("drow-mixed"))["draft"]["proposal"] ==
-              drow["draft"]["proposal"])
+              goliath["draft"]["proposal"])
         page.unroute("**/origin/draft", abort_save)
-        drow = save("drow-mixed", lambda: page.get_by_role("button", name="Retry draft save", exact=True).click())
-        event("retry-exact-pending-finite-choice", drow["draft"]["proposal"] == failed_requests[0]["proposal"])
-        latent = drow["draft"]["proposal"]["biologicalTransmission"]["latentConfigurations"]
+        goliath = save("drow-mixed", lambda: page.get_by_role("button", name="Retry draft save", exact=True).click())
+        event("retry-exact-pending-finite-choice", goliath["draft"]["proposal"] == failed_requests[0]["proposal"])
+        latent = goliath["draft"]["proposal"]["biologicalTransmission"]["latentConfigurations"]
         event("latent-finite-choice-persisted", any(c["candidateId"] == ability["id"] and
-              c["choices"][0]["selectedOptionIds"] == ["wisdom"] for c in latent))
+              c["choices"][0]["selectedOptionIds"] == ["constitution"] for c in latent))
         decision("Inheritance & Expression")
-        spell_key = "trait.faerie-fire"
-        drow = gene_action(drow, spell_key, donor, "Inherit instance", "drow-mixed")
-        drow = gene_action(drow, spell_key, donor, "Request expression", "drow-mixed")
-        event("linked-spell-not-granted-without-expression", not group(drow, spell_key)["expressions"])
-        drow = gene_action(drow, "spellcastingAbility", donor, "Request expression", "drow-mixed")
-        linked = group(drow, spell_key)["expressions"]
-        event("linked-spell-evaluates-source-ability", len(linked) == 1 and linked[0]["parameters"]["spellcastingAbility"] == "wisdom")
+        linked_key = "trait.stone-throw"
+        goliath = gene_action(goliath, linked_key, donor, "Inherit instance", "drow-mixed")
+        goliath = gene_action(goliath, linked_key, donor, "Request expression", "drow-mixed")
+        event("linked-trait-not-granted-without-expression", not group(goliath, linked_key)["expressions"])
+        goliath = gene_action(goliath, "trait.ancestral-aptitude", donor, "Request expression", "drow-mixed")
+        linked = group(goliath, linked_key)["expressions"]
+        event("linked-trait-evaluates-source-ability", len(linked) == 1 and linked[0]["parameters"]["giantAncestryAbility"] == "constitution")
         open_origin("drow-mixed")
         decision("Configuration")
-        ability_group = open_gene("spellcastingAbility")
-        expect(ability_group.get_by_label("Wisdom", exact=True)).to_be_checked()
+        ability_group = open_gene("trait.ancestral-aptitude")
+        expect(ability_group.get_by_label("Constitution", exact=True)).to_be_checked()
         event("finite-choice-reload-exact", request(page, "finite-choice-reload", url("drow-mixed"))["draft"]["proposal"] ==
-              drow["draft"]["proposal"])
+              goliath["draft"]["proposal"])
         snapshot("guided-biological-linked-finite-choice")
 
         open_origin("mixed")
