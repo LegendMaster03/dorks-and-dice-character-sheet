@@ -302,6 +302,15 @@ async function guidedDiscovery(environment: HostEnvironment, metadata: NativeRul
 function discoveryIdentity(metadata: NativeRulesetMetadata): NativeDiscoveryEnvelope {
     return { contractVersion: 1, rulesetId: metadata.rulesetId, fingerprint: metadata.fingerprint, previewOnly: true };
 }
+// Older native snapshots omit the additive field. Preserve that distinction;
+// only bounded authored description text can reach a workspace.
+function nativeDescription(value: unknown): { description?: string | null } {
+    if (value === undefined) return {};
+    if (value === null) return { description: null };
+    if (typeof value !== "string" || value.length > 4000 || !value.trim())
+        throw new Error("Invalid native discovery description.");
+    return { description: value };
+}
 export async function discoverNativeOriginPresets(environment: HostEnvironment, metadata: NativeRulesetMetadata,
     fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)): Promise<NativePresetDiscovery> {
     const result = await guidedDiscovery(environment, metadata, "/api/native-rules/origins/presets", {}, fetcher);
@@ -314,6 +323,7 @@ export async function discoverNativeOriginPresets(environment: HostEnvironment, 
             !Array.isArray(value.acquisitionMethodIds) || !value.acquisitionMethodIds.every(id => typeof id === "string"))
             throw new Error("Invalid native preset.");
         return { id: value.id, name: value.name, kind: value.kind, parentId: value.parentId as string | null,
+            ...nativeDescription(value.description),
             selectable: value.selectable, ancestrySelectionRequired: value.ancestrySelectionRequired,
             defaultUpbringingId: value.defaultUpbringingId as string | null,
             acquisitionMethodIds: value.acquisitionMethodIds as string[] };
@@ -333,6 +343,7 @@ export async function discoverNativeOriginMethods(environment: HostEnvironment, 
             throw new Error("Invalid native method.");
         return { reference: { ruleId: value.reference.ruleId, methodId: value.reference.methodId },
             name: value.name, stage: value.stage as string | null, support: value.support,
+            ...nativeDescription(value.description),
             defaultAvailability: value.defaultAvailability as string | null };
     });
     return { ...discoveryIdentity(metadata), methods };
