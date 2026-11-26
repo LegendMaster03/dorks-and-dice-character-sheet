@@ -8,6 +8,10 @@ import { loadNativeRuleset, searchNativeOptions,
 import { CharacterSheetApiError } from "../../character-api.js";
 import { requestErrorMessage } from "../../core/application/request-error.js";
 import { editableConventional } from "./conventional/model.js";
+import { supportsBiologicalDraft } from "./biological/model.js";
+import { unpackConstructDraft, type ConstructPreview } from "./construct/model.js";
+import { decodeSavedConstructPreview, evaluateConstructDraft } from "./construct/native.js";
+import type { NativePreviewEnvelope } from "../guided/contracts.js";
 import {
     activateNativeOrigin,
     loadOriginDraft,
@@ -53,6 +57,7 @@ export interface OriginUiState {
     draft: NativeOriginDraftView | null;
     savedState: NativeOriginSavedState | null;
     preview: NativeOriginPreview | null;
+    constructPreview?: NativePreviewEnvelope<ConstructPreview> | null;
     /** Draft revision from which this preview was obtained; not an authority token. */
     previewDraftRevision: number | null;
     catalog: NativeRulesetMetadata | null;
@@ -67,6 +72,8 @@ export interface OriginWorkflow {
     current(): Readonly<OriginUiState>;
     load(characterId: string): Promise<void>;
     saveConventionalDraft(characterId: string, proposal: NonNullable<OriginUiState["draft"]>["proposal"],
+        expectedRevision: number): Promise<void>;
+    saveCustomDraft(characterId: string, proposal: NonNullable<OriginUiState["draft"]>["proposal"],
         expectedRevision: number): Promise<void>;
     openChooser(category: "species" | "ancestry" | "skill",
         candidateId?: string, requirementId?: string,
@@ -114,7 +121,7 @@ export function createOriginWorkflow(
         const token = ++sequence;
         currentCharacterId = characterId;
         update({
-            status: "loading", draft: null, savedState: null, preview: null,
+            status: "loading", draft: null, savedState: null, preview: null, constructPreview: null,
             previewDraftRevision: null, catalog: null, chooser: { kind: "closed" }, message: undefined
         });
         try {
@@ -126,11 +133,19 @@ export function createOriginWorkflow(
             if (token !== sequence) return;
             let preview = draft.preview ?? null;
             let previewError: string | undefined;
+            let constructPreview: NativePreviewEnvelope<ConstructPreview> | null = null;
             if (draft.draft !== null && authorized.savedState === null && preview === null) {
                 try {
-                    preview = await previewOriginProposal(environment,
-                        draft.draft.rulesetId, draft.draft.fingerprint,
-                        draft.draft.proposal);
+                    const construct = unpackConstructDraft(draft.draft.proposal);
+                    if (construct) {
+                        if (draft.draft.fingerprint !== catalog.fingerprint || draft.draft.rulesetId !== catalog.rulesetId)
+                            throw new Error("The saved Construct draft requires review against updated native rules.");
+                        constructPreview = await evaluateConstructDraft(environment, catalog, construct);
+                    } else {
+                        preview = await previewOriginProposal(environment,
+                            draft.draft.rulesetId, draft.draft.fingerprint,
+                            draft.draft.proposal);
+                    }
                 } catch (error) {
                     previewError = requestErrorMessage(error);
                 }
@@ -139,8 +154,8 @@ export function createOriginWorkflow(
             update({
                 status: "ready", draft: draft.draft,
                 savedState: authorized.savedState, readOnly: authorized.readOnly,
-                catalog, preview,
-                previewDraftRevision: preview === null ? null : draft.draft?.revision ?? null,
+                catalog, preview, constructPreview,
+                previewDraftRevision: preview === null && constructPreview === null ? null : draft.draft?.revision ?? null,
                 message: previewError,
                 chooser: { kind: "closed" }, busy: false
             });
@@ -157,7 +172,7 @@ export function createOriginWorkflow(
             if (token !== sequence) return;
             update({
                 status: "error", draft: null, savedState: null,
-                preview: null, previewDraftRevision: null,
+                preview: null, constructPreview: null, previewDraftRevision: null,
                 catalog: null, message: requestErrorMessage(error),
                 chooser: { kind: "closed" }, busy: false
             });
@@ -254,17 +269,26 @@ export function createOriginWorkflow(
             const previewDrifted = response.preview?.contentChangedSinceRequest === true ||
                 (response.preview !== null && response.preview !== undefined &&
                  response.preview.fingerprint !== state.catalog?.fingerprint);
+            let constructPreview: NativePreviewEnvelope<ConstructPreview> | null = null;
+            let constructPreviewError: string | undefined;
+            if (unpackConstructDraft(proposal)) {
+                try {
+                    if (!state.catalog) throw new Error("Native catalog is unavailable.");
+                    constructPreview = decodeSavedConstructPreview(response.constructPreview, state.catalog);
+                } catch (error) {
+                    constructPreviewError = requestErrorMessage(error);
+                }
+            }
             update({ busy: false, draft: response.draft,
-                preview: response.preview ?? null,
-                previewDraftRevision: response.preview === null ||
-                    response.preview === undefined ? null :
+                preview: response.preview ?? null, constructPreview,
+                previewDraftRevision: response.preview == null && constructPreview === null ? null :
                     response.draft?.revision ?? null,
                 chooser: { kind: "closed" },
                 message: previewDrifted
                     ? "Native content changed during this save. Reload the Origin before approving or activating."
-                    : response.preview === null || response.preview === undefined
+                    : constructPreviewError ?? (response.preview == null && constructPreview === null
                         ? "Origin saved, but the native evaluation is not available."
-                        : undefined });
+                        : undefined) });
             if (response.draft !== null &&
                 isEditableMixedNativeOrigin(response.draft.proposal)) {
                 parentSources.prepare(characterId, response.draft.revision,
@@ -460,6 +484,22 @@ export function createOriginWorkflow(
                 throw new Error("The Origin draft changed. Reload before saving.");
             await saveProposal(characterId, proposal);
             if (state.message && (state.draft?.revision ?? 0) <= expectedRevision) throw new Error(state.message);
+        },
+        async saveCustomDraft(characterId, proposal, expectedRevision) {
+            const isSupported = (p: NonNullable<OriginUiState["draft"]>["proposal"]) =>
+                editableConventional(p) || supportsBiologicalDraft(p) || unpackConstructDraft(p) !== null;
+            if (currentCharacterId !== characterId || state.status !== "ready" || state.busy ||
+                state.readOnly || state.savedState || !state.catalog ||
+                (state.draft?.revision ?? 0) !== expectedRevision || !isSupported(proposal) ||
+                (state.draft && (!isSupported(state.draft.proposal) ||
+                    state.draft.rulesetId !== state.catalog.rulesetId || state.draft.fingerprint !== state.catalog.fingerprint)))
+                throw new Error("The Origin draft changed or is not editable. Reload before saving.");
+            await saveProposal(characterId, proposal);
+            // saveProposal also serves legacy event handlers and reports failures
+            // through state. The guided host must additionally reject a failed
+            // save so it can retain the exact proposed change for retry.
+            if (currentCharacterId !== characterId || state.draft?.revision !== expectedRevision + 1)
+                throw new Error(state.message ?? "The Origin draft save was not confirmed.");
         },
         openChooser, searchChooser, closeChooser,
         chooseOption, clearAncestry, setMode, clearMixedParent,

@@ -28,6 +28,23 @@ export interface AssemblyInput {
 /** One method-specific payload alongside the canonical Origin proposal.
  * This is a transport contract for A's draft integration, not a separate store. */
 export interface ConstructDraft { proposal: NativeOriginDraftProposal; assembly: AssemblyInput }
+/** Assembly travels in the existing revisioned Origin JSON record. Strip
+ * the Sheet-only field before calling the native Construct endpoint. */
+export function packConstructDraft(draft: ConstructDraft): NativeOriginDraftProposal {
+    return { ...draft.proposal, constructAssembly: draft.assembly };
+}
+export function unpackConstructDraft(stored: NativeOriginDraftProposal): ConstructDraft | null {
+    const { constructAssembly, ...proposal } = stored;
+    if (proposal.method.ruleId !== "rule.creature-origination" ||
+        proposal.method.methodId !== "construct-assembly" || proposal.intent !== "Custom" ||
+        proposal.contributors.length || proposal.candidates.length ||
+        !constructAssembly || typeof constructAssembly !== "object" ||
+        Array.isArray(constructAssembly)) return null;
+    const assembly = constructAssembly as AssemblyInput;
+    if (assembly.initialConstruction !== true || !Array.isArray(assembly.components) ||
+        !(assembly.initialAllowance === null || Number.isSafeInteger(assembly.initialAllowance))) return null;
+    return { proposal, assembly };
+}
 export const constructReference = { ruleId: "rule.creature-origination", methodId: "construct-assembly" } as const;
 export function emptyConstructDraft(id: string, allowance: number | null): ConstructDraft {
     if (!id.trim() || (allowance !== null && (!Number.isSafeInteger(allowance) || allowance < 0)))
