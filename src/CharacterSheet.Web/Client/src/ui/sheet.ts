@@ -408,7 +408,8 @@ function renderCharacterEditorOverlay(
     const body = createElement("div", "dd-character-editor-surface__body");
     body.append(renderCharacterBuilder(
         characterId, builder, false, handlers.structural,
-        { title: "Class & Background", choices: ["startingClass", "subclass", "background", "deity"] }));
+        { title: "Class & Deity", choices: ["startingClass", "subclass", "deity"] }));
+    if (handlers.renderExperiencePicker) body.append(handlers.renderExperiencePicker("background"));
     if (origin !== undefined && originHandlers !== undefined) {
         body.append(renderOriginBuilder(characterId, origin, builder.build,
             builder.build?.readOnly === true, originHandlers));
@@ -520,14 +521,10 @@ function renderGuidedBuilder(
             break;
         }
         case "background": {
-            const upbringing = handlers.renderUpbringing?.();
-            if (upbringing) panel.append(upbringing);
-            panel.append(renderCharacterBuilder(
-                characterId,
-                builder,
-                false,
-                handlers.structural,
-                { title: "Background", choices: ["background"] }));
+            if (handlers.renderExperiencePicker) {
+                panel.append(handlers.renderExperiencePicker("upbringing"), handlers.renderExperiencePicker("background"));
+                if (builder.saveError) panel.append(createInlineState(builder.saveError, "error"));
+            }
             const backgroundFeatures = renderGuidedSourceFeatures(
                 mechanics,
                 getGuidedBuilderChoiceSourceKeys(builder, "background"),
@@ -751,7 +748,7 @@ function renderGuidedBuilder(
  * into the active character or used to infer eligibility. */
 function renderGuidedCharacterPreview(builder: CharacterBuilderUiState, routine: CharacterRoutineUiState,
     mechanics: CharacterMechanicsView | null, origin?: OriginUiState,
-    upbringingLabel?: (id: string) => string): HTMLElement {
+    upbringingLabel?: (id: string) => string | undefined): HTMLElement {
     const section = createElement("div", "dd-guided-character-summary__content");
     const facts: DisplayFact[] = [
         { label: "Class", value: builderReferenceDisplay(builder, "startingClass").value },

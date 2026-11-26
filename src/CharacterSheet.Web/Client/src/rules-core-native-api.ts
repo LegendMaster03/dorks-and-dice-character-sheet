@@ -11,7 +11,7 @@ import type { HostEnvironment } from "./host-environment.js";
 // IDs, ruleset identity and the catalog fingerprint are explicit inputs.
 export const nativeOptionCategories = [
     "species", "ancestry", "class", "subclass", "patron", "pact", "invocation", "condition", "leveled-condition",
-    "skill", "competency", "feat", "spell", "item", "monster"
+    "skill", "competency", "feat", "spell", "item", "monster", "background"
 ] as const;
 export type NativeOptionCategory = typeof nativeOptionCategories[number];
 

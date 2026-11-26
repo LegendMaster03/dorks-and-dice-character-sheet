@@ -178,7 +178,8 @@ const nativeClassBuild = {
             ? { ...entry, ruleConceptKey: "class.warlock" }
             : entry)
 };
-function nativeFetch(available = true, category = "class") {
+function nativeFetch(available = true, category = "class",
+    option = { id: "class.warlock", name: "Warlock", kind: category }) {
     const requests = [];
     const fetcher = async (url) => {
         requests.push(String(url));
@@ -192,9 +193,7 @@ function nativeFetch(available = true, category = "class") {
             return Response.json({
                 contractVersion: 1, rulesetId: "first-party-001",
                 fingerprint, category, total: available ? 1 : 0,
-                options: available ? [{
-                    id: "class.warlock", name: "Warlock", kind: category
-                }] : []
+                options: available ? [option] : []
             });
         }
         throw new Error("Retired API was called: " + url);
@@ -213,6 +212,24 @@ test("native class reference resolves by exact ID without legacy concept detail 
         "/tool-host/character-sheet/api/upstream/api/native-rules/ruleset",
         "/tool-host/character-sheet/api/upstream/api/native-rules/options"
     ]);
+});
+
+test("a saved native Background resolves to its catalog name and a legacy Background retains its key", async () => {
+    const backgroundBuild = conceptKey => ({ ...build, foundationalSelections: [
+        { category: "background", ruleConceptKey: conceptKey }
+    ] });
+    const { fetcher, requests } = nativeFetch(true, "background", {
+        id: "background.entertainer", name: "Entertainer", kind: "background"
+    });
+    const native = await resolveStoredChoice(environment, backgroundBuild("background.entertainer"), "background", fetcher);
+    assert.equal(native.status, "resolved");
+    assert.equal(native.rule.name, "Entertainer");
+    const query = new URL(requests[1], "https://example.test").searchParams;
+    assert.equal(query.get("category"), "background");
+    assert.equal(query.get("q"), "background.entertainer");
+    assert.deepEqual(await resolveStoredChoice(environment, backgroundBuild("background:entertainer"), "background", fetcher),
+        { status: "unavailable", conceptKey: "background:entertainer" });
+    assert.equal(requests.length, 2);
 });
 
 test("unknown class is unavailable without inventing a replacement", async () => {

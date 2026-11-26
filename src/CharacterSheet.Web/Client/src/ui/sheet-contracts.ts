@@ -13,6 +13,7 @@ import type {
     CharacterProfileInput,
     CharacterRecoveryRequestInput
 } from "../character-state-api.js";
+import type { ExperienceKind } from "../features/life-experiences/model.js";
 import type { CharacterBuilderHandlers } from "./builder.js";
 import type { GuidedBuilderSection, SheetSection } from "./sheet-model.js";
 import type { HarvestingCraftingWorkflow } from "../features/harvesting/harvesting-workflow.js";
@@ -113,8 +114,8 @@ export interface FeatCharacterHandlers {
 }
 
 export interface CharacterSheetHandlers {
-    renderUpbringing?(): HTMLElement;
-    upbringingLabel?(id: string): string;
+    renderExperiencePicker?(kind: ExperienceKind): HTMLElement;
+    upbringingLabel?(id: string): string | undefined;
     structural: StructuralCharacterHandlers;
     feats: FeatCharacterHandlers;
     spells: KnownSpellCharacterHandlers;
