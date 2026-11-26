@@ -5,7 +5,7 @@ import { createButton, createElement, createSectionCard, createInlineState } fro
 import { renderRuleBrowser, renderRuleDetail, renderChoice, renderValidation, renderWorkspace,
     renderDependencyReview, renderDraftStatus } from "../../guided/components.js";
 import { resolveMethodEditor, type NativeMethod, type MethodEditor, type RuleDetail, type DisplayFact,
-    type ChoiceRequirement, type ValidationIssue, type DependencyChange, type DraftSaveStatus } from "../../guided/contracts.js";
+    type ChoiceRequirement, type ValidationIssue, type DependencyChange, type DraftSaveStatus, type NativePreset } from "../../guided/contracts.js";
 import { previewOriginProposal, type NativeOriginDraftProposal, type NativeOriginPreview } from "../origin-api.js";
 import { createInitialOriginProposal, originPreviewCandidates, requiredDirectOriginChoices,
     changeDirectOriginChoice, isAuthorizedInitialNativeOrigin } from "../origin-builder-model.js";
@@ -23,7 +23,9 @@ export interface ConventionalHost<TContext> {
     retry(): Promise<void>;
     notify(): void;
     methodEditors: readonly MethodEditor<TContext>[];
-    methodContext(method: NativeMethod): TContext;
+    methodContext(method: NativeMethod, presets: readonly NativePreset[]): TContext;
+    resetToConventional?(): Promise<void>;
+    canResetToConventional?(): boolean;
     /** Optional bounded presentation metadata from a native presentation provider. */
     describePreset?(id: string): string | undefined;
     labelRule?(id: string): string | undefined;
@@ -125,6 +127,12 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             methods = methodResult.status === "fulfilled" ? methodResult.value.methods : [];
             methodError = methodResult.status === "rejected" ? errorText(methodResult.reason) : null;
             discoveryFingerprint = metadata.fingerprint;
+            const persisted = host.current().draft?.proposal;
+            if (persisted && !editableConventional(persisted)) {
+                chosenMethod = methods.find(method => method.reference.ruleId === persisted.method.ruleId &&
+                    method.reference.methodId === persisted.method.methodId && initialMethod(method)) ?? null;
+                custom = chosenMethod !== null;
+            }
             inspectedId = currentProposal().selectedAncestryId ?? currentProposal().selectedSpeciesId ?? null;
             const selected = entries.find(entry => entry.preset.id === inspectedId);
             for (const node of selected?.path ?? []) expandedBranches.set(node.id, true);
@@ -352,8 +360,12 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                 createButton("Retry method discovery", button, () => void load(), busy));
             if (chosenMethod) {
                 const editor = resolveMethodEditor(chosenMethod, host.methodEditors);
-                if (editor && initialMethod(chosenMethod) && host.canEditDraft() && !state.readOnly && !state.savedState)
-                    area.append(editor.render(host.methodContext(chosenMethod)));
+                const stored = state.draft?.proposal;
+                const viewingSavedMethod = stored && !editableConventional(stored) &&
+                    stored.method.ruleId === chosenMethod.reference.ruleId && stored.method.methodId === chosenMethod.reference.methodId;
+                if (editor && initialMethod(chosenMethod) && !state.savedState &&
+                    (viewingSavedMethod || host.canEditDraft() && !state.readOnly))
+                    area.append(editor.render(host.methodContext(chosenMethod, entries.map(entry => entry.preset))));
                 else area.append(createInlineState("This method editor is not available for the current character.", "readonly"));
                 return area;
             }
@@ -371,8 +383,13 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             return area;
         }
         area.append(createButton("Construct a Custom Origin", "dd-button", () => { custom = true; notify(); }));
-        if (!editableConventional(currentProposal()) && !state.savedState)
+        if (!editableConventional(currentProposal()) && !state.savedState) {
             area.append(createInlineState("This saved Origin uses a custom configuration. Its evidence is preserved.", "readonly"));
+            if (host.canResetToConventional?.() && host.resetToConventional)
+                area.append(createButton("Replace custom draft with a conventional Origin", button,
+                    () => { void host.resetToConventional!().catch(e => { error = errorText(e); notify(); }); },
+                    busy || !!pending || state.busy));
+        }
         const savedIdentity = currentProposal().selectedAncestryId ?? currentProposal().selectedSpeciesId ?? null;
         const selected = entries.find(e => e.preset.id === (inspectedId ?? savedIdentity));
         const inspected = activeInspection();

@@ -212,6 +212,7 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
 
     const browser = createSectionCard("Add components");
     const search = createElement("input"); search.type = "search"; search.value = context.query;
+    search.setAttribute("aria-label", "Search components");
     const searchLabel = createElement("label", undefined, "Search components "); searchLabel.append(search);
     search.addEventListener("input", () => context.setQuery(search.value)); browser.append(searchLabel);
     const term = context.query.trim().toLocaleLowerCase();
