@@ -16,6 +16,8 @@ import { editableConventional, presetEntries, presetRuleNodes, suggestedUpbringi
 export interface ConventionalHost<TContext> {
     /** Canonical application-owned state. Never store a second persisted Origin. */
     current(): Readonly<OriginUiState>;
+    /** Explicit application capability, not inferred from the open guided creator. */
+    canEditDraft(): boolean;
     /** Host must verify character, snapshot, revision, and capability before saving. */
     save(proposal: NativeOriginDraftProposal, expectedRevision: number): Promise<void>;
     retry(): Promise<void>;
@@ -76,7 +78,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     const revision = () => host.current().draft?.revision ?? 0;
     function writable(): boolean {
         const s = host.current();
-        return s.status === "ready" && !s.readOnly && !s.savedState && !s.busy &&
+        return host.canEditDraft() && s.status === "ready" && !s.readOnly && !s.savedState && !s.busy &&
             !!s.catalog && (!s.draft || s.draft.fingerprint === s.catalog.fingerprint &&
                 s.draft.rulesetId === s.catalog.rulesetId) && editableConventional(currentProposal());
     }
@@ -186,9 +188,9 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                 proposal.manifestations.some(m => !saved.proposal.manifestations.some(n =>
                     n.id === m.id && n.candidateId === m.candidateId &&
                     (n.choices ?? []).length === (m.choices ?? []).length &&
-                    (m.choices ?? []).some(c => !(n.choices ?? []).some(d =>
+                    (m.choices ?? []).every(c => (n.choices ?? []).some(d =>
                         c.requirementId === d.requirementId && c.selectedOptionIds.length === d.selectedOptionIds.length &&
-                        c.selectedOptionIds.every((id, i) => id === d.selectedOptionIds[i]))) === false)))
+                        c.selectedOptionIds.every((id, i) => id === d.selectedOptionIds[i]))))))
                 throw new Error("The host has not confirmed the requested draft save.");
             pending = null; inspection = null;
             inspectedId = saved.proposal.selectedAncestryId ?? saved.proposal.selectedSpeciesId ?? null;
@@ -203,6 +205,15 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
         if (suggestion) facts.push({ label: "Suggested Upbringing (optional)", value: label(suggestion) });
         const features: RuleDetail[] = [];
         if (proposal && preview) {
+            const envelope = preview as unknown as Record<string, unknown>;
+            const movement = envelope.movementModes;
+            if (isRecord(movement) && movement.previewOnly === true && Array.isArray(movement.modes)) {
+                for (const mode of movement.modes) {
+                    if (isRecord(mode) && typeof mode.mode === "string" && typeof mode.speedFeet === "number")
+                        facts.push({ label: humanize(mode.mode) + " speed", value: mode.speedFeet + " ft.",
+                            source: typeof mode.sourceId === "string" ? { label: label(mode.sourceId) } : undefined });
+                }
+            }
             for (const candidate of originPreviewCandidates(preview, proposal)) {
                 if (!candidate.manifestedPreview && candidate.eligibility !== "Eligible") continue;
                 if (candidate.kind === "Intrinsic" && candidate.manifestedPreview) {
@@ -249,8 +260,9 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     }
     function choices(proposal: NativeOriginDraftProposal, preview: NativeOriginPreview): HTMLElement {
         const section = createSectionCard("Required creation choices");
-        const requirements = requiredDirectOriginChoices(preview, proposal);
         const candidates = originPreviewCandidates(preview, proposal);
+        const requirements = requiredDirectOriginChoices(preview, proposal).filter(requirement =>
+            candidates.some(c => c.id === requirement.candidateId && c.eligibility === "Eligible"));
         const expectedRevision = revision();
         if (!requirements.length) section.append(createElement("p", undefined, "No required choices reported."));
         requirements.forEach((requirement, index) => {
@@ -299,11 +311,13 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
     function render(): HTMLElement {
         const state = host.current();
         const area = createSectionCard("Character Origins");
-        const status: DraftSaveStatus = state.readOnly || state.savedState ? "read-only" :
+        const status: DraftSaveStatus = state.readOnly || state.savedState || !host.canEditDraft() ? "read-only" :
             saving ? "saving" : pending ? "failed" : state.status !== "ready" ? "unavailable" :
                 state.draft && state.draft.fingerprint !== state.catalog?.fingerprint ? "stale" :
-                    state.draft ? "saved" : "dirty";
-        area.append(renderDraftStatus(status));
+                    state.draft ? "saved" : "unavailable";
+        if (state.status === "ready" && !state.draft && host.canEditDraft() && !pending && !saving && !state.savedState)
+            area.append(createElement("p", undefined, "No Origin draft selected."));
+        else area.append(renderDraftStatus(status));
         if (error) area.append(createInlineState(error, "error"));
         if (busy && !saving) area.append(createInlineState("Loading native information…", "loading"));
         if (pending) {
@@ -328,7 +342,9 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                 createButton("Retry method discovery", button, () => void load(), busy));
             if (chosenMethod) {
                 const editor = resolveMethodEditor(chosenMethod, host.methodEditors);
-                if (editor && initialMethod(chosenMethod)) area.append(editor.render(host.methodContext(chosenMethod)));
+                if (editor && initialMethod(chosenMethod) && host.canEditDraft() && !state.readOnly && !state.savedState)
+                    area.append(editor.render(host.methodContext(chosenMethod)));
+                else area.append(createInlineState("This method editor is not available for the current character.", "readonly"));
                 return area;
             }
             for (const method of methods) {
@@ -337,7 +353,7 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
                 const row = createElement("article");
                 row.append(createElement("h3", undefined, method.name));
                 if (editor) row.append(createButton("Configure", button, () => { chosenMethod = method; notify(); },
-                    busy || !!pending || state.readOnly || !!state.savedState));
+                    busy || !!pending || !host.canEditDraft() || state.readOnly || !!state.savedState));
                 else row.append(createElement("p", undefined, initialMethod(method) ?
                     "Native preview supported; editor not registered." : "Reference only — not available for initial creation."));
                 area.append(row);
@@ -361,6 +377,18 @@ export function createConventionalWorkspace<TContext>(environment: HostEnvironme
             if (!host.describePreset?.(selected.preset.id))
                 work.append(createElement("p", undefined, "Native preset description is not available."));
             if (preview) work.append(renderValidation(validation(preview), () => undefined));
+            if (shown && !same) {
+                const required = requiredDirectOriginChoices(shown.preview, shown.proposal).filter(requirement =>
+                    originPreviewCandidates(shown.preview, shown.proposal).some(c => c.id === requirement.candidateId && c.eligibility === "Eligible"));
+                if (required.length) {
+                    const summary = createSectionCard("Required choices after selection");
+                    const list = createElement("ul");
+                    for (const requirement of required) list.append(createElement("li", undefined,
+                        humanize(requirement.requirementId) + " — choose " + requirement.minimum +
+                        (requirement.maximum === requirement.minimum ? "" : "–" + requirement.maximum)));
+                    summary.append(list); work.append(summary);
+                }
+            }
             if (shown && !same) {
                 const save = () => void persist(shown.proposal, shown.revision);
                 if (shown.review?.reconsider.length) work.append(renderDependencyReview(shown.review, save,
