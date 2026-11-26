@@ -1,8 +1,8 @@
 name: Pillar 2 / Pinned Current Core and Sheet Integration
 
-# Independent, branch-specific validation for the native Character Origins
-# implementation under review. This supplements (does not replace) the
-# existing main-compatibility and historical Phase 5 workflows.
+# Independent validation for the native Character Origins implementation under
+# review. Retains the Phase 5 probe and persistence cases with current coverage;
+# ordinary main-compatibility smoke tests remain separate.
 # Pin the exact Rules Core commit. A future branch advance requires an
 # intentional review and update of this SHA before signoff.
 on:
@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LegendMaster03/dorks-and-dice-rules-core
-          ref: 541e8d818da0e925dfede0708aebe9ab62a8ba6c
+          ref: 8a6c1ee2c133189bc3e5eedf9f3ba1441e9f7441
           path: rules-core
           persist-credentials: false
       - name: Verify exact source revisions
@@ -39,7 +39,7 @@ jobs:
           echo "SHEET_SOURCE_SHA=$sheet_head"
           echo "CORE_SOURCE_SHA=$core_head"
           test "$sheet_head" = "${{ github.event.pull_request.head.sha }}"
-          test "$core_head" = "541e8d818da0e925dfede0708aebe9ab62a8ba6c"
+          test "$core_head" = "8a6c1ee2c133189bc3e5eedf9f3ba1441e9f7441"
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
