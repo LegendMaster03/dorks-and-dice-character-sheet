@@ -93,3 +93,24 @@ test("physical links and explicit wiring remain distinct undirected choices", ()
     assert.equal(draft.assembly.powerConnections, undefined);
     assert.equal(draft.assembly.components[1].parentInstanceId, "three");
 });
+
+test("manufacturing stage and external price evidence is native, including unknown prices", () => {
+    const quote = { status: "partial", recipes: [{ instanceId: "one", sourceDefinitionId: "component.a",
+        recipeId: "recipe.a", stages: [{ stepId: "form", competencyId: "competency.a", minimumRanks: 2,
+            dependencies: [], inputs: [{ materialId: "material.a", amount: 2, retainedInProduct: true }],
+            outputs: [{ materialId: "material.b", amount: 1, retainedInProduct: false }] }] }],
+        ingredients: [{ definitionId: "material.a", quantity: 2, unitCost: null, knownCost: null }] };
+    const result = decodeAssembly({ ...assembly, manufacturingQuote: quote, status: 2 });
+    assert.equal(result.manufacturingQuote.recipes[0].instanceId, "one");
+    assert.equal(result.manufacturingQuote.recipes[0].stages[0].inputs[0].retainedInProduct, true);
+    assert.equal(result.manufacturingQuote.ingredients[0].knownCost, null);
+    assert.equal(constructionAllocation(123, result).remaining, undefined);
+    assert.throws(() => decodeAssembly({ ...assembly, manufacturingQuote: { ...quote, status: "resolved" } }));
+    assert.throws(() => decodeAssembly({ ...assembly, manufacturingQuote: { ...quote, status: "unavailable" } }));
+    const resolved = decodeAssembly({ ...assembly, status: 1, issues: [{ code: "construct-allowance-exceeded",
+        path: "initialAllowance", severity: 0, detail: "Over" }],
+        manufacturingQuote: { ...quote, status: "resolved",
+            ingredients: [{ definitionId: "material.a", quantity: 2, unitCost: 50, knownCost: 100 }] } });
+    assert.equal(constructionAllocation(90, resolved).remaining, "-10");
+    assert.equal(constructionAllocation(90, resolved).status, "over");
+});

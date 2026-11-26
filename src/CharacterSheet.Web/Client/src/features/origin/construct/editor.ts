@@ -102,6 +102,13 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
         void context.retry().catch(error => context.reportError(error instanceof Error ? error.message : "Retry failed."));
     }, context.readOnly || draftView.readOnly));
     if (!catalog) work.append(createElement("p", undefined, "Current native component catalog is unavailable."));
+    else if (catalog.initialAllowance === null) work.append(createElement("p", undefined,
+        "Native starting allowance is unavailable; construction can be drafted but not completed."));
+    else if (catalog.initialAllowance !== draft.assembly.initialAllowance) {
+        work.append(createElement("p", undefined, "This draft must use the current native starting allowance."),
+            createButton("Use native allowance (" + catalog.initialAllowance + ")", buttonClass,
+                () => save({ ...draft, assembly: { ...draft.assembly, initialAllowance: catalog.initialAllowance } }), blocked));
+    }
     if (context.decisionId !== "review") {
         const wiring = createElement("details");
         wiring.append(createElement("summary", undefined, draft.assembly.powerConnections == null ?
@@ -208,25 +215,39 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
     const searchLabel = createElement("label", undefined, "Search components "); searchLabel.append(search);
     search.addEventListener("input", () => context.setQuery(search.value)); browser.append(searchLabel);
     const term = context.query.trim().toLocaleLowerCase();
+    const categoryOf = (option: typeof names[number]) =>
+        option.componentCategory ?? configFor(option.id)?.componentCategory ?? null;
     const visible = names.filter(x => x.name.toLocaleLowerCase().includes(term) ||
+        (categoryOf(x) && readable(categoryOf(x)!).toLocaleLowerCase().includes(term)) ||
         configFor(x.id)?.baseCapabilities.some(c => readable(c).toLocaleLowerCase().includes(term)));
+    const categories = new Map<string | null, typeof visible>();
     for (const option of visible) {
-        const config = configFor(option.id);
-        const item = createElement("article", "dd-guided-detail");
-        item.append(createElement("h3", undefined, option.name));
-        if (config) item.append(createElement("p", undefined, config.baseCapabilities.map(readable).join(", ") || "No base capability metadata"));
-        else item.append(createButton("View native options", buttonClass, () => context.requestConfiguration(option.id)));
-        item.append(createButton("Add component", buttonClass, () => {
-            save(addComponent(draft, "part-" + crypto.randomUUID(), option.id));
-            context.requestConfiguration(option.id);
-        }, blocked));
-        browser.append(item);
+        const category = categoryOf(option);
+        const group = categories.get(category) ?? [];
+        group.push(option); categories.set(category, group);
+    }
+    for (const [category, options] of categories) {
+        const group = createElement("details"); group.open = true;
+        group.append(createElement("summary", undefined, category ? readable(category) : "Components — category not supplied"));
+        for (const option of options) {
+            const config = configFor(option.id);
+            const item = createElement("article", "dd-guided-detail");
+            item.append(createElement("h3", undefined, option.name));
+            if (config) item.append(createElement("p", undefined, config.baseCapabilities.map(readable).join(", ") || "No base capability metadata"));
+            else item.append(createButton("View native options", buttonClass, () => context.requestConfiguration(option.id)));
+            item.append(createButton("Add component", buttonClass, () => {
+                save(addComponent(draft, "part-" + crypto.randomUUID(), option.id));
+                context.requestConfiguration(option.id);
+            }, blocked));
+            group.append(item);
+        }
+        browser.append(group);
     }
     if (!visible.length) browser.append(createElement("p", undefined, "No matching native components."));
     browser.append(createElement("p", undefined, "Starting configurations are unavailable until published through native discovery."));
 
     const side = createSectionCard("Mechanical preview");
-    side.append(renderAllocation(constructionAllocation(draft.assembly.initialAllowance, preview?.assembly ?? null)));
+    side.append(renderAllocation(constructionAllocation(catalog?.initialAllowance ?? null, preview?.assembly ?? null)));
     side.append(createElement("p", undefined, "Rated power and projected operation do not verify live fuel, stored energy, or operating authority."));
     if (preview) {
         const assembly = preview.assembly;
@@ -239,10 +260,44 @@ function renderEditor(context: ConstructEditorContext): HTMLElement {
             side.append(createElement("p", undefined, "Unresolved mass evidence: " +
                 [...(assembly.unresolvedRetainedMassMaterials ?? []), ...(assembly.productsWithUncertifiedMass ?? [])].map(readable).join(", ")));
         const quotation = createSectionCard("Native ingredient quotation");
-        if (assembly.requiredConstructionResources === null) quotation.append(createElement("p", undefined, "Ingredient bill unavailable."));
-        else quotation.append(renderFacts(Object.entries(assembly.requiredConstructionResources).map(([id, amount]) =>
-            ({ label: labelFor(id, materials), value: String(amount) }))));
-        quotation.append(createElement("p", undefined, "Per-stage manufacturing quotation is not exposed by this assembly preview."));
+        const quote = assembly.manufacturingQuote;
+        if (quote && quote.status !== "unavailable") {
+            quotation.append(createElement("p", undefined, quote.status === "resolved" ?
+                "Native external ingredient quotation" : "Partial quotation — unresolved inputs or prices remain"));
+            for (const ingredient of quote.ingredients) quotation.append(renderFacts([
+                { label: labelFor(ingredient.definitionId, materials), value: String(ingredient.quantity) },
+                { label: "Starting unit value", value: ingredient.unitCost === null ? "Unresolved" : String(ingredient.unitCost) },
+                { label: "Known line cost", value: ingredient.knownCost === null ? "Unresolved" : String(ingredient.knownCost) }]));
+            const stages = createSectionCard("Manufacturing stages");
+            stages.append(createElement("p", undefined, "Native recipe requirements only; crafting completion, performer readiness and inventory are not verified."));
+            for (const recipe of quote.recipes) {
+                const recipeView = createElement("details");
+                recipeView.append(createElement("summary", undefined, (recipe.instanceId ? partName(recipe.instanceId) + " — " : "") +
+                    readable(recipe.sourceDefinitionId)), createElement("p", undefined, "Recipe: " + readable(recipe.recipeId)));
+                for (const stage of recipe.stages) {
+                    const step = createSectionCard(readable(stage.stepId));
+                    step.append(renderFacts([{ label: "Competency", value: readable(stage.competencyId) },
+                        { label: "Minimum ranks", value: String(stage.minimumRanks) },
+                        { label: "Prerequisite stages", value: stage.dependencies.map(readable).join(", ") || "None" }]));
+                    for (const input of stage.inputs) step.append(createElement("p", undefined,
+                        "Input: " + input.amount + " × " + labelFor(input.materialId, materials) +
+                        (input.retainedInProduct ? " (retained)" : "")));
+                    for (const output of stage.outputs) step.append(createElement("p", undefined,
+                        "Output: " + output.amount + " × " + labelFor(output.materialId, materials)));
+                    recipeView.append(step);
+                }
+                stages.append(recipeView);
+            }
+            if (!quote.recipes.length) stages.append(createElement("p", undefined, "No resolved stages available."));
+            quotation.append(stages);
+        } else {
+            if (assembly.requiredConstructionResources === null) quotation.append(createElement("p", undefined, "Ingredient bill unavailable."));
+            else quotation.append(renderFacts(Object.entries(assembly.requiredConstructionResources).map(([id, amount]) =>
+                ({ label: labelFor(id, materials), value: String(amount) }))));
+            quotation.append(createElement("p", undefined, quote?.status === "unavailable" ?
+                "Detailed native quotation exceeds the supported presentation bound." :
+                "The current Core build has not provided stage-level quotation."));
+        }
         side.append(quotation);
         const power = createSectionCard("Power networks");
         if (!assembly.powerNetworks?.length) power.append(createElement("p", undefined, "No evaluated power network."));
@@ -293,8 +348,20 @@ function renderConfiguration(part: ComponentInstance, config: Configuration, dra
         }, disabled));
     }
     if (config.materialSlots.length) panel.append(createElement("p", undefined, "Materials are native catalog candidates; recipe compatibility is evaluated by Rules Core."));
-    if (config.powerSourceRequired || part.powerSourceId)
+    if (config.powerSourceRequired || part.powerSourceId) {
         panel.append(selectField("Power source", config.powerSources, part.powerSourceId, id => update({ powerSourceId: id }), disabled));
+        const source = config.powerSourceDetails.find(x => x.id === part.powerSourceId);
+        if (source) {
+            const details = createSectionCard(source.name);
+            if (source.description) details.append(createElement("p", undefined, source.description));
+            details.append(renderFacts([{ label: "Operating principle", value: source.operatingPrinciple ? readable(source.operatingPrinciple) : "Unresolved" },
+                { label: "Rated output", value: source.ratedOutput === null ? "Unresolved" : String(source.ratedOutput) },
+                { label: "Rated Overdrive output", value: source.ratedOverdriveOutput === null ? "Not authored" : String(source.ratedOverdriveOutput) }]));
+            if (source.rulesStatus) details.append(createElement("p", undefined, "Native rule status: " + source.rulesStatus));
+            details.append(createElement("p", undefined, "Current fuel, energy and source-specific operating authority are unverified."));
+            panel.append(details);
+        } else if (part.powerSourceId) panel.append(createElement("p", undefined, "Native source-specific operating context is unavailable."));
+    }
     if (config.designs.length || part.designId)
         panel.append(selectField("Design", config.designs, part.designId, id => update({ designId: id }), disabled));
     for (const id of new Set([...config.enhancements.map(x => x.id), ...(part.enhancementIds ?? [])])) {

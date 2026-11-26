@@ -33,25 +33,23 @@ previous selections remain visible until reviewed; no client issues grants.
 - A's lifecycle remains a blocking approval decision. No activation button or
   new initial grant path has been added. Do not treat a native Authorized
   preview as permission to persist established characteristics.
-- Native method discovery does not publish initialConstructionAllowance;
-  the current delegated method/preset/identity endpoints do not expose a
-  trusted value to this editor. Supply an authored, fingerprint-pinned
-  allowance through an additive bounded discovery contract (not a client
-  constant, numeric text input or private rule payload). Until available,
-  use null and keep the review incomplete.
-- Native option search supports component/material identities but not authored
-  component role facets; configuration discovery provides base capabilities,
-  not complete component categories, material compatibility, source operating
-  principle/restrictions, protected-region choices or all recipe-stage detail.
-  Add bounded projections in Core and reviewed delegated routes as needed.
-  The current adapter shows names and discovered capabilities, material candidates
-  and native validation. The native evaluator supports user-assigned path-safe
-  protected-region labels and separately specified undirected power links;
-  the editor now exposes those without adding protection or dispatch mechanics.
-  Source-specific runtime authority is unresolved. The native assembly quote contains aggregate resource
-  quantities and known cost, not a per-stage manufacturing quote. Reuse the
-  manufacturing/crafting evaluator and expose bounded results; no independent
-  economy or client mechanical inference.
+- [Rules Core draft PR #217](https://github.com/LegendMaster03/dorks-and-dice-rules-core/pull/217)
+  adds bounded presentation fields to existing delegated endpoints without changing
+  catalog or mechanics: method allowance, authored component categories, source
+  descriptions/rule status/rated output and native recipe-stage/ingredient
+  quotations. The Sheet adapter reads those fields under exact snapshot
+  identity; older Core builds retain explicit unavailable states. The host
+  should initialize the canonical draft from the native allowance; a previously
+  incomplete draft may explicitly synchronize with that value. No hardcoded
+  budget, private definition read, or editable price.
+- Material identities are candidates; the native assembly evaluation determines
+  actual recipe compatibility. The native evaluator supports user-assigned
+  path-safe protected-region labels and separately specified undirected power
+  links; the editor exposes them without adding protection or dispatch rules.
+  Source-specific runtime authority remains unresolved. Rated output and the
+  native source descriptions are not proof of actual fuel, stored energy, or
+  operating authority. Recipe stages are read-only native quotations, not
+  performer readiness or crafting completion.
 - Shared open-catalog and parameter choice controls need integration for
   non-finite requirements. This increment renders finite choices only and
   identifies unsupported choices as requiring the shared editor.
@@ -67,7 +65,7 @@ published with explicit content approval, a native discovery and load contract,
 exact component/variant/material/link identities, current native allowance and
 fingerprint, and native reevaluation before review. Do not publish them or
 copy their prices or allowance into the production UI. No Core catalog
-changes have been made.
+changes have been made; the Core presentation branch does not publish presets.
 
 ## Verification
 
@@ -75,8 +73,8 @@ The isolated model tests are colocated with the feature. From the Client
 directory, run:
 
 ```sh
-tsc --ignoreConfig src/features/origin/construct/model.ts --outDir .construct-test-dist --module ESNext --target ES2022 --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck
-node --test src/features/origin/construct/model.test.mjs
+tsc --ignoreConfig src/features/origin/construct/model.ts src/features/origin/construct/native.ts --outDir .construct-test-dist --module ESNext --target ES2022 --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck
+node --test src/features/origin/construct/model.test.mjs src/features/origin/construct/native.test.mjs
 rm -rf .construct-test-dist
 ```
 

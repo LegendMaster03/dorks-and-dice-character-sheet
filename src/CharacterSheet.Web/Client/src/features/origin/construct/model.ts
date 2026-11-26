@@ -128,13 +128,19 @@ export function setManifestation(draft: ConstructDraft, candidateId: string,
 export type NativeStatus = "Invalid" | "Incomplete" | "Unresolved" | "Conflicting" | "Authorized";
 export interface NativeIssue { code: string; path: string; severity: "Incomplete" | "Unresolved" | "Conflict" | "Invalid"; detail: string }
 export interface NamedOption { id: string; name: string }
+export interface PowerSourceDetail extends NamedOption {
+    description: string | null; rulesStatus: string | null; operatingPrinciple: string | null;
+    ratedOutput: number | null; ratedOverdriveOutput: number | null;
+}
 export interface Configuration {
-    definitionId: string; name: string; materialSlots: string[]; defaultRecipeId: string | null;
+    definitionId: string; name: string; componentCategory: string | null;
+    materialSlots: string[]; defaultRecipeId: string | null;
     constructionVariants: { id: string; recipeId: string; bodySize: string | null }[];
     modeIds: string[]; baseCapabilities: string[]; requiresAnyOf: string[][];
     mountInterfaces: string[]; acceptsMountInterfaces: string[];
     powerSourceRequired: boolean; requiresContinuousPower: boolean;
-    designs: NamedOption[]; enhancements: NamedOption[]; powerSources: NamedOption[]; issues: NativeIssue[];
+    designs: NamedOption[]; enhancements: NamedOption[]; powerSources: NamedOption[];
+    powerSourceDetails: PowerSourceDetail[]; issues: NativeIssue[];
 }
 export interface ComponentState {
     instanceId: string; definitionId: string; installed: boolean; operational: boolean;
@@ -147,11 +153,21 @@ export interface Network {
     operationalDemand: number; operationalOutput: number; requestedHeadroom: number | null;
     isOverallocated: boolean | null; hasUnresolvedDemand: boolean; hasUnresolvedOutput: boolean;
 }
+export interface QuotedMaterial { materialId: string; amount: number; retainedInProduct: boolean | null }
+export interface QuotedStage {
+    stepId: string; competencyId: string; minimumRanks: number; dependencies: string[];
+    inputs: QuotedMaterial[]; outputs: QuotedMaterial[];
+}
+export interface QuotedRecipe { instanceId: string | null; sourceDefinitionId: string; recipeId: string; stages: QuotedStage[] }
+export interface QuotedIngredient { definitionId: string; quantity: number; unitCost: number | null; knownCost: number | null }
+export interface ManufacturingQuote {
+    status: "resolved" | "partial" | "unavailable"; recipes: QuotedRecipe[]; ingredients: QuotedIngredient[];
+}
 export interface AssemblyResult {
     status: NativeStatus; knownConstructionCost: number; components: ComponentState[];
     shutdownConsequences: { instanceId: string; consequenceId: string }[];
     issues: NativeIssue[]; powerNetworks: Network[] | null;
-    requiredConstructionResources: Record<string, number> | null;
+    requiredConstructionResources: Record<string, number> | null; manufacturingQuote: ManufacturingQuote | null;
     derivedCreatureSize: string | null; knownRetainedMaterialMassPounds: number | null;
     unresolvedRetainedMassMaterials: string[] | null; isBodyMassComplete: boolean;
     productsWithUncertifiedMass: string[] | null;
@@ -213,7 +229,8 @@ export function namedOption(v: unknown): NamedOption {
 }
 export function decodeConfiguration(v: unknown): Configuration {
     const r = record(v); return {
-        definitionId: str(r.definitionId), name: str(r.name), materialSlots: strings(r.materialSlots),
+        definitionId: str(r.definitionId), name: str(r.name), componentCategory: optional(r.componentCategory, str),
+        materialSlots: strings(r.materialSlots),
         defaultRecipeId: optional(r.defaultRecipeId, str),
         constructionVariants: list(r.constructionVariants, x => {
             const t = record(x); return { id: str(t.id), recipeId: str(t.recipeId), bodySize: optional(t.bodySize, str) };
@@ -223,6 +240,12 @@ export function decodeConfiguration(v: unknown): Configuration {
         acceptsMountInterfaces: strings(r.acceptsMountInterfaces), powerSourceRequired: bool(r.powerSourceRequired),
         requiresContinuousPower: bool(r.requiresContinuousPower), designs: list(r.designs, namedOption),
         enhancements: list(r.enhancements, namedOption), powerSources: list(r.powerSources, namedOption),
+        powerSourceDetails: optional(r.powerSourceDetails, x => list(x, raw => {
+            const t = record(raw); return { ...namedOption(raw),
+                description: optional(t.description, str), rulesStatus: optional(t.rulesStatus, str),
+                operatingPrinciple: optional(t.operatingPrinciple, str), ratedOutput: optional(t.ratedOutput, nonnegative),
+                ratedOverdriveOutput: optional(t.ratedOverdriveOutput, nonnegative) };
+        })) ?? [],
         issues: list(r.issues, issue)
     };
 }
@@ -240,6 +263,34 @@ function network(v: unknown): Network {
         requestedHeadroom: optional(r.requestedHeadroom, integer), isOverallocated: optional(r.isOverallocated, bool),
         hasUnresolvedDemand: bool(r.hasUnresolvedDemand), hasUnresolvedOutput: bool(r.hasUnresolvedOutput) };
 }
+function decodeManufacturingQuote(v: unknown): ManufacturingQuote {
+    const r = record(v);
+    const material = (raw: unknown): QuotedMaterial => {
+        const t = record(raw); return { materialId: str(t.materialId), amount: nonnegative(t.amount),
+            retainedInProduct: optional(t.retainedInProduct, bool) };
+    };
+    const result: ManufacturingQuote = {
+        status: enumValue(r.status, ["resolved", "partial", "unavailable"] as const),
+        recipes: list(r.recipes, raw => {
+            const t = record(raw); return { instanceId: optional(t.instanceId, str),
+                sourceDefinitionId: str(t.sourceDefinitionId), recipeId: str(t.recipeId),
+                stages: list(t.stages, stage => {
+                    const s = record(stage); return { stepId: str(s.stepId), competencyId: str(s.competencyId),
+                        minimumRanks: nonnegative(s.minimumRanks), dependencies: strings(s.dependencies),
+                        inputs: list(s.inputs, material), outputs: list(s.outputs, material) };
+                }) };
+        }),
+        ingredients: list(r.ingredients, raw => {
+            const t = record(raw); return { definitionId: str(t.definitionId), quantity: nonnegative(t.quantity),
+                unitCost: optional(t.unitCost, nonnegative), knownCost: optional(t.knownCost, nonnegative) };
+        })
+    };
+    if (result.status === "unavailable" && (result.recipes.length || result.ingredients.length))
+        throw new Error("An unavailable manufacturing quotation may not contain partial stage rows.");
+    if (result.status === "resolved" && result.ingredients.some(x => x.unitCost === null || x.knownCost === null))
+        throw new Error("Resolved manufacturing quotation has an unknown price.");
+    return result;
+}
 export function decodeAssembly(v: unknown): AssemblyResult {
     const r = record(v);
     return { status: status(r.status), knownConstructionCost: nonnegative(r.knownConstructionCost),
@@ -248,6 +299,7 @@ export function decodeAssembly(v: unknown): AssemblyResult {
         }), issues: list(r.issues, issue), powerNetworks: optional(r.powerNetworks, x => list(x, network)),
         requiredConstructionResources: optional(r.requiredConstructionResources, x =>
             Object.fromEntries(Object.entries(record(x)).map(([id, count]) => [id, nonnegative(count)]))),
+        manufacturingQuote: optional(r.manufacturingQuote, decodeManufacturingQuote),
         derivedCreatureSize: optional(r.derivedCreatureSize, str),
         knownRetainedMaterialMassPounds: optional(r.knownRetainedMaterialMassPounds, nonnegative),
         unresolvedRetainedMassMaterials: optional(r.unresolvedRetainedMassMaterials, strings),
@@ -285,7 +337,8 @@ export function decodeConstructPreview(raw: unknown, movement: unknown): Constru
  * ingredients are unresolved. Do not announce unused points for partial quotes. */
 export function constructionAllocation(allowance: number | null, result: AssemblyResult | null): AllocationView {
     const exceeded = result?.issues.some(x => x.code === "construct-allowance-exceeded") ?? false;
-    const complete = result?.status === "Authorized";
+    const complete = result?.manufacturingQuote?.status === "resolved" ||
+        (result?.manufacturingQuote == null && result?.status === "Authorized");
     return { label: "Starting construction allowance", allowance: allowance === null ? undefined : String(allowance),
         used: result ? String(result.knownConstructionCost) : undefined,
         remaining: result && allowance !== null && complete ? String(allowance - result.knownConstructionCost) : undefined,

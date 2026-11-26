@@ -25,6 +25,6 @@ jobs:
         working-directory: src/CharacterSheet.Web/Client
         run: |
           npm run typecheck
-          npx tsc --ignoreConfig src/features/origin/construct/model.ts --outDir .construct-test-dist --module ESNext --target ES2022 --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck
-          node --test src/features/origin/construct/model.test.mjs
+          npx tsc --ignoreConfig src/features/origin/construct/model.ts src/features/origin/construct/native.ts --outDir .construct-test-dist --module ESNext --target ES2022 --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck
+          node --test src/features/origin/construct/model.test.mjs src/features/origin/construct/native.test.mjs
           rm -rf .construct-test-dist
