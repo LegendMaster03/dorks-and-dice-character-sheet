@@ -987,8 +987,8 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 grant => grant.GetProperty("identity")
                     .GetProperty("mechanicalDefinitionId").GetString() == trait)
                     .GetProperty("id").GetString()!;
-            var faerie = GrantId("trait.elf.drow.faerie-fire");
-            var darkness = GrantId("trait.elf.drow.darkness");
+            var faerie = GrantId("trait.faerie-fire");
+            var darkness = GrantId("trait.darkness");
             using var persisted = JsonDocument.Parse(stored.LedgerJson);
             var remaining = persisted.RootElement.GetProperty("remainingFreeCasts");
             Assert.Equal(2, remaining.EnumerateObject().Count());
