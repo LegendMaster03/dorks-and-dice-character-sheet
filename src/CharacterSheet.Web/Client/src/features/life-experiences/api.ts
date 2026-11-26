@@ -2,8 +2,8 @@ import { buildCharacterSheetApiUrl } from "../../character-api.js";
 import type { HostEnvironment } from "../../host-environment.js";
 import { previewNativeLifeExperiences, type NativeRulesetMetadata } from "../../rules-core-native-api.js";
 import type { DraftView, EvaluationView } from "../guided/contracts.js";
-import { decodeExperiencePreview, toNativeProposal, validationIssues, type ExperienceCatalog, type ExperienceDraft,
-    type ExperiencePreview, type NativeChoice, type ExperienceNode } from "./model.js";
+import { decodeExperiencePreview, toNativeProposal, replayExperienceProposal, reconsiderChoices, validationIssues, type ExperienceCatalog, type ExperienceDraft,
+    type ExperiencePreview, type ExperienceNode } from "./model.js";
 
 type Fetcher = typeof globalThis.fetch;
 
@@ -14,7 +14,7 @@ export async function loadExperienceTitleCatalog(environment: HostEnvironment, m
     if (!metadata.capabilities.nativeOptionSearch) throw new Error("Native catalog discovery is unavailable.");
     const nodes: ExperienceNode[] = [];
     const labels: Record<string, string> = Object.create(null);
-    for (const category of ["upbringing", "background", "skill", "competency", "item", "spell"] as const) {
+    for (const category of ["upbringing", "background", "skill", "competency"] as const) {
         const seen = new Set<string>();
         let total: number | null = null;
         for (let offset = 0; ; ) {
@@ -55,16 +55,41 @@ export async function loadExperienceTitleCatalog(environment: HostEnvironment, m
 /** A draft can exist with only one selected source. The native resolver needs
  * both, so do not send a placeholder ID. Evaluation has no state side effects. */
 export async function evaluateExperienceDraft(environment: HostEnvironment, metadata: NativeRulesetMetadata,
-    draft: DraftView<ExperienceDraft>, previousChoices: readonly NativeChoice[],
-    fetcher: Fetcher = globalThis.fetch.bind(globalThis)): Promise<EvaluationView<ExperiencePreview> | null> {
+    draft: DraftView<ExperienceDraft>, fetcher: Fetcher = globalThis.fetch.bind(globalThis)): Promise<EvaluationView<ExperiencePreview> | null> {
     if (draft.rulesetId !== metadata.rulesetId || draft.fingerprint !== metadata.fingerprint)
         throw new Error("Draft rules changed; explicit review is required.");
-    const proposal = toNativeProposal(draft.proposal, previousChoices);
+    let proposal = toNativeProposal(draft.proposal);
     if (!proposal) return null;
-    const envelope = await previewNativeLifeExperiences(environment, metadata, proposal, fetcher);
-    const result = decodeExperiencePreview(envelope.result, metadata);
-    return { rulesetId: envelope.rulesetId, fingerprint: envelope.fingerprint, draftRevision: draft.revision,
-        previewOnly: true, result, issues: validationIssues(result) };
+    // Discover the actual active branches before replaying complete selections.
+    // This supports reload of partial counted choices and changed sources without
+    // ever feeding an incomplete count or guessing the native option structure.
+    const rejected = new Set<string>();
+    const signature = (input: typeof proposal) => JSON.stringify([
+        Object.entries(input?.selections ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+        Object.entries(input?.startingItemIds ?? {}).sort(([a], [b]) => a.localeCompare(b))
+    ]);
+    for (let round = 0; round < 12; round++) {
+        const envelope = await previewNativeLifeExperiences(environment, metadata, proposal, fetcher);
+        const result = decodeExperiencePreview(envelope.result, metadata);
+        for (const issue of result.issues) if (["unexpected-life-experience-choice", "invalid-life-experience-selection",
+            "unexpected-starting-item-choice"].includes(issue.code)) rejected.add(issue.path);
+        const next = replayExperienceProposal(draft.proposal, result);
+        const filtered = { ...next, selections: Object.fromEntries(Object.entries(next.selections ?? {}).filter(([key]) => !rejected.has(key))),
+            startingItemIds: Object.fromEntries(Object.entries(next.startingItemIds ?? {}).filter(([key]) => !rejected.has(key))) };
+        const invalidSource = result.issues.some(i => i.code === "invalid-life-experience-source" ||
+            i.code === "invalid-life-experience-parent");
+        if (invalidSource || signature(filtered) === signature(proposal)) {
+            const review = invalidSource ? [] : [...new Set([...reconsiderChoices(draft.proposal, result), ...rejected])];
+            return { rulesetId: envelope.rulesetId, fingerprint: envelope.fingerprint, draftRevision: draft.revision,
+                previewOnly: true, result, issues: [...validationIssues(result), ...review.map((_, index) => ({
+                    id: "draft-review-" + index, severity: "conflict" as const,
+                    message: "A saved choice needs review against the current active native options.",
+                    decision: { id: "benefits", label: "Benefits" }
+                }))] };
+        }
+        proposal = filtered;
+    }
+    throw new Error("Native choice discovery did not stabilize. The draft remains unchanged.");
 }
 
 /** The host owns revisioned persistence, requests and stale-response handling.
