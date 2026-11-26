@@ -76,7 +76,8 @@ test("native allocation uses the returned total, allowance and status; no offer 
     assert.equal(allocationView(null).status, "unavailable");
 });
 test("stale and non-preview evaluations cannot drive edits", () => {
-    const p = proposal();
+    let p = proposal();
+    p = setInherited(p, evaluation(p), "red-breath", true);
     const e = evaluateBiological(p, { previewOnly: true }, false);
     assert.equal(e.current, false);
     assert.throws(() => setInherited(p, e, "red-breath", true));
