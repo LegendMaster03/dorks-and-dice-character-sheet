@@ -96,28 +96,82 @@ def run_browser():
         event("native-biological-allocation", result["preview"].get("allocation") is not None)
         snapshot("guided-biological-contributors")
         decision("Inheritance & Expression")
-        page.get_by_label("Search characteristics").fill("Creature Type")
-        def offer(color):
-            return page.get_by_role("heading", name=re.compile("Contributor.*" + color, re.I), level=4).locator("..").filter(
-                has=page.get_by_role("button", name="Inherit instance", exact=True)).first
-        inherited_red = save("red", lambda: offer("Red").get_by_role("button", name="Inherit instance", exact=True).click())
-        inherited = save("red", lambda: offer("Bronze").get_by_role("button", name="Inherit instance", exact=True).click())
-        old_ids = inherited_red["draft"]["proposal"]["biologicalTransmission"]["candidateIds"]
-        bronze = [x for x in inherited["draft"]["proposal"]["biologicalTransmission"]["candidateIds"] if x not in old_ids]
-        event("distinct-inherited-instances", len(bronze) == 1)
-        bronze_card = page.get_by_role("heading", name=re.compile("Contributor.*Bronze", re.I), level=4).locator("..").filter(
-            has=page.get_by_role("button", name="Remove inherited instance", exact=True))
-        expressed = save("red", lambda: bronze_card.get_by_role("button", name="Request expression", exact=True).click())
-        event("requested-expression", any(x["candidateId"] == bronze[0] for x in expressed["draft"]["proposal"]["manifestations"]))
+        contributors = result["draft"]["proposal"]["contributors"]
+        red_id, bronze_id = (c["id"] for c in contributors)
+        def group(res, key):
+            return next(g for g in res["preview"]["result"]["biologicalCombination"]["characteristics"]
+                        if g["characteristicId"] == key)
+        def candidate(res, key, contributor):
+            return next(o["candidate"] for o in group(res, key)["offers"]
+                        if o["candidate"]["contributorId"] == contributor)
+        def open_gene(key):
+            # Clear retained search and open the exact native group by its stable ID.
+            page.get_by_label("Search characteristics").fill("")
+            gene = page.locator('[data-biological-group="' + key + '"]')
+            expect(gene).to_be_visible()
+            if gene.get_attribute("open") is None:
+                gene.locator("summary").first.click()
+            return gene
+        def gene_action(res, key, contributor, action):
+            gene = open_gene(key)
+            cid = candidate(res, key, contributor)["id"]
+            card = gene.locator('[data-biological-offer="' + cid + '"]')
+            return save("red", lambda: card.get_by_role("button", name=action, exact=True).click())
+        # A complete physical foundation is required before allocation is resolved.
+        for key in ("creatureType", "size", "walkingSpeedFeet"):
+            result = gene_action(result, key, red_id, "Inherit instance")
+            result = gene_action(result, key, red_id, "Request expression")
+        event("biological-foundation-authorized", result["preview"]["result"]["isMechanicallyAuthorized"] is True)
+        base_allocation = result["preview"]["allocation"]
+        event("biological-foundation-allocation", base_allocation["status"] == "within-allowance")
+        key = "trait.breath-weapon"
+        breath = group(result, key)
+        event("native-breath-discovery", set(breath["presentation"]["recombinableParameters"]) == {"damageType", "area"})
+        red_breath = candidate(result, key, red_id)
+        bronze_breath = candidate(result, key, bronze_id)
+        event("distinct-breath-configurations",
+              red_breath["offeredParameters"]["damageType"] == "fire" and
+              bronze_breath["offeredParameters"]["damageType"] == "lightning" and
+              red_breath["offeredParameters"]["area"] != bronze_breath["offeredParameters"]["area"])
+        result = gene_action(result, key, red_id, "Inherit instance")
+        result = gene_action(result, key, bronze_id, "Inherit instance")
+        event("latent-breath-no-charge", result["preview"]["allocation"]["committedLoad"] == base_allocation["committedLoad"] and
+              not group(result, key)["expressions"])
+        genes = result["preview"]["result"]["biologicalCombination"]["inheritedInstances"]
+        event("two-latent-breath-instances", sum(g["isLatent"] for g in genes
+              if g["gene"]["sourceCandidateId"] in [red_breath["id"], bronze_breath["id"]]) == 2)
         snapshot("guided-biological-inheritance")
         decision("Configuration")
+        open_gene(key)
+        panel = page.locator('[data-biological-composition="' + key + '"]')
+        panel.locator("summary").first.click()
+        panel.get_by_label("Base expression source", exact=True).select_option(red_breath["id"])
+        panel.get_by_label("Damage Type source", exact=True).select_option(red_breath["id"])
+        panel.get_by_label("Area source", exact=True).select_option(bronze_breath["id"])
+        result = save("red", lambda: panel.get_by_role("button", name="Apply combined expression").click())
+        effective = group(result, key)["expressions"]
+        event("one-native-recombined-breath", len(effective) == 1 and
+              effective[0]["parameters"]["damageType"] == "fire" and
+              effective[0]["parameters"]["area"] == bronze_breath["offeredParameters"]["area"] and
+              effective[0]["parameterSources"]["damageType"] == red_breath["id"] and
+              effective[0]["parameterSources"]["area"] == bronze_breath["id"])
+        event("recombined-native-allocation", result["preview"]["allocation"]["status"] == "within-allowance" and
+              result["preview"]["allocation"]["committedLoad"] > base_allocation["committedLoad"])
         snapshot("guided-biological-configuration")
+        open_origin("red")
+        decision("Configuration")
+        open_gene(key)
+        expect(page.get_by_label("Area source", exact=True)).to_have_value(bronze_breath["id"])
+        event("recombined-configuration-reload", request(page, "recombined-reload", url("red"))["draft"]["proposal"] ==
+              result["draft"]["proposal"])
         decision("Contributors")
         page.get_by_label("Native biological contributor source").select_option("ancestry.dragonborn.blue")
         page.get_by_role("heading", name="Contributor 1", exact=True).locator("..").get_by_role(
             "button", name="Replace with selected source below").click()
         changed = save("red", lambda: page.get_by_role("button", name="Apply changes", exact=True).click())
-        event("unaffected-contributor-retention", bronze[0] in changed["draft"]["proposal"]["biologicalTransmission"]["candidateIds"])
+        event("unaffected-contributor-retention", bronze_breath["id"] in changed["draft"]["proposal"]["biologicalTransmission"]["candidateIds"])
+        event("affected-composition-cleared", not changed["draft"]["proposal"].get("relationships") and
+              not changed["draft"]["proposal"].get("resolutions"))
         open_origin("red")
         decision("Review")
         persisted = request(page, "biological-reload", url("red"))

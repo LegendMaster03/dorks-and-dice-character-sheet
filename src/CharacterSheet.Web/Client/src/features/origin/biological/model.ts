@@ -53,6 +53,7 @@ function supportsCompositions(proposal: NativeOriginDraftProposal, candidateIds:
             !rel.candidateIds.every(id => typeof id === "string" && candidateIds.includes(id) &&
                 proposal.manifestations.some(m => m.candidateId === id))) return false;
         ids.add(rel.id as string);
+        const participants = rel.candidateIds;
         const matches = resolutions.filter(res => record(res) && res.relationshipId === rel.id);
         const res = matches[0];
         return matches.length === 1 && record(res) && res.action === 4 && record(res.basis) &&
@@ -61,7 +62,7 @@ function supportsCompositions(proposal: NativeOriginDraftProposal, candidateIds:
             record(res.replacementParameters) && record(res.replacementParameterSources) &&
             sameKeys(res.replacementParameters, res.replacementParameterSources) &&
             Object.keys(res.replacementParameters).length > 0 &&
-            Object.values(res.replacementParameterSources).every(id => rel.candidateIds.includes(id));
+            Object.values(res.replacementParameterSources).every(id => participants.includes(id));
     });
 }
 function withoutCompositions(proposal: BiologicalProposal, remove: (relation: CompositionRelationship) => boolean) {

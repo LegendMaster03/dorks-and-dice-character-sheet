@@ -135,6 +135,7 @@ function renderOffer(context: BiologicalEditorContext, proposal: BiologicalPropo
     evaluation: BiologicalEvaluation, offer: Offer, locked: boolean, save: (p: BiologicalProposal) => void,
     configure: boolean): HTMLElement {
     const card = createElement("article", "dd-build-choice");
+    card.dataset.biologicalOffer = offer.id;
     card.append(createElement("h4", undefined, contributorLabel(context, proposal, offer)),
         createElement("p", undefined, "Source: " + sourceName(context, offer.sourceId)),
         createElement("p", undefined, "State: " + human(offer.state)));
@@ -206,6 +207,7 @@ function renderComposition(context: BiologicalEditorContext, proposal: Biologica
     const offers = composableOffers(group);
     if (offers.length < 2 && !prior) return null;
     const panel = createElement("details", "dd-guided-detail");
+    panel.dataset.biologicalComposition = group.id;
     panel.open = !!prior;
     panel.append(createElement("summary", undefined, "Combine inherited configurations"),
         createElement("p", undefined, "Choose a base expression and the source of each native recombinable parameter. The underlying genes remain separate; Rules Core validates the single proposed phenotype."));
@@ -286,6 +288,7 @@ function renderCharacteristics(context: BiologicalEditorContext, proposal: Biolo
                 groups.append(area);
             }
             const detail = createElement("details", "dd-biological-gene");
+            detail.dataset.biologicalGroup = group.id;
             const key = (configure ? "configure:" : "inherit:") + group.id;
             const inheritedCount = offers.filter(o => o.inherited).length;
             const expressedCount = offers.filter(o => o.state === "expressed").length;
