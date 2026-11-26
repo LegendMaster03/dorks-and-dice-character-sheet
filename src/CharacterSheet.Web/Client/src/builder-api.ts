@@ -53,11 +53,12 @@ export interface CharacterBuildResponse {
     builderStatus: string;
     readOnly: boolean;
     foundationalSelections: FoundationalRuleSelectionResponse[];
+    upbringingId?: string | null;
     baseAbilityScoreInputs: BaseAbilityScoreInputResponse[];
     progressionEntries: CharacterAdvancementEntryResponse[];
 }
 
-export type CharacterBuilderChoice = "species" | "subspecies" | "background" | "deity" | "startingClass" | "subclass";
+export type CharacterBuilderChoice = "species" | "subspecies" | "background" | "upbringing" | "deity" | "startingClass" | "subclass";
 
 export function buildCharacterBuildBackendUrl(
     environment: HostEnvironment,
@@ -72,8 +73,8 @@ export function buildCharacterBuildBackendUrl(
     if (choice === "subspecies") {
         return buildCharacterSheetApiUrl(environment, `${base}/subspecies`);
     }
-    if (choice === "background") {
-        return buildCharacterSheetApiUrl(environment, `${base}/background`);
+    if (choice === "background" || choice === "upbringing") {
+        return buildCharacterSheetApiUrl(environment, `${base}/${choice}`);
     }
     if (choice === "deity") {
         return buildCharacterSheetApiUrl(environment, `${base}/deity`);

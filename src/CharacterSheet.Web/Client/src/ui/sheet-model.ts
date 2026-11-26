@@ -316,7 +316,9 @@ export function getGuidedBuilderSectionStates(
             // migration. It does not establish an earned Life Experiences pair.
             status: "incomplete",
             detail: backgroundResolved
-                ? "Background configured. Native Upbringing and Life Experiences integration is pending."
+                ? builder.build.upbringingId
+                    ? "Upbringing and Background selected. Combined benefits are pending."
+                    : "Background configured. Choose an Upbringing. Combined Life Experiences integration is pending."
                 : backgroundDetail
         },
         {

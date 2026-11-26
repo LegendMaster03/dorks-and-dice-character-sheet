@@ -301,6 +301,7 @@ export function createInitialBuilderState(): CharacterBuilderUiState {
             species: { status: "none" },
             subspecies: { status: "none" },
             background: { status: "none" },
+            upbringing: { status: "none" },
             deity: { status: "none" },
             startingClass: { status: "none" },
             subclass: { status: "none" }
@@ -328,6 +329,7 @@ function builderStateFromBuild(
             species: loadingRuleReference(build, "species"),
             subspecies: loadingRuleReference(build, "subspecies"),
             background: loadingRuleReference(build, "background"),
+            upbringing: { status: "none" },
             deity: loadingRuleReference(build, "deity"),
             startingClass: loadingRuleReference(build, "startingClass"),
             subclass: loadingRuleReference(build, "subclass")

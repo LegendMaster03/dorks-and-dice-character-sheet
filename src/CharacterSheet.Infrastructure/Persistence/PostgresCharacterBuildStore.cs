@@ -24,8 +24,8 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default)
     {
-        if (IsSpeciesOrSubspecies(category))
-            return await MutateLegacyOriginSelectionAsync(characterId,
+        if (IsSpeciesOrSubspecies(category) || category == CharacterFoundationalSelectionCategory.Upbringing)
+            return await MutateLockedSelectionAsync(characterId, category,
                 root => root.SetFoundationalSelection(category, ruleConceptKey, changedAt),
                 cancellationToken);
         var root = await GetTrackedAsync(characterId, cancellationToken);
@@ -41,8 +41,8 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
         DateTimeOffset changedAt,
         CancellationToken cancellationToken = default)
     {
-        if (IsSpeciesOrSubspecies(category))
-            return await MutateLegacyOriginSelectionAsync(characterId,
+        if (IsSpeciesOrSubspecies(category) || category == CharacterFoundationalSelectionCategory.Upbringing)
+            return await MutateLockedSelectionAsync(characterId, category,
                 root => root.ClearFoundationalSelection(category, changedAt),
                 cancellationToken);
         var root = await GetTrackedAsync(characterId, cancellationToken);
@@ -57,10 +57,10 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
     /// not have a canonical committed Origin. Both this mutation and initial
     /// Origin commit acquire the character root row lock first, so a selection
     /// cannot race in between canonical Origin activation and this check.
-    /// Other foundational selections and earned advancement remain separate.
+    /// Upbringing uses the same lock to serialize competing first selections.
     /// </summary>
-    private async Task<CharacterSheetRoot?> MutateLegacyOriginSelectionAsync(
-        Guid characterId, Action<CharacterSheetRoot> mutation,
+    private async Task<CharacterSheetRoot?> MutateLockedSelectionAsync(
+        Guid characterId, CharacterFoundationalSelectionCategory category, Action<CharacterSheetRoot> mutation,
         CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
@@ -70,7 +70,7 @@ public sealed class PostgresCharacterBuildStore(CharacterSheetDbContext dbContex
             .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
         if (locked is null)
             return null;
-        if (await dbContext.AuthorizedOrigins.AsNoTracking().AnyAsync(
+        if (IsSpeciesOrSubspecies(category) && await dbContext.AuthorizedOrigins.AsNoTracking().AnyAsync(
                 value => value.CharacterId == characterId, cancellationToken))
             throw new CharacterOriginManagedException();
 

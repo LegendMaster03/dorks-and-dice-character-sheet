@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CharacterSheet.Application.Characters;
 using CharacterSheet.Application.Hosting;
+using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Domain.Characters;
 using CharacterSheet.Infrastructure.Hosting;
 using CharacterSheet.Infrastructure.Persistence;
@@ -547,6 +550,54 @@ public sealed class CharacterBuildWorkflowTests
         Assert.Equal(0, await db.CharacterAdvancementEntries.CountAsync());
     }
 
+    [Fact]
+    public async Task UpbringingSavesIndependentlyOfBackgroundAndRequiresASelectableNativeSource()
+    {
+        using var factory = new CharacterBuildWorkflowFactory();
+        var characterId = Guid.NewGuid();
+        factory.Context = Context(Character(characterId, "Life Experiences", "Active"));
+        var root = $"/api/characters/{characterId:D}";
+        using var initialize = await factory.SendHostedAsync(HttpMethod.Post, root + "/sheet");
+        Assert.Equal(HttpStatusCode.OK, initialize.StatusCode);
+
+        using var upbringing = await factory.SendHostedAsync(HttpMethod.Put, root + "/build/upbringing",
+            new { conceptKey = "upbringing.elf.wood" });
+        Assert.Equal(HttpStatusCode.OK, upbringing.StatusCode);
+        var first = await upbringing.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.NotNull(first);
+        Assert.Equal("upbringing.elf.wood", first.UpbringingId);
+        Assert.Empty(first.FoundationalSelections);
+
+        using var background = await factory.SendHostedAsync(HttpMethod.Put, root + "/build/background",
+            new { conceptKey = "background:entertainer" });
+        Assert.Equal(HttpStatusCode.OK, background.StatusCode);
+        using var inherited = await factory.SendHostedAsync(HttpMethod.Put, root + "/build/upbringing",
+            new { conceptKey = "upbringing.elf.general" });
+        Assert.Equal(HttpStatusCode.BadRequest, inherited.StatusCode);
+
+        using var reload = await factory.SendHostedAsync(HttpMethod.Get, root + "/build");
+        var saved = await reload.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.NotNull(saved);
+        Assert.Equal("upbringing.elf.wood", saved.UpbringingId);
+        Assert.Equal("background:entertainer", Assert.Single(saved.FoundationalSelections).RuleConceptKey);
+
+        factory.Context = Context(Character(characterId, "Life Experiences", "Archived", DateTimeOffset.UtcNow));
+        using var archived = await factory.SendHostedAsync(HttpMethod.Delete, root + "/build/upbringing");
+        Assert.Equal(HttpStatusCode.Conflict, archived.StatusCode);
+        factory.Context = Context();
+        using var denied = await factory.SendHostedAsync(HttpMethod.Put, root + "/build/upbringing",
+            new { conceptKey = "upbringing.elf.wood" });
+        Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+
+        factory.Context = Context(Character(characterId, "Life Experiences", "Active"));
+        using var clear = await factory.SendHostedAsync(HttpMethod.Delete, root + "/build/upbringing");
+        Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+        var cleared = await clear.Content.ReadFromJsonAsync<CharacterBuildView>();
+        Assert.NotNull(cleared);
+        Assert.Null(cleared.UpbringingId);
+        Assert.Equal("background:entertainer", Assert.Single(cleared.FoundationalSelections).RuleConceptKey);
+    }
+
     private static ToolHostAuthenticationContext Context(params ToolHostCharacterContext[] characters) =>
         new(
             1,
@@ -576,6 +627,8 @@ public sealed class CharacterBuildWorkflowTests
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IToolHostAuthenticationClient>();
+                services.RemoveAll<INativeRulesCoreGateway>();
+                services.AddSingleton<INativeRulesCoreGateway, NativeUpbringingCatalog>();
                 services.AddSingleton<IToolHostAuthenticationClient>(new MutableAuthenticationClient(this));
             });
         }
@@ -605,6 +658,37 @@ public sealed class CharacterBuildWorkflowTests
             {
                 _database.Dispose();
             }
+        }
+
+        private sealed class NativeUpbringingCatalog : INativeRulesCoreGateway
+        {
+            public Task<JsonNode> GetNativeRulesetAsync(CancellationToken cancellationToken) =>
+                Task.FromResult<JsonNode>(new JsonObject { ["rulesetId"] = "first-party-001", ["fingerprint"] = "test" });
+
+            public Task<JsonNode> SearchNativeOptionsAsync(string fingerprint, string category, string? query,
+                int limit, int offset, CancellationToken cancellationToken)
+            {
+                Assert.Equal("test", fingerprint);
+                Assert.Equal("upbringing", category);
+                var options = new JsonArray();
+                if (query is "upbringing.elf.wood" or "upbringing.elf.general")
+                    options.Add(new JsonObject
+                    {
+                        ["id"] = query, ["kind"] = "upbringing",
+                        ["lifeExperience"] = new JsonObject { ["selectable"] = query == "upbringing.elf.wood" }
+                    });
+                return Task.FromResult<JsonNode>(new JsonObject
+                {
+                    ["rulesetId"] = "first-party-001", ["fingerprint"] = fingerprint, ["category"] = category,
+                    ["includesLifeExperienceHierarchy"] = true, ["options"] = options
+                });
+            }
+
+            public Task<JsonNode> EvaluateNativeAdvancementAsync(JsonElement request, CancellationToken cancellationToken) =>
+                throw new NotSupportedException();
+
+            public Task<JsonNode> ProjectNativeCharacterAsync(JsonElement request, CancellationToken cancellationToken) =>
+                throw new NotSupportedException();
         }
 
         private sealed class MutableAuthenticationClient(CharacterBuildWorkflowFactory factory)

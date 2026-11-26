@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CharacterSheet.Application.Persistence;
 using CharacterSheet.Application.RulesCore;
 using CharacterSheet.Application.Site;
@@ -13,7 +14,9 @@ public enum CharacterBuildAccessStatus
     Unauthenticated,
     SheetNotInitialized,
     OriginManaged,
-    ArchivedReadOnly
+    ArchivedReadOnly,
+    InvalidUpbringing,
+    UpbringingCatalogUnavailable
 }
 
 public static class CharacterBuildSelectionCategories
@@ -62,7 +65,8 @@ public sealed record CharacterBuildView(
     bool ReadOnly,
     IReadOnlyList<FoundationalRuleSelectionView> FoundationalSelections,
     IReadOnlyList<BaseAbilityScoreInputView> BaseAbilityScoreInputs,
-    IReadOnlyList<CharacterAdvancementEntryView> ProgressionEntries);
+    IReadOnlyList<CharacterAdvancementEntryView> ProgressionEntries,
+    string? UpbringingId = null);
 
 public sealed record CharacterBuildResult(
     CharacterBuildAccessStatus Status,
@@ -76,7 +80,8 @@ public sealed class CharacterBuildService(
     ISiteCharacterAccessGateway siteCharacterAccess,
     ICharacterBuildStore buildStore,
     TimeProvider timeProvider,
-    IRulesCoreGateway? rulesCore = null)
+    IRulesCoreGateway? rulesCore = null,
+    INativeRulesCoreGateway? nativeRules = null)
 {
     public async Task<CharacterBuildResult> GetAsync(
         Guid characterId,
@@ -232,6 +237,65 @@ public sealed class CharacterBuildService(
         CancellationToken cancellationToken = default) =>
         MutateAsync(characterId, (changedAt, token) => buildStore.ClearFoundationalSelectionAsync(
             characterId, CharacterFoundationalSelectionCategory.Background, changedAt, token), cancellationToken);
+
+    public async Task<CharacterBuildResult> SetUpbringingAsync(
+        Guid characterId, string upbringingId, CancellationToken cancellationToken = default)
+    {
+        var access = await siteCharacterAccess.GetAuthorizedCharacterAsync(characterId, cancellationToken);
+        var denied = MapDeniedAccess(access.Status);
+        if (denied is not null) return denied;
+        var character = access.Character!;
+        if (!character.AllowsOrdinaryEditingByLifecycle)
+            return new(CharacterBuildAccessStatus.ArchivedReadOnly);
+
+        if (upbringingId is null || upbringingId.Length is < 11 or > 160 ||
+            !upbringingId.StartsWith("upbringing.", StringComparison.Ordinal) ||
+            upbringingId.Any(value => value is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-')))
+            return new(CharacterBuildAccessStatus.InvalidUpbringing);
+        if (nativeRules is null) return new(CharacterBuildAccessStatus.UpbringingCatalogUnavailable);
+
+        try
+        {
+            var metadata = JsonSerializer.SerializeToElement(await nativeRules.GetNativeRulesetAsync(cancellationToken));
+            if (metadata.ValueKind != JsonValueKind.Object ||
+                !metadata.TryGetProperty("rulesetId", out var ruleset) || ruleset.ValueKind != JsonValueKind.String ||
+                !metadata.TryGetProperty("fingerprint", out var snapshot) ||
+                snapshot.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(snapshot.GetString()))
+                return new(CharacterBuildAccessStatus.UpbringingCatalogUnavailable);
+
+            var response = JsonSerializer.SerializeToElement(await nativeRules.SearchNativeOptionsAsync(
+                snapshot.GetString()!, "upbringing", upbringingId, 100, 0, cancellationToken));
+            if (response.ValueKind != JsonValueKind.Object ||
+                !response.TryGetProperty("rulesetId", out var pageRuleset) || !JsonElement.DeepEquals(pageRuleset, ruleset) ||
+                !response.TryGetProperty("fingerprint", out var pageSnapshot) || !JsonElement.DeepEquals(pageSnapshot, snapshot) ||
+                !response.TryGetProperty("category", out var category) || category.ValueKind != JsonValueKind.String || !category.ValueEquals("upbringing") ||
+                !response.TryGetProperty("includesLifeExperienceHierarchy", out var hierarchy) ||
+                hierarchy.ValueKind != JsonValueKind.True ||
+                !response.TryGetProperty("options", out var options) || options.ValueKind != JsonValueKind.Array)
+                return new(CharacterBuildAccessStatus.UpbringingCatalogUnavailable);
+
+            if (!options.EnumerateArray().Any(option =>
+                    option.ValueKind == JsonValueKind.Object &&
+                    option.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String && id.ValueEquals(upbringingId) &&
+                    option.TryGetProperty("kind", out var kind) && kind.ValueKind == JsonValueKind.String && kind.ValueEquals("upbringing") &&
+                    option.TryGetProperty("lifeExperience", out var source) && source.ValueKind == JsonValueKind.Object &&
+                    source.TryGetProperty("selectable", out var selectable) && selectable.ValueKind == JsonValueKind.True))
+                return new(CharacterBuildAccessStatus.InvalidUpbringing);
+        }
+        catch (RulesCoreGatewayException)
+        {
+            return new(CharacterBuildAccessStatus.UpbringingCatalogUnavailable);
+        }
+
+        var root = await buildStore.SetFoundationalSelectionAsync(characterId, CharacterFoundationalSelectionCategory.Upbringing,
+            upbringingId, timeProvider.GetUtcNow(), cancellationToken);
+        return root is null ? new(CharacterBuildAccessStatus.SheetNotInitialized) : Ready(root, character);
+    }
+
+    public Task<CharacterBuildResult> ClearUpbringingAsync(
+        Guid characterId, CancellationToken cancellationToken = default) =>
+        MutateAsync(characterId, (changedAt, token) => buildStore.ClearFoundationalSelectionAsync(
+            characterId, CharacterFoundationalSelectionCategory.Upbringing, changedAt, token), cancellationToken);
 
     public Task<CharacterBuildResult> SetDeityAsync(
         Guid characterId,
@@ -398,6 +462,7 @@ public sealed class CharacterBuildService(
         // Expose the legacy RaceSpecies category as Species, preferring a
         // canonical Species selection when both categories are present.
         var foundational = root.FoundationalSelections
+            .Where(value => value.Category != CharacterFoundationalSelectionCategory.Upbringing)
             .GroupBy(value => value.Category == CharacterFoundationalSelectionCategory.RaceSpecies
                 ? CharacterFoundationalSelectionCategory.Species
                 : value.Category)
@@ -440,7 +505,9 @@ public sealed class CharacterBuildService(
                     value.CreatedAt,
                     value.UpdatedAt,
                     value.Level))
-                .ToArray());
+                .ToArray(),
+            root.FoundationalSelections.SingleOrDefault(value =>
+                value.Category == CharacterFoundationalSelectionCategory.Upbringing)?.RuleConceptKey);
     }
 
     private static string MapCategory(CharacterFoundationalSelectionCategory category) => category switch
