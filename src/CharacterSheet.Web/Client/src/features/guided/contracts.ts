@@ -15,6 +15,7 @@ export interface NativePreviewEnvelope<T> extends CatalogIdentity {
 export interface NativePreset {
     readonly id: string;
     readonly name: string;
+    readonly description?: string | null;
     readonly kind: string;
     readonly parentId: string | null;
     readonly selectable: boolean;
@@ -29,6 +30,7 @@ export interface NativeMethodReference {
 export interface NativeMethod {
     readonly reference: NativeMethodReference;
     readonly name: string;
+    readonly description?: string | null;
     readonly stage: string | null;
     readonly support: string;
     readonly defaultAvailability: string | null;
