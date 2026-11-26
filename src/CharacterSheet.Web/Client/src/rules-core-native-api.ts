@@ -1,3 +1,4 @@
+import type { NativeDiscoveryEnvelope, NativeMethod, NativeMethodDiscovery, NativePreset, NativePresetDiscovery, NativePreviewEnvelope } from "./features/guided/contracts.js";
 /**
  * Calls native Rules Core mechanics through the authenticated same-origin bridge and validates
  * snapshot identities before accepting results.
@@ -285,4 +286,145 @@ export async function projectNativeCharacter(
     // Preserve unsupported/partial values rather than converting missing
     // numerical outcomes to zero. This is not a legacy DTO adapter.
     return result as unknown as NativeCharacterProjection;
+}
+
+/** Match the fingerprint and preview marker before exposing bounded native data.
+ * Method-specific adapters validate their result fields; discovery never grants authority. */
+async function guidedDiscovery(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    path: string, params: Record<string, string>, fetcher: NativeFetcher): Promise<Record<string, unknown>> {
+    assertRuleset(metadata);
+    const query = new URLSearchParams({ ...params, fingerprint: metadata.fingerprint });
+    const result = await requestJson(environment, path + "?" + query.toString(), "GET", undefined, fetcher);
+    assertMatchingSnapshot(metadata, result);
+    if (result.previewOnly !== true) throw new Error("Invalid native discovery response.");
+    return result;
+}
+function discoveryIdentity(metadata: NativeRulesetMetadata): NativeDiscoveryEnvelope {
+    return { contractVersion: 1, rulesetId: metadata.rulesetId, fingerprint: metadata.fingerprint, previewOnly: true };
+}
+// Older native snapshots omit the additive field. Preserve that distinction;
+// only bounded authored description text can reach a workspace.
+function nativeDescription(value: unknown): { description?: string | null } {
+    if (value === undefined) return {};
+    if (value === null) return { description: null };
+    if (typeof value !== "string" || value.length > 4000 || !value.trim())
+        throw new Error("Invalid native discovery description.");
+    return { description: value };
+}
+export async function discoverNativeOriginPresets(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)): Promise<NativePresetDiscovery> {
+    const result = await guidedDiscovery(environment, metadata, "/api/native-rules/origins/presets", {}, fetcher);
+    if (!Array.isArray(result.presets)) throw new Error("Invalid native preset discovery.");
+    const presets = result.presets.map((value: unknown): NativePreset => {
+        if (!isObject(value) || typeof value.id !== "string" || typeof value.name !== "string" ||
+            typeof value.kind !== "string" || (value.parentId !== null && typeof value.parentId !== "string") ||
+            typeof value.selectable !== "boolean" || typeof value.ancestrySelectionRequired !== "boolean" ||
+            (value.defaultUpbringingId !== null && typeof value.defaultUpbringingId !== "string") ||
+            !Array.isArray(value.acquisitionMethodIds) || !value.acquisitionMethodIds.every(id => typeof id === "string"))
+            throw new Error("Invalid native preset.");
+        return { id: value.id, name: value.name, kind: value.kind, parentId: value.parentId as string | null,
+            ...nativeDescription(value.description),
+            selectable: value.selectable, ancestrySelectionRequired: value.ancestrySelectionRequired,
+            defaultUpbringingId: value.defaultUpbringingId as string | null,
+            acquisitionMethodIds: value.acquisitionMethodIds as string[] };
+    });
+    return { ...discoveryIdentity(metadata), presets };
+}
+export async function discoverNativeOriginMethods(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    creatureTypeId?: string, fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)): Promise<NativeMethodDiscovery> {
+    const result = await guidedDiscovery(environment, metadata, "/api/native-rules/origins/methods",
+        creatureTypeId ? { creatureTypeId } : {}, fetcher);
+    if (!Array.isArray(result.methods)) throw new Error("Invalid native method discovery.");
+    const methods = result.methods.map((value: unknown): NativeMethod => {
+        if (!isObject(value) || !isObject(value.reference) || typeof value.reference.ruleId !== "string" ||
+            typeof value.reference.methodId !== "string" || typeof value.name !== "string" ||
+            (value.stage !== null && typeof value.stage !== "string") || typeof value.support !== "string" ||
+            (value.defaultAvailability !== null && typeof value.defaultAvailability !== "string"))
+            throw new Error("Invalid native method.");
+        return { reference: { ruleId: value.reference.ruleId, methodId: value.reference.methodId },
+            name: value.name, stage: value.stage as string | null, support: value.support,
+            ...nativeDescription(value.description),
+            defaultAvailability: value.defaultAvailability as string | null };
+    });
+    return { ...discoveryIdentity(metadata), methods };
+}
+export interface NativeChoiceCatalogDiscovery extends NativeDiscoveryEnvelope {
+    choices: { catalogId: string; status: string; requiresCharacterAuthority: boolean;
+        options: readonly { id: string; name: string }[] };
+}
+export async function discoverNativeOriginChoiceCatalog(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    catalogId: string, fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)): Promise<NativeChoiceCatalogDiscovery> {
+    const response = await guidedDiscovery(environment, metadata, "/api/native-rules/origins/choice-catalog", { catalogId }, fetcher);
+    const c = response.choices;
+    if (!isObject(c) || c.catalogId !== catalogId || typeof c.status !== "string" ||
+        typeof c.requiresCharacterAuthority !== "boolean" || !Array.isArray(c.options))
+        throw new Error("Invalid native choice catalog.");
+    const options = c.options.map((option: unknown) => {
+        if (!isObject(option) || typeof option.id !== "string" || typeof option.name !== "string")
+            throw new Error("Invalid native catalog option.");
+        return { id: option.id, name: option.name };
+    });
+    return { ...discoveryIdentity(metadata), choices: { catalogId, status: c.status,
+        requiresCharacterAuthority: c.requiresCharacterAuthority, options } };
+}
+export async function discoverNativeConstructConfiguration(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    definitionId: string, fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)):
+    Promise<NativeDiscoveryEnvelope & { configuration: Record<string, unknown> }> {
+    const response = await guidedDiscovery(environment, metadata,
+        "/api/native-rules/origins/construct/components/" + encodeURIComponent(definitionId) + "/configuration", {}, fetcher);
+    if (!isObject(response.configuration)) throw new Error("Invalid native construct configuration.");
+    return { ...discoveryIdentity(metadata), configuration: response.configuration };
+}
+export interface NativeLifeExperienceProposal {
+    upbringingId: string;
+    backgroundId: string;
+    selections?: Readonly<Record<string, readonly string[]>>;
+    startingItemIds?: Readonly<Record<string, string>>;
+}
+export interface NativeLifeExperiencePreviewResult {
+    status: string;
+    sources: readonly { sourceId: string; occurrenceId: string; inherited: boolean }[];
+    choices: readonly { key: string; kind: string; count: number; optionIds: readonly string[]; contextConstraint?: string | null }[];
+    selectedPaths: readonly { sourceId: string; occurrenceId: string; benefitId: string; optionId: string }[];
+    candidateGrants: readonly { sourceId: string; occurrenceId: string; benefitId: string; optionId?: string | null;
+        kind: string; targetId: string; ranks: number; proficient: boolean; originalTargetId?: string | null;
+        authoredEffect?: unknown; grantPath?: string | null }[];
+    startingItems: readonly { key: string; name: string; quantity: number; ordinaryOptions: readonly string[];
+        expectedEquipmentTypeId?: string | null; requiresMundane: boolean; requiresInexpensive: boolean; selectedItemId?: string | null }[];
+    currency: readonly { sourceId: string; occurrenceId: string; currency: string; quantity: number }[];
+    candidateEquipment: unknown;
+    equipmentReplacements: readonly unknown[];
+    issues: readonly unknown[];
+    earnedProjection: null;
+}
+async function guidedPreview(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    path: string, input: object, fetcher: NativeFetcher): Promise<Record<string, unknown>> {
+    assertRuleset(metadata);
+    const response = await requestJson(environment, path, "POST",
+        { ...input, rulesetId: metadata.rulesetId, fingerprint: metadata.fingerprint }, fetcher);
+    assertMatchingSnapshot(metadata, response);
+    if (response.previewOnly !== true || !isObject(response.result)) throw new Error("Invalid native preview.");
+    return response;
+}
+export async function previewNativeLifeExperiences(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    proposal: NativeLifeExperienceProposal, fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)):
+    Promise<NativePreviewEnvelope<NativeLifeExperiencePreviewResult> & { committed: false }> {
+    const response = await guidedPreview(environment, metadata, "/api/native-rules/origins/life-experiences/preview", { proposal }, fetcher);
+    const result = response.result as Record<string, unknown>;
+    if (response.committed !== false || result.earnedProjection != null || typeof result.status !== "string" ||
+        !["sources", "choices", "selectedPaths", "candidateGrants", "startingItems", "currency", "equipmentReplacements", "issues"]
+            .every(key => Array.isArray(result[key]))) throw new Error("Invalid native Life Experiences preview.");
+    return { ...discoveryIdentity(metadata), committed: false,
+        result: result as unknown as NativeLifeExperiencePreviewResult };
+}
+/** The assembly adapter owns its native DTO and result decoding (Workstream D).
+ * Accept only preview data here, never a verified operating or modification plan. */
+export async function previewNativeConstruct(environment: HostEnvironment, metadata: NativeRulesetMetadata,
+    proposal: import("./features/origin/origin-api.js").NativeOriginDraftProposal, assembly: object,
+    fetcher: NativeFetcher = globalThis.fetch.bind(globalThis)):
+    Promise<NativePreviewEnvelope<Record<string, unknown>> & { movementModes: unknown }> {
+    const response = await guidedPreview(environment, metadata, "/api/native-rules/origins/construct/preview",
+        { proposal, assembly }, fetcher);
+    return { ...discoveryIdentity(metadata), result: response.result as Record<string, unknown>,
+        movementModes: response.movementModes };
 }

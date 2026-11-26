@@ -1,0 +1,384 @@
+import type { AllocationView, ValidationIssue } from "../../guided/contracts.js";
+import type { NativeOriginDraftProposal, NativeOriginDraftManifestation } from "../origin-api.js";
+
+/** Initial construction only. No fuel snapshot, resource debit, or trusted runtime
+ * override is represented by this player-editable input. The host supplies allowance. */
+export interface ComponentInstance {
+    instanceId: string;
+    definitionId: string;
+    materials?: Readonly<Record<string, string>>;
+    connectedTo?: readonly string[];
+    enabled: boolean;
+    modeId?: string | null;
+    designId?: string | null;
+    enhancementIds?: readonly string[];
+    powerSourceId?: string | null;
+    parentInstanceId?: string | null;
+    mountInterfaceId?: string | null;
+    constructionVariantId?: string | null;
+    protectedRegionId?: string | null;
+}
+export interface PowerConnection { fromInstanceId: string; toInstanceId: string }
+export interface AssemblyInput {
+    components: readonly ComponentInstance[];
+    initialAllowance: number | null;
+    initialConstruction: true;
+    powerConnections?: readonly PowerConnection[];
+}
+/** One method-specific payload alongside the canonical Origin proposal.
+ * This is a transport contract for A's draft integration, not a separate store. */
+export interface ConstructDraft { proposal: NativeOriginDraftProposal; assembly: AssemblyInput }
+export const constructReference = { ruleId: "rule.creature-origination", methodId: "construct-assembly" } as const;
+export function emptyConstructDraft(id: string, allowance: number | null): ConstructDraft {
+    if (!id.trim() || (allowance !== null && (!Number.isSafeInteger(allowance) || allowance < 0)))
+        throw new Error("Invalid initial Construct draft identity or allowance.");
+    return { proposal: { id, intent: "Custom", method: constructReference,
+        contributors: [], candidates: [], manifestations: [] },
+        assembly: { components: [], initialAllowance: allowance, initialConstruction: true } };
+}
+export function addComponent(draft: ConstructDraft, instanceId: string, definitionId: string): ConstructDraft {
+    if (!/^[A-Za-z0-9_.-]{1,96}$/.test(instanceId) || !definitionId.trim() ||
+        draft.assembly.components.some(x => x.instanceId === instanceId))
+        throw new Error("A component requires a distinct stable instance identity.");
+    return { ...draft, assembly: { ...draft.assembly, components: [...draft.assembly.components,
+        { instanceId, definitionId, enabled: true }] } };
+}
+export type ComponentPatch = Partial<Omit<ComponentInstance, "instanceId" | "definitionId">>;
+export function editComponent(draft: ConstructDraft, instanceId: string, patch: ComponentPatch): ConstructDraft {
+    if (!draft.assembly.components.some(x => x.instanceId === instanceId)) throw new Error("Component no longer exists.");
+    return { ...draft, assembly: { ...draft.assembly, components: draft.assembly.components.map(x =>
+        x.instanceId === instanceId ? { ...x, ...patch, instanceId: x.instanceId, definitionId: x.definitionId } : x) } };
+}
+/** Remove only exact-instance links that necessarily cease to exist. Keep all
+ * other selections, including manifestations needing native revalidation. */
+export function removeComponent(draft: ConstructDraft, instanceId: string): ConstructDraft {
+    if (!draft.assembly.components.some(x => x.instanceId === instanceId)) throw new Error("Component no longer exists.");
+    const components = draft.assembly.components.filter(x => x.instanceId !== instanceId).map(x => {
+        const links = x.connectedTo?.filter(id => id !== instanceId);
+        const changedLinks = links?.length !== x.connectedTo?.length;
+        const removedParent = x.parentInstanceId === instanceId;
+        return changedLinks || removedParent ? { ...x,
+            ...(changedLinks ? { connectedTo: links } : {}),
+            ...(removedParent ? { parentInstanceId: null, mountInterfaceId: null } : {}) } : x;
+    });
+    const powerConnections = draft.assembly.powerConnections?.filter(x =>
+        x.fromInstanceId !== instanceId && x.toInstanceId !== instanceId);
+    return { ...draft, assembly: { ...draft.assembly, components, powerConnections } };
+}
+/** ConnectedTo is a physical, undirected declaration, independent of explicit
+ * power wiring. Mounts are proposed physical contacts, not client-verified links. */
+export function hasPhysicalDeclaration(draft: ConstructDraft, a: string, b: string): boolean {
+    return draft.assembly.components.some(x => (x.instanceId === a && x.connectedTo?.includes(b)) ||
+        (x.instanceId === b && x.connectedTo?.includes(a)));
+}
+export function hasProposedContact(draft: ConstructDraft, a: string, b: string): boolean {
+    return hasPhysicalDeclaration(draft, a, b) || draft.assembly.components.some(x =>
+        x.instanceId === a && x.parentInstanceId === b || x.instanceId === b && x.parentInstanceId === a);
+}
+function requireDistinctPair(draft: ConstructDraft, a: string, b: string): void {
+    if (a === b || ![a, b].every(id => draft.assembly.components.some(x => x.instanceId === id)))
+        throw new Error("A connection needs distinct installed component instances.");
+}
+export function setPhysicalConnection(draft: ConstructDraft, a: string, b: string, connected: boolean): ConstructDraft {
+    requireDistinctPair(draft, a, b);
+    if (connected) {
+        if (hasPhysicalDeclaration(draft, a, b)) return draft;
+        const part = draft.assembly.components.find(x => x.instanceId === a)!;
+        return editComponent(draft, a, { connectedTo: [...(part.connectedTo ?? []), b] });
+    }
+    // Remove the exact pair in either direction. Preserve explicit wiring
+    // evidence for native review if it no longer has a physical contact.
+    const components = draft.assembly.components.map(x => {
+        const target = x.instanceId === a ? b : x.instanceId === b ? a : null;
+        return target && x.connectedTo?.includes(target) ?
+            { ...x, connectedTo: x.connectedTo.filter(id => id !== target) } : x;
+    });
+    return { ...draft, assembly: { ...draft.assembly, components } };
+}
+export function setExplicitWiring(draft: ConstructDraft, explicit: boolean): ConstructDraft {
+    const current = draft.assembly.powerConnections;
+    if (explicit === (current != null)) return draft;
+    return { ...draft, assembly: { ...draft.assembly, powerConnections: explicit ? [] : undefined } };
+}
+function samePair(link: PowerConnection, a: string, b: string): boolean {
+    return link.fromInstanceId === a && link.toInstanceId === b ||
+        link.fromInstanceId === b && link.toInstanceId === a;
+}
+export function hasPowerConnection(draft: ConstructDraft, a: string, b: string): boolean {
+    return draft.assembly.powerConnections?.some(link => samePair(link, a, b)) ?? false;
+}
+export function setPowerConnection(draft: ConstructDraft, a: string, b: string, connected: boolean): ConstructDraft {
+    requireDistinctPair(draft, a, b);
+    const links = draft.assembly.powerConnections;
+    if (links == null) throw new Error("Explicit power wiring is not selected.");
+    if (connected && !hasProposedContact(draft, a, b)) throw new Error("Power wiring needs a proposed direct physical contact.");
+    if (connected === hasPowerConnection(draft, a, b)) return draft;
+    return { ...draft, assembly: { ...draft.assembly, powerConnections: connected ?
+        [...links, { fromInstanceId: a, toInstanceId: b }] : links.filter(link => !samePair(link, a, b)) } };
+}
+export function setManifestation(draft: ConstructDraft, candidateId: string,
+    selection: NativeOriginDraftManifestation | null): ConstructDraft {
+    if (selection && selection.candidateId !== candidateId) throw new Error("Mismatched characteristic identity.");
+    const existing = draft.proposal.manifestations.find(x => x.candidateId === candidateId);
+    const manifestations = draft.proposal.manifestations.filter(x => x.candidateId !== candidateId);
+    if (selection) manifestations.push({ ...selection, id: existing?.id ?? selection.id });
+    return { ...draft, proposal: { ...draft.proposal, manifestations } };
+}
+
+export type NativeStatus = "Invalid" | "Incomplete" | "Unresolved" | "Conflicting" | "Authorized";
+export interface NativeIssue { code: string; path: string; severity: "Incomplete" | "Unresolved" | "Conflict" | "Invalid"; detail: string }
+export interface NamedOption { id: string; name: string }
+export interface PowerSourceDetail extends NamedOption {
+    description: string | null; rulesStatus: string | null; operatingPrinciple: string | null;
+    ratedOutput: number | null; ratedOverdriveOutput: number | null;
+}
+export interface Configuration {
+    definitionId: string; name: string; componentCategory: string | null;
+    materialSlots: string[]; defaultRecipeId: string | null;
+    constructionVariants: { id: string; recipeId: string; bodySize: string | null }[];
+    modeIds: string[]; baseCapabilities: string[]; requiresAnyOf: string[][];
+    mountInterfaces: string[]; acceptsMountInterfaces: string[];
+    powerSourceRequired: boolean; requiresContinuousPower: boolean;
+    designs: NamedOption[]; enhancements: NamedOption[]; powerSources: NamedOption[];
+    powerSourceDetails: PowerSourceDetail[]; issues: NativeIssue[];
+}
+export interface ComponentState {
+    instanceId: string; definitionId: string; installed: boolean; operational: boolean;
+    activeCapabilities: string[]; requestedEnabled: boolean; modeId: string | null;
+    activeOperationalOriginTraitIds: string[] | null; requiresContinuousPower: boolean;
+    sourceSupplyingPower: boolean | null;
+}
+export interface Network {
+    id: string; componentInstanceIds: string[]; requestedDemand: number; availableOutput: number;
+    operationalDemand: number; operationalOutput: number; requestedHeadroom: number | null;
+    isOverallocated: boolean | null; hasUnresolvedDemand: boolean; hasUnresolvedOutput: boolean;
+}
+export interface QuotedMaterial { materialId: string; amount: number; retainedInProduct: boolean | null }
+export interface QuotedStage {
+    stepId: string; competencyId: string; minimumRanks: number; dependencies: string[];
+    inputs: QuotedMaterial[]; outputs: QuotedMaterial[];
+}
+export interface QuotedRecipe { instanceId: string | null; sourceDefinitionId: string; recipeId: string; stages: QuotedStage[] }
+export interface QuotedIngredient { definitionId: string; quantity: number; unitCost: number | null; knownCost: number | null }
+export interface ManufacturingQuote {
+    status: "resolved" | "partial" | "unavailable"; recipes: QuotedRecipe[]; ingredients: QuotedIngredient[];
+}
+export interface AssemblyResult {
+    status: NativeStatus; knownConstructionCost: number; components: ComponentState[];
+    shutdownConsequences: { instanceId: string; consequenceId: string }[];
+    issues: NativeIssue[]; powerNetworks: Network[] | null;
+    requiredConstructionResources: Record<string, number> | null; manufacturingQuote: ManufacturingQuote | null;
+    derivedCreatureSize: string | null; knownRetainedMaterialMassPounds: number | null;
+    unresolvedRetainedMassMaterials: string[] | null; isBodyMassComplete: boolean;
+    productsWithUncertifiedMass: string[] | null;
+    physicalLoad: { status: string; knownMinimumGrossLoadPounds: number;
+        verifiedSupportCapacityPounds: number | null; minimumDeficitPounds: number | null;
+        maximumPossibleHeadroomPounds: number | null; bodyMassComplete: boolean; explanation: string } | null;
+    physicalLoadSupports: { sourceId: string; maximumGrossLoadPounds: number | null; operating: boolean; sharesLoad: boolean }[];
+    physicalSurfaces: { instanceId: string; componentDefinitionId: string; materialSlotId: string;
+        materialDefinitionId: string; role: string; rigidity: string | null; combustibility: string | null;
+        operational: boolean; protectedRegionId: string | null }[];
+}
+export interface Candidate {
+    id: string; kind: "Intrinsic" | "Trait" | "Other"; labelId: string;
+    offeredValue: unknown; unresolvedEvidence: string[];
+    sourceDefinitionId: string; occurrencePath: string;
+    eligibility: "Unreviewed" | "Eligible" | "Restricted" | "Unresolved" | "DmAuthorized";
+    eligibilityExplanation: string | null;
+    requiredChoices: { id: string; minimum: number; maximum: number;
+        finiteOptions: string[] | null; optionCatalogId: string | null; parameterKey: string | null }[];
+}
+export interface ConstructPreview {
+    assembly: AssemblyResult;
+    origin: { status: NativeStatus; issues: NativeIssue[]; candidates: Candidate[] };
+    movement: { status: string; modes: { mode: string; speedFeet: number }[] } | null;
+}
+
+// Decode the bounded native records before rendering. Reject malformed
+// booleans/counts/status rather than coercing missing values to zero or false.
+export function record(v: unknown): Record<string, unknown> {
+    if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("Invalid native Construct record.");
+    return v as Record<string, unknown>;
+}
+export function str(v: unknown): string {
+    if (typeof v !== "string" || !v.trim()) throw new Error("Invalid native Construct text.");
+    return v;
+}
+export function integer(v: unknown): number {
+    if (typeof v !== "number" || !Number.isSafeInteger(v)) throw new Error("Invalid native Construct number.");
+    return v;
+}
+function nonnegative(v: unknown): number {
+    const n = integer(v); if (n < 0) throw new Error("Invalid negative native Construct quantity."); return n;
+}
+function bool(v: unknown): boolean {
+    if (typeof v !== "boolean") throw new Error("Invalid native Construct flag."); return v;
+}
+function list<T>(v: unknown, decode: (v: unknown) => T): T[] {
+    if (!Array.isArray(v)) throw new Error("Invalid native Construct list.");
+    return v.map(decode);
+}
+function optional<T>(v: unknown, decode: (v: unknown) => T): T | null {
+    return v === null || v === undefined ? null : decode(v);
+}
+const strings = (v: unknown) => list(v, str);
+function enumValue<T extends string>(v: unknown, values: readonly T[]): T {
+    const match = typeof v === "number" ? values[v] : values.find(x => x === v);
+    if (!match) throw new Error("Unknown native Construct status."); return match;
+}
+const status = (v: unknown) => enumValue(v, ["Invalid", "Incomplete", "Unresolved", "Conflicting", "Authorized"] as const);
+function issue(v: unknown): NativeIssue {
+    const r = record(v); return { code: str(r.code), path: str(r.path),
+        severity: enumValue(r.severity, ["Incomplete", "Unresolved", "Conflict", "Invalid"] as const), detail: str(r.detail) };
+}
+export function namedOption(v: unknown): NamedOption {
+    const r = record(v); return { id: str(r.id), name: str(r.name) };
+}
+export function decodeConfiguration(v: unknown): Configuration {
+    const r = record(v); return {
+        definitionId: str(r.definitionId), name: str(r.name), componentCategory: optional(r.componentCategory, str),
+        materialSlots: strings(r.materialSlots),
+        defaultRecipeId: optional(r.defaultRecipeId, str),
+        constructionVariants: list(r.constructionVariants, x => {
+            const t = record(x); return { id: str(t.id), recipeId: str(t.recipeId), bodySize: optional(t.bodySize, str) };
+        }),
+        modeIds: strings(r.modeIds), baseCapabilities: strings(r.baseCapabilities),
+        requiresAnyOf: list(r.requiresAnyOf, strings), mountInterfaces: strings(r.mountInterfaces),
+        acceptsMountInterfaces: strings(r.acceptsMountInterfaces), powerSourceRequired: bool(r.powerSourceRequired),
+        requiresContinuousPower: bool(r.requiresContinuousPower), designs: list(r.designs, namedOption),
+        enhancements: list(r.enhancements, namedOption), powerSources: list(r.powerSources, namedOption),
+        powerSourceDetails: optional(r.powerSourceDetails, x => list(x, raw => {
+            const t = record(raw); return { ...namedOption(raw),
+                description: optional(t.description, str), rulesStatus: optional(t.rulesStatus, str),
+                operatingPrinciple: optional(t.operatingPrinciple, str), ratedOutput: optional(t.ratedOutput, nonnegative),
+                ratedOverdriveOutput: optional(t.ratedOverdriveOutput, nonnegative) };
+        })) ?? [],
+        issues: list(r.issues, issue)
+    };
+}
+function componentState(v: unknown): ComponentState {
+    const r = record(v); return { instanceId: str(r.instanceId), definitionId: str(r.definitionId),
+        installed: bool(r.installed), operational: bool(r.operational), requestedEnabled: bool(r.requestedEnabled),
+        activeCapabilities: strings(r.activeCapabilities), modeId: optional(r.modeId, str),
+        activeOperationalOriginTraitIds: optional(r.activeOperationalOriginTraitIds, strings),
+        requiresContinuousPower: bool(r.requiresContinuousPower), sourceSupplyingPower: optional(r.sourceSupplyingPower, bool) };
+}
+function network(v: unknown): Network {
+    const r = record(v); return { id: str(r.id), componentInstanceIds: strings(r.componentInstanceIds),
+        requestedDemand: nonnegative(r.requestedDemand), availableOutput: nonnegative(r.availableOutput),
+        operationalDemand: nonnegative(r.operationalDemand), operationalOutput: nonnegative(r.operationalOutput),
+        requestedHeadroom: optional(r.requestedHeadroom, integer), isOverallocated: optional(r.isOverallocated, bool),
+        hasUnresolvedDemand: bool(r.hasUnresolvedDemand), hasUnresolvedOutput: bool(r.hasUnresolvedOutput) };
+}
+function decodeManufacturingQuote(v: unknown): ManufacturingQuote {
+    const r = record(v);
+    const material = (raw: unknown): QuotedMaterial => {
+        const t = record(raw); return { materialId: str(t.materialId), amount: nonnegative(t.amount),
+            retainedInProduct: optional(t.retainedInProduct, bool) };
+    };
+    const result: ManufacturingQuote = {
+        status: enumValue(r.status, ["resolved", "partial", "unavailable"] as const),
+        recipes: list(r.recipes, raw => {
+            const t = record(raw); return { instanceId: optional(t.instanceId, str),
+                sourceDefinitionId: str(t.sourceDefinitionId), recipeId: str(t.recipeId),
+                stages: list(t.stages, stage => {
+                    const s = record(stage); return { stepId: str(s.stepId), competencyId: str(s.competencyId),
+                        minimumRanks: nonnegative(s.minimumRanks), dependencies: strings(s.dependencies),
+                        inputs: list(s.inputs, material), outputs: list(s.outputs, material) };
+                }) };
+        }),
+        ingredients: list(r.ingredients, raw => {
+            const t = record(raw); return { definitionId: str(t.definitionId), quantity: nonnegative(t.quantity),
+                unitCost: optional(t.unitCost, nonnegative), knownCost: optional(t.knownCost, nonnegative) };
+        })
+    };
+    if (result.status === "unavailable" && (result.recipes.length || result.ingredients.length))
+        throw new Error("An unavailable manufacturing quotation may not contain partial stage rows.");
+    if (result.status === "resolved" && result.ingredients.some(x => x.unitCost === null || x.knownCost === null))
+        throw new Error("Resolved manufacturing quotation has an unknown price.");
+    return result;
+}
+export function decodeAssembly(v: unknown): AssemblyResult {
+    const r = record(v);
+    return { status: status(r.status), knownConstructionCost: nonnegative(r.knownConstructionCost),
+        components: list(r.components, componentState), shutdownConsequences: list(r.shutdownConsequences, x => {
+            const t = record(x); return { instanceId: str(t.instanceId), consequenceId: str(t.consequenceId) };
+        }), issues: list(r.issues, issue), powerNetworks: optional(r.powerNetworks, x => list(x, network)),
+        requiredConstructionResources: optional(r.requiredConstructionResources, x =>
+            Object.fromEntries(Object.entries(record(x)).map(([id, count]) => [id, nonnegative(count)]))),
+        manufacturingQuote: optional(r.manufacturingQuote, decodeManufacturingQuote),
+        derivedCreatureSize: optional(r.derivedCreatureSize, str),
+        knownRetainedMaterialMassPounds: optional(r.knownRetainedMaterialMassPounds, nonnegative),
+        unresolvedRetainedMassMaterials: optional(r.unresolvedRetainedMassMaterials, strings),
+        isBodyMassComplete: bool(r.isBodyMassComplete),
+        productsWithUncertifiedMass: optional(r.productsWithUncertifiedMass, strings),
+        physicalLoad: optional(r.physicalLoad, raw => {
+            const t = record(raw); return { status: str(t.status), knownMinimumGrossLoadPounds: nonnegative(t.knownMinimumGrossLoadPounds),
+                verifiedSupportCapacityPounds: optional(t.verifiedSupportCapacityPounds, nonnegative),
+                minimumDeficitPounds: optional(t.minimumDeficitPounds, nonnegative),
+                maximumPossibleHeadroomPounds: optional(t.maximumPossibleHeadroomPounds, nonnegative),
+                bodyMassComplete: bool(t.bodyMassComplete), explanation: str(t.explanation) };
+        }),
+        physicalLoadSupports: optional(r.physicalLoadSupports, raw => list(raw, x => {
+            const t = record(x); return { sourceId: str(t.sourceId),
+                maximumGrossLoadPounds: optional(t.maximumGrossLoadPounds, nonnegative),
+                operating: bool(t.operating), sharesLoad: bool(t.sharesLoad) };
+        })) ?? [],
+        physicalSurfaces: optional(r.physicalSurfaces, raw => list(raw, x => {
+            const t = record(x); return { instanceId: str(t.instanceId), componentDefinitionId: str(t.componentDefinitionId),
+                materialSlotId: str(t.materialSlotId), materialDefinitionId: str(t.materialDefinitionId), role: str(t.role),
+                rigidity: optional(t.rigidity, str), combustibility: optional(t.combustibility, str),
+                operational: bool(t.operational), protectedRegionId: optional(t.protectedRegionId, str) };
+        })) ?? [] };
+}
+function candidate(v: unknown): Candidate {
+    const r = record(v), identity = record(r.identity), basis = record(r.selectionBasis);
+    const occurrence = record(identity.occurrence), source = record(occurrence.source);
+    return { id: str(r.id), kind: enumValue(identity.kind, ["Intrinsic", "Trait", "Other"] as const),
+        sourceDefinitionId: str(source.id), occurrencePath: str(occurrence.occurrencePath),
+        eligibility: enumValue(basis.eligibility, ["Unreviewed", "Eligible", "Restricted", "Unresolved", "DmAuthorized"] as const),
+        eligibilityExplanation: optional(basis.explanation, str),
+        labelId: str(identity.intrinsicSlotId ?? identity.mechanicalDefinitionId ?? identity.traitConceptId),
+        offeredValue: r.offeredValue, unresolvedEvidence: optional(r.unresolvedEvidence, strings) ?? [],
+        requiredChoices: optional(r.requiredChoices, x => list(x, raw => {
+            const t = record(raw); return { id: str(t.id), minimum: nonnegative(t.minimum), maximum: nonnegative(t.maximum),
+                finiteOptions: optional(t.finiteOptions, strings), optionCatalogId: optional(t.optionCatalogId, str),
+                parameterKey: optional(t.parameterKey, str) };
+        })) ?? [] };
+}
+export function decodeConstructPreview(raw: unknown, movement: unknown): ConstructPreview {
+    const r = record(raw), origin = record(r.origin), proposal = record(origin.evaluatedProposal);
+    return { assembly: decodeAssembly(r.assembly),
+        origin: { status: status(origin.status), issues: list(origin.issues, issue),
+            candidates: list(proposal.candidates, candidate) },
+        movement: optional(movement, x => { const t = record(x);
+            if (t.previewOnly !== true) throw new Error("Movement is not a native preview.");
+            return {
+            status: str(t.status), modes: list(t.modes, y => {
+                const m = record(y); return { mode: str(m.mode), speedFeet: nonnegative(m.speedFeet) };
+            }) }; }) };
+}
+/** Cost is native; an over-limit lower bound is meaningful even if other
+ * ingredients are unresolved. Do not announce unused points for partial quotes. */
+export function constructionAllocation(allowance: number | null, result: AssemblyResult | null): AllocationView {
+    const exceeded = result?.issues.some(x => x.code === "construct-allowance-exceeded") ?? false;
+    const complete = result?.manufacturingQuote?.status === "resolved" ||
+        (result?.manufacturingQuote == null && result?.status === "Authorized");
+    return { label: "Starting construction allowance", allowance: allowance === null ? undefined : String(allowance),
+        used: result ? String(result.knownConstructionCost) : undefined,
+        remaining: result && allowance !== null && complete ? String(allowance - result.knownConstructionCost) : undefined,
+        status: exceeded ? "over" : complete && allowance !== null ? "within" : "unresolved",
+        detail: !result ? "Awaiting native quotation." : exceeded ? "Known cost exceeds the allowance."
+            : complete ? "Initial ingredient quotation; no inventory transaction." : "Known cost only; total and remaining allowance are not confirmed." };
+}
+export function toValidation(issues: readonly NativeIssue[]): ValidationIssue[] {
+    const seen = new Set<string>(); const result: ValidationIssue[] = [];
+    for (const x of issues) {
+        const id = x.code + ":" + x.path + ":" + x.detail;
+        if (seen.has(id)) continue; seen.add(id);
+        const severity = x.severity === "Incomplete" ? "incomplete" : x.severity === "Unresolved" ? "unavailable"
+            : x.severity === "Conflict" ? "conflict" : "invalid";
+        result.push({ id, severity, message: x.detail, decision: { id: "configuration", label: "Review configuration" } });
+    }
+    return result;
+}

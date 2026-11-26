@@ -65,8 +65,8 @@ export const SHEET_SECTIONS: readonly SheetSectionDefinition[] = [
     }
 ];
 
-export type GuidedBuilderSection = "class" | "background" | "species" | "abilities" | "equipment" | "review";
-export type GuidedBuilderChoiceOwnerSection = "class" | "background" | "species";
+export type GuidedBuilderSection = "class" | "background" | "species" | "abilities" | "other" | "equipment" | "review";
+export type GuidedBuilderChoiceOwnerSection = "class" | "background" | "species" | "other";
 
 export interface GuidedBuilderSectionDefinition {
     id: GuidedBuilderSection;
@@ -75,9 +75,10 @@ export interface GuidedBuilderSectionDefinition {
 
 export const GUIDED_BUILDER_SECTIONS: readonly GuidedBuilderSectionDefinition[] = [
     { id: "class", label: "Class" },
-    { id: "background", label: "Background" },
-    { id: "species", label: "Origin" },
-    { id: "abilities", label: "Abilities" },
+    { id: "species", label: "Character Origins" },
+    { id: "background", label: "Life Experiences" },
+    { id: "abilities", label: "Ability Scores" },
+    { id: "other", label: "Other Choices" },
     { id: "equipment", label: "Equipment" },
     { id: "review", label: "Review" }
 ];
@@ -113,8 +114,8 @@ export function getGuidedBuilderChoiceSourceKeys(
     }
 
     const targets: readonly CharacterBuilderChoice[] = section === "background"
-        ? ["background", "deity"]
-        : ["species", "subspecies"];
+        ? ["background"]
+        : section === "other" ? ["deity"] : ["species", "subspecies"];
     for (const target of targets) {
         const conceptKey = getStoredChoiceConceptKey(builder.build, target);
         if (conceptKey !== null) {
@@ -130,7 +131,8 @@ export function getGuidedBuilderOwnedChoiceSourceKeys(
     return [...new Set([
         ...getGuidedBuilderChoiceSourceKeys(builder, "class"),
         ...getGuidedBuilderChoiceSourceKeys(builder, "background"),
-        ...getGuidedBuilderChoiceSourceKeys(builder, "species")
+        ...getGuidedBuilderChoiceSourceKeys(builder, "species"),
+        ...getGuidedBuilderChoiceSourceKeys(builder, "other")
     ])];
 }
 
@@ -181,6 +183,16 @@ export function getGuidedBuilderSectionStates(
         && choice.sourceConceptKey !== undefined
         && speciesSourceKeys.has(choice.sourceConceptKey));
 
+    const otherSourceKeys = new Set(getGuidedBuilderChoiceSourceKeys(builder, "other"));
+    const pendingOtherChoices = ruleChoices.filter(choice =>
+        choice.kind !== "starting-equipment" && choice.state !== "resolved" &&
+        ((choice.sourceConceptKey !== undefined && otherSourceKeys.has(choice.sourceConceptKey)) ||
+         ((choice.sourceConceptKey === undefined || !ownedSourceKeys.has(choice.sourceConceptKey)) &&
+          choice.kind !== "ability-score" && choice.kind !== "ability-score-set")));
+    const otherHasConflict = nonEquipmentConflicts.some(conflict =>
+        hasRelatedProjectionConflict([conflict], otherSourceKeys) ||
+        !(conflict.relatedConceptKeys ?? []).some(key => ownedSourceKeys.has(key)));
+    const otherResolved = rulesVerificationAvailable && pendingOtherChoices.length === 0 && !otherHasConflict;
     const classHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, classSourceKeys);
     const backgroundHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, backgroundSourceKeys);
     const speciesHasConflict = hasRelatedProjectionConflict(nonEquipmentConflicts, speciesSourceKeys);
@@ -292,22 +304,35 @@ export function getGuidedBuilderSectionStates(
             detail: classDetail
         },
         {
-            id: "background",
-            label: "Background",
-            status: backgroundResolved ? "resolved" : "incomplete",
-            detail: backgroundDetail
-        },
-        {
             id: "species",
-            label: "Origin",
+            label: "Character Origins",
             status: speciesResolved ? "resolved" : "incomplete",
             detail: speciesDetail
         },
         {
+            id: "background",
+            label: "Life Experiences",
+            // The current Background picker remains operational during the
+            // migration. It does not establish an earned Life Experiences pair.
+            status: "incomplete",
+            detail: backgroundResolved
+                ? "Background configured. Native Upbringing and Life Experiences integration is pending."
+                : backgroundDetail
+        },
+        {
             id: "abilities",
-            label: "Abilities",
+            label: "Ability Scores",
             status: abilitiesResolved ? "resolved" : "incomplete",
             detail: abilityDetail
+        },
+        {
+            id: "other",
+            label: "Other Choices",
+            status: otherResolved ? "resolved" : "incomplete",
+            detail: !rulesVerificationAvailable ? "Current rules choices could not be verified."
+                : otherHasConflict ? "Review unresolved character-wide rules conflicts."
+                : pendingOtherChoices.length ? pendingOtherChoices.length + " required choices remain."
+                : "No unresolved additional choices were reported."
         },
         {
             id: "equipment",

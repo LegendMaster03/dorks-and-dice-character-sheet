@@ -74,6 +74,30 @@ public sealed class DelegatedRulesCoreGateway(
             "/api/mechanics/v1/origins/innate-spells/ledger/initialize-preview",
             JsonContent.Create(request, options: JsonOptions), cancellationToken);
 
+    public Task<JsonNode> DiscoverNativeOriginMethodsAsync(string fingerprint, string? creatureTypeId, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Get, "/api/mechanics/v1/origins/methods?" +
+            "fingerprint=" + Uri.EscapeDataString(fingerprint) + (creatureTypeId is null ? "" : "&creatureTypeId=" + Uri.EscapeDataString(creatureTypeId)), null, cancellationToken);
+
+    public Task<JsonNode> DiscoverNativeOriginPresetsAsync(string fingerprint, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Get, "/api/mechanics/v1/origins/presets?" +
+            "fingerprint=" + Uri.EscapeDataString(fingerprint), null, cancellationToken);
+
+    public Task<JsonNode> DiscoverNativeOriginChoiceCatalogAsync(string fingerprint, string catalogId, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Get, "/api/mechanics/v1/origins/choice-catalog?" +
+            "fingerprint=" + Uri.EscapeDataString(fingerprint) + "&catalogId=" + Uri.EscapeDataString(catalogId), null, cancellationToken);
+
+    public Task<JsonNode> DiscoverNativeConstructConfigurationAsync(string definitionId, string fingerprint, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Get, "/api/mechanics/v1/origins/construct/components/" + Uri.EscapeDataString(definitionId) + "/configuration?" +
+            "fingerprint=" + Uri.EscapeDataString(fingerprint), null, cancellationToken);
+
+    public Task<JsonNode> PreviewNativeConstructAsync(JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/origins/construct/preview",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
+    public Task<JsonNode> PreviewNativeLifeExperiencesAsync(JsonElement request, CancellationToken cancellationToken = default) =>
+        SendJsonAsync<JsonNode>(HttpMethod.Post, "/api/mechanics/v1/origins/life-experiences/preview",
+            JsonContent.Create(request, options: JsonOptions), cancellationToken);
+
     public Task<JsonNode> GetNativeHarvestingCatalogAsync(
         string fingerprint, CancellationToken cancellationToken = default) =>
         SendJsonAsync<JsonNode>(HttpMethod.Get,

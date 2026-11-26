@@ -86,7 +86,9 @@ test("core modules do not depend on feature modules", async () => {
 
 test("leaf features do not import unrelated sibling features", async () => {
     const allowedComposition = new Map([
-        ["combat", new Set(["initiative", "defense", "health", "proficiency", "saving-throws"])]
+        ["combat", new Set(["initiative", "defense", "health", "proficiency", "saving-throws"])],
+        // Life Experiences consumes the approved Workstream A presentation contracts.
+        ["life-experiences", new Set(["guided"])]
     ]);
 
     for (const file of await tsFiles("features")) {
@@ -155,7 +157,8 @@ test("stylesheet entrypoint is composition-only", async () => {
         '@import "./styles/mechanics.css";',
         '@import "./styles/contextual-help.css";',
         '@import "./styles/abilities.css";',
-        '@import "./styles/supplemental.css";'
+        '@import "./styles/supplemental.css";',
+        '@import "./styles/guided-workspace.css";'
     ]);
 });
 

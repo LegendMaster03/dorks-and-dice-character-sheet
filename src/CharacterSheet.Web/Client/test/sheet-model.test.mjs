@@ -580,9 +580,10 @@ test("guided setup reports only backend-known unresolved structural configuratio
         states.map(section => [section.id, section.status]),
         [
             ["class", "incomplete"],
-            ["background", "incomplete"],
             ["species", "incomplete"],
+            ["background", "incomplete"],
             ["abilities", "incomplete"],
+            ["other", "incomplete"],
             ["equipment", "unavailable"],
             ["review", "available"]
         ]
