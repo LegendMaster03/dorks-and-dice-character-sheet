@@ -160,7 +160,10 @@ test("method discovery retains native support and choice membership is not eligi
     const method = { reference: { ruleId: "rule.example", methodId: "example" },
         name: "Example", stage: "post-origination", support: "reference-only", defaultAvailability: null };
     assert.deepEqual((await discoverNativeOriginMethods(env, metadata, undefined,
-        reply({ ...metadata, previewOnly: true, methods: [method] }))).methods, [method]);
+        reply({ ...metadata, previewOnly: true, methods: [method, { ...method, stage: null, support: "initial-preview" }] }))).methods,
+        [method, { ...method, stage: null, support: "initial-preview" }]);
+    await assert.rejects(discoverNativeOriginMethods(env, metadata, undefined,
+        reply({ ...metadata, previewOnly: true, methods: [{ ...method, stage: 42 }] })), /Invalid native method/);
     const choices = { catalogId: "example", status: "supported", requiresCharacterAuthority: true,
         options: [{ id: "feat.example", name: "Example" }] };
     assert.deepEqual((await discoverNativeOriginChoiceCatalog(env, metadata, "example",
