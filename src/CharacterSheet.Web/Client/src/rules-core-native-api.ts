@@ -328,11 +328,11 @@ export async function discoverNativeOriginMethods(environment: HostEnvironment, 
     const methods = result.methods.map((value: unknown): NativeMethod => {
         if (!isObject(value) || !isObject(value.reference) || typeof value.reference.ruleId !== "string" ||
             typeof value.reference.methodId !== "string" || typeof value.name !== "string" ||
-            typeof value.stage !== "string" || typeof value.support !== "string" ||
+            (value.stage !== null && typeof value.stage !== "string") || typeof value.support !== "string" ||
             (value.defaultAvailability !== null && typeof value.defaultAvailability !== "string"))
             throw new Error("Invalid native method.");
         return { reference: { ruleId: value.reference.ruleId, methodId: value.reference.methodId },
-            name: value.name, stage: value.stage, support: value.support,
+            name: value.name, stage: value.stage as string | null, support: value.support,
             defaultAvailability: value.defaultAvailability as string | null };
     });
     return { ...discoveryIdentity(metadata), methods };
