@@ -106,7 +106,9 @@ export async function evaluateConstructDraft(environment: HostEnvironment, metad
     if (assembly.initialConstruction !== true || proposal.method.ruleId !== "rule.creature-origination" ||
         proposal.method.methodId !== "construct-assembly" || proposal.intent !== "Custom" || proposal.candidates.length ||
         proposal.contributors.length) throw new Error("Only an initial custom Construct player proposal may be previewed here.");
-    const envelope = await previewNativeConstruct(environment, metadata, proposal, assembly, fetcher);
+    // The persisted Sheet proposal uses a named intent; Core's enum JSON
+    // contract expects the numeric Custom value for a native preview.
+    const envelope = await previewNativeConstruct(environment, metadata, { ...proposal, intent: 2 }, assembly, fetcher);
     return { contractVersion: 1, rulesetId: envelope.rulesetId, fingerprint: envelope.fingerprint,
         previewOnly: true, result: decodeConstructPreview(envelope.result, envelope.movementModes) };
 }

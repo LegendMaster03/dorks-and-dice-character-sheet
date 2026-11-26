@@ -124,6 +124,9 @@ public sealed class CharacterOriginDraftService(
                     return new(CharacterOriginDraftStatus.InvalidRequest);
                 var nativeProposal = JsonNode.Parse(validProposal)!.AsObject();
                 nativeProposal.Remove("constructAssembly");
+                // Rules Core uses the numeric NativeOriginIntent.Custom wire
+                // value; retain the original player draft representation.
+                nativeProposal["intent"] = 2;
                 preview = await rulesCore.PreviewNativeConstructAsync(
                     JsonSerializer.SerializeToElement(new
                     {

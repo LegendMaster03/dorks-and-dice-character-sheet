@@ -339,6 +339,7 @@ public sealed class OriginDraftPersistenceTests
         {
             ConstructCalls++;
             Assert.False(request.GetProperty("proposal").TryGetProperty("constructAssembly", out _));
+            Assert.Equal(2, request.GetProperty("proposal").GetProperty("intent").GetInt32());
             Assert.Equal(2, request.GetProperty("assembly").GetProperty("components").GetArrayLength());
             return Task.FromResult(JsonNode.Parse("""
                 {"contractVersion":1,"previewOnly":true,"rulesetId":"first-party-001","fingerprint":"native",
