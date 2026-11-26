@@ -184,7 +184,7 @@ def request_on_page(page, name, path, method="GET", body=None, expected=200):
     return result["body"]
 
 
-def run_browser():
+def start_services():
     launch("site",
            ["dotnet", str(ROOT / "site/dorks-and-dice-site/bin/Release/net10.0/dorks-and-dice-site.dll")],
            {"ASPNETCORE_ENVIRONMENT": "Development",
@@ -222,6 +222,8 @@ def run_browser():
            ROOT / "rules-core")
     wait_ready("http://127.0.0.1:5159/ready")
 
+def run_browser():
+    start_services()
     with sync_playwright() as p:
         chromium_path = os.environ.get("PILLAR2_CHROMIUM_PATH")
         browser = p.chromium.launch(
