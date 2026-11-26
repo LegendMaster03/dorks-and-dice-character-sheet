@@ -111,10 +111,9 @@ export async function resolveStoredChoice(
     const conceptKey = getStoredChoiceConceptKey(build, choice);
     if (conceptKey === null) return { status: "none" };
 
-    // The current native catalog exposes standalone class and subclass
-    // summaries. Ancestry/background/deity records are not available here.
+    // Resolve exact native identities and retain legacy references as saved.
     const category = choice === "startingClass" ? "class"
-        : choice === "subclass" ? "subclass" : null;
+        : choice === "subclass" || choice === "background" ? choice : null;
     if (category === null || !conceptKey.startsWith(category + ".")) {
         return { status: "unavailable", conceptKey };
     }

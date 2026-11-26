@@ -317,6 +317,13 @@ test("guided builder opens on Class and renderer uses the same source routing mo
     assert.doesNotMatch(source, /choice\.kind,\s*choice\.sourceConceptKey/);
 });
 
+test("Life Experiences uses the native source picker for both Upbringing and Background", async () => {
+    const sheet = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
+    const step = sheet.slice(sheet.indexOf('case "background": {'), sheet.indexOf('case "species": {'));
+    assert.match(step, /renderExperiencePicker\("upbringing"\), handlers\.renderExperiencePicker\("background"\)/);
+    assert.doesNotMatch(step, /renderCharacterBuilder/);
+});
+
 test("guided builder uses numbered steps, sequential navigation, a Rules Core-backed Equipment step, and a non-blocking sheet exit", async () => {
     const source = await readFile(new URL("../src/ui/sheet.ts", import.meta.url), "utf8");
     const builderSource = await readFile(new URL("../src/ui/builder.ts", import.meta.url), "utf8");
