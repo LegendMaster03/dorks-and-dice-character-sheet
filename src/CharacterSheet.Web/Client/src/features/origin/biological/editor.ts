@@ -114,11 +114,11 @@ function renderContributors(context: BiologicalEditorContext, proposal: Biologic
             review.replaceChildren(renderDependencyReview(result.change,
                 () => save(next), () => review.replaceChildren(), locked));
         }
-        card.append(createButton("Remove contributor", buttonClass, () => change(undefined), locked || !evaluation.current || !native),
+        card.append(createButton("Remove contributor", buttonClass, () => change(undefined), locked || (!evaluation.current && (proposal.biologicalTransmission.candidateIds.length > 0 || proposal.manifestations.length > 0)) || !native),
             createButton("Replace with selected source below", buttonClass, () => {
                 const replacement = selectedPreset();
                 if (replacement) change(replacement);
-            }, locked || !evaluation.current || !native));
+            }, locked || (!evaluation.current && (proposal.biologicalTransmission.candidateIds.length > 0 || proposal.manifestations.length > 0)) || !native));
         section.append(card);
     }
     section.append(query, picker, createButton("Add contributor", buttonClass, () => {
