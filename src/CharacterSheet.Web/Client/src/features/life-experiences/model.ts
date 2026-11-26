@@ -70,7 +70,7 @@ function equipment(value: unknown, identity: CatalogIdentity): value is Equipmen
 }
 /** Decode the nested DTOs deliberately left opaque in the shared preview bridge. */
 export function decodeExperiencePreview(raw: NativeLifeExperiencePreviewResult, identity: CatalogIdentity): ExperiencePreview {
-    if (raw.earnedProjection !== null || !["invalid", "needs-choices", "unavailable", "resolved"].includes(raw.status) ||
+    if (raw.earnedProjection != null || !["invalid", "needs-choices", "unavailable", "resolved"].includes(raw.status) ||
         !raw.sources.every(s => fields(s, ["sourceId", "occurrenceId"]) && typeof s.inherited === "boolean") ||
         new Set(raw.sources.map(s => s.sourceId)).size !== raw.sources.length ||
         !raw.choices.every(c => fields(c, ["key", "kind"]) && integer(c.count, 1) && c.count <= 32 &&
@@ -95,7 +95,7 @@ export function decodeExperiencePreview(raw: NativeLifeExperiencePreviewResult, 
     return raw as ExperiencePreview;
 }
 export function labelFor(catalog: ExperienceCatalog, id: string): string {
-    return catalog.labels[id] ?? catalog.nodes.find(n => n.id === id)?.label ??
+    return (Object.hasOwn(catalog.labels, id) ? catalog.labels[id] : undefined) ?? catalog.nodes.find(n => n.id === id)?.label ??
         id.split(".").at(-1)!.replaceAll("-", " ").replace(/^./, c => c.toUpperCase());
 }
 function sourceChain(catalog: ExperienceCatalog, id: string | null, kind: ExperienceKind): Set<string> {
@@ -151,22 +151,43 @@ export function changeExperienceChoice(draft: ExperienceDraft, choice: NativeCho
     if (next.length) selections[choice.key] = next;
     return { ...draft, selections };
 }
-/** Incomplete counted selections stay in the durable draft; they are not sent
- * as invalid complete selections. Unknown keys are retained for explicit review. */
-export function toNativeProposal(draft: ExperienceDraft, choices: readonly NativeChoice[] = []): NativeLifeExperienceProposal | null {
+/** A partial source pair is a legitimate draft but never a native request. */
+export function toNativeProposal(draft: ExperienceDraft): NativeLifeExperienceProposal | null {
     if (!draft.upbringingId || !draft.backgroundId) return null;
-    const byKey = new Map(choices.map(c => [c.key, c]));
-    return { upbringingId: draft.upbringingId, backgroundId: draft.backgroundId,
-        selections: Object.fromEntries(Object.entries(draft.selections).filter(([key, ids]) => {
-            const choice = byKey.get(key);
-            return ids.length > 0 && (!choice || ids.length === choice.count);
-        })), startingItemIds: draft.startingItemIds };
+    return { upbringingId: draft.upbringingId, backgroundId: draft.backgroundId, selections: {}, startingItemIds: {} };
 }
-/** Inactive and conflicting selections remain visible until explicit review.
- * Never discard a choice simply because a preview failed or was incomplete. */
+/** Project only complete choices whose exact current path and membership Core
+ * has just offered. The durable draft is never mutated by preview discovery.
+ * Replaying from a blank proposal also handles partial counted selections after reload. */
+export function replayExperienceProposal(draft: ExperienceDraft, preview: ExperiencePreview): NativeLifeExperienceProposal {
+    const proposal = toNativeProposal(draft);
+    if (!proposal) throw new Error("Both sources are required.");
+    const selections = Object.fromEntries(preview.choices.flatMap(choice => {
+        const ids = draft.selections[choice.key];
+        return ids && ids.length === choice.count && new Set(ids).size === ids.length &&
+            ids.every(id => choice.optionIds.includes(id)) ? [[choice.key, ids]] : [];
+    }));
+    const startingItemIds = Object.fromEntries(preview.startingItems.flatMap(item => {
+        const id = draft.startingItemIds[item.key];
+        return id ? [[item.key, id]] : [];
+    }));
+    return { ...proposal, selections, startingItemIds };
+}
+/** Inactive/conflicting selections remain durable and visible for explicit
+ * review. Incomplete counted choices are not conflicts or silently erased. */
 export function reconsiderChoices(draft: ExperienceDraft, preview: ExperiencePreview): string[] {
+    if (preview.issues.some(i => i.code === "invalid-life-experience-source" ||
+        i.code === "invalid-life-experience-parent")) return [];
+    const choices = new Map(preview.choices.map(c => [c.key, c]));
     const invalidKeys = new Set(preview.issues.filter(i => ["unexpected-life-experience-choice",
         "invalid-life-experience-selection", "unexpected-starting-item-choice"].includes(i.code)).map(i => i.path));
+    for (const [key, ids] of Object.entries(draft.selections)) {
+        const choice = choices.get(key);
+        if (!choice || ids.length > choice.count || new Set(ids).size !== ids.length ||
+            ids.some(id => !choice.optionIds.includes(id))) invalidKeys.add(key);
+    }
+    const activeItems = new Set(preview.startingItems.map(i => i.key));
+    for (const key of Object.keys(draft.startingItemIds)) if (!activeItems.has(key)) invalidKeys.add(key);
     return [...new Set([...Object.keys(draft.selections), ...Object.keys(draft.startingItemIds)])]
         .filter(key => invalidKeys.has(key));
 }
@@ -178,7 +199,7 @@ export function removeReviewedChoice(draft: ExperienceDraft, key: string): Exper
 export function choiceTree(choices: readonly NativeChoice[], draft: ExperienceDraft, catalog: ExperienceCatalog): ChoiceRequirement[] {
     const parent = new Map<string, { key: string; option: string }>();
     for (const child of choices) {
-        const candidates = choices.flatMap(p => p.optionIds.map(option => ({ key: p.key, option })))
+        const candidates = choices.filter(p => p.kind === "benefit-option").flatMap(p => p.optionIds.map(option => ({ key: p.key, option })))
             .filter(p => child.key === p.key + "/" + p.option || child.key.startsWith(p.key + "/" + p.option + "/"))
             .sort((a, b) => b.key.length - a.key.length);
         if (candidates[0]) parent.set(child.key, candidates[0]);
@@ -194,7 +215,7 @@ export function choiceTree(choices: readonly NativeChoice[], draft: ExperienceDr
             children: choices.filter(child => parent.get(child.key)?.key === c.key &&
                 parent.get(child.key)?.option === id).map(build) })),
         issues: c.contextConstraint ? [{ id: c.key, severity: "authorization-required",
-            message: "The source-specific context must be independently verified." }] : undefined
+            message: "Source-specific context: " + c.contextConstraint.replaceAll("-", " ") + ". Independent verification is required." }] : undefined
     });
     return choices.filter(c => !parent.has(c.key)).map(build);
 }
