@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-    loadNativeRuleset, searchNativeOptions, evaluateNativeAdvancement, projectNativeCharacter
+    loadNativeRuleset, searchNativeOptions, evaluateNativeAdvancement, projectNativeCharacter,
+    discoverNativeOriginPresets, discoverNativeOriginMethods, discoverNativeOriginChoiceCatalog,
+    previewNativeLifeExperiences
 } from "../.test-dist/rules-core-native-api.js";
 
 const fingerprint = "a".repeat(64);
@@ -140,4 +142,38 @@ test("native Origin option categories use catalog identity without raw source", 
     }
     assert.ok(hits.some(path => path.includes("category=species")));
     assert.ok(hits.some(path => path.includes("category=ancestry")));
+});
+
+test("guided preset discovery preserves hierarchy and excludes unexpected rule bodies", async () => {
+    const preset = { id: "species.example", name: "Example", kind: "species",
+        parentId: null, selectable: false, defaultUpbringingId: null,
+        acquisitionMethodIds: [], ancestrySelectionRequired: true };
+    const result = await discoverNativeOriginPresets(env, metadata, reply({
+        ...metadata, previewOnly: true, presets: [{ ...preset, definition: { private: true } }]
+    }));
+    assert.deepEqual(result.presets, [preset]);
+    await assert.rejects(discoverNativeOriginPresets(env, metadata, reply({
+        ...metadata, fingerprint: "b".repeat(64), previewOnly: true, presets: [preset]
+    })), /different native snapshot/);
+});
+test("method discovery retains native support and choice membership is not eligibility", async () => {
+    const method = { reference: { ruleId: "rule.example", methodId: "example" },
+        name: "Example", stage: "post-origination", support: "reference-only", defaultAvailability: null };
+    assert.deepEqual((await discoverNativeOriginMethods(env, metadata, undefined,
+        reply({ ...metadata, previewOnly: true, methods: [method] }))).methods, [method]);
+    const choices = { catalogId: "example", status: "supported", requiresCharacterAuthority: true,
+        options: [{ id: "feat.example", name: "Example" }] };
+    assert.deepEqual((await discoverNativeOriginChoiceCatalog(env, metadata, "example",
+        reply({ ...metadata, previewOnly: true, choices }))).choices, choices);
+});
+test("Life Experiences accepts candidates only, not an earned or committed projection", async () => {
+    const result = { status: "incomplete", sources: [], choices: [], selectedPaths: [], candidateGrants: [],
+        candidateEquipment: null, equipmentReplacements: [], startingItems: [], currency: [], issues: [], earnedProjection: null };
+    const preview = { ...metadata, previewOnly: true, committed: false, result };
+    const proposal = { upbringingId: "upbringing.example", backgroundId: "background.example" };
+    assert.deepEqual((await previewNativeLifeExperiences(env, metadata, proposal, reply(preview))).result, result);
+    await assert.rejects(previewNativeLifeExperiences(env, metadata, proposal, reply({ ...preview, committed: true })),
+        /Invalid native Life Experiences preview/);
+    await assert.rejects(previewNativeLifeExperiences(env, metadata, proposal, reply({ ...preview, result: { ...result, earnedProjection: {} } })),
+        /Invalid native Life Experiences preview/);
 });

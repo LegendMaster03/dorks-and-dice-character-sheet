@@ -111,7 +111,8 @@ test("guided builder routes rule choices to the selected entity that owns them",
         new Set(["class:fighter", "subclass:champion"]));
     assert.deepEqual(
         new Set(getGuidedBuilderChoiceSourceKeys(builder, "background")),
-        new Set(["background:acolyte", "deity:pelor"]));
+        new Set(["background:acolyte"]));
+    assert.deepEqual(getGuidedBuilderChoiceSourceKeys(builder, "other"), ["deity:pelor"]);
     assert.deepEqual(
         new Set(getGuidedBuilderChoiceSourceKeys(builder, "species")),
         new Set(["species:human", "subspecies:variant-human"]));
@@ -143,7 +144,7 @@ test("guided builder routes rule choices to the selected entity that owns them",
     assert.equal(states.find(section => section.id === "abilities").status, "incomplete");
     assert.equal(states.find(section => section.id === "equipment").status, "incomplete");
     assert.match(states.find(section => section.id === "equipment").detail, /not yet been resolved/);
-    assert.match(states.find(section => section.id === "background").detail, /2 required Background choices remain/);
+    assert.match(states.find(section => section.id === "background").detail, /1 required Background choice remains/);
     assert.match(states.find(section => section.id === "species").detail, /1 required Species choice remains/);
     assert.match(states.find(section => section.id === "abilities").detail, /1 required Ability Score choice remains/);
 
@@ -153,7 +154,9 @@ test("guided builder routes rule choices to the selected entity that owns them",
     };
     const sourceResolvedStates = getGuidedBuilderSectionStates(builder, sourceResolved);
     assert.equal(sourceResolvedStates.find(section => section.id === "class").status, "resolved");
-    assert.equal(sourceResolvedStates.find(section => section.id === "background").status, "resolved");
+    assert.equal(sourceResolvedStates.find(section => section.id === "background").status, "incomplete");
+    assert.equal(sourceResolvedStates.find(section => section.id === "other").status, "resolved");
+    assert.match(sourceResolvedStates.find(section => section.id === "background").detail, /Life Experiences integration is pending/);
     assert.equal(sourceResolvedStates.find(section => section.id === "species").status, "resolved");
     assert.equal(sourceResolvedStates.find(section => section.id === "abilities").status, "incomplete");
     assert.equal(sourceResolvedStates.find(section => section.id === "equipment").status, "incomplete");
@@ -168,7 +171,7 @@ test("canonical Origin uses its own state rather than the legacy Species step", 
     };
     const legacy = getGuidedBuilderSectionStates(builder,
         { ruleChoices: [], projectionConflicts: [] }, null, false, metadata);
-    assert.equal(legacy.find(section => section.id === "species").label, "Origin");
+    assert.equal(legacy.find(section => section.id === "species").label, "Character Origins");
     assert.equal(legacy.find(section => section.id === "species").status, "incomplete");
     assert.match(legacy.find(section => section.id === "species").detail,
         /Legacy Species\/Subspecies selections require explicit Origin reconciliation/);

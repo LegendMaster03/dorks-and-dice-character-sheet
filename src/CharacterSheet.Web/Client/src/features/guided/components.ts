@@ -165,6 +165,7 @@ export function renderDraftStatus(status: DraftSaveStatus): HTMLElement {
 /** Browser/preview are optional; smaller screens use accessible native disclosures. */
 export function renderWorkspace(work: HTMLElement, browser?: HTMLElement, preview?: HTMLElement): HTMLElement {
     const workspace = createElement("div", "dd-guided-workspace");
+    workspace.dataset.guidedLayout = browser && preview ? "three" : browser ? "browser" : preview ? "preview" : "single";
     if (browser) {
         const section = createElement("details", "dd-guided-workspace__side");
         section.open = true;

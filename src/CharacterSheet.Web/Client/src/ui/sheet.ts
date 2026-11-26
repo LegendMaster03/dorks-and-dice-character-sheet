@@ -25,6 +25,7 @@ import {
 import { renderAdvancementDetails } from "./advancement.js";
 import {
     buildCompetencyPresentation,
+    formatMechanicalValue,
     partitionCompetencyCollection,
     type CharacterMechanicsView
 } from "./character-mechanics.js";
@@ -34,6 +35,8 @@ import {
 } from "./guided-equipment.js";
 import type { NativeStartingEquipmentPreview } from "../features/inventory/starting-equipment-api.js";
 import { renderGuidedSourceFeatures } from "./guided-source-features.js";
+import { renderDraftStatus, renderFacts, renderWorkspace } from "../features/guided/components.js";
+import type { DisplayFact } from "../features/guided/contracts.js";
 import { renderRecoveryContinuation, renderRecoveryControls } from "../features/health/health.js";
 import { renderHitPointGainEditors } from "../features/health/hit-point-gains.js";
 import { renderSavingThrowsCard } from "../features/saving-throws/saving-throws.js";
@@ -51,6 +54,7 @@ import {
 } from "../features/support/support-values.js";
 import {
     ABILITY_SCORE_DEFINITIONS,
+    builderReferenceDisplay,
     createCharacterHeaderModel,
     getGuidedBuilderChoiceSourceKeys,
     getGuidedBuilderOwnedChoiceSourceKeys,
@@ -513,12 +517,13 @@ function renderGuidedBuilder(
             break;
         }
         case "background": {
+            panel.append(createInlineState("Background remains editable. Native Upbringing and combined Life Experiences are not yet available.", "warning"));
             panel.append(renderCharacterBuilder(
                 characterId,
                 builder,
                 false,
                 handlers.structural,
-                { title: "Background", choices: ["background", "deity"] }));
+                { title: "Background", choices: ["background"] }));
             const backgroundFeatures = renderGuidedSourceFeatures(
                 mechanics,
                 getGuidedBuilderChoiceSourceKeys(builder, "background"),
@@ -581,6 +586,25 @@ function renderGuidedBuilder(
             if (abilityChoices !== null) panel.append(abilityChoices);
             break;
         }
+        case "other": {
+            panel.append(renderCharacterBuilder(characterId, builder, false, handlers.structural,
+                { title: "Deity", choices: ["deity"] }));
+            const deityFeatures = renderGuidedSourceFeatures(mechanics,
+                getGuidedBuilderChoiceSourceKeys(builder, "other"), "Deity Features");
+            if (deityFeatures !== null) panel.append(deityFeatures);
+            const deityChoices = renderRulesChoices(mechanics, routine, handlers, {
+                sourceConceptKeys: getGuidedBuilderChoiceSourceKeys(builder, "other"),
+                excludedChoiceKinds: ["starting-equipment"], includeConflicts: false, heading: "Deity Choices"
+            });
+            if (deityChoices !== null) panel.append(deityChoices);
+            const otherChoices = renderRulesChoices(mechanics, routine, handlers, {
+                excludedSourceConceptKeys: getGuidedBuilderOwnedChoiceSourceKeys(builder),
+                excludedChoiceKinds: ["starting-class", "subclass", "starting-equipment", "ability-score", "ability-score-set"],
+                heading: "Additional Rules Choices"
+            });
+            if (otherChoices !== null) panel.append(otherChoices);
+            break;
+        }
         case "equipment": {
             if (equipmentReceived) {
                 const equipment = createSectionCard("Starting Equipment", "dd-guided-builder__equipment");
@@ -641,9 +665,11 @@ function renderGuidedBuilder(
                     createElement("strong", "dd-guided-builder__review-label", section.label),
                     createElement("span", "dd-guided-builder__review-status", guidedStatusLabel(section.status)),
                     createElement("span", "dd-guided-builder__review-detail", section.detail));
+                item.append(createButton("Review " + section.label, "dd-button dd-button--ghost",
+                    () => handlers.selectGuidedBuilderSection(section.id), section.status === "unavailable"));
                 list.append(item);
             }
-            review.append(list);
+            review.append(list, createInlineState("This review does not finalize character creation or authorize new grants.", "neutral"));
             const rulesChoices = renderRulesChoices(
                 mechanics,
                 routine,
@@ -695,8 +721,42 @@ function renderGuidedBuilder(
         panel.append(navigation);
     }
 
-    container.append(panel);
+    container.append(renderWorkspace(panel, undefined, renderGuidedCharacterPreview(builder, routine, mechanics, origin)));
     return container;
+}
+
+/** Read from the existing application stores; no preview value is promoted
+ * into the active character or used to infer eligibility. */
+function renderGuidedCharacterPreview(builder: CharacterBuilderUiState, routine: CharacterRoutineUiState,
+    mechanics: CharacterMechanicsView | null, origin?: OriginUiState): HTMLElement {
+    const section = createSectionCard("Character summary");
+    const facts: DisplayFact[] = [
+        { label: "Class", value: builderReferenceDisplay(builder, "startingClass").value },
+        { label: "Origin", value: origin?.savedState ? "Committed native Origin"
+            : origin?.draft ? "Uncommitted draft" : "Not configured" },
+        { label: "Upbringing", value: "Native integration pending" },
+        { label: "Background", value: builderReferenceDisplay(builder, "background").value }
+    ];
+    if (origin?.readOnly) section.append(renderDraftStatus("read-only"));
+    else if (origin?.busy) section.append(createInlineState("Origin operation in progress.", "loading"));
+    else if (origin?.status === "error") section.append(renderDraftStatus("unavailable"));
+    else if (origin?.draft) {
+        if (origin.preview?.contentChangedSinceRequest || (origin.catalog && origin.draft.fingerprint !== origin.catalog.fingerprint))
+            section.append(renderDraftStatus("stale"));
+        else if (origin.message) section.append(createInlineState("Origin needs attention. Review the Origin section.", "warning"));
+        else section.append(renderDraftStatus("saved"));
+    }
+    section.append(createElement("p", undefined, "Current sheet presentation; uncommitted Origin and Life Experiences candidates are not active mechanics."));
+    for (const value of [...(mechanics?.abilityValues ?? []), ...(mechanics?.combatFundamentals ?? []),
+        ...(mechanics?.defenses?.values ?? []), ...(mechanics?.movement ?? []), ...(mechanics?.training ?? [])])
+        facts.push({ label: value.label, value: formatMechanicalValue(value) });
+    const hp = mechanics?.healthTracks?.find(track => track.role === "hit-points");
+    facts.push({ label: "Hit points", value: hp?.formattedValue ?? (hp?.maximum === undefined ? "Unavailable" : String(hp.maximum)) });
+    facts.push({ label: "Inventory", value: routine.status === "ready" && routine.state
+        ? routine.state.inventoryItemOccurrences.length + " item entries" : "Unavailable" });
+    if (mechanics === null) section.append(createInlineState("Current mechanical presentation unavailable.", "warning"));
+    section.append(renderFacts(facts));
+    return section;
 }
 
 interface RulesChoiceRenderOptions {
