@@ -42,3 +42,7 @@
 @container character-sheet (min-width: 65rem) {
     .dd-origin-allocation .dd-guided-facts { grid-template-columns: repeat(6, minmax(0, auto)); justify-content: start; gap: .35rem 1rem; }
 }
+
+/* Configuration choices are a readable vertical form, not an inline control string. */
+.dd-biological-configuration label { display: grid; gap: .25rem; margin-block: .5rem; }
+.dd-biological-configuration select { width: 100%; }

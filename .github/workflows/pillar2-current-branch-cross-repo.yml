@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: LegendMaster03/dorks-and-dice-rules-core
-          ref: dcb230ec6c6560941ed90d181875e0083897db14
+          ref: 6e853f1d26fe045fc68213c84bedb0c2bc978d41
           path: rules-core
           persist-credentials: false
       - name: Verify exact source revisions
@@ -39,7 +39,7 @@ jobs:
           echo "SHEET_SOURCE_SHA=$sheet_head"
           echo "CORE_SOURCE_SHA=$core_head"
           test "$sheet_head" = "${{ github.event.pull_request.head.sha }}"
-          test "$core_head" = "dcb230ec6c6560941ed90d181875e0083897db14"
+          test "$core_head" = "6e853f1d26fe045fc68213c84bedb0c2bc978d41"
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -63,7 +63,7 @@ jobs:
           dotnet test
           rules-core/tests/RulesCore.Mechanics.Tests/RulesCore.Mechanics.Tests.csproj
           --configuration Release
-          --filter FullyQualifiedName~NativeOriginBiologicalCombinationTests
+          --filter 'FullyQualifiedName~NativeOriginBiologicalCombinationTests|FullyQualifiedName~NativeOriginInheritedCombinationTests'
       - name: Start disposable PostgreSQL 18
         shell: bash
         run: |

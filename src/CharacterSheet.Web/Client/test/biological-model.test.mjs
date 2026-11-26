@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { newBiologicalProposal, addNativeContributor, evaluateBiological,
     setInherited, setExpression, setFiniteChoice, removeContributor, allocationView,
-    composableOffers, setComposition, clearComposition, supportsBiologicalDraft }
+    composableOffers, setComposition, clearComposition, supportsBiologicalDraft,
+    setInheritedInteraction, removeInheritedInteraction }
     from "../.test-dist/features/origin/biological/model.js";
 
 const preset = (id, name) => ({ id, name, kind: "ancestry", parentId: "species.dragonborn",
@@ -132,4 +133,31 @@ test("canonical native composition is source-bound, persisted, and removed on af
     assert.equal(changed.proposal.relationships.length, 0);
     assert.equal(changed.proposal.resolutions.length, 0);
     assert.ok(changed.change.reconsider.some(x => x.includes("Combined expression")));
+});
+
+test("inherited interactions require the native exact configured inputs and do not invent grants", () => {
+    let p = proposal();
+    p = setInherited(p, evaluation(p), "red-breath", true);
+    p = setInherited(p, evaluation(p), "bronze-breath", true);
+    const interaction = { ruleOwnerId: "rule.test", interactionId: "test-interaction",
+        resultTraitId: "trait.test", resultName: "Test result",
+        inputs: [{count: 2, candidateIds: ["red-breath", "bronze-breath"]}] };
+    const native = (raw, configured = ["red-breath", "bronze-breath"]) => evaluateBiological(p, { previewOnly: true, result: {
+        evaluatedProposal: { id: p.id }, issues: [], biologicalCombination: {
+            proposalId: p.id, explicitTransmissionPlan: true, interactionOptions: raw,
+            characteristics: [{ kind: "Trait", characteristicId: "trait.breath-weapon",
+                offers: [redOffer, bronzeOffer], expressions: [] }],
+            inheritedInstances: configured.map(id => ({ gene: { sourceCandidateId: id }, expressionGrantIds: [] }))
+        }
+    }}, true);
+    assert.equal(native([interaction], ["red-breath"]).interactionOptions, undefined);
+    assert.equal(native([{...interaction, ruleOwnerId:"table-decision:forged"}]).interactionOptions, undefined);
+    assert.throws(() => setInheritedInteraction(p, native([]), "rule.test", "test-interaction", [["red-breath","bronze-breath"]]));
+    assert.throws(() => setInheritedInteraction(p, native([interaction]), "rule.test", "test-interaction", [["red-breath","red-breath"]]));
+    const selected = setInheritedInteraction(p, native([interaction]), "rule.test", "test-interaction", [["red-breath","bronze-breath"]]);
+    assert.equal(selected.biologicalTransmission.combinations.length, 1);
+    assert.equal(selected.manifestations.length, 0);
+    assert.deepEqual(selected.biologicalTransmission.candidateIds, p.biologicalTransmission.candidateIds);
+    assert.equal(supportsBiologicalDraft(JSON.parse(JSON.stringify(selected))), true);
+    assert.deepEqual(removeInheritedInteraction(selected, "rule.test", "test-interaction").biologicalTransmission, p.biologicalTransmission);
 });

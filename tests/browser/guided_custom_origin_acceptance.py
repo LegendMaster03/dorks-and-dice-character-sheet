@@ -30,7 +30,7 @@ def run_browser():
         def url(name, suffix="draft"):
             return API + "/characters/" + ids[name] + "/origin/" + suffix
 
-        for name in ("direct", "red", "mixed"):
+        for name in ("direct", "red", "mixed", "drow-mixed"):
             request(page, "bootstrap-" + name, API + "/characters/" + ids[name] + "/sheet",
                     "POST", {}, 200)
         catalog = request(page, "native-catalog", API + "/native-rules/ruleset")
@@ -112,11 +112,11 @@ def run_browser():
             if gene.get_attribute("open") is None:
                 gene.locator("summary").first.click()
             return gene
-        def gene_action(res, key, contributor, action):
+        def gene_action(res, key, contributor, action, character="red"):
             gene = open_gene(key)
             cid = candidate(res, key, contributor)["id"]
             card = gene.locator('[data-biological-offer="' + cid + '"]')
-            return save("red", lambda: card.get_by_role("button", name=action, exact=True).click())
+            return save(character, lambda: card.get_by_role("button", name=action, exact=True).click())
         # A complete physical foundation is required before allocation is resolved.
         for key in ("creatureType", "size", "walkingSpeedFeet"):
             result = gene_action(result, key, red_id, "Inherit instance")
@@ -181,6 +181,59 @@ def run_browser():
         snapshot("guided-biological-review-mobile")
         page.set_viewport_size({"width":1440,"height":900})
 
+        # Real finite choice persistence, transport failure and linked native
+        # expression (no catalog/feat authority is manufactured).
+        open_origin("drow-mixed")
+        select_method("biological")
+        save("drow-mixed", lambda: page.get_by_role("button", name="Start biological draft").click())
+        page.get_by_label("Native biological contributor source").select_option("ancestry.elf.drow")
+        drow = save("drow-mixed", lambda: page.get_by_role("button", name="Add contributor").click())
+        donor = drow["draft"]["proposal"]["contributors"][0]["id"]
+        decision("Inheritance & Expression")
+        for key in ("creatureType", "size", "walkingSpeedFeet"):
+            drow = gene_action(drow, key, donor, "Inherit instance", "drow-mixed")
+            drow = gene_action(drow, key, donor, "Request expression", "drow-mixed")
+        ability = candidate(drow, "spellcastingAbility", donor)
+        drow = gene_action(drow, "spellcastingAbility", donor, "Inherit instance", "drow-mixed")
+        decision("Configuration")
+        ability_group = open_gene("spellcastingAbility")
+        wisdom = ability_group.get_by_label("Wisdom", exact=True)
+        expect(wisdom).to_be_visible()
+        failed_requests = []
+        def abort_save(route):
+            if route.request.method == "PUT":
+                failed_requests.append(route.request.post_data_json)
+                route.abort()
+            else:
+                route.continue_()
+        page.route("**/origin/draft", abort_save)
+        wisdom.check()
+        expect(page.get_by_role("button", name="Retry draft save", exact=True)).to_be_enabled()
+        event("finite-choice-save-failure-retained", len(failed_requests) == 1)
+        event("failed-save-did-not-change-server-draft", request(page, "failed-save-read", url("drow-mixed"))["draft"]["proposal"] ==
+              drow["draft"]["proposal"])
+        page.unroute("**/origin/draft", abort_save)
+        drow = save("drow-mixed", lambda: page.get_by_role("button", name="Retry draft save", exact=True).click())
+        event("retry-exact-pending-finite-choice", drow["draft"]["proposal"] == failed_requests[0]["proposal"])
+        latent = drow["draft"]["proposal"]["biologicalTransmission"]["latentConfigurations"]
+        event("latent-finite-choice-persisted", any(c["candidateId"] == ability["id"] and
+              c["choices"][0]["selectedOptionIds"] == ["wisdom"] for c in latent))
+        decision("Inheritance & Expression")
+        spell_key = "trait.faerie-fire"
+        drow = gene_action(drow, spell_key, donor, "Inherit instance", "drow-mixed")
+        drow = gene_action(drow, spell_key, donor, "Request expression", "drow-mixed")
+        event("linked-spell-not-granted-without-expression", not group(drow, spell_key)["expressions"])
+        drow = gene_action(drow, "spellcastingAbility", donor, "Request expression", "drow-mixed")
+        linked = group(drow, spell_key)["expressions"]
+        event("linked-spell-evaluates-source-ability", len(linked) == 1 and linked[0]["parameters"]["spellcastingAbility"] == "wisdom")
+        open_origin("drow-mixed")
+        decision("Configuration")
+        ability_group = open_gene("spellcastingAbility")
+        expect(ability_group.get_by_label("Wisdom", exact=True)).to_be_checked()
+        event("finite-choice-reload-exact", request(page, "finite-choice-reload", url("drow-mixed"))["draft"]["proposal"] ==
+              drow["draft"]["proposal"])
+        snapshot("guided-biological-linked-finite-choice")
+
         open_origin("mixed")
         select_method("construct-assembly")
         save("mixed", lambda: page.get_by_role("button", name="Start Construct draft").click())
@@ -238,7 +291,7 @@ def run_browser():
         event("construct-reload-exact", persisted["draft"]["proposal"] == configured["draft"]["proposal"])
         page.set_viewport_size({"width":390,"height":844})
         snapshot("guided-construct-review-mobile")
-        for name in ("red", "mixed"):
+        for name in ("red", "mixed", "drow-mixed"):
             state = request(page, name + "-state", url(name, "state"))
             event(name + "-unestablished", state["savedState"] is None)
             request(outsider, name + "-owner-boundary", url(name), expected=404)
