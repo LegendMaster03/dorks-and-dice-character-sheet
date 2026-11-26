@@ -1,7 +1,7 @@
 import { createButton, createElement, createSectionCard } from "../../ui/components.js";
 import { renderChoice, renderDecisionNavigation, renderDependencyReview, renderDraftStatus, renderFacts,
     renderRuleBrowser, renderRuleDetail, renderValidation, renderWorkspace, type ChoiceActions } from "../guided/components.js";
-import { isCurrentEvaluation, type ChoiceRequirement, type EditorContext, type RuleNode } from "../guided/contracts.js";
+import { isCurrentEvaluation, type ChoiceRequirement, type DraftView, type EvaluationView, type EditorContext, type RuleNode } from "../guided/contracts.js";
 import { changeExperienceChoice, changeExperienceSource, choiceTree, labelFor, reconsiderChoices, removeReviewedChoice,
     type ExperienceCatalog, type ExperienceDraft, type ExperienceKind, type ExperiencePreview, type NativeGrant, type SourceChange } from "./model.js";
 
@@ -59,6 +59,9 @@ function grantLabel(grant: NativeGrant, catalog: ExperienceCatalog): string {
 export function renderExperienceBenefits(preview: ExperiencePreview, catalog: ExperienceCatalog): HTMLElement {
     const card = createSectionCard("Combined candidate benefits");
     card.append(createElement("p", undefined, "Proposed learned benefits, not earned or applied to the character."));
+    if (preview.sources.length) card.append(renderFacts(preview.sources.map(source => ({
+        label: source.inherited ? "Inherited cultural source" : "Selected source", value: labelFor(catalog, source.sourceId)
+    }))));
     const groups = new Map<string, NativeGrant[]>();
     for (const grant of preview.candidateGrants) {
         const key = grantGroup(grant.kind);
@@ -112,9 +115,9 @@ export function renderExperienceBenefits(preview: ExperiencePreview, catalog: Ex
 
 export interface EquipmentOption { id: string; label: string }
 export interface ExperienceEquipmentContext {
-    preview: ExperiencePreview;
+    evaluation: EvaluationView<ExperiencePreview>;
     catalog: ExperienceCatalog;
-    draft: ExperienceDraft;
+    draft: DraftView<ExperienceDraft>;
     readOnly: boolean;
     /** Options must be returned by the existing ordinary-item authority for
      * this exact intent; ordinary display names are never treated as IDs. */
@@ -124,8 +127,15 @@ export interface ExperienceEquipmentContext {
 /** Mount this in the existing Equipment step. No inventory APIs are called.
  * A starting-item intention remains separate from an owned inventory item. */
 export function renderExperienceEquipment(context: ExperienceEquipmentContext): HTMLElement {
-    const { preview, catalog, draft } = context;
+    const { evaluation, catalog } = context;
     const card = createSectionCard("Life Experiences equipment intentions");
+    if (!isCurrentEvaluation(context.draft, evaluation) || context.draft.rulesetId !== catalog.rulesetId ||
+        context.draft.fingerprint !== catalog.fingerprint || !["saved", "read-only"].includes(context.draft.saveStatus)) {
+        card.append(createElement("p", undefined, "Current equipment intentions are unavailable. Reload or complete the draft save."));
+        return card;
+    }
+    const draft = context.draft.proposal, preview = evaluation.result;
+    const readOnly = context.readOnly || context.draft.readOnly || context.draft.saveStatus === "read-only";
     card.append(createElement("p", undefined, "Unclaimed starting entitlements. No items or currency have been awarded."));
     for (const item of preview.startingItems) {
         const group = createElement("section");
@@ -142,7 +152,7 @@ export function renderExperienceEquipment(context: ExperienceEquipmentContext): 
             const onSelect = context.onSelect;
             for (const option of options) group.append(createButton(
                 (draft.startingItemIds[item.key] === option.id ? "Selected: " : "Select: ") + option.label, secondary,
-                () => onSelect({ ...draft, startingItemIds: { ...draft.startingItemIds, [item.key]: option.id } }), context.readOnly));
+                () => onSelect({ ...draft, startingItemIds: { ...draft.startingItemIds, [item.key]: option.id } }), readOnly));
         } else group.append(createElement("p", undefined, "Ordinary inventory identity verification is required."));
         card.append(group);
     }
@@ -247,15 +257,16 @@ export function renderExperienceWorkspace(context: ExperienceWorkspaceContext): 
                 else save(change.draft);
             }, disabled || !inspected.selectable || !context.catalog.hierarchyComplete));
         }
-        if (context.pendingSourceChange && context.pendingSourceChange.draftRevision === context.draft.revision) {
-            const change = context.pendingSourceChange;
-            const summarize = (key: string) => key.split("/").map(id => labelFor(context.catalog, id)).join(" — ");
-            work.append(renderDependencyReview({ retained: change.retained.map(summarize),
-                reconsider: change.reconsider.map(summarize), available: [] }, () => {
-                save(change.draft);
-                context.reviewSourceChange(null);
-            }, () => context.reviewSourceChange(null), disabled));
-        }
+
+    }
+    if (context.pendingSourceChange && context.pendingSourceChange.draftRevision === context.draft.revision) {
+        const change = context.pendingSourceChange;
+        const summarize = (key: string) => key.split("/").map(id => labelFor(context.catalog, id)).join(" — ");
+        work.append(renderDependencyReview({ retained: change.retained.map(summarize),
+            reconsider: change.reconsider.map(summarize), available: [] }, () => {
+            save(change.draft);
+            context.reviewSourceChange(null);
+        }, () => context.reviewSourceChange(null), disabled));
     }
     if (context.decisionId === "benefits" || context.decisionId === "review") {
         if (!preview) work.append(createElement("p", undefined,
@@ -265,7 +276,12 @@ export function renderExperienceWorkspace(context: ExperienceWorkspaceContext): 
             const actions: ChoiceActions = {
                 select: (key, id, selected) => {
                     const choice = native.get(key);
-                    if (choice) save(changeExperienceChoice(draft, choice, id, selected));
+                    if (!choice) return;
+                    const next = changeExperienceChoice(draft, choice, id, selected);
+                    const reconsider = Object.keys(draft.selections).filter(k => k !== key && !(k in next.selections));
+                    if (reconsider.length) context.reviewSourceChange({ draft: next, reconsider,
+                        retained: Object.keys(next.selections).filter(k => k !== key), draftRevision: context.draft!.revision });
+                    else save(next);
                 },
                 browseCatalog: () => {}, navigate: context.navigate
             };
@@ -296,7 +312,13 @@ export function renderExperienceWorkspace(context: ExperienceWorkspaceContext): 
                 { ...issue, decision: undefined } : issue), context.navigate));
             if (context.decisionId === "review") {
                 work.append(createElement("p", undefined, "Review is nonauthoritative. Whole-character training and earned benefit verification remain required."),
-                    renderExperienceEquipment({ preview, catalog: context.catalog, draft, readOnly: true }));
+                    renderFacts(preview.choices.map(choice => ({
+                        label: labelFor(context.catalog, choice.key.split("/").at(-1)!),
+                        value: (draft.selections[choice.key] ?? []).map(id => labelFor(context.catalog, id)).join(", ") ||
+                            "Required — not selected",
+                        source: { label: labelFor(context.catalog, choice.key.split("/")[0]!) }
+                    }))),
+                    renderExperienceEquipment({ evaluation: context.preview!, catalog: context.catalog, draft: context.draft!, readOnly: true }));
             }
         }
     }

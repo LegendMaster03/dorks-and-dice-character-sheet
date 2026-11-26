@@ -1,0 +1,34 @@
+# Guided Character Creator — Workstream E integration handoff
+
+Status: **partial, nonauthoritative feature implementation; not ready to replace the production Background step.**
+
+- Branch: `feature/guided-creator-life-experiences-20261126`
+- Workstream A code checkpoint: `b31f4778f6765b65e9139977a2745ce94dd9e503`
+- Approved design: `cc5b82f7ca588be51c5970de9222b1cd1cb72b93`
+- Rules Core inspected: `0baa466b7fc8f55e5d675b886f76e95f9a4b551f`
+
+## Feature interfaces for A
+
+Mount `renderExperienceWorkspace(context)` from `Client/src/features/life-experiences/workspace.ts` in the existing `background` step. The workspace owns no global app state. Use its `experienceDecisions` and supply `ExperienceWorkspaceContext`, including the exact character's authorized draft, evaluation, revision-bound pending change review, inspected rule, search state, native catalog and training hierarchy. Origin's suggested Upbringing is an optional display input only. Deity is already in A's Other Choices step; do not restore it here.
+
+`model.ts` implements independent draft selection, exact source-chain retention, choice and descendant handling, native DTO decoding, explicit reconsideration of inactive choices and candidate-only provenance. `api.ts` adapts the existing same-origin preview bridge. Both source IDs are mandatory for native evaluation; partial draft pairs remain valid in application storage. Preview discovery starts empty and replays complete offered choices in bounded rounds. Partial counted choices and stale paths remain in the draft. Only the current revision and fingerprint may be presented; a preview can never constitute an earned grant or finalization. The caller owns request sequencing, retry, exact revision compare-and-swap and access checks.
+
+Mount `renderExperienceEquipment(context)` within the existing Equipment step; supply the current revision-bound evaluation and draft. Only independently resolved ordinary-item options for the exact intent can populate the optional item selector. The function only changes proposed item selections, never inventory. Do not store a separate starting inventory or create an additional grant system.
+
+## Required shared changes
+
+- Proposed shared architecture-test allowance: `life-experiences -> guided` only. The initial E CI failed the existing unrelated-sibling guard; A's approved shared presentation dependency was not yet in the allowlist. The E branch proposes this explicit narrow entry, plus unique test registration in the shared package script. Reconcile those with B–D registrations in the integration branch rather than wholesale replacing the A-owned files.
+- A must register the editor and supply a real nonauthoritative persistence host. `ExperienceDraftHost` is an interface, not a storage implementation. Implement durable selection state tied to the exact character/ruleset/aggregate revision, authorization, stale-write conflict handling and save/reload. Do not reuse the legacy Background field as a second mutable source.
+- Provide catalog discovery with native parent IDs, selectability, names, bounded public benefit descriptions, choice labels, authored restrictions, optional narrative prompts, and native training family/composite relationships. Current `GET /api/native-rules/options` forwards to Core's `/catalog/options`; Core accepts upbringing/background but returns only ID/name/kind. No approved native hierarchical Life Experiences presentation contract exists at this checkpoint. The feature-local title loader deliberately marks results browse-only and does not infer parents from IDs or grant authority. Do not pass raw catalog definitions, review notes, or private paths through the browser. Add bounded presentation metadata in coordination with Core; supply complete verified hierarchy to the E adapter. Existing normal Sheet hierarchy must remain intact.
+- Choice paths for ordinary equipment nested within an outer benefit are not always structurally nested in the native response (equipment choice keys use source/equipment/choice ID); render only active native offers. A richer explicit native parent/option relation and public labels would remove ambiguity. No generic catalog-wide substitute is authorized.
+- Restricted language options require independent source context/identity authority. The preview may suppress a candidate language even when a selection is present. The native catalog is incomplete; a missing identity is not authorization for arbitrary text. Contextual choices remain pending verification.
+- Verified Life Experiences plan requires a server-owned provider for exact character revision, source occurrences, source-specific choice eligibility and ordinary item evidence. Native verified character training composition separately requires independent primary inputs and earned source occurrences from Class, inherent characteristics and Life Experiences; it produces proposed aggregate mechanics, not authority to mutate the sheet. Cross-Class duplicate choices and competency breadth/rank policy must consume that contract. No client reimplementation.
+- Starting equipment needs existing ordinary-inventory provider, idempotent claim/consumption and atomic finalization, preserving already owned items. Re-evaluate unclaimed intentions only. Never use display names as item IDs.
+- Workstream A lifecycle proposal remains unapproved and unimplemented at this checkpoint. Production wiring and earned/committed operations are blocked; do not weaken established Origin protections or expose preview as earned mechanics.
+
+## Validation and limitations
+
+Nine E tests registered in the frontend test suite: independent sources, nonselectable cultural parent, source-change retention, Guild Merchant nested options, counted partial choices, inactive replacements, typed candidate/provenance validation, staged preview replay, stale fingerprint and title-only discovery. The earlier run `45762483779` passed 388 tests and failed the shared architecture dependency guard. The revised candidate `9fed11791168788ea4391bc3aa5fa95d394e6fbd` passed Build frontend and Embedded Module lifecycle verification in run [45762631975](https://github.com/LegendMaster03/dorks-and-dice-character-sheet/actions/runs/45762631975) at the time of recording. This does not validate a live character or backend finalization.
+
+The feature is deliberately not mounted in production because A owns the shared composition and the required capabilities do not yet exist. Tests are mock-contract/pure-model tests, not actual native authenticated acceptance. Full conventional, mixed biological, and construct end-to-end creation, source authority, cross-Class training, item and currency materialization, duplicate awards, durable reload, browser responsiveness/accessibility and resulting Sheet verification remain outstanding. No native mechanics or main branch changes.
+
