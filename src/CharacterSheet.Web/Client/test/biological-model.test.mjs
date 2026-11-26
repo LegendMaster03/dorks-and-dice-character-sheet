@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { newBiologicalProposal, addNativeContributor, evaluateBiological,
-    setInherited, setExpression, setFiniteChoice, removeContributor, allocationView }
+    setInherited, setExpression, setFiniteChoice, removeContributor, allocationView,
+    composableOffers, setComposition, clearComposition, supportsBiologicalDraft }
     from "../.test-dist/features/origin/biological/model.js";
 
 const preset = (id, name) => ({ id, name, kind: "ancestry", parentId: "species.dragonborn",
@@ -88,4 +89,47 @@ test("no four-source limit is inferred from the prior editor", () => {
     assert.equal(p.contributors.length, 7);
     assert.throws(() => addNativeContributor(p, "red", red));
     assert.throws(() => addNativeContributor(p, "restricted", {...red, selectable: false}));
+});
+
+test("canonical native composition is source-bound, persisted, and removed on affected contributor change", () => {
+    let p = proposal();
+    const plain = [redOffer, bronzeOffer].map((o, i) => ({ candidate: {
+        ...o.candidate, requiredChoices: [], offeredParameters: {
+            damageType: i ? "lightning" : "fire", area: {shape: i ? "cone" : "line"}
+        }
+    }}));
+    const evalFor = (draft, metadata = true) => evaluateBiological(draft, { previewOnly: true, result: {
+        evaluatedProposal: { id: draft.id }, issues: [], biologicalCombination: {
+            proposalId: draft.id, explicitTransmissionPlan: true,
+            maxInheritedInstancesPerKind: 2, maxExpressedInstancesPerKind: 1,
+            characteristics: [{ kind: "Trait", characteristicId: "trait.breath-weapon",
+                offers: plain, expressions: [], ...(metadata ? { presentation: {
+                    name: "Breath Weapon", recombinableParameters: ["damageType", "area"]
+                }} : {}) }], inheritedInstances: []
+        }
+    }}, true);
+    p = setInherited(p, evalFor(p), "red-breath", true);
+    p = setInherited(p, evalFor(p), "bronze-breath", true);
+    assert.equal(evalFor(p).maxInherited, 2);
+    assert.equal(composableOffers(evalFor(p, false).groups[0]).length, 0);
+    assert.throws(() => setComposition(p, evalFor(p, false), "trait.breath-weapon", "red-breath", {
+        damageType: "red-breath", area: "bronze-breath"
+    }));
+    p = setComposition(p, evalFor(p), "trait.breath-weapon", "red-breath", {
+        damageType: "red-breath", area: "bronze-breath"
+    });
+    assert.deepEqual(p.resolutions[0].replacementParameters, { damageType: "fire", area: { shape: "cone" } });
+    assert.deepEqual(p.resolutions[0].replacementParameterSources, { damageType: "red-breath", area: "bronze-breath" });
+    assert.equal(p.manifestations.length, 2);
+    assert.equal(supportsBiologicalDraft(JSON.parse(JSON.stringify(p))), true);
+    assert.equal(supportsBiologicalDraft({...p, resolutions:[{...p.resolutions[0], basis:{adjudication:3}}]}), false);
+    const cleared = clearComposition(p, "trait.breath-weapon");
+    assert.deepEqual(cleared.biologicalTransmission, p.biologicalTransmission);
+    assert.equal(cleared.manifestations.length, 0);
+    assert.equal(cleared.relationships.length, 0);
+    const changed = removeContributor(p, evalFor(p), "red");
+    assert.deepEqual(changed.proposal.biologicalTransmission.candidateIds, ["bronze-breath"]);
+    assert.equal(changed.proposal.relationships.length, 0);
+    assert.equal(changed.proposal.resolutions.length, 0);
+    assert.ok(changed.change.reconsider.some(x => x.includes("Combined expression")));
 });
