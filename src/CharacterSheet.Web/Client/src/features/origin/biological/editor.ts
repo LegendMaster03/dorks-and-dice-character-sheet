@@ -1,13 +1,14 @@
 /** Method-specific workspace. The shared controller owns navigation, canonical
  * draft writes, revision conflicts, and authorization; this editor owns no grants. */
 import { createButton, createElement, createSectionCard } from "../../../ui/components.js";
-import { renderAllocation, renderChoice, renderDecisionNavigation, renderDependencyReview,
+import { renderChoice, renderDecisionNavigation, renderDependencyReview,
     renderDraftStatus, renderFacts, renderValidation, renderWorkspace } from "../../guided/components.js";
 import { isCurrentEvaluation, type EditorContext, type MethodEditor, type NativePreset } from "../../guided/contracts.js";
 import type { NativeOriginDraftProposal } from "../origin-api.js";
 import { addNativeContributor, biologicalReference, evaluateBiological, nativeContributorAllowed,
     newBiologicalProposal, record, removeContributor, setExpression, setFiniteChoice, setInherited,
-    supportsBiologicalDraft, type BiologicalEvaluation, type BiologicalProposal, type Offer } from "./model.js";
+    composableOffers, setComposition, clearComposition, setInheritedInteraction, removeInheritedInteraction, groupAllocationCharges,
+    supportsBiologicalDraft, type BiologicalEvaluation, type BiologicalProposal, type Offer, type CharacteristicGroup } from "./model.js";
 
 export interface BiologicalEditorContext extends EditorContext<NativeOriginDraftProposal, unknown> {
     /** The preview result must contain the complete native preview envelope,
@@ -17,6 +18,8 @@ export interface BiologicalEditorContext extends EditorContext<NativeOriginDraft
     readonly characteristicLabel?: (id: string) => string | undefined;
     readonly characteristicDescription?: (id: string) => string | undefined;
     readonly characteristicCategory?: (id: string) => string | undefined;
+    /** View state only: retain disclosure/search across canonical draft writes. */
+    readonly characteristicBrowser?: { query: string; expanded: Map<string, boolean> };
 }
 const decisions = [
     { id: "contributors", label: "Contributors" },
@@ -132,28 +135,32 @@ function renderOffer(context: BiologicalEditorContext, proposal: BiologicalPropo
     evaluation: BiologicalEvaluation, offer: Offer, locked: boolean, save: (p: BiologicalProposal) => void,
     configure: boolean): HTMLElement {
     const card = createElement("article", "dd-build-choice");
+    card.dataset.biologicalOffer = offer.id;
     card.append(createElement("h4", undefined, contributorLabel(context, proposal, offer)),
         createElement("p", undefined, "Source: " + sourceName(context, offer.sourceId)),
         createElement("p", undefined, "State: " + human(offer.state)));
     if (offer.requestedExpression && offer.state !== "expressed")
         card.append(createElement("p", undefined, "Expression requested; not granted by current evaluation."));
-    const facts = [
-        { label: "Offered configuration", value: valueText(offer.value) || "Not specified" },
-        { label: "Parameters", value: valueText(offer.parameters) || "Not specified" }
-    ];
-    card.append(renderFacts(facts));
-    if (offer.explanation) card.append(createElement("p", undefined, offer.explanation));
-    const charges = evaluation.charges.filter(charge => Array.isArray(charge.grantIds) &&
-        charge.grantIds.some(id => typeof id === "string" && offer.expressionIds.includes(id)));
-    for (const charge of charges) {
-        if (typeof charge.load === "number")
-            card.append(createElement("p", undefined, "Evaluated charge: " + charge.load + (Array.isArray(charge.grantIds) && charge.grantIds.length > 1 ? " (shared charge)" : "") + " points"));
-    }
+    const authored = record(offer.value) ? offer.value : null;
+    // Show the distinct source-bound parameters before the generic description.
+    const summary = valueText(offer.parameters) || (authored ?
+        [authored.spell, authored.level == null ? null : "Level " + authored.level]
+            .filter(v => typeof v === "string").join(" · ") : valueText(offer.value));
+    if (summary) card.append(createElement("p", undefined, summary));
+    const evidence = createElement("details");
+    evidence.append(createElement("summary", undefined, "Source configuration and requirements"),
+        renderFacts([
+            { label: "Offered configuration", value: valueText(offer.value) || "Not specified" },
+            { label: "Parameters", value: valueText(offer.parameters) || "Not specified" }
+        ]));
+    if (offer.explanation) evidence.append(createElement("p", undefined, offer.explanation));
+    card.append(evidence);
     if (!configure) {
+        const composition = proposal.relationships?.some(r => r.candidateIds.includes(offer.id));
         card.append(createButton(offer.inherited ? "Remove inherited instance" : "Inherit instance", buttonClass,
             () => save(setInherited(proposal, evaluation, offer.id, !offer.inherited)), locked),
             createButton(offer.requestedExpression ? "Withdraw expression request" : "Request expression", buttonClass,
-                () => save(setExpression(proposal, evaluation, offer.id, !offer.requestedExpression)), locked || !offer.inherited));
+                () => save(setExpression(proposal, evaluation, offer.id, !offer.requestedExpression)), locked || !offer.inherited || !!composition));
     }
     if (offer.inherited) {
         const details = createElement("details");
@@ -187,6 +194,121 @@ function renderOffer(context: BiologicalEditorContext, proposal: BiologicalPropo
     }
     return card;
 }
+function renderComposition(context: BiologicalEditorContext, proposal: BiologicalProposal,
+    evaluation: BiologicalEvaluation, group: CharacteristicGroup, locked: boolean,
+    save: (p: BiologicalProposal) => void): HTMLElement | null {
+    const prior = proposal.resolutions?.find(r => r.relationshipId === "guided-compose:" + group.id);
+    const offers = composableOffers(group);
+    if (offers.length < 2 && !prior) return null;
+    const panel = createElement("details", "dd-guided-detail");
+    panel.dataset.biologicalComposition = group.id;
+    panel.classList.add("dd-biological-configuration");
+    panel.open = !!prior;
+    panel.append(createElement("summary", undefined, "Combine inherited configurations"),
+        createElement("p", undefined, "Choose a base expression and the source of each native recombinable parameter. The underlying genes remain separate; Rules Core validates the single proposed phenotype."));
+    if (prior) panel.append(createButton("Clear combined expression", buttonClass,
+        () => save(clearComposition(proposal, group.id)), locked));
+    if (offers.length < 2) {
+        panel.append(createElement("p", undefined, "Current native composition options are unavailable. Review or clear the previous request."));
+        return panel;
+    }
+    const base = createElement("select");
+    base.setAttribute("aria-label", "Base expression source");
+    const addSources = (select: HTMLSelectElement, parameter?: string) => {
+        for (const offer of offers) {
+            const option = createElement("option", undefined, contributorLabel(context, proposal, offer) +
+                (parameter && record(offer.parameters) ? " — " + valueText(offer.parameters[parameter]) : ""));
+            option.value = offer.id; select.append(option);
+        }
+        select.disabled = locked;
+    };
+    addSources(base);
+    base.value = prior?.replacementCandidateId ?? offers.find(o => o.requestedExpression)?.id ?? offers[0]!.id;
+    if (!base.value) base.value = offers[0]!.id;
+    const baseLabel = createElement("label", undefined, "Base expression source "); baseLabel.append(base);
+    panel.append(baseLabel);
+    const selections = new Map<string, HTMLSelectElement>();
+    for (const key of group.presentation?.recombinableParameters ?? []) {
+        const label = createElement("label", undefined, human(key) + " source ");
+        const select = createElement("select"); select.setAttribute("aria-label", human(key) + " source");
+        addSources(select, key);
+        select.value = prior?.replacementParameterSources[key] ?? base.value;
+        if (!select.value) select.value = base.value;
+        selections.set(key, select); label.append(select); panel.append(label);
+    }
+    const error = createElement("p"); error.setAttribute("role", "alert");
+    panel.append(createButton("Apply combined expression", buttonClass, () => {
+        try {
+            error.textContent = "";
+            save(setComposition(proposal, evaluation, group.id, base.value,
+                Object.fromEntries([...selections].map(([key, select]) => [key, select.value]))));
+        } catch (e) { error.textContent = e instanceof Error ? e.message : "Native composition unavailable."; }
+    }, locked), error);
+    return panel;
+}
+
+/** The Core supplies exact allowed candidate pools; the player chooses
+ * distinct occurrences, and the native evaluator decides the final phenotype. */
+function renderInteractions(context: BiologicalEditorContext, proposal: BiologicalProposal,
+    evaluation: BiologicalEvaluation, locked: boolean, save: (p: BiologicalProposal) => void): HTMLElement {
+    const panel = createElement("details", "dd-guided-detail dd-biological-configuration");
+    const previous = proposal.biologicalTransmission.combinations ?? [];
+    const options = evaluation.interactionOptions;
+    panel.open = previous.length > 0;
+    panel.append(createElement("summary", undefined, "Inherited interactions" +
+        (options ? " — " + options.length + " available" : " — discovery unavailable")));
+    const offerLabel = (id: string) => {
+        const offer = evaluation.groups.flatMap(g => g.offers).find(o => o.id === id);
+        const group = evaluation.groups.find(g => g.id === offer?.characteristicId);
+        return offer ? (group?.presentation?.name ?? name(context, offer.characteristicId)) + " — " +
+            contributorLabel(context, proposal, offer) : "Previous inherited occurrence — review required";
+    };
+    for (const selection of previous) {
+        const option = options?.find(o => o.ruleOwnerId === selection.ruleOwnerId && o.interactionId === selection.interactionId);
+        const entry = createElement("article", "dd-guided-detail");
+        entry.append(createElement("h4", undefined, option?.resultName ?? "Previous inherited interaction"),
+            createElement("p", undefined, selection.candidateIds.map(offerLabel).join("; ")),
+            createButton("Remove inherited interaction", buttonClass,
+                () => save(removeInheritedInteraction(proposal, selection.ruleOwnerId, selection.interactionId)), locked));
+        panel.append(entry);
+    }
+    if (!options?.length) {
+        panel.append(createElement("p", undefined, options ?
+            "No authored interaction has a matching configured inherited input set." :
+            "Current native inherited interaction discovery is unavailable."));
+        return panel;
+    }
+    for (const option of options) {
+        const entry = createElement("article", "dd-guided-detail");
+        entry.append(createElement("h4", undefined, option.resultName),
+            createElement("p", undefined, "Select distinct exact inherited inputs. Native evaluation checks the resulting expression, dependencies and allocation."));
+        const selects: HTMLSelectElement[][] = [];
+        for (const [index, input] of option.inputs.entries()) {
+            const slots: HTMLSelectElement[] = [];
+            for (let i = 0; i < input.count; i++) {
+                const label = createElement("label", undefined, "Input " + (index + 1) + "." + (i + 1) + " ");
+                const select = createElement("select");
+                const empty = createElement("option", undefined, "Choose inherited occurrence"); empty.value = ""; select.append(empty);
+                for (const id of input.candidateIds) {
+                    const node = createElement("option", undefined, offerLabel(id)); node.value = id; select.append(node);
+                }
+                select.disabled = locked; label.append(select); entry.append(label); slots.push(select);
+            }
+            selects.push(slots);
+        }
+        const error = createElement("p"); error.setAttribute("role", "alert");
+        entry.append(createButton("Apply inherited interaction", buttonClass, () => {
+            try {
+                error.textContent = "";
+                save(setInheritedInteraction(proposal, evaluation, option.ruleOwnerId, option.interactionId,
+                    selects.map(group => group.map(select => select.value))));
+            } catch (e) { error.textContent = e instanceof Error ? e.message : "Native interaction unavailable."; }
+        }, locked), error);
+        panel.append(entry);
+    }
+    return panel;
+}
+
 function renderCharacteristics(context: BiologicalEditorContext, proposal: BiologicalProposal,
     evaluation: BiologicalEvaluation, locked: boolean, save: (p: BiologicalProposal) => void,
     configure: boolean): HTMLElement {
@@ -199,16 +321,21 @@ function renderCharacteristics(context: BiologicalEditorContext, proposal: Biolo
     const query = createElement("input");
     query.type = "search";
     query.setAttribute("aria-label", "Search characteristics");
-    const groups = createElement("div");
+    query.placeholder = "Search characteristics";
+    const browser = context.characteristicBrowser;
+    query.value = browser?.query ?? "";
+    const groups = createElement("div", "dd-biological-groups");
     function populate(): void {
         groups.replaceChildren();
         const term = query.value.trim().toLowerCase();
         const categories = new Map<string, HTMLElement>();
         for (const group of evaluation.groups) {
-            const title = name(context, group.id);
+            const authored = group.offers.map(o => o.value).find(v => record(v) && typeof v.name === "string");
+            const title = group.presentation?.name ?? context.characteristicLabel?.(group.id) ??
+                (record(authored) && typeof authored.name === "string" ? authored.name : name(context, group.id));
             const offers = group.offers.filter(o => !configure || o.inherited);
             if (!offers.length || (term && ![title, ...offers.map(o => contributorLabel(context, proposal, o))].some(s => s.toLowerCase().includes(term)))) continue;
-            const category = context.characteristicCategory?.(group.id) ??
+            const category = group.presentation?.category ?? context.characteristicCategory?.(group.id) ??
                 (group.kind === "Intrinsic" || group.kind === "0" ? "Physical characteristics" : "Other characteristics");
             let area = categories.get(category);
             if (!area) {
@@ -217,31 +344,57 @@ function renderCharacteristics(context: BiologicalEditorContext, proposal: Biolo
                 categories.set(category, area);
                 groups.append(area);
             }
-            const detail = createElement("details");
-            detail.open = true;
-            detail.append(createElement("summary", undefined, title + " — " +
-                offers.filter(o => o.inherited).length + " inherited"));
-            const description = context.characteristicDescription?.(group.id);
+            const detail = createElement("details", "dd-biological-gene");
+            detail.dataset.biologicalGroup = group.id;
+            const key = (configure ? "configure:" : "inherit:") + group.id;
+            const inheritedCount = offers.filter(o => o.inherited).length;
+            const expressedCount = offers.filter(o => o.state === "expressed").length;
+            const hasConfiguration = offers.some(o => o.inherited && o.requirements.some(r =>
+                r.timing === 0 || r.timing === "Creation")) || composableOffers(group).length > 1 ||
+                !!proposal.resolutions?.some(r => r.relationshipId === "guided-compose:" + group.id);
+            detail.open = !!term || (browser?.expanded.get(key) ?? (configure ? hasConfiguration : inheritedCount > 0));
+            detail.append(createElement("summary", undefined, title + " — " + inheritedCount +
+                (evaluation.maxInherited == null ? "" : "/" + evaluation.maxInherited) + " inherited" +
+                (expressedCount ? " · " + group.expressions.length +
+                    (evaluation.maxExpressed == null ? "" : "/" + evaluation.maxExpressed) + " effective expression" +
+                    (group.expressions.length === 1 ? "" : "s") : "")));
+            detail.addEventListener("toggle", () => {
+                if (!term && detail.isConnected) browser?.expanded.set(key, detail.open);
+            });
+            const description = group.presentation?.description ?? context.characteristicDescription?.(group.id) ??
+                (record(authored) && typeof authored.description === "string" ? authored.description : undefined);
             if (description) detail.append(createElement("p", undefined, description));
+            for (const charge of groupAllocationCharges(evaluation, group))
+                detail.append(createElement("p", "dd-biological-charge", "Evaluated charge: " + charge.load +
+                    (charge.load === 1 ? " point" : " points") + (charge.shared ? " (shared; counted once in total)" : "")));
             for (const offer of offers) detail.append(renderOffer(context, proposal, evaluation, offer, locked, save, configure));
+            const composition = renderComposition(context, proposal, evaluation, group, locked, save);
+            if (composition) detail.append(composition);
             if (group.expressions.length) {
                 const effects = createElement("details");
                 effects.append(createElement("summary", undefined, "Evaluated consequences — preview only"));
-                for (const grant of group.expressions) effects.append(createElement("p", undefined,
-                    valueText(grant.effectiveValue) || "Native effective characteristic"));
+                for (const grant of group.expressions) {
+                    effects.append(createElement("p", undefined, valueText(grant.parameters) || valueText(grant.effectiveValue) ||
+                        "Native effective characteristic"));
+                    if (record(grant.parameterSources)) effects.append(renderFacts(Object.entries(grant.parameterSources).map(([key, id]) => {
+                        const source = group.offers.find(o => o.id === id);
+                        return { label: human(key), value: source ? contributorLabel(context, proposal, source) : "Native source evidence" };
+                    })));
+                }
                 detail.append(effects);
             }
             area.append(detail);
         }
         if (!categories.size) groups.append(createElement("p", undefined, "No matching hereditary offers."));
     }
-    query.addEventListener("input", populate);
+    query.addEventListener("input", () => { if (browser) browser.query = query.value; populate(); });
     populate();
     section.append(query, groups);
+    if (configure) section.append(renderInteractions(context, proposal, evaluation, locked, save));
     return section;
 }
 export function renderBiologicalEditor(context: BiologicalEditorContext): HTMLElement {
-    const section = createSectionCard("Biological Origination");
+    const section = createSectionCard("Biological Origination", "dd-custom-origin");
     const error = createElement("p");
     error.setAttribute("role", "alert");
     const draft = context.draft;
@@ -270,7 +423,19 @@ export function renderBiologicalEditor(context: BiologicalEditorContext): HTMLEl
     }
     const current = !!draft && !!context.preview && isCurrentEvaluation(draft, context.preview);
     const evaluation = evaluateBiological(proposal, context.preview?.result, current);
-    section.append(renderAllocation(evaluation.allocation));
+    const allocation = createElement("div", "dd-origin-allocation");
+    allocation.append(renderFacts([
+        { label: "Used", value: evaluation.allocation.used ?? "Unresolved" },
+        { label: "Allowance", value: evaluation.allocation.allowance ?? "Unresolved" },
+        { label: "Remaining", value: evaluation.allocation.remaining ?? "Unresolved" }
+    ]));
+    allocation.append(createElement("p", undefined, evaluation.allocation.detail ??
+        (evaluation.allocation.status === "within" ? "Within allocation" : "Native allocation unavailable")));
+    if (evaluation.maxInherited != null && evaluation.maxExpressed != null)
+        allocation.append(createElement("p", undefined, "Per characteristic: " + evaluation.maxInherited +
+            " inherited instances; " + evaluation.maxExpressed +
+            (evaluation.maxExpressed === 1 ? " effective expression." : " effective expressions.")));
+    section.append(allocation);
     let work: HTMLElement;
     switch (context.decisionId) {
         case "inheritance": work = renderCharacteristics(context, proposal, evaluation, locked, save, false); break;
@@ -287,7 +452,27 @@ export function renderBiologicalEditor(context: BiologicalEditorContext): HTMLEl
             break;
         default: work = renderContributors(context, proposal, evaluation, locked, save);
     }
-    const preview = renderValidation(evaluation.issues, context.navigate);
+    const preview = createSectionCard("Character preview");
+    const inherited = evaluation.groups.flatMap(g => g.offers).filter(o => o.inherited);
+    preview.append(renderFacts([
+        { label: "Inherited instances", value: String(inherited.length) },
+        { label: "Expressed instances", value: String(inherited.filter(o => o.state === "expressed").length) },
+        { label: "Effective characteristics", value: String(new Set(evaluation.groups.flatMap(g =>
+            g.expressions.map(grant => grant.id).filter(id => typeof id === "string"))).size) },
+        { label: "Latent", value: String(inherited.filter(o => o.state === "latent").length) },
+        { label: "Unresolved", value: String(inherited.filter(o => o.state === "unresolved").length) }
+    ]));
+    for (const group of evaluation.groups.filter(g => g.expressions.length)) {
+        const effects = createElement("details");
+        effects.append(createElement("summary", undefined, name(context, group.id)));
+        for (const grant of group.expressions) effects.append(createElement("p", undefined, valueText(grant.effectiveValue)));
+        preview.append(effects);
+    }
+    const validation = createElement("details");
+    validation.open = context.decisionId === "review";
+    validation.append(createElement("summary", undefined, evaluation.issues.length + " validation issues"),
+        renderValidation(evaluation.issues, context.navigate));
+    preview.append(validation);
     if (!evaluation.current) preview.append(createElement("p", undefined, "Current native results are unavailable."));
     section.append(renderWorkspace(work, undefined, preview));
     if (locked && draft?.saveStatus === "failed")

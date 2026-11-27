@@ -407,7 +407,7 @@ public static class CharacterOriginDraftEndpoints
             CharacterOriginDraftStatus.Ready => Results.Ok(new
             {
                 status = "ready", draft = result.Draft,
-                preview = result.Preview, activeGrants = false
+                preview = result.Preview, constructPreview = result.ConstructPreview, activeGrants = false
             }),
             CharacterOriginDraftStatus.NotFoundOrNotOwned => Results.NotFound(),
             CharacterOriginDraftStatus.Unauthenticated => Results.Unauthorized(),

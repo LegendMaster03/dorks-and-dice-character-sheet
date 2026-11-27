@@ -10,13 +10,73 @@ const records = (value: unknown): RecordValue[] => Array.isArray(value) ? value.
 const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 const text = (value: unknown): string => typeof value === "string" ? value : "";
 export const biologicalReference = { ruleId: "rule.creature-origination", methodId: "biological" } as const;
+export interface InteractionSelection {
+    ruleOwnerId: string; interactionId: string; candidateIds: readonly string[];
+}
+export interface InteractionOption {
+    ruleOwnerId: string; interactionId: string; resultTraitId: string; resultName: string;
+    inputs: readonly { count: number; candidateIds: readonly string[] }[];
+}
 export interface Transmission {
     candidateIds: readonly string[];
     latentConfigurations?: readonly { candidateId: string; choices?: readonly NativeOriginDraftChoice[] }[];
-    combinations?: readonly { ruleOwnerId: string; interactionId: string; candidateIds: readonly string[] }[];
+    combinations?: readonly InteractionSelection[];
+}
+/** These are ordinary proposed native relationship dispositions, never DM decisions. */
+export interface CompositionRelationship {
+    id: string; kind: 3; candidateIds: readonly string[]; authoredRuleReference: string;
+}
+export interface CompositionResolution {
+    relationshipId: string; action: 4;
+    basis: { adjudication: 0; nativeRuleReference: string };
+    replacementCandidateId: string;
+    replacementParameters: Readonly<RecordValue>;
+    replacementParameterSources: Readonly<Record<string, string>>;
 }
 export interface BiologicalProposal extends NativeOriginDraftProposal {
     biologicalTransmission: Transmission;
+    relationships?: readonly CompositionRelationship[];
+    resolutions?: readonly CompositionResolution[];
+}
+export interface CharacteristicGroup {
+    id: string; kind: string; offers: readonly Offer[]; expressions: readonly RecordValue[];
+    presentation?: { name: string; description?: string; category?: string; recombinableParameters: readonly string[] };
+}
+const compositionId = (characteristic: string) => "guided-compose:" + characteristic;
+const sameKeys = (a: RecordValue, b: RecordValue) =>
+    Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(k => Object.hasOwn(b, k));
+
+/** Reopen only this editor's narrow native-supported replacement shape.
+ * Other persisted relationships require their existing specialist workflow. */
+function supportsCompositions(proposal: NativeOriginDraftProposal, candidateIds: readonly string[]): boolean {
+    const relations = proposal.relationships ?? [], resolutions = proposal.resolutions ?? [];
+    if (!Array.isArray(relations) || !Array.isArray(resolutions) || relations.length !== resolutions.length) return false;
+    const ids = new Set<string>();
+    return relations.every(rel => {
+        if (!record(rel) || typeof rel.authoredRuleReference !== "string" || !rel.authoredRuleReference.startsWith("trait.") ||
+            rel.id !== compositionId(rel.authoredRuleReference) || rel.kind !== 3 ||
+            ids.has(rel.id as string) || !Array.isArray(rel.candidateIds) || rel.candidateIds.length < 2 ||
+            new Set(rel.candidateIds).size !== rel.candidateIds.length ||
+            !rel.candidateIds.every(id => typeof id === "string" && candidateIds.includes(id) &&
+                proposal.manifestations.some(m => m.candidateId === id))) return false;
+        ids.add(rel.id as string);
+        const participants = rel.candidateIds;
+        const matches = resolutions.filter(res => record(res) && res.relationshipId === rel.id);
+        const res = matches[0];
+        return matches.length === 1 && record(res) && res.action === 4 && record(res.basis) &&
+            res.basis.adjudication === 0 && res.basis.nativeRuleReference === rel.authoredRuleReference &&
+            res.basis.tableDecisionId == null && rel.candidateIds.includes(res.replacementCandidateId) &&
+            record(res.replacementParameters) && record(res.replacementParameterSources) &&
+            sameKeys(res.replacementParameters, res.replacementParameterSources) &&
+            Object.keys(res.replacementParameters).length > 0 &&
+            Object.values(res.replacementParameterSources).every(id => participants.includes(id));
+    });
+}
+function withoutCompositions(proposal: BiologicalProposal, remove: (relation: CompositionRelationship) => boolean) {
+    const removed = new Set((proposal.relationships ?? []).filter(remove).map(r => r.id));
+    if (!removed.size) return {};
+    return { relationships: proposal.relationships?.filter(r => !removed.has(r.id)),
+        resolutions: proposal.resolutions?.filter(r => !removed.has(r.relationshipId)) };
 }
 export interface Offer {
     id: string;
@@ -30,13 +90,18 @@ export interface Offer {
     value: unknown;
     parameters: unknown;
     requirements: readonly RecordValue[];
+    unresolvedEvidence: readonly string[];
     expressionIds: readonly string[];
     state: "available" | "pending" | "latent" | "expressed" | "unresolved";
     inherited: boolean;
     requestedExpression: boolean;
 }
 export interface BiologicalEvaluation {
-    groups: readonly { id: string; kind: string; offers: readonly Offer[]; expressions: readonly RecordValue[] }[];
+    groups: readonly CharacteristicGroup[];
+    maxInherited?: number;
+    maxExpressed?: number;
+    /** Undefined is unsupported/unavailable discovery; [] is a known empty result. */
+    interactionOptions?: readonly InteractionOption[];
     allocation: AllocationView;
     charges: readonly RecordValue[];
     components: readonly RecordValue[];
@@ -58,10 +123,14 @@ export function supportsBiologicalDraft(proposal: NativeOriginDraftProposal): pr
         proposal.selectedAncestryId == null && record(plan) &&
         Array.isArray(plan.candidateIds) && plan.candidateIds.every(id => typeof id === "string") &&
         (plan.latentConfigurations == null || Array.isArray(plan.latentConfigurations)) &&
-        (plan.combinations == null || Array.isArray(plan.combinations)) &&
+        (plan.combinations == null || Array.isArray(plan.combinations) &&
+            plan.combinations.every(c => record(c) && typeof c.ruleOwnerId === "string" &&
+                !c.ruleOwnerId.startsWith("table-decision:") && typeof c.interactionId === "string" &&
+                Array.isArray(c.candidateIds) && c.candidateIds.every(id => typeof id === "string"))) &&
+        supportsCompositions(proposal, plan.candidateIds) &&
         !["existingConfiguration", "existingEffectiveConfiguration", "existingEffectiveConfigurationBasis",
             "activeTemporaryTransformation", "otherActiveTemporaryTransformations", "temporaryTransformationPrecedence",
-            "tableDecisions", "history", "resolutions", "relationships", "constraints", "inputRequirements", "processCreatureTypeId"]
+            "tableDecisions", "history", "constraints", "inputRequirements", "processCreatureTypeId"]
             .some(key => proposal[key] != null && !(Array.isArray(proposal[key]) && (proposal[key] as unknown[]).length === 0)) &&
         proposal.contributors.every(c => record(c) && record(c.source) && record(c.role) &&
             typeof c.id === "string" && typeof c.source.id === "string" &&
@@ -111,8 +180,18 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
     const combination = result.biologicalCombination;
     if (!Array.isArray(combination.characteristics)) return empty;
     const genes = records(combination.inheritedInstances);
-    const groups = records(combination.characteristics).map(group => ({
+    const groups: CharacteristicGroup[] = records(combination.characteristics).map(group => ({
         id: text(group.characteristicId), kind: String(group.kind),
+        presentation: record(group.presentation) && typeof group.presentation.name === "string" &&
+            group.presentation.name.length <= 160 ? {
+                name: group.presentation.name,
+                description: typeof group.presentation.description === "string" && group.presentation.description.length <= 4000 ? group.presentation.description : undefined,
+                category: typeof group.presentation.category === "string" && group.presentation.category.length <= 160 ? group.presentation.category : undefined,
+                recombinableParameters: Array.isArray(group.presentation.recombinableParameters) &&
+                    group.presentation.recombinableParameters.length <= 32 &&
+                    group.presentation.recombinableParameters.every(k => typeof k === "string" && k.length > 0 && k.length <= 160) ?
+                    [...new Set(strings(group.presentation.recombinableParameters))] : []
+            } : undefined,
         expressions: records(group.expressions),
         offers: records(group.offers).flatMap(item => {
             const c = item.candidate;
@@ -131,10 +210,14 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
                 occurrence: text(c.identity.occurrence.occurrencePath), kind: String(group.kind),
                 characteristicId: text(group.characteristicId), eligibility: typeof c.selectionBasis.eligibility === "number" ? c.selectionBasis.eligibility : text(c.selectionBasis.eligibility),
                 explanation: text(c.selectionBasis.explanation), value: c.offeredValue, parameters: c.offeredParameters,
-                requirements: records(c.requiredChoices), expressionIds, state, inherited, requestedExpression }];
+                requirements: records(c.requiredChoices), unresolvedEvidence: strings(c.unresolvedEvidence),
+                expressionIds, state, inherited, requestedExpression }];
         })
     }));
     const represented = new Set(groups.flatMap(g => g.offers.map(o => o.id)));
+    const configured = new Set(genes.flatMap(g => record(g.gene) && typeof g.gene.sourceCandidateId === "string" ?
+        [g.gene.sourceCandidateId] : []));
+    const interactionOptions = decodeInteractions(combination.interactionOptions, configured);
     const issues: ValidationIssue[] = records(result.issues).map((issue, i) => ({
         id: text(issue.code) + ":" + i, severity: issue.severity === "Invalid" || issue.severity === 3 ? "invalid" : issue.severity === "Conflict" || issue.severity === 2 ? "conflict" : issue.severity === "Incomplete" || issue.severity === 0 ? "incomplete" : "warning", message: text(issue.detail) || "Native evaluation requires review.",
         decision: { id: "inheritance", label: "Review inheritance" }
@@ -144,11 +227,89 @@ export function evaluateBiological(proposal: BiologicalProposal, envelope: unkno
             decision: { id: "contributors", label: "Review contributors" } });
     const rawAllocation = record(envelope.allocation) ? envelope.allocation : result.creationAllocation;
     const allocation = allocationView(rawAllocation);
+    const maximum = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
     return { current: true, groups, allocation, issues,
+        maxInherited: maximum(combination.maxInheritedInstancesPerKind),
+        maxExpressed: maximum(combination.maxExpressedInstancesPerKind), interactionOptions,
         policyRevision: record(rawAllocation) && typeof rawAllocation.policyRevision === "string" ? rawAllocation.policyRevision : undefined,
         components: record(rawAllocation) ? records(rawAllocation.components) : [],
         charges: record(rawAllocation) ? records(rawAllocation.charges) : [] };
 }
+/** Present each actual native charge once within a characteristic group.
+ * A single effective grant can represent several transmitted source instances;
+ * a bundle or inherited interaction can also be shared across groups.
+ * The allocation total is never recomputed by the client. */
+export function groupAllocationCharges(evaluation: BiologicalEvaluation, group: CharacteristicGroup):
+    readonly { load: number; shared: boolean }[] {
+    if (!evaluation.current) return [];
+    const grantIds = new Set(group.expressions.flatMap(g => typeof g.id === "string" ? [g.id] : []));
+    const seen = new Set<string>(), result: { load: number; shared: boolean }[] = [];
+    for (const charge of evaluation.charges) {
+        if (typeof charge.load !== "number" || !Number.isSafeInteger(charge.load) || charge.load < 0 ||
+            !Array.isArray(charge.grantIds) || !charge.grantIds.every(id => typeof id === "string") ||
+            !charge.grantIds.some(id => grantIds.has(id))) continue;
+        const ids = strings(charge.grantIds);
+        const key = JSON.stringify([charge.priceId, charge.configurationId, [...ids].sort(), charge.load]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const inputs = evaluation.groups.flatMap(g => g.offers).filter(o => o.expressionIds.some(id => ids.includes(id)));
+        const shared = ids.length > 1 || inputs.length > 1 ||
+            evaluation.groups.filter(g => g.expressions.some(grant => typeof grant.id === "string" && ids.includes(grant.id))).length > 1;
+        result.push({ load: charge.load, shared });
+    }
+    return result;
+}
+
+function decodeInteractions(raw: unknown, configured: ReadonlySet<string>): InteractionOption[] | undefined {
+    if (!Array.isArray(raw) || raw.length > 100) return undefined;
+    const result: InteractionOption[] = [], seen = new Set<string>();
+    const bounded = (v: unknown): v is string => typeof v === "string" && !!v.trim() && v.length <= 160;
+    for (const item of raw) {
+        if (!record(item) || !bounded(item.ruleOwnerId) || item.ruleOwnerId.startsWith("table-decision:") ||
+            !bounded(item.interactionId) || !bounded(item.resultTraitId) || !bounded(item.resultName) ||
+            !Array.isArray(item.inputs) || !item.inputs.length || item.inputs.length > 16) return undefined;
+        const key = JSON.stringify([item.ruleOwnerId, item.interactionId]);
+        if (seen.has(key)) return undefined;
+        seen.add(key);
+        const inputs: { count: number; candidateIds: string[] }[] = [];
+        for (const input of item.inputs) {
+            if (!record(input) || typeof input.count !== "number" || !Number.isSafeInteger(input.count) ||
+                input.count < 1 || input.count > 16 || !Array.isArray(input.candidateIds) ||
+                input.candidateIds.length > 512 || input.candidateIds.length < input.count ||
+                new Set(input.candidateIds).size !== input.candidateIds.length ||
+                !input.candidateIds.every(id => typeof id === "string" && configured.has(id))) return undefined;
+            inputs.push({ count: input.count, candidateIds: input.candidateIds });
+        }
+        const total = inputs.reduce((sum, input) => sum + input.count, 0);
+        if (total < 2 || total > 16) return undefined;
+        result.push({ ruleOwnerId: item.ruleOwnerId, interactionId: item.interactionId, resultTraitId: item.resultTraitId,
+            resultName: item.resultName, inputs });
+    }
+    return result;
+}
+export function setInheritedInteraction(proposal: BiologicalProposal, evaluation: BiologicalEvaluation,
+    ruleOwnerId: string, interactionId: string, selectedGroups: readonly (readonly string[])[]): BiologicalProposal {
+    const option = evaluation.current ? evaluation.interactionOptions?.find(o =>
+        o.ruleOwnerId === ruleOwnerId && o.interactionId === interactionId) : undefined;
+    const ids = selectedGroups.flat();
+    if (!option || selectedGroups.length !== option.inputs.length ||
+        selectedGroups.some((ids, i) => ids.length !== option.inputs[i]!.count ||
+            ids.some(id => !option.inputs[i]!.candidateIds.includes(id))) ||
+        new Set(ids).size !== ids.length ||
+        ids.some(id => !proposal.biologicalTransmission.candidateIds.includes(id)) ||
+        proposal.relationships?.some(rel => rel.candidateIds.some(id => ids.includes(id))))
+        throw new Error("Choose distinct configured inherited instances from the current native inputs; clear overlapping parameter compositions first.");
+    const plan = proposal.biologicalTransmission;
+    return { ...proposal, biologicalTransmission: { ...plan,
+        combinations: [...(plan.combinations ?? []).filter(c =>
+            c.ruleOwnerId !== ruleOwnerId || c.interactionId !== interactionId), { ruleOwnerId, interactionId, candidateIds: ids }] } };
+}
+export function removeInheritedInteraction(proposal: BiologicalProposal, ruleOwnerId: string, interactionId: string): BiologicalProposal {
+    const plan = proposal.biologicalTransmission;
+    return { ...proposal, biologicalTransmission: { ...plan,
+        combinations: plan.combinations?.filter(c => c.ruleOwnerId !== ruleOwnerId || c.interactionId !== interactionId) } };
+}
+
 function requireOffer(evaluation: BiologicalEvaluation, id: string): Offer {
     const offer = evaluation.current ? evaluation.groups.flatMap(g => g.offers).find(o => o.id === id) : undefined;
     if (!offer) throw new Error("Refresh native offers before editing inheritance.");
@@ -158,7 +319,7 @@ export function setInherited(proposal: BiologicalProposal, evaluation: Biologica
     candidateId: string, inherit: boolean): BiologicalProposal {
     requireOffer(evaluation, candidateId);
     const plan = proposal.biologicalTransmission;
-    return { ...proposal,
+    return { ...proposal, ...(inherit ? {} : withoutCompositions(proposal, r => r.candidateIds.includes(candidateId))),
         manifestations: inherit ? proposal.manifestations : proposal.manifestations.filter(m => m.candidateId !== candidateId),
         biologicalTransmission: { ...plan, candidateIds: inherit ? [...new Set([...plan.candidateIds, candidateId])] :
             plan.candidateIds.filter(id => id !== candidateId),
@@ -170,7 +331,7 @@ export function setInherited(proposal: BiologicalProposal, evaluation: Biologica
  * configured choices; native evaluation may reject the requested result. */
 export function setExpression(proposal: BiologicalProposal, evaluation: BiologicalEvaluation,
     candidateId: string, express: boolean): BiologicalProposal {
-    requireOffer(evaluation, candidateId);
+    const offer = requireOffer(evaluation, candidateId);
     const plan = proposal.biologicalTransmission;
     if (!plan.candidateIds.includes(candidateId)) throw new Error("Inherit the occurrence first.");
     const existing = proposal.manifestations.find(m => m.candidateId === candidateId);
@@ -179,14 +340,75 @@ export function setExpression(proposal: BiologicalProposal, evaluation: Biologic
     const configurations = (plan.latentConfigurations ?? []).filter(c => c.candidateId !== candidateId);
     const manifestations = proposal.manifestations.filter(m => m.candidateId !== candidateId);
     if (express) {
-        manifestations.push({ id: "selection:" + candidateId, candidateId, choices: latent?.choices });
+        manifestations.push({ id: "selection:" + candidateId, candidateId, choices: latent?.choices,
+            ...((offer.kind === "Intrinsic" || offer.kind === "0") && offer.value != null ? { selectedValue: offer.value } : {}) });
     } else if (existing) {
-        if (existing.selectedParameters != null || existing.selectedValue != null)
+        if (existing.selectedParameters != null ||
+            existing.selectedValue != null && JSON.stringify(existing.selectedValue) !== JSON.stringify(offer.value))
             throw new Error("This expression has configured values requiring native reconciliation.");
         if (existing.choices?.length) configurations.push({ candidateId, choices: existing.choices });
     }
-    return { ...proposal, manifestations, biologicalTransmission: { ...plan, latentConfigurations: configurations } };
+    return { ...proposal, ...(express ? {} : withoutCompositions(proposal, r => r.candidateIds.includes(candidateId))),
+        manifestations, biologicalTransmission: { ...plan, latentConfigurations: configurations } };
 }
+/** Only complete, choice-free, inherited offers of a native-declared
+ * composable characteristic are exposed. The Core reconciler is authoritative
+ * for the proposed replacement, including value equality and dependencies. */
+export function composableOffers(group: CharacteristicGroup): readonly Offer[] {
+    if (!group.presentation?.recombinableParameters.length ||
+        !group.id.startsWith("trait.") || !["Trait", "1"].includes(group.kind)) return [];
+    const allowed = group.presentation.recombinableParameters;
+    return group.offers.filter(o => o.inherited && !o.requirements.length && !o.unresolvedEvidence.length &&
+        record(o.parameters) && allowed.every(k => Object.hasOwn(o.parameters as RecordValue, k)));
+}
+export function setComposition(proposal: BiologicalProposal, evaluation: BiologicalEvaluation,
+    characteristicId: string, baseCandidateId: string, selectedSources: Readonly<Record<string, string>>): BiologicalProposal {
+    const group = evaluation.current ? evaluation.groups.find(g => g.id === characteristicId) : undefined;
+    if (!group) throw new Error("Refresh native characteristic offers before composing.");
+    const available = composableOffers(group);
+    const base = available.find(o => o.id === baseCandidateId);
+    const allowed = group.presentation?.recombinableParameters ?? [];
+    if (!base || !record(base.parameters) || !allowed.length ||
+        Object.keys(selectedSources).some(k => !allowed.includes(k))) throw new Error("Native composition is unavailable.");
+    const baseParameters = base.parameters;
+    const parameters: RecordValue = Object.fromEntries(Object.entries(baseParameters));
+    const sources: Record<string, string> = Object.fromEntries(Object.keys(parameters).map(key => [key, base.id]));
+    for (const key of allowed) {
+        const donor = available.find(o => o.id === selectedSources[key]);
+        if (!donor || !record(donor.parameters) || !sameKeys(baseParameters, donor.parameters) ||
+            !Object.hasOwn(donor.parameters, key))
+            throw new Error("Select exact, complete native parameter offers.");
+        parameters[key] = donor.parameters[key];
+        sources[key] = donor.id;
+    }
+    const participants = [...new Set([base.id, ...Object.values(sources)])];
+    if (participants.length < 2) throw new Error("Use the ordinary expression control for one source.");
+    const groupIds = new Set(group.offers.map(o => o.id));
+    const existing = proposal.manifestations.filter(m => groupIds.has(m.candidateId));
+    if (existing.some(m => m.choices?.length || m.selectedParameters != null || m.selectedValue != null) ||
+        proposal.biologicalTransmission.latentConfigurations?.some(c => groupIds.has(c.candidateId) && c.choices?.length) ||
+        proposal.biologicalTransmission.combinations?.some(c => c.candidateIds.some(id => groupIds.has(id))))
+        throw new Error("Existing configured selections or inherited interactions require separate reconciliation.");
+    const id = compositionId(group.id);
+    return { ...proposal,
+        manifestations: [...proposal.manifestations.filter(m => !groupIds.has(m.candidateId)),
+            ...participants.map(candidateId => ({ id: "selection:" + candidateId, candidateId }))],
+        relationships: [...(proposal.relationships ?? []).filter(r => r.id !== id),
+            { id, kind: 3, candidateIds: participants, authoredRuleReference: group.id }],
+        resolutions: [...(proposal.resolutions ?? []).filter(r => r.relationshipId !== id),
+            { relationshipId: id, action: 4, basis: { adjudication: 0, nativeRuleReference: group.id },
+                replacementCandidateId: base.id, replacementParameters: parameters, replacementParameterSources: sources }]
+    };
+}
+export function clearComposition(proposal: BiologicalProposal, characteristicId: string): BiologicalProposal {
+    const id = compositionId(characteristicId);
+    const relation = proposal.relationships?.find(r => r.id === id);
+    if (!relation) return proposal;
+    // Return to independent latent instances. Never delete inherited evidence.
+    return { ...proposal, ...withoutCompositions(proposal, r => r.id === id),
+        manifestations: proposal.manifestations.filter(m => !relation.candidateIds.includes(m.candidateId)) };
+}
+
 export function setFiniteChoice(proposal: BiologicalProposal, evaluation: BiologicalEvaluation,
     candidateId: string, requirementId: string, selected: readonly string[]): BiologicalProposal {
     const offer = requireOffer(evaluation, candidateId);
@@ -221,10 +443,12 @@ export function removeContributor(proposal: BiologicalProposal, evaluation: Biol
     const removed = plan.candidateIds.filter(id => affected.has(id));
     const retained = plan.candidateIds.filter(id => !affected.has(id));
     const name = (id: string) => evaluation.groups.flatMap(g => g.offers).find(o => o.id === id)?.characteristicId ?? "Unresolved saved occurrence";
-    return { proposal: { ...proposal, contributors: proposal.contributors.filter(c => !record(c) || c.id !== contributorId),
+    const affectedCompositions = (proposal.relationships ?? []).filter(r => r.candidateIds.some(id => affected.has(id)));
+    return { proposal: { ...proposal, ...withoutCompositions(proposal, r => r.candidateIds.some(id => affected.has(id))), contributors: proposal.contributors.filter(c => !record(c) || c.id !== contributorId),
         manifestations: proposal.manifestations.filter(m => !affected.has(m.candidateId)),
         biologicalTransmission: { ...plan, candidateIds: retained,
             latentConfigurations: plan.latentConfigurations?.filter(c => !affected.has(c.candidateId)),
             combinations: plan.combinations?.filter(c => !c.candidateIds.some(id => affected.has(id))) } },
-        change: { retained: retained.filter(id => evaluation.groups.some(g => g.offers.some(o => o.id === id))).map(name), reconsider: [...removed, ...retained.filter(id => !evaluation.groups.some(g => g.offers.some(o => o.id === id)))].map(name), available: [] } };
+        change: { retained: retained.filter(id => evaluation.groups.some(g => g.offers.some(o => o.id === id))).map(name), reconsider: [...removed.map(name), ...retained.filter(id => !evaluation.groups.some(g => g.offers.some(o => o.id === id))).map(name),
+            ...affectedCompositions.map(r => "Combined expression — " + r.authoredRuleReference)], available: [] } };
 }

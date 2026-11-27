@@ -73,6 +73,8 @@ export interface NativeOriginDraftResponse {
     status: "ready";
     draft: NativeOriginDraftView | null;
     preview?: NativeOriginPreview | null;
+    /** Separate method-specific preview; decoded by the Construct adapter. */
+    constructPreview?: unknown;
     activeGrants: false;
 }
 

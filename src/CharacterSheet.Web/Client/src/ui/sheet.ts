@@ -13,7 +13,7 @@ import {
 import type { CharacterSheetBootstrapResponse } from "../character-api.js";
 import { renderCharacterBuilder } from "./builder.js";
 import { renderOriginBuilder, type OriginBuilderHandlers } from "../features/origin/origin-builder.js";
-import { editableConventional } from "../features/origin/conventional/model.js";
+import { canMountGuidedOriginWorkspace } from "../features/origin/custom-workspace.js";
 import type { OriginUiState } from "../features/origin/origin-workflow.js";
 import {
     canActivateDirectNativeOrigin,
@@ -548,9 +548,7 @@ function renderGuidedBuilder(
             // editor is the canonical Origin draft. Never duplicate legacy
             // Species/Subspecies mutations in this guided section.
             const draft = origin?.draft;
-            if (renderGuidedOrigins && origin?.status === "ready" && origin.catalog && !origin.savedState &&
-                (!draft || (editableConventional(draft.proposal) && draft.rulesetId === origin.catalog.rulesetId &&
-                    draft.fingerprint === origin.catalog.fingerprint && !origin.preview?.contentChangedSinceRequest))) {
+            if (renderGuidedOrigins && canMountGuidedOriginWorkspace(origin)) {
                 panel.append(renderGuidedOrigins());
                 if (draft && originHandlers && origin.preview && origin.previewDraftRevision === draft.revision &&
                     !hasLegacySpeciesSelections(builder.build?.foundationalSelections ?? []) &&

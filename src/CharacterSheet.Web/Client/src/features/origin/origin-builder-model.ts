@@ -102,6 +102,7 @@ export function isEditableMixedNativeOrigin(
 ): boolean {
     if (!(proposal.intent === 1 || proposal.intent === "Mixed") ||
         !nativeBiologicalMethod(proposal) || proposal.candidates.length !== 0 ||
+        proposal.biologicalTransmission != null ||
         proposal.selectedSpeciesId != null || proposal.selectedAncestryId != null ||
         containsExtraAuthority(proposal) || proposal.contributors.length > mixedSourceSlots.length)
         return false;

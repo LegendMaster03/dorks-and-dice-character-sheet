@@ -88,7 +88,9 @@ test("leaf features do not import unrelated sibling features", async () => {
     const allowedComposition = new Map([
         ["combat", new Set(["initiative", "defense", "health", "proficiency", "saving-throws"])],
         // Life Experiences consumes the approved Workstream A presentation contracts.
-        ["life-experiences", new Set(["guided"])]
+        ["life-experiences", new Set(["guided"])],
+        // Origin composition consumes the same approved shared editor contracts.
+        ["origin", new Set(["guided"])]
     ]);
 
     for (const file of await tsFiles("features")) {

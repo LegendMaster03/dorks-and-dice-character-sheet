@@ -44,6 +44,11 @@ public sealed class PostgresCharacterOriginDraftStore(CharacterSheetDbContext db
 
         if (expectedRevision == 0)
         {
+            // The root lock serializes first creation. Check before attaching a
+            // second entity, including retries within the same scoped context.
+            if (await dbContext.CharacterOriginDrafts.AsNoTracking().AnyAsync(
+                item => item.CharacterId == characterId, cancellationToken))
+                return null;
             var draft = new CharacterOriginDraftState(characterId, normalizedRuleset,
                 normalizedFingerprint, validJson, changedAt);
             dbContext.CharacterOriginDrafts.Add(draft);

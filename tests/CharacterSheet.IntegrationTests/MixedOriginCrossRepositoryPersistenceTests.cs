@@ -875,6 +875,131 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
     }
 
 #if PILLAR2_CURRENT_ORIGIN
+    // Exercise the production draft service with real native HTTP and PostgreSQL,
+    // not only the adapter's JSON fixtures. None of these proposals are committed.
+    [Fact]
+    public async Task RealBiologicalDraftSavesExactTransmissionAndUnaffectedContributor()
+    {
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var catalog = core.App.Services.GetRequiredService<NativeCatalogStore>().Snapshot!;
+        var native = new HttpNativeGateway(core.Client);
+        var id = Guid.NewGuid();
+        var proposal = JsonNode.Parse("""
+            {"id":"real-biological-draft","intent":1,
+             "method":{"ruleId":"rule.creature-origination","methodId":"biological"},
+             "contributors":[{"id":"red","role":{"kind":0},"source":{"kind":0,"id":"ancestry.dragonborn.red"}},
+                             {"id":"bronze","role":{"kind":0},"source":{"kind":0,"id":"ancestry.dragonborn.bronze"}}],
+             "candidates":[],"manifestations":[],
+             "biologicalTransmission":{"candidateIds":[],"latentConfigurations":[],"combinations":[]}}
+            """)!.AsObject();
+        async Task<CharacterOriginDraftResult> Save(CharacterSheetDbContext db, long revision)
+        {
+            var service = new CharacterOriginDraftService(new OwnerScopedParentAccess(id, id, true),
+                new PostgresCharacterBuildStore(db), new PostgresCharacterOriginDraftStore(db),
+                new PostgresCharacterAuthorizedOriginStore(db), native, TimeProvider.System);
+            var saved = await service.SaveAsync(id, catalog.RulesetId, catalog.Fingerprint,
+                JsonSerializer.SerializeToElement(proposal, Wire), revision);
+            Assert.Equal(CharacterOriginDraftStatus.Ready, saved.Status);
+            Assert.False(saved.Draft!.Active);
+            Assert.Equal(revision + 1, saved.Draft.Revision);
+            Assert.True(saved.Preview!["previewOnly"]!.GetValue<bool>());
+            Assert.Null(await new PostgresCharacterAuthorizedOriginStore(db).GetAsync(id));
+            return saved;
+        }
+
+        string bronze;
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await db.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+            var initial = await Save(db, 0);
+            var groups = initial.Preview!["result"]!["biologicalCombination"]!["characteristics"]!.AsArray();
+            var matching = groups.Select(group => group!["offers"]!.AsArray())
+                .First(offers => offers.Any(offer => offer!["candidate"]!["contributorId"]!.GetValue<string>() == "red") &&
+                    offers.Any(offer => offer!["candidate"]!["contributorId"]!.GetValue<string>() == "bronze"));
+            string Candidate(string contributor) => matching.First(offer =>
+                offer!["candidate"]!["contributorId"]!.GetValue<string>() == contributor)!
+                ["candidate"]!["id"]!.GetValue<string>();
+            var red = Candidate("red");
+            bronze = Candidate("bronze");
+            Assert.NotEqual(red, bronze);
+            proposal["biologicalTransmission"]!["candidateIds"] = new JsonArray(red, bronze);
+            var latent = await Save(db, 1);
+            Assert.NotNull(latent.Preview!["allocation"]);
+            Assert.Empty(latent.Draft!.Proposal.GetProperty("manifestations").EnumerateArray());
+            // Preserve the exact Bronze candidate while replacing the other donor.
+            proposal["contributors"]![0] = JsonNode.Parse("""
+                {"id":"blue","role":{"kind":0},"source":{"kind":0,"id":"ancestry.dragonborn.blue"}}
+                """);
+            proposal["biologicalTransmission"]!["candidateIds"] = new JsonArray(bronze);
+            await Save(db, 2);
+        }
+        await using var reopened = new CharacterSheetDbContext(database.CreateOptions());
+        var stored = await new PostgresCharacterOriginDraftStore(reopened).GetAsync(id);
+        Assert.Equal(3, stored!.Revision);
+        using var json = JsonDocument.Parse(stored.ProposalJson);
+        Assert.Equal(bronze, Assert.Single(json.RootElement.GetProperty("biologicalTransmission")
+            .GetProperty("candidateIds").EnumerateArray()).GetString());
+        Assert.True(JsonElement.DeepEquals(JsonSerializer.SerializeToElement(proposal, Wire), json.RootElement));
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(reopened).GetAsync(id));
+    }
+
+    [Theory]
+    [InlineData("construct-basic-starting-build-20261120.json", 163, "medium")]
+    [InlineData("construct-small-starting-build-20261121.json", 147, "small")]
+    [InlineData("construct-lightweight-starting-build-20261121.json", 187, "medium")]
+    [InlineData("construct-armored-starting-build-20261121.json", 187, "medium")]
+    public async Task RealReferenceAssemblyIsQuotedAndPersistedWithoutGameplayGrant(
+        string fixture, int expectedCost, string expectedSize)
+    {
+        await using var core = await RealCore.StartAsync();
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var catalog = core.App.Services.GetRequiredService<NativeCatalogStore>().Snapshot!;
+        var native = new HttpNativeGateway(core.Client);
+        var id = Guid.NewGuid();
+        // Reference data is a test input only, not a published starting preset.
+        var root = Environment.GetEnvironmentVariable("RULES_CORE_CONTENT_ROOT")!;
+        var reference = JsonNode.Parse(await File.ReadAllTextAsync(
+            Path.Combine(root, "..", "reference", fixture)))!;
+        var assembly = reference["assembly"]!.DeepClone();
+        var methods = await native.DiscoverNativeOriginMethodsAsync(catalog.Fingerprint, null, default);
+        var method = Assert.Single(methods["methods"]!.AsArray(), x =>
+            x!["reference"]!["methodId"]!.GetValue<string>() == "construct-assembly");
+        assembly["initialAllowance"] = method!["initialConstructionAllowance"]?.DeepClone();
+        assembly["initialConstruction"] = true;
+        var proposal = JsonNode.Parse("""
+            {"id":"real-construct-draft","intent":"Custom",
+             "method":{"ruleId":"rule.creature-origination","methodId":"construct-assembly"},
+             "contributors":[],"candidates":[],"manifestations":[]}
+            """)!.AsObject();
+        proposal["constructAssembly"] = assembly;
+        var input = JsonSerializer.SerializeToElement(proposal, Wire);
+        await using (var db = new CharacterSheetDbContext(database.CreateOptions()))
+        {
+            await db.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+            var service = new CharacterOriginDraftService(new OwnerScopedParentAccess(id, id, true),
+                new PostgresCharacterBuildStore(db), new PostgresCharacterOriginDraftStore(db),
+                new PostgresCharacterAuthorizedOriginStore(db), native, TimeProvider.System);
+            var saved = await service.SaveAsync(id, catalog.RulesetId, catalog.Fingerprint, input, 0);
+            Assert.Equal(CharacterOriginDraftStatus.Ready, saved.Status);
+            Assert.False(saved.Draft!.Active);
+            Assert.Null(saved.Preview);
+            var evaluation = saved.ConstructPreview!;
+            Assert.True(evaluation["previewOnly"]!.GetValue<bool>());
+            var assessed = evaluation["result"]!["assembly"]!;
+            Assert.Equal(expectedCost, assessed["knownConstructionCost"]!.GetValue<int>());
+            Assert.Equal(expectedSize, assessed["derivedCreatureSize"]!.GetValue<string>());
+            Assert.Equal("resolved", assessed["manufacturingQuote"]!["status"]!.GetValue<string>());
+        }
+        await using var reopened = new CharacterSheetDbContext(database.CreateOptions());
+        var stored = await new PostgresCharacterOriginDraftStore(reopened).GetAsync(id);
+        Assert.Equal(1, stored!.Revision);
+        Assert.True(JsonElement.DeepEquals(input, JsonSerializer.Deserialize<JsonElement>(stored.ProposalJson)));
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(reopened).GetAsync(id));
+    }
+
     [Fact]
     public async Task RealDrowCourseInitializesNonemptyNativeLedgerAndReloadsFromPostgres()
     {
@@ -987,8 +1112,8 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                 grant => grant.GetProperty("identity")
                     .GetProperty("mechanicalDefinitionId").GetString() == trait)
                     .GetProperty("id").GetString()!;
-            var faerie = GrantId("trait.elf.drow.faerie-fire");
-            var darkness = GrantId("trait.elf.drow.darkness");
+            var faerie = GrantId("trait.faerie-fire");
+            var darkness = GrantId("trait.darkness");
             using var persisted = JsonDocument.Parse(stored.LedgerJson);
             var remaining = persisted.RootElement.GetProperty("remainingFreeCasts");
             Assert.Equal(2, remaining.EnumerateObject().Count());
@@ -1244,6 +1369,24 @@ public sealed class MixedOriginCrossRepositoryPersistenceTests
                     $"Real Rules Core ruleset returned {(int)response.StatusCode}: {body}");
             return JsonNode.Parse(body) ??
                 throw new RulesCoreGatewayException("Real Core omitted ruleset JSON.");
+        }
+
+        public Task<JsonNode> PreviewNativeConstructAsync(JsonElement request, CancellationToken ct) =>
+            SendAsync("/api/mechanics/v1/origins/construct/preview", request, ct);
+
+        public async Task<JsonNode> DiscoverNativeOriginMethodsAsync(string fingerprint,
+            string? creatureTypeId, CancellationToken ct)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                "/api/mechanics/v1/origins/methods?fingerprint=" + Uri.EscapeDataString(fingerprint) +
+                (creatureTypeId is null ? "" : "&creatureTypeId=" + Uri.EscapeDataString(creatureTypeId)));
+            Authorize(request);
+            using var response = await http.SendAsync(request, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+                throw new RulesCoreGatewayException(
+                    $"Real Core method discovery returned {(int)response.StatusCode}: {body}");
+            return JsonNode.Parse(body) ?? throw new RulesCoreGatewayException("Real Core omitted method discovery.");
         }
 
         public Task<JsonNode> PreviewDirectInnateSpellLedgerBootstrapAsync(

@@ -56,12 +56,13 @@ public static class VerifiedOriginVisionReader
                 identity.ValueKind != JsonValueKind.Object ||
                 !identity.TryGetProperty("kind", out var kind) ||
                 !EnumIs(kind, "Trait", 1) ||
-                // Canonical native trait references preserve the shared
-                // definition ID even when granted by distinct Species.
-                // Retain the older source-local identifier for previously
-                // committed direct Origins; neither path relaxes source,
-                // occurrence, payload, or active-baseline verification.
+                // Core's 20261121 biological-gene migration renamed the
+                // shared trait to trait.low-light-vision. Accept that exact
+                // ID and both historical IDs; all provenance and payload
+                // checks remain mandatory for every representation.
                 (!StringIs(identity, "mechanicalDefinitionId",
+                    "trait.low-light-vision") &&
+                 !StringIs(identity, "mechanicalDefinitionId",
                     "trait.shared.low-light-vision") &&
                  !StringIs(identity, "mechanicalDefinitionId",
                     sourceId + "#trait:low-light-vision")) ||

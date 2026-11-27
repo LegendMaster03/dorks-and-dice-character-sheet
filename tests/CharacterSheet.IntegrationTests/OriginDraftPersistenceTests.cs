@@ -261,6 +261,54 @@ public sealed class OriginDraftPersistenceTests
         }
     }
 
+    [Fact]
+    public async Task ConstructAssemblyUsesNativeQuotationAndSameRevisionedDraft()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var id = Guid.NewGuid();
+        var options = database.CreateOptions();
+        const string json = """
+            {"id":"construct","intent":"Custom","method":{"ruleId":"rule.creature-origination","methodId":"construct-assembly"},
+             "contributors":[],"candidates":[],"manifestations":[],
+             "constructAssembly":{"initialConstruction":true,"initialAllowance":123,"components":[
+                {"instanceId":"frame-a","definitionId":"component.frame","enabled":true},
+                {"instanceId":"frame-b","definitionId":"component.frame","enabled":false}],"powerConnections":[]}}
+            """;
+        var proposal = JsonSerializer.Deserialize<JsonElement>(json);
+        var native = new PreviewGateway();
+        await using (var db = new CharacterSheetDbContext(options))
+        {
+            await db.Database.MigrateAsync();
+            await new PostgresCharacterSheetStore(db).GetOrCreateAsync(id);
+            var service = new CharacterOriginDraftService(
+                new Access(SiteCharacterAccessStatus.Authorized, id, SiteCharacterLifecycleState.Active),
+                new PostgresCharacterBuildStore(db), new PostgresCharacterOriginDraftStore(db),
+                new PostgresCharacterAuthorizedOriginStore(db), native, TimeProvider.System);
+            var result = await service.SaveAsync(id, "first-party-001", "native", proposal, 0);
+            Assert.Equal(CharacterOriginDraftStatus.Ready, result.Status);
+            Assert.Equal(1, result.Draft!.Revision);
+            Assert.False(result.Draft.Active);
+            Assert.Null(result.Preview);
+            Assert.NotNull(result.ConstructPreview);
+            Assert.Equal(0, native.Calls);
+            Assert.Equal(1, native.ConstructCalls);
+            var forged = JsonNode.Parse(json)!.AsObject();
+            forged["constructAssembly"]!["initialAllowance"] = 999;
+            var rejected = await service.SaveAsync(id, "first-party-001", "native",
+                JsonSerializer.SerializeToElement(forged), 1);
+            Assert.Equal(CharacterOriginDraftStatus.InvalidRequest, rejected.Status);
+            Assert.Equal(1, native.ConstructCalls);
+            var stale = await service.SaveAsync(id, "first-party-001", "native", proposal, 0);
+            Assert.Equal(CharacterOriginDraftStatus.RevisionConflict, stale.Status);
+        }
+        await using var reload = new CharacterSheetDbContext(options);
+        var stored = await new PostgresCharacterOriginDraftStore(reload).GetAsync(id);
+        Assert.NotNull(stored);
+        Assert.Equal(1, stored.Revision);
+        Assert.True(JsonElement.DeepEquals(proposal, JsonSerializer.Deserialize<JsonElement>(stored.ProposalJson)));
+        Assert.Null(await new PostgresCharacterAuthorizedOriginStore(reload).GetAsync(id));
+    }
+
     private sealed class Access(SiteCharacterAccessStatus status, Guid characterId,
         SiteCharacterLifecycleState lifecycle) : ISiteCharacterAccessGateway
     {
@@ -280,6 +328,24 @@ public sealed class OriginDraftPersistenceTests
     private sealed class PreviewGateway : INativeRulesCoreGateway
     {
         public int Calls { get; private set; }
+        public int ConstructCalls { get; private set; }
+        public Task<JsonNode> DiscoverNativeOriginMethodsAsync(string fingerprint, string? creatureTypeId,
+            CancellationToken cancellationToken) => Task.FromResult(JsonNode.Parse("""
+            {"contractVersion":1,"previewOnly":true,"rulesetId":"first-party-001","fingerprint":"native",
+             "methods":[{"reference":{"ruleId":"rule.creature-origination","methodId":"construct-assembly"},
+                         "support":"assembly-preview","initialConstructionAllowance":123}]}
+            """)!);
+        public Task<JsonNode> PreviewNativeConstructAsync(JsonElement request, CancellationToken cancellationToken)
+        {
+            ConstructCalls++;
+            Assert.False(request.GetProperty("proposal").TryGetProperty("constructAssembly", out _));
+            Assert.Equal(2, request.GetProperty("proposal").GetProperty("intent").GetInt32());
+            Assert.Equal(2, request.GetProperty("assembly").GetProperty("components").GetArrayLength());
+            return Task.FromResult(JsonNode.Parse("""
+                {"contractVersion":1,"previewOnly":true,"rulesetId":"first-party-001","fingerprint":"native",
+                 "result":{"assembly":{},"origin":{}}}
+                """)!);
+        }
 
         public Task<JsonNode> PreviewNativeOriginAsync(JsonElement request,
             CancellationToken cancellationToken)

@@ -40,6 +40,7 @@ import { createHarvestingCraftingWorkflow } from "./features/harvesting/harvesti
 import { createExperienceSourcePicker } from "./features/life-experiences/source-picker.js";
 import { createConventionalWorkspace } from "./features/origin/conventional/workspace.js";
 import { createOriginWorkflow } from "./features/origin/origin-workflow.js";
+import { createCustomOriginHost, type CustomOriginContext } from "./features/origin/custom-workspace.js";
 
 const root = document.getElementById("tool-root");
 if (!(root instanceof HTMLElement)) {
@@ -484,17 +485,17 @@ const experiencePickers = {
     upbringing: createExperienceSourcePicker(environment, () => application.render(), "upbringing"),
     background: createExperienceSourcePicker(environment, () => application.render(), "background")
 };
-let originWorkspace: { characterId: string; workspace: ReturnType<typeof createConventionalWorkspace<never>> } | undefined;
+let originWorkspace: { characterId: string; workspace: ReturnType<typeof createConventionalWorkspace<CustomOriginContext>> } | undefined;
 function guidedOrigins(characterId: string) {
     if (originWorkspace?.characterId === characterId) return originWorkspace.workspace;
-    const workspace = createConventionalWorkspace<never>(environment, characterId, {
+    const customHost = createCustomOriginHost(environment, characterId, originWorkflow, () => application.render());
+    const workspace = createConventionalWorkspace<CustomOriginContext>(environment, characterId, {
         current: originWorkflow.current,
         canEditDraft: () => !originWorkflow.current().readOnly,
         save: (proposal, revision) => originWorkflow.saveConventionalDraft(characterId, proposal, revision),
         retry: () => originWorkflow.load(characterId),
         notify: () => application.render(),
-        methodEditors: [],
-        methodContext: () => { throw new Error("No custom editor is available for this character."); }
+        ...customHost
     });
     originWorkspace = { characterId, workspace };
     return workspace;

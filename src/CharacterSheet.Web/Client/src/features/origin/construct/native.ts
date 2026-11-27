@@ -88,6 +88,16 @@ export async function loadComponentConfiguration(environment: HostEnvironment, m
     return { contractVersion: 1, previewOnly: true, rulesetId: envelope.rulesetId,
         fingerprint: envelope.fingerprint, result: configuration };
 }
+/** The saved response contains the native Construct envelope, never the
+ * ordinary biological preview. Verify identity before decoding it. */
+export function decodeSavedConstructPreview(raw: unknown, metadata: NativeRulesetMetadata): NativePreviewEnvelope<ConstructPreview> {
+    const envelope = record(raw);
+    if (envelope.contractVersion !== 1 || envelope.previewOnly !== true ||
+        envelope.rulesetId !== metadata.rulesetId || envelope.fingerprint !== metadata.fingerprint)
+        throw new Error("Invalid or stale saved Construct evaluation.");
+    return { contractVersion: 1, previewOnly: true, rulesetId: metadata.rulesetId,
+        fingerprint: metadata.fingerprint, result: decodeConstructPreview(envelope.result, envelope.movementModes) };
+}
 /** Stateless and initial-only. The native preview receives raw player choices,
  * not evaluated candidates, a profile, an operating session, or authority. */
 export async function evaluateConstructDraft(environment: HostEnvironment, metadata: NativeRulesetMetadata,
@@ -96,7 +106,9 @@ export async function evaluateConstructDraft(environment: HostEnvironment, metad
     if (assembly.initialConstruction !== true || proposal.method.ruleId !== "rule.creature-origination" ||
         proposal.method.methodId !== "construct-assembly" || proposal.intent !== "Custom" || proposal.candidates.length ||
         proposal.contributors.length) throw new Error("Only an initial custom Construct player proposal may be previewed here.");
-    const envelope = await previewNativeConstruct(environment, metadata, proposal, assembly, fetcher);
+    // The persisted Sheet proposal uses a named intent; Core's enum JSON
+    // contract expects the numeric Custom value for a native preview.
+    const envelope = await previewNativeConstruct(environment, metadata, { ...proposal, intent: 2 }, assembly, fetcher);
     return { contractVersion: 1, rulesetId: envelope.rulesetId, fingerprint: envelope.fingerprint,
         previewOnly: true, result: decodeConstructPreview(envelope.result, envelope.movementModes) };
 }

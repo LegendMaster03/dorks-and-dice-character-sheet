@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { newBiologicalProposal, addNativeContributor, evaluateBiological,
-    setInherited, setExpression, setFiniteChoice, removeContributor, allocationView }
+    setInherited, setExpression, setFiniteChoice, removeContributor, allocationView,
+    composableOffers, setComposition, clearComposition, supportsBiologicalDraft,
+    setInheritedInteraction, removeInheritedInteraction, groupAllocationCharges }
     from "../.test-dist/features/origin/biological/model.js";
 
 const preset = (id, name) => ({ id, name, kind: "ancestry", parentId: "species.dragonborn",
@@ -88,4 +90,87 @@ test("no four-source limit is inferred from the prior editor", () => {
     assert.equal(p.contributors.length, 7);
     assert.throws(() => addNativeContributor(p, "red", red));
     assert.throws(() => addNativeContributor(p, "restricted", {...red, selectable: false}));
+});
+
+test("canonical native composition is source-bound, persisted, and removed on affected contributor change", () => {
+    let p = proposal();
+    const plain = [redOffer, bronzeOffer].map((o, i) => ({ candidate: {
+        ...o.candidate, requiredChoices: [], offeredParameters: {
+            damageType: i ? "lightning" : "fire", area: {shape: i ? "cone" : "line"}
+        }
+    }}));
+    const evalFor = (draft, metadata = true) => evaluateBiological(draft, { previewOnly: true, result: {
+        evaluatedProposal: { id: draft.id }, issues: [], biologicalCombination: {
+            proposalId: draft.id, explicitTransmissionPlan: true,
+            maxInheritedInstancesPerKind: 2, maxExpressedInstancesPerKind: 1,
+            characteristics: [{ kind: "Trait", characteristicId: "trait.breath-weapon",
+                offers: plain, expressions: [], ...(metadata ? { presentation: {
+                    name: "Breath Weapon", recombinableParameters: ["damageType", "area"]
+                }} : {}) }], inheritedInstances: []
+        }
+    }}, true);
+    p = setInherited(p, evalFor(p), "red-breath", true);
+    p = setInherited(p, evalFor(p), "bronze-breath", true);
+    assert.equal(evalFor(p).maxInherited, 2);
+    assert.equal(composableOffers(evalFor(p, false).groups[0]).length, 0);
+    assert.throws(() => setComposition(p, evalFor(p, false), "trait.breath-weapon", "red-breath", {
+        damageType: "red-breath", area: "bronze-breath"
+    }));
+    p = setComposition(p, evalFor(p), "trait.breath-weapon", "red-breath", {
+        damageType: "red-breath", area: "bronze-breath"
+    });
+    assert.deepEqual(p.resolutions[0].replacementParameters, { damageType: "fire", area: { shape: "cone" } });
+    assert.deepEqual(p.resolutions[0].replacementParameterSources, { damageType: "red-breath", area: "bronze-breath" });
+    assert.equal(p.manifestations.length, 2);
+    assert.equal(supportsBiologicalDraft(JSON.parse(JSON.stringify(p))), true);
+    assert.equal(supportsBiologicalDraft({...p, resolutions:[{...p.resolutions[0], basis:{adjudication:3}}]}), false);
+    const cleared = clearComposition(p, "trait.breath-weapon");
+    assert.deepEqual(cleared.biologicalTransmission, p.biologicalTransmission);
+    assert.equal(cleared.manifestations.length, 0);
+    assert.equal(cleared.relationships.length, 0);
+    const changed = removeContributor(p, evalFor(p), "red");
+    assert.deepEqual(changed.proposal.biologicalTransmission.candidateIds, ["bronze-breath"]);
+    assert.equal(changed.proposal.relationships.length, 0);
+    assert.equal(changed.proposal.resolutions.length, 0);
+    assert.ok(changed.change.reconsider.some(x => x.includes("Combined expression")));
+});
+
+test("inherited interactions require the native exact configured inputs and do not invent grants", () => {
+    let p = proposal();
+    p = setInherited(p, evaluation(p), "red-breath", true);
+    p = setInherited(p, evaluation(p), "bronze-breath", true);
+    const interaction = { ruleOwnerId: "rule.test", interactionId: "test-interaction",
+        resultTraitId: "trait.test", resultName: "Test result",
+        inputs: [{count: 2, candidateIds: ["red-breath", "bronze-breath"]}] };
+    const native = (raw, configured = ["red-breath", "bronze-breath"]) => evaluateBiological(p, { previewOnly: true, result: {
+        evaluatedProposal: { id: p.id }, issues: [], biologicalCombination: {
+            proposalId: p.id, explicitTransmissionPlan: true, interactionOptions: raw,
+            characteristics: [{ kind: "Trait", characteristicId: "trait.breath-weapon",
+                offers: [redOffer, bronzeOffer], expressions: [] }],
+            inheritedInstances: configured.map(id => ({ gene: { sourceCandidateId: id }, expressionGrantIds: [] }))
+        }
+    }}, true);
+    assert.equal(native([interaction], ["red-breath"]).interactionOptions, undefined);
+    assert.equal(native([{...interaction, ruleOwnerId:"table-decision:forged"}]).interactionOptions, undefined);
+    assert.throws(() => setInheritedInteraction(p, native([]), "rule.test", "test-interaction", [["red-breath","bronze-breath"]]));
+    assert.throws(() => setInheritedInteraction(p, native([interaction]), "rule.test", "test-interaction", [["red-breath","red-breath"]]));
+    const selected = setInheritedInteraction(p, native([interaction]), "rule.test", "test-interaction", [["red-breath","bronze-breath"]]);
+    assert.equal(selected.biologicalTransmission.combinations.length, 1);
+    assert.equal(selected.manifestations.length, 0);
+    assert.deepEqual(selected.biologicalTransmission.candidateIds, p.biologicalTransmission.candidateIds);
+    assert.equal(supportsBiologicalDraft(JSON.parse(JSON.stringify(selected))), true);
+    assert.deepEqual(removeInheritedInteraction(selected, "rule.test", "test-interaction").biologicalTransmission, p.biologicalTransmission);
+});
+
+test("recombined source instances display one native shared charge rather than one charge per donor", () => {
+    let p = proposal();
+    p = setInherited(p, evaluation(p), "red-breath", true);
+    p = setInherited(p, evaluation(p), "bronze-breath", true);
+    const base = evaluation(p, [["red-breath", ["grant"]], ["bronze-breath", ["grant"]]]);
+    const group = {...base.groups[0], expressions: [{id:"grant"}]};
+    const charge = {priceId:"breath", load:3, grantIds:["grant"]};
+    const e = {...base, groups:[group], charges:[charge, charge]};
+    assert.deepEqual(groupAllocationCharges(e, group), [{load:3, shared:true}]);
+    assert.equal(e.allocation.used, "3");
+    assert.deepEqual(groupAllocationCharges({...e,current:false},group), []);
 });
